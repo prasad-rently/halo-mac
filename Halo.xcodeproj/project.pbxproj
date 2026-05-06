@@ -6,6 +6,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		000000000000000000003003 /* HaloUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000003002 /* HaloUITests.swift */; };
 		000000000000000000001017 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001016 /* AppState.swift */; };
 		000000000000000000001019 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001018 /* ContentView.swift */; };
 		000000000000000000001021 /* HaloApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001020 /* HaloApp.swift */; };
@@ -73,6 +74,8 @@
 		000000000000000000002003 /* HaloWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloWidget.swift; sourceTree = "<group>"; };
 		000000000000000000002020 /* HaloSharedData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloSharedData.swift; sourceTree = "<group>"; };
 		000000000000000000002017 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		000000000000000000003000 /* HaloUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000003002 /* HaloUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -89,6 +92,12 @@
 		};
 /* End PBXCopyFilesBuildPhase section */
 /* Begin PBXFrameworksBuildPhase section */
+		000000000000000000003005 /* Frameworks (UITests) */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		000000000000000000001014 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -115,6 +124,7 @@
 				000000000000000000001064 /* Frameworks */,
 				000000000000000000002001 /* HaloWidget */,
 				000000000000000000002022 /* Shared */,
+				000000000000000000003001 /* HaloUITests */,
 				000000000000000000001003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -152,9 +162,20 @@
 		};
 		000000000000000000001003 /* Products */ = {
 			isa = PBXGroup;
-			children = (000000000000000000001015 /* Halo.app */,
-					000000000000000000002000 /* HaloWidget.appex */,);
+			children = (
+				000000000000000000001015 /* Halo.app */,
+				000000000000000000002000 /* HaloWidget.appex */,
+				000000000000000000003000 /* HaloUITests.xctest */,
+			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		000000000000000000003001 /* HaloUITests */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000003002 /* HaloUITests.swift */,
+			);
+			path = HaloUITests;
 			sourceTree = "<group>";
 		};
 		000000000000000000001064 /* Frameworks */ = {
@@ -213,6 +234,20 @@
 			productReference = 000000000000000000002000;
 			productType = "com.apple.product-type.app-extension";
 		};
+		000000000000000000003004 /* HaloUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 000000000000000000003009;
+			buildPhases = (
+				000000000000000000003005,
+				000000000000000000003006,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = HaloUITests;
+			productName = HaloUITests;
+			productReference = 000000000000000000003000;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXContainerItemProxy section */
@@ -241,6 +276,10 @@
 				TargetAttributes = {
 					000000000000000000001004 = { CreatedOnToolsVersion = 15.4; };
 					000000000000000000002009 = { CreatedOnToolsVersion = 15.4; };
+					000000000000000000003004 = {
+						CreatedOnToolsVersion = 15.4;
+						TestTargetID = 000000000000000000001004;
+					};
 				};
 			};
 			buildConfigurationList = 000000000000000000001005;
@@ -252,7 +291,7 @@
 			productRefGroup = 000000000000000000001003;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (000000000000000000001004, 000000000000000000002009,);
+			targets = (000000000000000000001004, 000000000000000000002009, 000000000000000000003004,);
 		};
 /* End PBXProject section */
 
@@ -312,6 +351,14 @@
 				000000000000000000002004 /* HaloWidgetBundle.swift in Sources */,
 				000000000000000000002005 /* HaloWidget.swift in Sources */,
 				000000000000000000002019 /* HaloSharedData.swift in Sources (Widget) */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		000000000000000000003006 /* Sources (UITests) */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				000000000000000000003003 /* HaloUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -428,6 +475,36 @@
 			};
 			name = Release;
 		};
+		000000000000000000003007 /* Debug (UITests) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 110;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.halo.mac.uitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.9;
+				TEST_TARGET_NAME = Halo;
+			};
+			name = Debug;
+		};
+		000000000000000000003008 /* Release (UITests) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 110;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.halo.mac.uitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.9;
+				TEST_TARGET_NAME = Halo;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -446,6 +523,12 @@
 		000000000000000000002012 /* Build configuration list for PBXNativeTarget "HaloWidget" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (000000000000000000002010, 000000000000000000002011,);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		000000000000000000003009 /* Build configuration list for PBXNativeTarget "HaloUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (000000000000000000003007, 000000000000000000003008,);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};

@@ -1,0 +1,57 @@
+appId: com.halo.mac
+tags:
+  - regression
+  - applications
+---
+# ═══════════════════════════════════════════════════
+# TC-008: Applications Module
+# Verifies app list renders, sorting, category filter,
+# and uninstall confirmation sheet.
+# ═══════════════════════════════════════════════════
+
+- launchApp
+- tapOn: "Applications"
+
+# Header and scan state
+- waitForAnimationToEnd:
+    timeout: 10000
+- assertVisible: "Applications"
+
+# Sort controls must be visible
+- assertVisible: "Name"
+- assertVisible: "Size"
+- assertVisible: "Last Used"
+
+# At least one app row must appear (Halo itself)
+- assertVisible: "Halo"
+
+# ── Sort by Size ──────────────────────────────────
+- tapOn: "Size"
+- waitForAnimationToEnd:
+    timeout: 5000
+# List should still be populated after sort
+- assertVisible:
+    id: "appListView"
+
+# ── Sort by Name ──────────────────────────────────
+- tapOn: "Name"
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# ── Search ────────────────────────────────────────
+- tapOn:
+    id: "appSearchField"
+- inputText: "Halo"
+- assertVisible: "Halo"
+- clearText
+
+# ── Uninstall flow (verify confirmation only) ─────
+- longPressOn: "Halo"
+- assertVisible: "Uninstall"
+- tapOn: "Uninstall"
+# Confirmation sheet must appear — never proceed
+- assertVisible: "Move to Trash"
+- assertVisible: "Cancel"
+- tapOn: "Cancel"
+
+- takeScreenshot: applications_module

@@ -1,0 +1,44 @@
+appId: com.halo.mac
+tags:
+  - smoke
+  - dashboard
+---
+# ═══════════════════════════════════════════════════
+# TC-002: Dashboard Live Metrics
+# Verifies health ring, all metric cards, and
+# Smart Scan trigger are visible and functional.
+# ═══════════════════════════════════════════════════
+
+- launchApp
+
+# Health ring and score
+- assertVisible: "health"
+- assertVisible:
+    id: "healthScoreRing"
+
+# All six metric cards
+- assertVisible: "CPU Usage"
+- assertVisible: "RAM"
+- assertVisible: "Disk Free"
+- assertVisible: "Upload"
+- assertVisible: "Download"
+- assertVisible: "Battery"
+
+# Quick Actions
+- assertVisible: "Smart Scan"
+- assertVisible: "System Junk"
+- assertVisible: "Clipboard"
+- assertVisible: "Duplicates"
+- assertVisible: "App Ghosts"
+
+# Recent Activity section exists
+- assertVisible: "Recent Activity"
+
+# Trigger Smart Scan
+- tapOn: "Smart Scan"
+- assertVisible: "Scanning"
+- waitForAnimationToEnd:
+    timeout: 30000
+- assertVisible: "Smart Scan"   # button re-enabled after completion
+
+- takeScreenshot: dashboard_post_scan

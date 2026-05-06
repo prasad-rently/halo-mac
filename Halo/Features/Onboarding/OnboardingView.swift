@@ -23,6 +23,7 @@ struct OnboardingView: View {
                     case 2: OnboardingStep2Accessibility(onNext: { step = 3 })
                     default: OnboardingStepDone(onDone: {
                         UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+                        UserDefaults.standard.synchronize()   // flush to disk immediately
                         appState.isOnboardingComplete = true
                     })
                     }
@@ -333,7 +334,7 @@ struct SettingsView: View {
                     .font(.system(size: 48))
                     .foregroundColor(.haloAccent)
                 Text("Halo").font(HaloFont.display(24, weight: .heavy))
-                Text("Version 1.0.0 (Build 100)").foregroundColor(.secondary)
+                Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—") (Build \(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"))").foregroundColor(.secondary)
                 Divider()
                 Button("Check for Updates") {}
                 Button("View Privacy Policy") {}

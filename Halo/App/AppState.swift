@@ -10,7 +10,9 @@ final class AppState: ObservableObject {
 
     // MARK: Navigation
     @Published var selectedModule: AppModule = .dashboard
-    @Published var isOnboardingComplete: Bool = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+    @Published var isOnboardingComplete: Bool = CommandLine.arguments.contains("--uitesting")
+        ? true
+        : UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
 
     // MARK: System Metrics (live)
     @Published var cpuUsage: Double = 0

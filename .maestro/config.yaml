@@ -1,0 +1,26 @@
+# Maestro Workspace Configuration
+# App: Halo — Your Mac. Elevated.
+# Bundle ID: com.halo.mac
+# Platform: macOS 13.0+ (flows written for future iOS/Mac Catalyst port)
+#
+# To run all flows:   maestro test .maestro/flows/
+# To run one flow:    maestro test .maestro/flows/01_onboarding.yaml
+# To run tagged:      maestro test --include-tags smoke .maestro/flows/
+
+flows:
+  - .maestro/flows/*.yaml
+
+tags:
+  smoke:
+    - .maestro/flows/01_onboarding.yaml
+    - .maestro/flows/02_dashboard.yaml
+  regression:
+    - .maestro/flows/
+  clipboard:
+    - .maestro/flows/07_clipboard.yaml
+  performance:
+    - .maestro/flows/05_performance.yaml
+
+---
+# Environment variables (override with -e KEY=VALUE)
+appId: com.halo.mac

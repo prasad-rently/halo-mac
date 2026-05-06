@@ -1,0 +1,54 @@
+appId: com.halo.mac
+tags:
+  - regression
+  - files
+---
+# ═══════════════════════════════════════════════════
+# TC-006: Files Module (SpaceLens + Duplicates + Large Files)
+# ═══════════════════════════════════════════════════
+
+- launchApp
+- tapOn: "Files"
+
+# Three tabs must exist
+- assertVisible: "SpaceLens"
+- assertVisible: "Duplicates"
+- assertVisible: "Large Files"
+
+# ── SpaceLens Tab ─────────────────────────────────
+- tapOn: "SpaceLens"
+- waitForAnimationToEnd:
+    timeout: 10000
+- assertVisible:
+    id: "spaceLensTreemap"
+
+# ── Duplicates Tab ────────────────────────────────
+- tapOn: "Duplicates"
+- assertVisible: "Scan for Duplicates"
+- tapOn: "Scan for Duplicates"
+- waitForAnimationToEnd:
+    timeout: 60000   # SHA-256 scan can take time
+
+# Results: either groups found or empty state
+- assertTrue:
+    visible: "No duplicates found"
+    OR:
+      visible: "Wasted"
+
+# If duplicates found, verify safe deletion UI
+- tapOn:
+    optional: true
+    text: "Select All Duplicates"
+- assertVisible:
+    optional: true
+    text: "Move to Trash"
+
+- takeScreenshot: files_duplicates
+
+# ── Large Files Tab ───────────────────────────────
+- tapOn: "Large Files"
+- waitForAnimationToEnd:
+    timeout: 10000
+- assertVisible: "Size"
+
+- takeScreenshot: files_large
