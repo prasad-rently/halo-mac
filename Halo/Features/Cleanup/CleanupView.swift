@@ -322,15 +322,25 @@ struct FileItemRow: View {
     @ObservedObject var viewModel: CleanupViewModel
     @State private var showTrashConfirm = false
 
+    /// Show a folder icon for directory-level items (DerivedData project folders,
+    /// Trash directories) and the item's file kind icon otherwise.
+    private var itemIcon: String {
+        let fm = FileManager.default
+        var isDir: ObjCBool = false
+        fm.fileExists(atPath: item.url.path, isDirectory: &isDir)
+        if isDir.boolValue { return "folder.fill" }
+        return item.kind.icon
+    }
+
     var body: some View {
         HStack(spacing: 10) {
-            // File type icon
-            Image(systemName: item.kind.icon)
+            // File/folder type icon
+            Image(systemName: itemIcon)
                 .font(.system(size: 14))
                 .foregroundColor(.haloText2)
                 .frame(width: 20)
 
-            // Path + filename
+            // Path + name
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.parentDisplayPath + "/")
                     .font(HaloFont.body(11))

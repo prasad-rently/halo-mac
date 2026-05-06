@@ -150,6 +150,60 @@ actor ScanCoordinator {
         _ = try await scanner.deleteItems([item])
     }
 
-    // MARK: - DerivedData: placeholder (implemented in fix 3)
-    private func scanDerivedDataDirectories() async -> [ScannedItem] { [] }
+    // MARK: - DerivedData: enumerate project build folders as single deletable units
+
+    /// Scans DerivedData and CoreSimulator/Caches by enumerating the immediate
+    /// subdirectories (one per Xcode project build) and calculating each folder's
+    /// total size. Trashing these directory-level items is what actually frees disk
+    /// space — scanning individual files inside them only finds a tiny fraction of
+    /// the total and leaves the directory skeleton behind.
+    private func scanDerivedDataDirectories() async -> [ScannedItem] {
+        let home = NSHomeDirectory()
+        let roots = [
+            URL(fileURLWithPath: "\(home)/Library/Developer/Xcode/DerivedData"),
+            URL(fileURLWithPath: "\(home)/Library/Developer/CoreSimulator/Caches")
+        ]
+        let fm = FileManager.default
+        var items: [ScannedItem] = []
+
+        for root in roots {
+            guard fm.fileExists(atPath: root.path) else { continue }
+
+            let children = (try? fm.contentsOfDirectory(
+                at: root,
+                includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey, .creationDateKey],
+                options: [.skipsHiddenFiles]
+            )) ?? []
+
+            // Process each project folder concurrently to calculate sizes fast
+            await withTaskGroup(of: ScannedItem?.self) { group in
+                for child in children {
+                    group.addTask {
+                        var isDir: ObjCBool = false
+                        guard fm.fileExists(atPath: child.path, isDirectory: &isDir),
+                              isDir.boolValue else { return nil }
+
+                        let resVals = try? child.resourceValues(
+                            forKeys: [.contentModificationDateKey, .creationDateKey]
+                        )
+                        let size = await self.scanner.calculateSize(of: child)
+                        guard size > 0 else { return nil }   // skip empty placeholder dirs
+
+                        return ScannedItem(
+                            id: UUID(),
+                            url: child,
+                            size: size,
+                            creationDate: resVals?.creationDate,
+                            modifiedDate: resVals?.contentModificationDate,
+                            kind: .derived
+                        )
+                    }
+                }
+                for await result in group {
+                    if let item = result { items.append(item) }
+                }
+            }
+        }
+        return items.sorted { $0.size > $1.size }
+    }
 }
