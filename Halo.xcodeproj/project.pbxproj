@@ -1,0 +1,455 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		000000000000000000001017 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001016 /* AppState.swift */; };
+		000000000000000000001019 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001018 /* ContentView.swift */; };
+		000000000000000000001021 /* HaloApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001020 /* HaloApp.swift */; };
+		000000000000000000001023 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001022 /* Models.swift */; };
+		000000000000000000001025 /* FileSystemScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001024 /* FileSystemScanner.swift */; };
+		000000000000000000001027 /* ScanCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001026 /* ScanCoordinator.swift */; };
+		000000000000000000001029 /* SystemMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001028 /* SystemMonitor.swift */; };
+		000000000000000000001031 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001030 /* DesignSystem.swift */; };
+		000000000000000000001033 /* ApplicationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001032 /* ApplicationsView.swift */; };
+		000000000000000000001035 /* CleanupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001034 /* CleanupView.swift */; };
+		000000000000000000001037 /* ClipboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001036 /* ClipboardView.swift */; };
+		000000000000000000001039 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001038 /* DashboardView.swift */; };
+		000000000000000000001041 /* FilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001040 /* FilesView.swift */; };
+		000000000000000000001043 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001042 /* MenuBarView.swift */; };
+		000000000000000000001045 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001044 /* OnboardingView.swift */; };
+		000000000000000000001047 /* PerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001046 /* PerformanceView.swift */; };
+		000000000000000000001049 /* ProtectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001048 /* ProtectionView.swift */; };
+		000000000000000000001051 /* DuplicateDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001050 /* DuplicateDetector.swift */; };
+		000000000000000000001053 /* ClipboardMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001052 /* ClipboardMonitor.swift */; };
+		000000000000000000001055 /* SmartScanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001054 /* SmartScanView.swift */; };
+		000000000000000000001066 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001065 /* HotkeyManager.swift */; };
+		000000000000000000001068 /* ClipboardQuickPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001067 /* ClipboardQuickPickerView.swift */; };
+		000000000000000000001057 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001056 /* Assets.xcassets */; };
+		000000000000000000001059 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001058 /* PrivacyInfo.xcprivacy */; };
+		000000000000000000001061 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000001060 /* IOKit.framework */; };
+		000000000000000000001063 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000001062 /* SystemConfiguration.framework */; };
+		000000000000000000002004 /* HaloWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000002002 /* HaloWidgetBundle.swift */; };
+		000000000000000000002005 /* HaloWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000002003 /* HaloWidget.swift */; };
+		000000000000000000002019 /* HaloSharedData.swift in Sources (Widget) */ = {isa = PBXBuildFile; fileRef = 000000000000000000002020 /* HaloSharedData.swift */; };
+		000000000000000000002016 /* HaloWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 000000000000000000002000 /* HaloWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		000000000000000000002021 /* HaloSharedData.swift in Sources (Main) */ = {isa = PBXBuildFile; fileRef = 000000000000000000002020 /* HaloSharedData.swift */; };
+		000000000000000000002018 /* WidgetKit.framework in Frameworks (Main) */ = {isa = PBXBuildFile; fileRef = 000000000000000000002017 /* WidgetKit.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		000000000000000000001015 /* Halo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Halo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000001016 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/AppState.swift; sourceTree = "<group>"; };
+		000000000000000000001018 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/ContentView.swift; sourceTree = "<group>"; };
+		000000000000000000001020 /* HaloApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/HaloApp.swift; sourceTree = "<group>"; };
+		000000000000000000001022 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Models/Models.swift; sourceTree = "<group>"; };
+		000000000000000000001024 /* FileSystemScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/FileSystemScanner.swift; sourceTree = "<group>"; };
+		000000000000000000001026 /* ScanCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ScanCoordinator.swift; sourceTree = "<group>"; };
+		000000000000000000001028 /* SystemMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SystemMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000001030 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/DesignSystem/DesignSystem.swift; sourceTree = "<group>"; };
+		000000000000000000001032 /* ApplicationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Applications/ApplicationsView.swift; sourceTree = "<group>"; };
+		000000000000000000001034 /* CleanupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Cleanup/CleanupView.swift; sourceTree = "<group>"; };
+		000000000000000000001036 /* ClipboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/ClipboardView.swift; sourceTree = "<group>"; };
+		000000000000000000001038 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/DashboardView.swift; sourceTree = "<group>"; };
+		000000000000000000001040 /* FilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/FilesView.swift; sourceTree = "<group>"; };
+		000000000000000000001042 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/MenuBar/MenuBarView.swift; sourceTree = "<group>"; };
+		000000000000000000001044 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Onboarding/OnboardingView.swift; sourceTree = "<group>"; };
+		000000000000000000001046 /* PerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/PerformanceView.swift; sourceTree = "<group>"; };
+		000000000000000000001048 /* ProtectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Protection/ProtectionView.swift; sourceTree = "<group>"; };
+		000000000000000000001050 /* DuplicateDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/DuplicateDetector.swift; sourceTree = "<group>"; };
+		000000000000000000001052 /* ClipboardMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/ClipboardMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000001054 /* SmartScanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/SmartScan/SmartScanView.swift; sourceTree = "<group>"; };
+		000000000000000000001065 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/HotkeyManager.swift; sourceTree = "<group>"; };
+		000000000000000000001067 /* ClipboardQuickPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/ClipboardQuickPickerView.swift; sourceTree = "<group>"; };
+		000000000000000000001056 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Halo/Resources/Assets.xcassets; sourceTree = "<group>"; };
+		000000000000000000001058 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = Halo/Resources/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		000000000000000000001060 /* IOKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOKit.framework; path = System/Library/Frameworks/IOKit.framework; sourceTree = SDKROOT; };
+		000000000000000000001062 /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
+		000000000000000000002000 /* HaloWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HaloWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000002002 /* HaloWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloWidgetBundle.swift; sourceTree = "<group>"; };
+		000000000000000000002003 /* HaloWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloWidget.swift; sourceTree = "<group>"; };
+		000000000000000000002020 /* HaloSharedData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloSharedData.swift; sourceTree = "<group>"; };
+		000000000000000000002017 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		000000000000000000002015 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				000000000000000000002016 /* HaloWidget.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+/* Begin PBXFrameworksBuildPhase section */
+		000000000000000000001014 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				000000000000000000001061 /* IOKit.framework in Frameworks */,
+				000000000000000000001063 /* SystemConfiguration.framework in Frameworks */,
+				000000000000000000002018 /* WidgetKit.framework in Frameworks (Main) */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		000000000000000000002006 /* Frameworks (Widget) */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		000000000000000000001000 /* Halo */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000001001 /* Sources */,
+				000000000000000000001064 /* Frameworks */,
+				000000000000000000002001 /* HaloWidget */,
+				000000000000000000002022 /* Shared */,
+				000000000000000000001003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		000000000000000000001001 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000001016 /* AppState.swift */,
+				000000000000000000001018 /* ContentView.swift */,
+				000000000000000000001020 /* HaloApp.swift */,
+				000000000000000000001022 /* Models.swift */,
+				000000000000000000001024 /* FileSystemScanner.swift */,
+				000000000000000000001026 /* ScanCoordinator.swift */,
+				000000000000000000001028 /* SystemMonitor.swift */,
+				000000000000000000001050 /* DuplicateDetector.swift */,
+				000000000000000000001030 /* DesignSystem.swift */,
+				000000000000000000001032 /* ApplicationsView.swift */,
+				000000000000000000001034 /* CleanupView.swift */,
+				000000000000000000001052 /* ClipboardMonitor.swift */,
+				000000000000000000001067 /* ClipboardQuickPickerView.swift */,
+				000000000000000000001036 /* ClipboardView.swift */,
+				000000000000000000001065 /* HotkeyManager.swift */,
+				000000000000000000001038 /* DashboardView.swift */,
+				000000000000000000001040 /* FilesView.swift */,
+				000000000000000000001042 /* MenuBarView.swift */,
+				000000000000000000001044 /* OnboardingView.swift */,
+				000000000000000000001046 /* PerformanceView.swift */,
+				000000000000000000001048 /* ProtectionView.swift */,
+				000000000000000000001054 /* SmartScanView.swift */,
+				000000000000000000001056 /* Assets.xcassets */,
+				000000000000000000001058 /* PrivacyInfo.xcprivacy */,
+			);
+			name = Sources;
+			sourceTree = "<group>";
+		};
+		000000000000000000001003 /* Products */ = {
+			isa = PBXGroup;
+			children = (000000000000000000001015 /* Halo.app */,
+					000000000000000000002000 /* HaloWidget.appex */,);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		000000000000000000001064 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000001060 /* IOKit.framework */,
+				000000000000000000001062 /* SystemConfiguration.framework */,
+				000000000000000000002017 /* WidgetKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		000000000000000000002001 /* HaloWidget */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000002002 /* HaloWidgetBundle.swift */,
+				000000000000000000002003 /* HaloWidget.swift */,
+			);
+			path = HaloWidget;
+			sourceTree = "<group>";
+		};
+		000000000000000000002022 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000002020 /* HaloSharedData.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		000000000000000000001004 /* Halo */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 000000000000000000001008;
+			buildPhases = (000000000000000000001014, 000000000000000000001012, 000000000000000000001013, 000000000000000000002015,);
+			dependencies = (000000000000000000002014 /* PBXTargetDependency */,);
+			buildRules = ();
+			name = Halo;
+			productName = Halo;
+			productReference = 000000000000000000001015;
+			productType = "com.apple.product-type.application";
+		};
+		000000000000000000002009 /* HaloWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 000000000000000000002012;
+			buildPhases = (
+				000000000000000000002006,
+				000000000000000000002008,
+				000000000000000000002007,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = HaloWidget;
+			productName = HaloWidget;
+			productReference = 000000000000000000002000;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXContainerItemProxy section */
+		000000000000000000002013 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000001011 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 000000000000000000002009;
+			remoteInfo = HaloWidget;
+		};
+/* End PBXContainerItemProxy section */
+/* Begin PBXTargetDependency section */
+		000000000000000000002014 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 000000000000000000002009 /* HaloWidget */;
+			targetProxy = 000000000000000000002013 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+/* Begin PBXProject section */
+		000000000000000000001011 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1540;
+				LastUpgradeCheck = 1540;
+				TargetAttributes = {
+					000000000000000000001004 = { CreatedOnToolsVersion = 15.4; };
+					000000000000000000002009 = { CreatedOnToolsVersion = 15.4; };
+				};
+			};
+			buildConfigurationList = 000000000000000000001005;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base);
+			mainGroup = 000000000000000000001000;
+			productRefGroup = 000000000000000000001003;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (000000000000000000001004, 000000000000000000002009,);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		000000000000000000001013 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				000000000000000000001057 /* Assets.xcassets in Resources */,
+				000000000000000000001059 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		000000000000000000002007 /* Resources (Widget) */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		000000000000000000001012 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				000000000000000000001017 /* AppState.swift in Sources */,
+				000000000000000000001019 /* ContentView.swift in Sources */,
+				000000000000000000001021 /* HaloApp.swift in Sources */,
+				000000000000000000001023 /* Models.swift in Sources */,
+				000000000000000000001025 /* FileSystemScanner.swift in Sources */,
+				000000000000000000001027 /* ScanCoordinator.swift in Sources */,
+				000000000000000000001029 /* SystemMonitor.swift in Sources */,
+				000000000000000000001051 /* DuplicateDetector.swift in Sources */,
+				000000000000000000001031 /* DesignSystem.swift in Sources */,
+				000000000000000000001033 /* ApplicationsView.swift in Sources */,
+				000000000000000000001035 /* CleanupView.swift in Sources */,
+				000000000000000000001053 /* ClipboardMonitor.swift in Sources */,
+				000000000000000000001068 /* ClipboardQuickPickerView.swift in Sources */,
+				000000000000000000001037 /* ClipboardView.swift in Sources */,
+				000000000000000000001066 /* HotkeyManager.swift in Sources */,
+				000000000000000000001039 /* DashboardView.swift in Sources */,
+				000000000000000000001041 /* FilesView.swift in Sources */,
+				000000000000000000001043 /* MenuBarView.swift in Sources */,
+				000000000000000000001045 /* OnboardingView.swift in Sources */,
+				000000000000000000001047 /* PerformanceView.swift in Sources */,
+				000000000000000000001049 /* ProtectionView.swift in Sources */,
+				000000000000000000001055 /* SmartScanView.swift in Sources */,
+				000000000000000000002021 /* HaloSharedData.swift in Sources (Main) */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		000000000000000000002008 /* Sources (Widget) */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				000000000000000000002004 /* HaloWidgetBundle.swift in Sources */,
+				000000000000000000002005 /* HaloWidget.swift in Sources */,
+				000000000000000000002019 /* HaloSharedData.swift in Sources (Widget) */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		000000000000000000001006 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		000000000000000000001007 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		000000000000000000001009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSET_CATALOG_COMPILER_OPTIMIZATION = space;
+				CODE_SIGN_ENTITLEMENTS = Halo/Halo.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 100;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Halo/Resources/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.halo.mac";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		000000000000000000001010 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSET_CATALOG_COMPILER_OPTIMIZATION = space;
+				CODE_SIGN_ENTITLEMENTS = Halo/Halo.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 100;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Halo/Resources/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.halo.mac";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		000000000000000000002010 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = HaloWidget/HaloWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 100;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HaloWidget/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.halo.mac.widget";
+				PRODUCT_NAME = HaloWidget;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		000000000000000000002011 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = HaloWidget/HaloWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 100;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HaloWidget/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.halo.mac.widget";
+				PRODUCT_NAME = HaloWidget;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		000000000000000000001005 /* Build configuration list for PBXProject "Halo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (000000000000000000001006, 000000000000000000001007,);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		000000000000000000001008 /* Build configuration list for PBXNativeTarget "Halo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (000000000000000000001009, 000000000000000000001010,);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		000000000000000000002012 /* Build configuration list for PBXNativeTarget "HaloWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (000000000000000000002010, 000000000000000000002011,);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 000000000000000000001011 /* Project object */;
+}

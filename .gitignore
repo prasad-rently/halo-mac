@@ -1,0 +1,62 @@
+# Xcode build artifacts
+build/
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+Package.resolved
+
+# CocoaPods / Carthage (unused but excluded for safety)
+Pods/
+Carthage/Build/
+
+# macOS system files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+*.AppleDouble
+*.LSOverride
+
+# Xcode user schemes (auto-generated per machine)
+xcuserdata/
+
+# Archives and exports
+*.xcarchive
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Provisioning profiles — never commit these
+*.mobileprovision
+*.provisionprofile
+
+# Environment & secrets
+.env
+*.env.local
+Secrets.swift
+Secrets.plist
+
+# Derived data / build outputs
+/tmp/HaloBuild/
+
+# Editor artifacts
+*.orig
+*.swp
+.idea/
+.vscode/
