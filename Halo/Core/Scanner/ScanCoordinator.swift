@@ -63,19 +63,31 @@ actor ScanCoordinator {
         return category
     }
 
-    // MARK: - Execute Cleanup
+    // MARK: - Execute Cleanup (batch)
 
-    func executeCleanup(categories: [CleanupCategory]) async -> (deleted: Int, freed: Int64) {
+    /// Trashes all given items. Returns (deleted, freed, firstError).
+    func executeCleanup(items: [ScannedItem]) async -> (deleted: Int, freed: Int64, error: String?) {
         var totalDeleted = 0
         var totalFreed: Int64 = 0
+        var firstError: String? = nil
 
-        for category in categories where category.isSelected {
-            let selectedItems = category.items.filter(\.isSelected)
-            let result = try? await scanner.deleteItems(selectedItems)
-            totalDeleted += result?.deleted ?? 0
-            totalFreed += result?.freed ?? 0
+        for item in items {
+            do {
+                let result = try await scanner.deleteItems([item])
+                totalDeleted += result.deleted
+                totalFreed += result.freed
+            } catch {
+                if firstError == nil {
+                    firstError = "Could not trash \"\(item.name)\": \(error.localizedDescription)"
+                }
+            }
         }
+        return (totalDeleted, totalFreed, firstError)
+    }
 
-        return (totalDeleted, totalFreed)
+    // MARK: - Execute Cleanup (single item)
+
+    func deleteSingleItem(_ item: ScannedItem) async throws {
+        _ = try await scanner.deleteItems([item])
     }
 }
