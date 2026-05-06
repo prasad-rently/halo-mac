@@ -9,7 +9,8 @@
   <img src="https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white" alt="Swift 5.9"/>
   <img src="https://img.shields.io/badge/SwiftUI-blue?logo=swift&logoColor=white" alt="SwiftUI"/>
   <img src="https://img.shields.io/badge/WidgetKit-✓-4f7cff" alt="WidgetKit"/>
-  <img src="https://img.shields.io/badge/license-Proprietary-lightgrey" alt="License"/>
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"/>
+  <img src="https://img.shields.io/github/v/release/prasad-rently/halo-mac?color=4f7cff" alt="Latest release"/>
 </p>
 
 ---
@@ -287,6 +288,19 @@ Top items:
 
 ---
 
+## Contributing
+
+Contributions are welcome! Please open an issue first to discuss what you'd like to change. Pull requests should target the `main` branch.
+
+1. Fork the repo
+2. Create a feature branch (`git checkout -b feat/my-feature`)
+3. Commit your changes following the existing code style
+4. Open a Pull Request
+
+---
+
 ## License
 
-Proprietary — all rights reserved. See `LICENSE` for details.
+Released under the [MIT License](LICENSE).
+
+Copyright © 2026 [Prasad](https://github.com/prasad-rently)
