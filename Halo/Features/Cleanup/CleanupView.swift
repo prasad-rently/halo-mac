@@ -26,6 +26,7 @@ final class CleanupViewModel: ObservableObject {
     @Published var categories: [CleanupCategory] = []
     @Published var isScanning = false
     @Published var isCleaning = false
+    @Published var cleanError: String? = nil
     @Published var lastCleanResult: (deleted: Int, freed: Int64)? = nil
 
     private let coordinator = ScanCoordinator()
@@ -36,7 +37,6 @@ final class CleanupViewModel: ObservableObject {
     func scanAll() async {
         isScanning = true
         categories = CleanupKind.allCases.map { CleanupCategory(kind: $0) }
-        // Scan each category concurrently
         await withTaskGroup(of: CleanupCategory.self) { group in
             for kind in CleanupKind.allCases {
                 group.addTask { await self.coordinator.scanCategory(kind) }
@@ -50,28 +50,44 @@ final class CleanupViewModel: ObservableObject {
         isScanning = false
     }
 
-    func cleanSelected(for kind: CleanupKind) async {
+    /// Clean every item in the given category at once.
+    func cleanAll(for kind: CleanupKind) async {
         guard let idx = categories.firstIndex(where: { $0.kind == kind }) else { return }
         isCleaning = true
-        let result = await coordinator.executeCleanup(categories: [categories[idx]])
-        lastCleanResult = result
-        // Remove cleaned items
-        categories[idx].items.removeAll { $0.isSelected }
+        cleanError = nil
+        let (deleted, freed, error) = await coordinator.executeCleanup(
+            items: categories[idx].items
+        )
+        if let error { cleanError = error }
+        lastCleanResult = (deleted, freed)
+        categories[idx].items.removeAll { _ in deleted > 0 }   // remove all on success
+        // Re-scan the category so sizes stay accurate
+        let refreshed = await coordinator.scanCategory(kind)
+        categories[idx] = refreshed
         isCleaning = false
     }
 
-    func cleanAll() async {
+    /// Clean a single item — called from the per-row trash button.
+    func cleanSingleItem(_ item: ScannedItem, for kind: CleanupKind) async {
+        guard let idx = categories.firstIndex(where: { $0.kind == kind }) else { return }
         isCleaning = true
-        let result = await coordinator.executeCleanup(categories: categories)
-        lastCleanResult = result
-        for i in categories.indices {
-            categories[i].items.removeAll { $0.isSelected }
+        cleanError = nil
+        do {
+            try await coordinator.deleteSingleItem(item)
+            categories[idx].items.removeAll { $0.id == item.id }
+            lastCleanResult = (1, item.size)
+        } catch {
+            cleanError = error.localizedDescription
         }
         isCleaning = false
     }
 
     func category(for kind: CleanupKind) -> CleanupCategory? {
         categories.first { $0.kind == kind }
+    }
+
+    func categoryIndex(for kind: CleanupKind) -> Int? {
+        categories.firstIndex(where: { $0.kind == kind })
     }
 }
 
@@ -95,7 +111,6 @@ struct CleanupSidebar: View {
                     }
                 }
 
-                // Total chip
                 VStack(spacing: 3) {
                     Text(viewModel.isScanning ? "Scanning…" : viewModel.totalFormatted)
                         .font(HaloFont.display(30, weight: .heavy))
@@ -118,7 +133,6 @@ struct CleanupSidebar: View {
 
             Divider().background(Color.haloBorder)
 
-            // Category list
             ScrollView {
                 VStack(spacing: 2) {
                     ForEach(CleanupKind.allCases) { kind in
@@ -127,9 +141,7 @@ struct CleanupSidebar: View {
                             kind: kind,
                             category: cat,
                             isSelected: selectedCategory == kind
-                        ) {
-                            selectedCategory = kind
-                        }
+                        ) { selectedCategory = kind }
                     }
                 }
                 .padding(.vertical, 8)
@@ -166,11 +178,6 @@ struct CleanupCategoryRow: View {
                     }
                 }
                 Spacer()
-                if category?.isSelected == true {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(.haloAccent)
-                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
@@ -191,6 +198,8 @@ struct CleanupCategoryRow: View {
 struct CleanupFileList: View {
     let category: CleanupKind
     @ObservedObject var viewModel: CleanupViewModel
+    @State private var showCleanAllConfirm = false
+    @State private var showErrorAlert = false
 
     private var currentCategory: CleanupCategory? {
         viewModel.category(for: category)
@@ -200,32 +209,85 @@ struct CleanupFileList: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("\(category.rawValue)")
-                    .font(HaloFont.display(15, weight: .semibold))
-                    .foregroundColor(.haloText)
-                if let cat = currentCategory {
-                    Text("— \(cat.allFormatted)")
-                        .font(HaloFont.body(14))
-                        .foregroundColor(.haloText2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(category.rawValue)
+                        .font(HaloFont.display(15, weight: .semibold))
+                        .foregroundColor(.haloText)
+                    if let cat = currentCategory, !cat.items.isEmpty {
+                        Text("\(cat.items.count) item\(cat.items.count == 1 ? "" : "s") · \(cat.allFormatted)")
+                            .font(HaloFont.body(11))
+                            .foregroundColor(.haloText2)
+                    }
                 }
                 Spacer()
-                HaloGhostButton("Select All") {
-                    // select all
-                }
-                HaloPrimaryButton("Clean", icon: "sparkles", isLoading: viewModel.isCleaning) {
-                    Task { await viewModel.cleanSelected(for: category) }
+                if let cat = currentCategory, !cat.items.isEmpty {
+                    // Clean All button — trashes every item in this category
+                    Button {
+                        showCleanAllConfirm = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            if viewModel.isCleaning {
+                                ProgressView().scaleEffect(0.6).tint(.white)
+                            } else {
+                                Image(systemName: "trash.fill")
+                                    .font(.system(size: 12, weight: .semibold))
+                            }
+                            Text("Clean All (\(cat.allFormatted))")
+                                .font(HaloFont.body(13, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Color.haloRed.opacity(viewModel.isCleaning ? 0.5 : 1))
+                        .cornerRadius(10)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isCleaning)
+                    .confirmationDialog(
+                        "Move all \(cat.items.count) items (\(cat.allFormatted)) to Trash?",
+                        isPresented: $showCleanAllConfirm,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Move to Trash", role: .destructive) {
+                            Task { await viewModel.cleanAll(for: category) }
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    }
                 }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
 
+            // Error banner
+            if let error = viewModel.cleanError {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.haloAmber)
+                    Text(error)
+                        .font(HaloFont.body(12))
+                        .foregroundColor(.haloText)
+                        .lineLimit(2)
+                    Spacer()
+                    Button {
+                        viewModel.cleanError = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 11))
+                            .foregroundColor(.haloText2)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.haloAmber.opacity(0.08))
+                .overlay(Rectangle().fill(Color.haloAmber).frame(height: 1), alignment: .bottom)
+            }
+
             Divider().background(Color.haloBorder)
 
             if viewModel.isScanning {
                 VStack(spacing: 12) {
-                    ProgressView()
-                        .scaleEffect(1.2)
-                        .tint(.haloAccent)
+                    ProgressView().scaleEffect(1.2).tint(.haloAccent)
                     Text("Scanning \(category.rawValue)…")
                         .font(HaloFont.body(13))
                         .foregroundColor(.haloText2)
@@ -235,11 +297,16 @@ struct CleanupFileList: View {
                 ScrollView {
                     LazyVStack(spacing: 5) {
                         ForEach(cat.items) { item in
-                            FileItemRow(item: item)
+                            FileItemRow(
+                                item: item,
+                                category: category,
+                                viewModel: viewModel
+                            )
                         }
                     }
                     .padding(16)
                 }
+                .accessibilityIdentifier("fileListView")
             } else {
                 EmptyCleanupState(category: category)
             }
@@ -247,17 +314,33 @@ struct CleanupFileList: View {
     }
 }
 
+// MARK: - File Item Row
+
 struct FileItemRow: View {
     let item: ScannedItem
-    @State private var isChecked: Bool = true
+    let category: CleanupKind
+    @ObservedObject var viewModel: CleanupViewModel
+    @State private var showTrashConfirm = false
+
+    /// Show a folder icon for directory-level items (DerivedData project folders,
+    /// Trash directories) and the item's file kind icon otherwise.
+    private var itemIcon: String {
+        let fm = FileManager.default
+        var isDir: ObjCBool = false
+        fm.fileExists(atPath: item.url.path, isDirectory: &isDir)
+        if isDir.boolValue { return "folder.fill" }
+        return item.kind.icon
+    }
 
     var body: some View {
         HStack(spacing: 10) {
-            HaloCheckbox(isChecked: $isChecked)
-            Image(systemName: item.kind.icon)
+            // File/folder type icon
+            Image(systemName: itemIcon)
                 .font(.system(size: 14))
                 .foregroundColor(.haloText2)
                 .frame(width: 20)
+
+            // Path + name
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.parentDisplayPath + "/")
                     .font(HaloFont.body(11))
@@ -268,16 +351,42 @@ struct FileItemRow: View {
                     .foregroundColor(.haloText)
                     .lineLimit(1)
             }
+
             Spacer()
+
+            // Size
             Text(item.sizeFormatted)
                 .font(HaloFont.body(12, weight: .medium))
                 .foregroundColor(.haloText2)
                 .frame(width: 72, alignment: .trailing)
+
+            // Modified date
             if let modified = item.modifiedDate {
                 Text(RelativeDateTimeFormatter().localizedString(for: modified, relativeTo: Date()))
                     .font(HaloFont.body(11))
                     .foregroundColor(.haloText3)
                     .frame(width: 80, alignment: .trailing)
+            }
+
+            // Per-item trash button (red)
+            Button {
+                showTrashConfirm = true
+            } label: {
+                Image(systemName: "trash.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(Color.haloRed)
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.isCleaning)
+            .confirmationDialog(
+                "Move \"\(item.name)\" (\(item.sizeFormatted)) to Trash?",
+                isPresented: $showTrashConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Move to Trash", role: .destructive) {
+                    Task { await viewModel.cleanSingleItem(item, for: category) }
+                }
+                Button("Cancel", role: .cancel) {}
             }
         }
         .padding(.horizontal, 12)
@@ -285,21 +394,34 @@ struct FileItemRow: View {
         .background(Color.haloSurface2)
         .cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.haloBorder, lineWidth: 1))
+        .opacity(viewModel.isCleaning ? 0.6 : 1)
     }
 }
+
+// MARK: - Empty State
 
 struct EmptyCleanupState: View {
     let category: CleanupKind
 
+    private var message: (icon: String, title: String, subtitle: String) {
+        switch category {
+        case .trash:
+            return ("trash", "Trash is empty", "Your system Trash contains no items.")
+        default:
+            return ("checkmark.circle.fill", "\(category.rawValue) is clean!",
+                    "No files found that need cleanup.")
+        }
+    }
+
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "checkmark.circle.fill")
+            Image(systemName: message.icon)
                 .font(.system(size: 40))
                 .foregroundColor(.haloGreen)
-            Text("\(category.rawValue) is clean!")
+            Text(message.title)
                 .font(HaloFont.display(15, weight: .semibold))
                 .foregroundColor(.haloText)
-            Text("No files found that need cleanup.")
+            Text(message.subtitle)
                 .font(HaloFont.body(13))
                 .foregroundColor(.haloText2)
         }
