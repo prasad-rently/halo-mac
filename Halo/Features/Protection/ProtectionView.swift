@@ -40,6 +40,10 @@ final class ProtectionViewModel: ObservableObject {
     // Permissions
     @Published var permissions: [AppPermission] = []
 
+    // Launch Agents — real scan from ~/Library/LaunchAgents, /Library/LaunchAgents, /Library/LaunchDaemons
+    @Published var launchAgents: [RealLaunchAgentItem] = []
+    @Published var isLoadingAgents = false
+
     private let scanner = ProtectionScanner()
 
     enum ScanState: Equatable {
@@ -68,6 +72,7 @@ final class ProtectionViewModel: ObservableObject {
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.loadPermissions() }
             group.addTask { await self.loadInstalledBrowsers() }
+            group.addTask { await self.loadLaunchAgents() }
         }
     }
 
@@ -91,7 +96,7 @@ final class ProtectionViewModel: ObservableObject {
         }
     }
 
-    // MARK: Browser Privacy (real detection + real clearing)
+    // MARK: Browser Privacy
 
     func loadInstalledBrowsers() async {
         isLoadingBrowsers = true
@@ -113,7 +118,6 @@ final class ProtectionViewModel: ObservableObject {
             if result.error != nil && firstError == nil { firstError = result.error }
         }
         if let err = firstError { clearBrowserError = err }
-        // Refresh data sizes after clearing
         var sizes: [UUID: Int64] = [:]
         for b in installedBrowsers { sizes[b.id] = await scanner.dataSize(for: b) }
         browserDataSizes = sizes
@@ -121,7 +125,7 @@ final class ProtectionViewModel: ObservableObject {
         showBrowserReviewSheet = false
     }
 
-    // MARK: Permissions (sample — TCC.db needs Full Disk Access)
+    // MARK: Permissions
 
     func loadPermissions() async {
         permissions = PermissionKind.allCases.map { kind in
@@ -140,6 +144,14 @@ final class ProtectionViewModel: ObservableObject {
         case .screenRecording: return ["Zoom", "CleanShot X", "Loom"]
         case .accessibility:   return ["Raycast", "BetterTouchTool"]
         }
+    }
+
+    // MARK: Launch Agents (real scan)
+
+    func loadLaunchAgents() async {
+        isLoadingAgents = true
+        launchAgents = await scanner.scanLaunchAgents()
+        isLoadingAgents = false
     }
 }
 
@@ -305,7 +317,7 @@ struct ThreatRow: View {
     }
 }
 
-// MARK: - Privacy Cleaner Card (real browser detection)
+// MARK: - Privacy Cleaner Card
 
 struct PrivacyCleanerCard: View {
     @ObservedObject var viewModel: ProtectionViewModel
@@ -337,7 +349,6 @@ struct PrivacyCleanerCard: View {
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
 
-                // Detected-browser list
                 if viewModel.isLoadingBrowsers {
                     HStack(spacing: 8) {
                         ProgressView().scaleEffect(0.6).tint(.haloAccent)
@@ -401,7 +412,6 @@ struct BrowserReviewSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Review & Clear Browser Data")
@@ -423,12 +433,10 @@ struct BrowserReviewSheet: View {
 
             Divider().background(Color.haloBorder)
 
-            // Warning banner
             HStack(spacing: 8) {
                 Image(systemName: "info.circle.fill").foregroundColor(.haloAmber)
                 Text("Close all browsers before clearing to avoid data corruption.")
-                    .font(HaloFont.body(12))
-                    .foregroundColor(.haloText)
+                    .font(HaloFont.body(12)).foregroundColor(.haloText)
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -436,18 +444,14 @@ struct BrowserReviewSheet: View {
 
             Divider().background(Color.haloBorder)
 
-            // Browser list with toggles
             ScrollView {
                 VStack(spacing: 10) {
                     ForEach(viewModel.installedBrowsers) { browser in
                         let isSelected = viewModel.selectedBrowsersForClear.contains(browser.id)
                         HStack(spacing: 12) {
                             Button {
-                                if isSelected {
-                                    viewModel.selectedBrowsersForClear.remove(browser.id)
-                                } else {
-                                    viewModel.selectedBrowsersForClear.insert(browser.id)
-                                }
+                                if isSelected { viewModel.selectedBrowsersForClear.remove(browser.id) }
+                                else { viewModel.selectedBrowsersForClear.insert(browser.id) }
                             } label: {
                                 Image(systemName: isSelected ? "checkmark.square.fill" : "square")
                                     .font(.system(size: 16))
@@ -500,7 +504,6 @@ struct BrowserReviewSheet: View {
 
             Divider().background(Color.haloBorder)
 
-            // Error banner
             if let err = viewModel.clearBrowserError {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.haloAmber)
@@ -511,15 +514,10 @@ struct BrowserReviewSheet: View {
                 .background(Color.haloAmber.opacity(0.08))
             }
 
-            // Footer
             HStack(spacing: 12) {
                 Button("Cancel") { dismiss() }
-                    .font(HaloFont.body(13))
-                    .foregroundColor(.haloText2)
-                    .buttonStyle(.plain)
-
+                    .font(HaloFont.body(13)).foregroundColor(.haloText2).buttonStyle(.plain)
                 Spacer()
-
                 Button {
                     Task { await viewModel.clearSelectedBrowserData() }
                 } label: {
@@ -535,8 +533,7 @@ struct BrowserReviewSheet: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, 16).padding(.vertical, 9)
                     .background(viewModel.selectedBrowsersForClear.isEmpty
-                        ? Color.haloRed.opacity(0.4)
-                        : Color.haloRed)
+                        ? Color.haloRed.opacity(0.4) : Color.haloRed)
                     .cornerRadius(10)
                 }
                 .buttonStyle(.plain)
@@ -602,71 +599,126 @@ struct PermissionCard: View {
     }
 }
 
-// MARK: - Launch Agents (original sample data — replaced in next commit)
+// MARK: - Launch Agents Monitor (real plist scan)
 
 struct LaunchAgentsSection: View {
     @ObservedObject var viewModel: ProtectionViewModel
 
+    private var suspiciousCount: Int { viewModel.launchAgents.filter(\.isSuspicious).count }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HaloSectionHeader(title: "Launch Agents Monitor",
-                              subtitle: "Background processes that start automatically")
-            HStack(spacing: 12) {
-                ForEach(LaunchAgentItem.samples) { agent in
-                    LaunchAgentCard(agent: agent)
+            HStack {
+                HaloSectionHeader(
+                    title: "Launch Agents Monitor",
+                    subtitle: "Background processes found in ~/Library/LaunchAgents and /Library/LaunchAgents"
+                )
+                Spacer()
+                if viewModel.isLoadingAgents {
+                    ProgressView().scaleEffect(0.6).tint(.haloAccent)
+                } else if !viewModel.launchAgents.isEmpty {
+                    HStack(spacing: 6) {
+                        if suspiciousCount > 0 {
+                            HaloBadge(text: "\(suspiciousCount) suspicious", color: .haloAmber)
+                        }
+                        HaloBadge(text: "\(viewModel.launchAgents.count) total", color: .haloAccent)
+                        Button {
+                            Task { await viewModel.loadLaunchAgents() }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 12))
+                                .foregroundColor(.haloText2)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            if viewModel.isLoadingAgents {
+                HStack(spacing: 10) {
+                    ProgressView().scaleEffect(0.8).tint(.haloAccent)
+                    Text("Scanning launch agents…")
+                        .font(HaloFont.body(13))
+                        .foregroundColor(.haloText2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(Color.haloSurface2)
+                .cornerRadius(12)
+            } else if viewModel.launchAgents.isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill").foregroundColor(.haloGreen)
+                    Text("No launch agents found in user or system directories.")
+                        .font(HaloFont.body(13))
+                        .foregroundColor(.haloText2)
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.haloSurface2)
+                .cornerRadius(12)
+            } else {
+                LazyVStack(spacing: 6) {
+                    ForEach(viewModel.launchAgents) { agent in
+                        LaunchAgentRow(agent: agent)
+                    }
                 }
             }
         }
     }
 }
 
-struct LaunchAgentItem: Identifiable {
-    let id = UUID()
-    let name: String
-    let path: String
-    let isSuspicious: Bool
-    let lastRun: Date?
-
-    static let samples: [LaunchAgentItem] = [
-        .init(name: "com.adobe.agsService",      path: "~/Library/LaunchAgents/", isSuspicious: true,  lastRun: nil),
-        .init(name: "com.dropbox.DropboxHelper",  path: "~/Library/LaunchAgents/", isSuspicious: false, lastRun: Date().addingTimeInterval(-3600)),
-        .init(name: "com.apple.SafariHistory",    path: "/Library/LaunchAgents/",  isSuspicious: false, lastRun: Date())
-    ]
-}
-
-struct LaunchAgentCard: View {
-    let agent: LaunchAgentItem
+struct LaunchAgentRow: View {
+    let agent: RealLaunchAgentItem
 
     var body: some View {
-        HaloCard {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Image(systemName: agent.isSuspicious ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                        .font(.system(size: 14))
-                        .foregroundColor(agent.isSuspicious ? .haloAmber : .haloGreen)
-                    Spacer()
-                    HaloBadge(text: agent.isSuspicious ? "Review" : "OK",
-                              color: agent.isSuspicious ? .haloAmber : .haloGreen)
-                }
-                Text(agent.name)
-                    .font(HaloFont.mono(11))
+        HStack(spacing: 12) {
+            Image(systemName: agent.isSuspicious
+                ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                .font(.system(size: 15))
+                .foregroundColor(agent.isSuspicious ? .haloAmber : .haloGreen)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(agent.label)
+                    .font(HaloFont.mono(12))
                     .foregroundColor(.haloText)
                     .lineLimit(1)
-                Text(agent.path)
-                    .font(HaloFont.body(11))
-                    .foregroundColor(.haloText2)
-                if let date = agent.lastRun {
-                    Text("Last run: \(RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date()))")
+                HStack(spacing: 6) {
+                    Text(agent.path
+                        .replacingOccurrences(of: NSHomeDirectory(), with: "~")
+                        .replacingOccurrences(of: "/" + agent.label + ".plist", with: ""))
                         .font(HaloFont.body(10))
                         .foregroundColor(.haloText3)
-                } else {
-                    Text("Never ran")
-                        .font(HaloFont.body(10))
-                        .foregroundColor(.haloRed)
+                        .lineLimit(1)
+                    if !agent.program.isEmpty {
+                        Text("→ " + agent.program
+                            .replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+                            .font(HaloFont.mono(10))
+                            .foregroundColor(.haloText3)
+                            .lineLimit(1)
+                    }
                 }
             }
-            .padding(14)
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 3) {
+                HaloBadge(
+                    text: agent.isSuspicious ? "Review" : agent.scope,
+                    color: agent.isSuspicious ? .haloAmber : .haloAccent.opacity(0.7)
+                )
+                if let date = agent.lastModified {
+                    Text(RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date()))
+                        .font(HaloFont.body(10))
+                        .foregroundColor(.haloText3)
+                }
+            }
         }
-        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(agent.isSuspicious ? Color.haloAmber.opacity(0.06) : Color.haloSurface2)
+        .cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10)
+            .stroke(agent.isSuspicious ? Color.haloAmber.opacity(0.3) : Color.haloBorder,
+                    lineWidth: 1))
     }
 }
