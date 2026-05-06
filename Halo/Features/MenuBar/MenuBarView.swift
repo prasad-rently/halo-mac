@@ -49,18 +49,19 @@ final class MenuBarManager: ObservableObject {
 struct MenuBarIconView: View {
     let state: MenuBarManager.SystemPressureLevel
 
+    private var imageName: String {
+        state == .normal ? "MenuBar_Standby" : "MenuBar_Processing"
+    }
+
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(LinearGradient(
-                    colors: [.haloAccent, state == .normal ? .haloGreen : state == .moderate ? .haloAmber : .haloRed],
-                    startPoint: .topLeading, endPoint: .bottomTrailing))
-                .frame(width: 14, height: 14)
-                .shadow(color: state.color.opacity(0.7), radius: 4)
-            Image(systemName: "sparkles")
-                .font(.system(size: 8, weight: .bold))
-                .foregroundColor(.white)
-        }
+        Image(imageName)
+            .resizable()
+            .interpolation(.high)
+            .frame(width: 18, height: 18)
+            // Tint: amber/red glow under load, no tint at normal state
+            .shadow(color: state == .normal ? .clear
+                    : state == .moderate ? Color.haloAmber.opacity(0.8)
+                    : Color.haloRed.opacity(0.8), radius: 3)
     }
 }
 
