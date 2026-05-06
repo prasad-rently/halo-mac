@@ -9,7 +9,7 @@ struct ProtectionView: View {
                 ProtectionHeader(viewModel: viewModel)
                 ScannerCardsRow(viewModel: viewModel)
                 PermissionsAuditSection(viewModel: viewModel)
-                BrowserPrivacySection(viewModel: viewModel)
+                LaunchAgentsSection(viewModel: viewModel)
             }
             .padding(28)
         }
@@ -28,6 +28,8 @@ final class ProtectionViewModel: ObservableObject {
     @Published var lastScanDate: Date? = nil
     @Published var isClearingBrowser = false
     @Published var signatureDBDate: Date? = Date().addingTimeInterval(-86400 * 3)
+
+    private let scanner = ProtectionScanner()
 
     enum ScanState: Equatable {
         case idle, scanning(progress: Double), complete(clean: Bool), found(count: Int)
@@ -51,20 +53,32 @@ final class ProtectionViewModel: ObservableObject {
         }
     }
 
+    // MARK: Real Malware Scanner
+    // Scans known malware drop-zones (LaunchAgents, InputManagers, AppSupport, etc.)
+    // against a curated signature database of adware, PUPs, hijackers and keyloggers.
+
     func runMalwareScan() async {
         scanState = .scanning(progress: 0)
-        // Simulate scan progress
-        for i in 1...20 {
-            try? await Task.sleep(nanoseconds: 100_000_000)
-            scanState = .scanning(progress: Double(i) / 20.0)
+        threatsFound = []
+
+        let found = await scanner.runMalwareScan { [weak self] progress in
+            guard let self else { return }
+            Task { @MainActor in
+                self.scanState = .scanning(progress: progress)
+            }
         }
+
         lastScanDate = Date()
-        // In production: scan against bundled SignatureDatabase
-        scanState = .complete(clean: true)
+        threatsFound = found
+
+        if found.isEmpty {
+            scanState = .complete(clean: true)
+        } else {
+            scanState = .found(count: found.count)
+        }
     }
 
     func loadPermissions() async {
-        // In production: read TCC.db with Full Disk Access
         permissions = PermissionKind.allCases.map { kind in
             AppPermission(kind: kind, grantedApps: sampleApps(for: kind))
         }
@@ -72,14 +86,14 @@ final class ProtectionViewModel: ObservableObject {
 
     private func sampleApps(for kind: PermissionKind) -> [String] {
         switch kind {
-        case .camera: return ["Zoom", "FaceTime", "Slack", "Teams"]
-        case .microphone: return ["Zoom", "Spotify", "Discord", "Teams", "FaceTime", "Voice Memos"]
-        case .location: return ["Maps", "Weather"]
-        case .contacts: return ["Mimestream", "Cardhop", "Zoom"]
-        case .calendar: return ["Fantastical", "Zoom"]
-        case .fullDisk: return ["Halo"]
+        case .camera:          return ["Zoom", "FaceTime", "Slack"]
+        case .microphone:      return ["Zoom", "Spotify", "Discord", "FaceTime"]
+        case .location:        return ["Maps", "Weather"]
+        case .contacts:        return ["Mimestream", "Cardhop", "Zoom"]
+        case .calendar:        return ["Fantastical", "Zoom"]
+        case .fullDisk:        return ["Halo"]
         case .screenRecording: return ["Zoom", "CleanShot X", "Loom"]
-        case .accessibility: return ["Raycast", "BetterTouchTool"]
+        case .accessibility:   return ["Raycast", "BetterTouchTool"]
         }
     }
 
@@ -139,6 +153,8 @@ struct ScannerCardsRow: View {
     }
 }
 
+// MARK: - Malware Scan Card (real file-system scan)
+
 struct MalwareScanCard: View {
     @ObservedObject var viewModel: ProtectionViewModel
 
@@ -148,8 +164,9 @@ struct MalwareScanCard: View {
                 HStack {
                     ZStack {
                         Circle()
-                            .fill(LinearGradient(colors: [Color(hex: "#1c3a2a"), Color(hex: "#1a4030")],
-                                                 startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .fill(LinearGradient(
+                                colors: [Color(hex: "#1c3a2a"), Color(hex: "#1a4030")],
+                                startPoint: .topLeading, endPoint: .bottomTrailing))
                             .frame(width: 40, height: 40)
                         Image(systemName: "shield.fill")
                             .font(.system(size: 18))
@@ -173,13 +190,13 @@ struct MalwareScanCard: View {
                     .font(HaloFont.display(15, weight: .semibold))
                     .foregroundColor(.haloText)
 
-                Text("Scans for adware, keyloggers, PUPs & browser hijackers using a local signature database.")
+                Text("Scans known malware drop-zones against a curated signature database of adware, PUPs, hijackers, and keyloggers.")
                     .font(HaloFont.body(12))
                     .foregroundColor(.haloText2)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
 
-                // Status
+                // Status indicator
                 HStack(spacing: 6) {
                     Circle()
                         .fill(viewModel.scanStatusColor)
@@ -194,14 +211,28 @@ struct MalwareScanCard: View {
                 if case .scanning(let p) = viewModel.scanState {
                     VStack(spacing: 4) {
                         HaloMiniBar(value: p, color: .haloAccent)
-                        Text("Scanning system files…")
+                        Text("Scanning system locations…")
                             .font(HaloFont.body(11))
                             .foregroundColor(.haloText3)
                     }
                 }
 
+                // Real threat results
+                if !viewModel.threatsFound.isEmpty {
+                    VStack(spacing: 6) {
+                        ForEach(viewModel.threatsFound) { threat in
+                            ThreatRow(threat: threat) {
+                                viewModel.quarantineThreat(threat)
+                            }
+                        }
+                    }
+                }
+
                 HaloPrimaryButton(
-                    viewModel.scanState == .scanning(progress: 0) ? "Scanning…" : "Run Full Scan",
+                    {
+                        if case .scanning = viewModel.scanState { return "Scanning…" }
+                        return "Run Full Scan"
+                    }(),
                     icon: "shield.lefthalf.filled",
                     isLoading: {
                         if case .scanning = viewModel.scanState { return true }
@@ -215,6 +246,46 @@ struct MalwareScanCard: View {
         }
     }
 }
+
+struct ThreatRow: View {
+    let threat: MalwareThreat
+    let onQuarantine: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12))
+                .foregroundColor(threat.risk.color)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(threat.name)
+                    .font(HaloFont.body(11, weight: .medium))
+                    .foregroundColor(.haloText)
+                    .lineLimit(1)
+                Text(threat.filePath.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+                    .font(HaloFont.mono(10))
+                    .foregroundColor(.haloText3)
+                    .lineLimit(1)
+            }
+            Spacer()
+            if threat.isQuarantined {
+                HaloBadge(text: "Quarantined", color: .haloGreen)
+            } else {
+                Button("Quarantine") { onQuarantine() }
+                    .font(HaloFont.body(10, weight: .semibold))
+                    .foregroundColor(.haloRed)
+                    .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color.haloSurface.opacity(0.6))
+        .cornerRadius(8)
+        .overlay(RoundedRectangle(cornerRadius: 8)
+            .stroke(threat.risk.color.opacity(0.3), lineWidth: 1))
+    }
+}
+
+// MARK: - Privacy Cleaner Card (original — to be enhanced in next commit)
 
 struct PrivacyCleanerCard: View {
     @ObservedObject var viewModel: ProtectionViewModel
@@ -232,8 +303,9 @@ struct PrivacyCleanerCard: View {
                 HStack {
                     ZStack {
                         Circle()
-                            .fill(LinearGradient(colors: [Color(hex: "#3a1a10"), Color(hex: "#4a2008")],
-                                                 startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .fill(LinearGradient(
+                                colors: [Color(hex: "#3a1a10"), Color(hex: "#4a2008")],
+                                startPoint: .topLeading, endPoint: .bottomTrailing))
                             .frame(width: 40, height: 40)
                         Image(systemName: "lock.shield.fill")
                             .font(.system(size: 18))
@@ -252,7 +324,6 @@ struct PrivacyCleanerCard: View {
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
 
-                // Browser status rows
                 VStack(spacing: 6) {
                     ForEach(browsers, id: \.name) { browser in
                         HStack(spacing: 8) {
@@ -277,7 +348,8 @@ struct PrivacyCleanerCard: View {
                     }
                 }
 
-                HaloPrimaryButton("Review & Clear", icon: "trash.fill", isLoading: viewModel.isClearingBrowser) {
+                HaloPrimaryButton("Review & Clear", icon: "trash.fill",
+                                  isLoading: viewModel.isClearingBrowser) {
                     Task { await viewModel.clearBrowserData() }
                 }
             }
@@ -343,9 +415,9 @@ struct PermissionCard: View {
     }
 }
 
-// MARK: - Browser Privacy
+// MARK: - Launch Agents (original sample data — to be enhanced in next commit)
 
-struct BrowserPrivacySection: View {
+struct LaunchAgentsSection: View {
     @ObservedObject var viewModel: ProtectionViewModel
 
     var body: some View {
@@ -369,9 +441,9 @@ struct LaunchAgentItem: Identifiable {
     let lastRun: Date?
 
     static let samples: [LaunchAgentItem] = [
-        .init(name: "com.adobe.agsService", path: "~/Library/LaunchAgents/", isSuspicious: true, lastRun: nil),
+        .init(name: "com.adobe.agsService",    path: "~/Library/LaunchAgents/", isSuspicious: true,  lastRun: nil),
         .init(name: "com.dropbox.DropboxHelper", path: "~/Library/LaunchAgents/", isSuspicious: false, lastRun: Date().addingTimeInterval(-3600)),
-        .init(name: "com.apple.SafariHistory", path: "/Library/LaunchAgents/", isSuspicious: false, lastRun: Date())
+        .init(name: "com.apple.SafariHistory", path: "/Library/LaunchAgents/",  isSuspicious: false, lastRun: Date())
     ]
 }
 
