@@ -1,0 +1,38 @@
+appId: com.halo.mac
+tags:
+  - smoke
+  - onboarding
+---
+# ═══════════════════════════════════════════════════
+# TC-001: Onboarding Flow
+# Verifies the first-launch onboarding wizard completes
+# correctly and lands the user on the Dashboard.
+# ═══════════════════════════════════════════════════
+
+- launchApp:
+    clearState: true
+
+# Step 1 — Welcome screen
+- assertVisible: "Your Mac. Elevated."
+- assertVisible: "Get Started"
+- tapOn: "Get Started"
+
+# Step 2 — Permission prompts (Full Disk Access)
+- assertVisible: "Full Disk Access"
+- assertVisible: "Grant Access"
+- tapOn: "Skip for Now"   # safe for CI — no real permissions
+
+# Step 3 — Accessibility (⌘⇧V shortcut)
+- assertVisible: "Accessibility"
+- tapOn: "Skip for Now"
+
+# Step 4 — Completion
+- assertVisible: "You're all set"
+- tapOn: "Start Using Halo"
+
+# Post-onboarding: should land on Dashboard
+- assertVisible: "Dashboard"
+- assertVisible: "health"
+- assertVisible: "Smart Scan"
+
+- takeScreenshot: onboarding_complete

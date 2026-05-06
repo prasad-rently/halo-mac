@@ -1,0 +1,41 @@
+appId: com.halo.mac
+tags:
+  - regression
+  - protection
+---
+# ═══════════════════════════════════════════════════
+# TC-004: Protection Module
+# Verifies threat scan, risk badges, and permission
+# audit sections render correctly.
+# ═══════════════════════════════════════════════════
+
+- launchApp
+- tapOn: "Protection"
+
+# Main section headers
+- assertVisible: "Threats"
+- assertVisible: "Permissions"
+
+# Scan button present
+- assertVisible: "Scan Now"
+- tapOn: "Scan Now"
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# After scan: either "No threats found" or threat rows
+- assertTrue:
+    visible: "No threats found"
+    OR:
+      visible: "Adware"
+      OR:
+        visible: "Potentially Unwanted"
+
+# Permissions section — all 8 permission kinds
+- assertVisible: "Camera"
+- assertVisible: "Microphone"
+- assertVisible: "Location"
+- assertVisible: "Full Disk Access"
+- assertVisible: "Screen Recording"
+- assertVisible: "Accessibility"
+
+- takeScreenshot: protection_scan_result

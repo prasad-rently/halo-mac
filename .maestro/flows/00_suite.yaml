@@ -1,0 +1,22 @@
+appId: com.halo.mac
+tags:
+  - suite
+---
+# ═══════════════════════════════════════════════════
+# TC-000: Full Regression Suite Runner
+# Runs every test case in order.
+# Execute with: maestro test .maestro/flows/00_suite.yaml
+# Or individual flows: maestro test .maestro/flows/02_dashboard.yaml
+# ═══════════════════════════════════════════════════
+
+- runFlow: "01_onboarding.yaml"
+- runFlow: "02_dashboard.yaml"
+- runFlow: "03_cleanup.yaml"
+- runFlow: "04_protection.yaml"
+- runFlow: "05_performance.yaml"
+- runFlow: "06_files.yaml"
+- runFlow: "07_clipboard.yaml"
+- runFlow: "08_applications.yaml"
+- runFlow: "09_menubar.yaml"
+- runFlow: "10_settings.yaml"
+- runFlow: "11_widget.yaml"

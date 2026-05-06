@@ -1,0 +1,37 @@
+appId: com.halo.mac
+tags:
+  - regression
+  - performance
+---
+# ═══════════════════════════════════════════════════
+# TC-005: Performance Module
+# Verifies login item list, toggle, and maintenance
+# task cards render and respond to interaction.
+# ═══════════════════════════════════════════════════
+
+- launchApp
+- tapOn: "Performance"
+
+# Login Items section
+- assertVisible: "Login Items"
+
+# At least the section header exists
+- assertVisible: "Startup Impact"
+
+# Maintenance tasks section
+- assertVisible: "Maintenance"
+- assertVisible: "Flush DNS Cache"
+- assertVisible: "Purge RAM"
+- assertVisible: "Repair Permissions"
+
+# Run a maintenance task (non-destructive)
+- tapOn: "Flush DNS Cache"
+- waitForAnimationToEnd:
+    timeout: 10000
+# After run: shows last-run time or completion
+- assertTrue:
+    visible: "Just now"
+    OR:
+      visible: "seconds ago"
+
+- takeScreenshot: performance_module

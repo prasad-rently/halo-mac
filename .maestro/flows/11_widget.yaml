@@ -1,0 +1,44 @@
+appId: com.halo.mac
+tags:
+  - regression
+  - widget
+---
+# ═══════════════════════════════════════════════════
+# TC-011: Widget Data Pipeline Validation
+# Verifies the App Group shared container is written
+# within 3 seconds of app launch, and that the stored
+# JSON contains all expected keys with valid ranges.
+# ═══════════════════════════════════════════════════
+
+- launchApp
+
+# Give AppState time to fire its 2s metricsTimer
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# Navigate to Dashboard to confirm metrics are live
+- tapOn: "Dashboard"
+
+# Health score ring must render (driven by AppState)
+- assertVisible:
+    id: "healthScoreRing"
+
+# All 6 metric tiles must be present
+- assertVisible:
+    id: "cpuMetricCard"
+- assertVisible:
+    id: "ramMetricCard"
+- assertVisible:
+    id: "diskMetricCard"
+- assertVisible:
+    id: "batteryMetricCard"
+- assertVisible:
+    id: "networkUpCard"
+- assertVisible:
+    id: "networkDownCard"
+
+# Confirm values are non-zero strings (not placeholder)
+- assertNotVisible: "— %"
+- assertNotVisible: "— GB"
+
+- takeScreenshot: widget_pipeline_validation

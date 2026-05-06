@@ -1,0 +1,49 @@
+appId: com.halo.mac
+tags:
+  - regression
+  - cleanup
+---
+# ═══════════════════════════════════════════════════
+# TC-003: Cleanup Module
+# Verifies scan categories appear, file list populates,
+# and Clean Selected trashes files (not deletes).
+# ═══════════════════════════════════════════════════
+
+- launchApp
+- tapOn: "Cleanup"
+
+# All 10 category rows should be visible in sidebar
+- assertVisible: "System Caches"
+- assertVisible: "User Caches"
+- assertVisible: "Log Files"
+- assertVisible: "Temp Files"
+- assertVisible: "Downloads"
+- assertVisible: "Xcode DerivedData"
+- assertVisible: "iOS Backups"
+- assertVisible: "Language Packs"
+- assertVisible: "Trash"
+- assertVisible: "Mail Attachments"
+
+# Wait for initial scan to finish
+- waitForAnimationToEnd:
+    timeout: 20000
+
+# Select System Caches and verify file list
+- tapOn: "System Caches"
+- assertVisible:
+    id: "fileListView"
+
+# Verify scan progress indicators resolved
+- assertNotVisible: "Scanning…"
+
+# Select all and clean (should use trashItem, not removeItem)
+- tapOn: "Select All"
+- assertVisible: "Clean Selected"
+- tapOn: "Clean Selected"
+
+# Confirmation sheet must appear before deletion
+- assertVisible: "Move to Trash"
+- assertVisible: "Cancel"
+- tapOn: "Cancel"   # don't actually delete in CI
+
+- takeScreenshot: cleanup_categories

@@ -1,0 +1,67 @@
+appId: com.halo.mac
+tags:
+  - smoke
+  - regression
+  - clipboard
+---
+# ═══════════════════════════════════════════════════
+# TC-007: Clipboard Manager
+# Verifies history list, filter tabs, pin, delete,
+# and search functionality.
+# ═══════════════════════════════════════════════════
+
+- launchApp
+- tapOn: "Clipboard"
+
+# Filter tabs for content types
+- assertVisible: "All"
+- assertVisible: "Text"
+- assertVisible: "URL"
+- assertVisible: "Code"
+- assertVisible: "Image"
+
+# Sample items loaded (from ClipboardItem.sampleItems)
+- assertVisible: "developer.apple.com"
+- assertVisible: "FileSystemScanner"
+
+# ── Filter by URL ─────────────────────────────────
+- tapOn: "URL"
+- assertVisible: "developer.apple.com"
+- assertNotVisible: "FileSystemScanner"
+
+# ── Filter by Code ────────────────────────────────
+- tapOn: "Code"
+- assertVisible: "FileSystemScanner"
+
+# ── Back to All ───────────────────────────────────
+- tapOn: "All"
+
+# ── Search ────────────────────────────────────────
+- tapOn:
+    id: "clipboardSearchField"
+- inputText: "scanner"
+- assertVisible: "FileSystemScanner"
+- assertNotVisible: "developer.apple.com"
+- clearText
+- assertVisible: "developer.apple.com"
+
+# ── Pin an item ───────────────────────────────────
+- longPressOn: "Halo — Your Mac. Elevated."
+- assertVisible: "Pin"
+- tapOn: "Pin"
+- assertVisible: "Pinned"
+
+# ── Delete an item ────────────────────────────────
+- swipeLeft:
+    label: "Halo — Your Mac. Elevated."
+- assertVisible: "Delete"
+- tapOn: "Delete"
+# Item should be gone
+- assertNotVisible: "Halo — Your Mac. Elevated."
+
+# ── Clear All ─────────────────────────────────────
+- tapOn: "Clear All"
+- assertVisible: "Are you sure"
+- tapOn: "Cancel"   # don't destroy history in CI
+
+- takeScreenshot: clipboard_module

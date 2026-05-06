@@ -1,0 +1,54 @@
+appId: com.halo.mac
+tags:
+  - smoke
+  - regression
+  - settings
+---
+# ═══════════════════════════════════════════════════
+# TC-010: Settings Panel
+# Verifies all settings sections render, toggles
+# respond, and theme/hotkey controls are accessible.
+# ═══════════════════════════════════════════════════
+
+- launchApp
+
+# Open Settings via keyboard shortcut ⌘,
+- pressKey: "cmd+,"
+
+# Settings window must appear
+- assertVisible: "Settings"
+
+# ── General section ───────────────────────────────
+- assertVisible: "General"
+- tapOn: "General"
+
+# Launch at Login toggle
+- assertVisible: "Launch at Login"
+- assertVisible:
+    id: "launchAtLoginToggle"
+
+# Show in Dock toggle
+- assertVisible: "Show in Dock"
+
+# Hotkey section
+- assertVisible: "Hotkey"
+
+# ── Appearance section ────────────────────────────
+- tapOn: "Appearance"
+- assertVisible: "Theme"
+- assertVisible: "Dark"
+
+# ── Notifications section ─────────────────────────
+- tapOn: "Notifications"
+- assertVisible: "Enable Notifications"
+
+# ── About section ─────────────────────────────────
+- tapOn: "About"
+- assertVisible: "Halo"
+- assertVisible: "Version"
+- assertVisible: "1.1"
+
+# MIT License / open-source link
+- assertVisible: "MIT"
+
+- takeScreenshot: settings_panel

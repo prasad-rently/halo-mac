@@ -1,0 +1,43 @@
+appId: com.halo.mac
+tags:
+  - smoke
+  - regression
+  - menubar
+---
+# ═══════════════════════════════════════════════════
+# TC-009: Menu Bar Popover
+# Verifies the menu bar popover shows live metrics,
+# quick navigation tiles, and the open-main-window
+# button.
+# ═══════════════════════════════════════════════════
+
+- launchApp
+
+# Open the menu bar popover via accessibility
+- tapOn:
+    id: "menuBarButton"
+
+# Popover must be visible
+- assertVisible:
+    id: "menuBarPopover"
+
+# Live metric tiles
+- assertVisible: "CPU"
+- assertVisible: "RAM"
+- assertVisible: "Network"
+
+# Health score ring
+- assertVisible:
+    id: "healthScoreRing"
+
+# Clipboard snippets section (top 5)
+- assertVisible: "Clipboard"
+
+# Open Halo button
+- assertVisible: "Open Halo"
+
+# ── Navigate to main window via menu bar ─────────
+- tapOn: "Open Halo"
+- assertVisible: "Dashboard"
+
+- takeScreenshot: menubar_popover
