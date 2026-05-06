@@ -25,6 +25,7 @@
 		000000000000000000001049 /* ProtectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001048 /* ProtectionView.swift */; };
 		000000000000000000001051 /* DuplicateDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001050 /* DuplicateDetector.swift */; };
 		000000000000000000001053 /* ClipboardMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001052 /* ClipboardMonitor.swift */; };
+		000000000000000000001071 /* ProtectionScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001070 /* ProtectionScanner.swift */; };
 		000000000000000000001055 /* SmartScanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001054 /* SmartScanView.swift */; };
 		000000000000000000001066 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001065 /* HotkeyManager.swift */; };
 		000000000000000000001068 /* ClipboardQuickPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001067 /* ClipboardQuickPickerView.swift */; };
@@ -60,6 +61,7 @@
 		000000000000000000001046 /* PerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/PerformanceView.swift; sourceTree = "<group>"; };
 		000000000000000000001048 /* ProtectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Protection/ProtectionView.swift; sourceTree = "<group>"; };
 		000000000000000000001050 /* DuplicateDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/DuplicateDetector.swift; sourceTree = "<group>"; };
+		000000000000000000001070 /* ProtectionScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ProtectionScanner.swift; sourceTree = "<group>"; };
 		000000000000000000001052 /* ClipboardMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/ClipboardMonitor.swift; sourceTree = "<group>"; };
 		000000000000000000001054 /* SmartScanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/SmartScan/SmartScanView.swift; sourceTree = "<group>"; };
 		000000000000000000001065 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/HotkeyManager.swift; sourceTree = "<group>"; };
@@ -130,6 +132,7 @@
 				000000000000000000001026 /* ScanCoordinator.swift */,
 				000000000000000000001028 /* SystemMonitor.swift */,
 				000000000000000000001050 /* DuplicateDetector.swift */,
+				000000000000000000001070 /* ProtectionScanner.swift */,
 				000000000000000000001030 /* DesignSystem.swift */,
 				000000000000000000001032 /* ApplicationsView.swift */,
 				000000000000000000001034 /* CleanupView.swift */,
@@ -287,6 +290,7 @@
 				000000000000000000001027 /* ScanCoordinator.swift in Sources */,
 				000000000000000000001029 /* SystemMonitor.swift in Sources */,
 				000000000000000000001051 /* DuplicateDetector.swift in Sources */,
+				000000000000000000001071 /* ProtectionScanner.swift in Sources */,
 				000000000000000000001031 /* DesignSystem.swift in Sources */,
 				000000000000000000001033 /* ApplicationsView.swift in Sources */,
 				000000000000000000001035 /* CleanupView.swift in Sources */,
