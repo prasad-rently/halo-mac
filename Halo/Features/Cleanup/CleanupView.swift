@@ -393,15 +393,25 @@ struct FileItemRow: View {
 struct EmptyCleanupState: View {
     let category: CleanupKind
 
+    private var message: (icon: String, title: String, subtitle: String) {
+        switch category {
+        case .trash:
+            return ("trash", "Trash is empty", "Your system Trash contains no items.")
+        default:
+            return ("checkmark.circle.fill", "\(category.rawValue) is clean!",
+                    "No files found that need cleanup.")
+        }
+    }
+
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "checkmark.circle.fill")
+            Image(systemName: message.icon)
                 .font(.system(size: 40))
                 .foregroundColor(.haloGreen)
-            Text("\(category.rawValue) is clean!")
+            Text(message.title)
                 .font(HaloFont.display(15, weight: .semibold))
                 .foregroundColor(.haloText)
-            Text("No files found that need cleanup.")
+            Text(message.subtitle)
                 .font(HaloFont.body(13))
                 .foregroundColor(.haloText2)
         }

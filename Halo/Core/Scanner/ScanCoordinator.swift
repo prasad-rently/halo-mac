@@ -38,6 +38,20 @@ actor ScanCoordinator {
         var category = CleanupCategory(kind: kind)
         category.isScanning = true
 
+        // Xcode DerivedData: enumerate build-project directories as single items
+        if kind == .xcodeData {
+            category.items = await scanDerivedDataDirectories()
+            category.isScanning = false
+            return category
+        }
+
+        // Trash: enumerate immediate top-level items (files & folders) in Trash
+        if kind == .trash {
+            category.items = await scanTrashItems()
+            category.isScanning = false
+            return category
+        }
+
         var items: [ScannedItem] = []
 
         for pathString in kind.targetPaths {
@@ -45,8 +59,8 @@ actor ScanCoordinator {
             guard FileManager.default.fileExists(atPath: pathString) else { continue }
 
             var config = FileSystemScanner.ScanConfig()
-            config.maxDepth = kind == .xcodeData ? 3 : 4
-            config.minSizeBytes = 1024 // ignore files under 1KB
+            config.maxDepth = 4
+            config.minSizeBytes = 1024  // 1 KB minimum for file-level scan categories
             if let days = kind.ageThresholdDays {
                 config.olderThanDays = days
             }
@@ -61,6 +75,51 @@ actor ScanCoordinator {
         category.items = items.sorted { $0.size > $1.size }
         category.isScanning = false
         return category
+    }
+
+    // MARK: - Trash: enumerate top-level items with real sizes
+
+    private func scanTrashItems() async -> [ScannedItem] {
+        var items: [ScannedItem] = []
+        let fm = FileManager.default
+
+        // Use the proper FileManager API — covers all mounted volumes' trash dirs
+        let trashURLs = fm.urls(for: .trashDirectory, in: .userDomainMask)
+
+        for trashURL in trashURLs {
+            guard fm.fileExists(atPath: trashURL.path) else { continue }
+
+            let children = (try? fm.contentsOfDirectory(
+                at: trashURL,
+                includingPropertiesForKeys: [.fileSizeKey, .isDirectoryKey,
+                                             .contentModificationDateKey, .creationDateKey],
+                options: []   // include hidden files — Trash can contain .hidden items
+            )) ?? []
+
+            for child in children {
+                let resVals = try? child.resourceValues(forKeys: [
+                    .isDirectoryKey, .fileSizeKey,
+                    .contentModificationDateKey, .creationDateKey
+                ])
+                let isDir = resVals?.isDirectory ?? false
+
+                // For directories in Trash, calculate their total recursive size
+                let size: Int64 = isDir
+                    ? await scanner.calculateSize(of: child)
+                    : Int64(resVals?.fileSize ?? 0)
+
+                let item = ScannedItem(
+                    id: UUID(),
+                    url: child,
+                    size: size,
+                    creationDate: resVals?.creationDate,
+                    modifiedDate: resVals?.contentModificationDate,
+                    kind: .other
+                )
+                items.append(item)
+            }
+        }
+        return items.sorted { $0.size > $1.size }
     }
 
     // MARK: - Execute Cleanup (batch)
@@ -90,4 +149,7 @@ actor ScanCoordinator {
     func deleteSingleItem(_ item: ScannedItem) async throws {
         _ = try await scanner.deleteItems([item])
     }
+
+    // MARK: - DerivedData: placeholder (implemented in fix 3)
+    private func scanDerivedDataDirectories() async -> [ScannedItem] { [] }
 }

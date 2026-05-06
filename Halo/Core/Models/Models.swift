@@ -110,7 +110,12 @@ enum CleanupKind: String, CaseIterable, Identifiable {
         case .downloads:
             return ["\(home)/Downloads"]
         case .trash:
-            return ["\(home)/.Trash"]
+            // Use FileManager API so we get the correct Trash URL for the
+            // current user on all mounted volumes, not just ~/.Trash
+            let trashURLs = FileManager.default.urls(for: .trashDirectory, in: .userDomainMask)
+            return trashURLs.map(\.path).filter {
+                FileManager.default.fileExists(atPath: $0)
+            }
         case .mailAttachments:
             return ["\(home)/Library/Mail"]
         case .xcodeData:
