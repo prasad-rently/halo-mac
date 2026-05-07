@@ -1,7 +1,9 @@
 import Foundation
 
 // Written by the main app every 2s; read by the widget timeline provider.
-// Both targets must be in the "group.com.halo.mac" App Group.
+// Both targets must be in the "group.com.halo.mac" App Group for production.
+// In debug builds (no provisioning profile) the suite falls back to
+// UserDefaults.standard so macOS never prompts for App Group access.
 struct HaloWidgetData: Codable {
     var cpuUsage: Double        // 0.0–1.0
     var ramUsage: Double        // 0.0–1.0
@@ -14,10 +16,14 @@ struct HaloWidgetData: Codable {
     static let suiteName = "group.com.halo.mac"
     static let defaultsKey = "haloWidgetData"
 
+    /// Resolves to the App Group suite when available, standard defaults otherwise.
+    private static var defaults: UserDefaults {
+        UserDefaults(suiteName: suiteName) ?? UserDefaults.standard
+    }
+
     static func load() -> HaloWidgetData {
         guard
-            let defaults = UserDefaults(suiteName: suiteName),
-            let data = defaults.data(forKey: defaultsKey),
+            let data    = defaults.data(forKey: defaultsKey),
             let decoded = try? JSONDecoder().decode(HaloWidgetData.self, from: data)
         else {
             return HaloWidgetData(cpuUsage: 0, ramUsage: 0, ramUsedGB: 0,
@@ -28,10 +34,7 @@ struct HaloWidgetData: Codable {
     }
 
     func save() {
-        guard
-            let defaults = UserDefaults(suiteName: Self.suiteName),
-            let data = try? JSONEncoder().encode(self)
-        else { return }
-        defaults.set(data, forKey: Self.defaultsKey)
+        guard let data = try? JSONEncoder().encode(self) else { return }
+        Self.defaults.set(data, forKey: Self.defaultsKey)
     }
 }
