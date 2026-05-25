@@ -70,6 +70,7 @@ struct MenuBarIconView: View {
 struct MenuBarPopoverView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var menuBarManager: MenuBarManager
+    @StateObject private var displaysVM = DisplaysViewModel()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -79,11 +80,14 @@ struct MenuBarPopoverView: View {
             Divider().background(Color.haloBorder)
             MenuBarStatsSection()
             Divider().background(Color.haloBorder)
+            MenuBarBrightnessSection(viewModel: displaysVM)
+            Divider().background(Color.haloBorder)
             MenuBarQuickActions()
         }
         .frame(width: 300)
         .background(Color(hex: "#111827"))
         .cornerRadius(14)
+        .task { await displaysVM.load() }
         .onAppear { menuBarManager.update(from: appState) }
         .onChange(of: appState.cpuUsage) { _ in menuBarManager.update(from: appState) }
     }
@@ -219,6 +223,94 @@ struct MenuBarStatRow: View {
         }
     }
 }
+
+// MARK: - Menu Bar Brightness Section
+
+struct MenuBarBrightnessSection: View {
+    @ObservedObject var viewModel: DisplaysViewModel
+
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack {
+                Image(systemName: "sun.max.fill")
+                    .font(.system(size: 10))
+                    .foregroundColor(.haloAccent)
+                Text("BRIGHTNESS")
+                    .font(HaloFont.body(9, weight: .semibold))
+                    .foregroundColor(.haloText3)
+                    .tracking(1.5)
+                Spacer()
+                if viewModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.5)
+                        .frame(width: 14, height: 14)
+                }
+            }
+
+            if viewModel.displays.isEmpty && !viewModel.isLoading {
+                Text("No controllable displays")
+                    .font(HaloFont.body(10))
+                    .foregroundColor(.haloText3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                ForEach($viewModel.displays) { $display in
+                    MenuBarBrightnessRow(
+                        display: $display,
+                        onBrightnessChange: { newValue in
+                            viewModel.setBrightnessImmediate(newValue, for: display.id)
+                        }
+                    )
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+}
+
+struct MenuBarBrightnessRow: View {
+    @Binding var display: ConnectedDisplay
+    let onBrightnessChange: (Double) -> Void
+
+    var body: some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: display.typeIcon)
+                    .font(.system(size: 10))
+                    .foregroundColor(display.isBuiltIn ? .haloAccent : .haloAccent2)
+                    .frame(width: 14)
+
+                Text(display.name)
+                    .font(HaloFont.body(11, weight: .medium))
+                    .foregroundColor(.haloText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                Spacer()
+
+                Text("\(Int(display.brightness * 100))%")
+                    .font(HaloFont.mono(11))
+                    .foregroundColor(display.isBuiltIn ? .haloAccent : .haloAccent2)
+                    .frame(width: 32, alignment: .trailing)
+            }
+
+            if display.isDDCCapable || display.isBuiltIn {
+                Slider(value: Binding(
+                    get: { display.brightness },
+                    set: { onBrightnessChange($0) }
+                ), in: 0.02...1.0)
+                .tint(display.isBuiltIn ? .haloAccent : .haloAccent2)
+            } else {
+                Text("DDC not supported")
+                    .font(HaloFont.body(9))
+                    .foregroundColor(.haloAmber)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+}
+
+// MARK: - Quick Actions
 
 struct MenuBarQuickActions: View {
     @EnvironmentObject var appState: AppState

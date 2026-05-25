@@ -4,6 +4,42 @@ Remaining BRD iterations, in priority order. Each item includes enough context f
 
 ---
 
+## Phase 2 · Per-Display Brightness Control  🆕
+
+> Full spec → `docs/PHASE2_DISPLAY_BRIGHTNESS.md`
+
+**Why:** Power users with multi-monitor setups want unified brightness control for all connected screens without leaving Halo or opening System Settings.
+
+**What to build:**
+- New sidebar module **Displays** (`AppModule.displays`, icon `sun.max.fill`)
+- `Core/Display/DisplayBrightnessManager.swift` — `actor` wrapping `CoreDisplay` (built-in) and DDC/CI via IOKit (external monitors)
+- `Core/Display/DDCHelper.swift` — I²C DDC commands (VCP `0x10` = Brightness) adapted from MonitorControl (Apache-2.0)
+- `Features/Displays/DisplaysView.swift` — per-display brightness sliders + Night Shift card + display info table
+
+**Key APIs:**
+- `CGGetActiveDisplayList()` — enumerate displays
+- `CoreDisplay_Display_Get/SetUserBrightness()` — built-in panel (private framework, ships on all Macs)
+- `IOFramebufferUserClient` / `IOAVService` — external monitor DDC
+- `CBBlueLightClient` — Night Shift toggle + colour temperature strength
+- `NSApplication.didChangeScreenParametersNotification` — hot-plug / unplug
+
+**Files to create/modify:**
+```
+Halo/Core/Display/
+├── DisplayBrightnessManager.swift   ← new actor
+└── DDCHelper.swift                  ← new DDC helper
+Halo/Features/Displays/
+└── DisplaysView.swift               ← new view + DisplaysViewModel
+Halo/Core/Models/Models.swift        ← append ConnectedDisplay struct
+Halo/App/AppState.swift              ← add .displays + connectedDisplayCount
+Halo/App/ContentView.swift           ← sidebar item + router case
+```
+
+**Effort:** 3–4 days  
+**Status:** 📋 Planned
+
+---
+
 ## 1. XPC Helper Target (Privileged Operations)
 
 **Why:** The App Store sandbox prevents calling `dscacheutil -flushcache` (DNS), `purge` (RAM), and `diskutil repairPermissions` directly. An XPC helper runs as a separate process with elevated privileges.

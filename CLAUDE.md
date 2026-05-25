@@ -34,6 +34,9 @@ Halo/
 │   ├── Core/
 │   │   ├── Models/Models.swift      all value-type data models
 │   │   ├── HotkeyManager.swift      global NSEvent monitor for ⌘⇧V
+│   │   ├── Display/                 ← Phase 2 (planned)
+│   │   │   ├── DisplayBrightnessManager.swift   actor — CoreDisplay + DDC/CI
+│   │   │   └── DDCHelper.swift                  I²C DDC for external monitors
 │   │   └── Scanner/
 │   │       ├── SystemMonitor.swift       CPU/RAM/disk/battery/network
 │   │       ├── FileSystemScanner.swift   async actor, AsyncStream
@@ -54,6 +57,7 @@ Halo/
 │   │   │   └── ClipboardQuickPickerView.swift
 │   │   ├── MenuBar/MenuBarView.swift
 │   │   ├── SmartScan/SmartScanView.swift
+│   │   ├── Displays/DisplaysView.swift   ← Phase 2 (planned) — brightness per display
 │   │   └── Onboarding/OnboardingView.swift + SettingsView + Commands
 │   └── Resources/
 │       ├── Info.plist
@@ -214,7 +218,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 
 ## Modules Status
 
-| Module | View | ViewModel | Scanner | Tests |
+| Module | View | ViewModel | Scanner / Manager | Tests |
 |--------|------|-----------|---------|-------|
 | Dashboard | ✅ | AppState | SystemMonitor | — |
 | Cleanup | ✅ | CleanupViewModel | FileSystemScanner | — |
@@ -222,6 +226,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | Performance | ✅ | PerformanceViewModel | SystemMonitor | — |
 | Applications | ✅ | ApplicationsViewModel | FileSystemScanner | — |
 | Files (SpaceLens) | ✅ | SpaceLensViewModel | — | — |
+| **Displays** 🆕 | 📋 Planned | DisplaysViewModel | DisplayBrightnessManager | — |
 | Files (Duplicates) | ✅ | DuplicateFinderViewModel | DuplicateDetector | ✅ |
 | Clipboard | ✅ | ClipboardViewModel | ClipboardMonitor | ✅ |
 | Menu Bar | ✅ | MenuBarManager | SystemMonitor | — |

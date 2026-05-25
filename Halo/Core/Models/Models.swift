@@ -297,6 +297,42 @@ enum LeftoverKind: String {
     case crashLogs = "Crash Logs"
 }
 
+// MARK: - Display Models
+
+import CoreGraphics
+
+struct ConnectedDisplay: Identifiable {
+    let id: CGDirectDisplayID        // unique per session — matches CGGetActiveDisplayList
+    let name: String                 // e.g. "Built-in Retina Display", "LG UltraFine 5K"
+    let resolution: CGSize           // logical points (not pixels)
+    let scaleFactor: CGFloat         // 2.0 for Retina, 1.0 for standard
+    let refreshRate: Double          // Hz (0 = unknown, shown as 60 Hz)
+    let isBuiltIn: Bool              // true for MacBook/iMac internal panel
+    let isMain: Bool                 // true for the display with the menu bar
+    let physicalSizeInches: Double?  // diagonal in inches, nil if unknown
+
+    var brightness: Double           // 0.0 – 1.0, live value
+    var isDDCCapable: Bool           // false → slider disabled for external display
+
+    // Convenience
+    var resolutionLabel: String {
+        "\(Int(resolution.width)) × \(Int(resolution.height))"
+    }
+
+    var refreshLabel: String {
+        let hz = refreshRate > 0 ? refreshRate : 60
+        return hz == floor(hz) ? "\(Int(hz)) Hz" : String(format: "%.1f Hz", hz)
+    }
+
+    var sizeLabel: String? {
+        guard let s = physicalSizeInches else { return nil }
+        return String(format: "%.1f\"", s)
+    }
+
+    var typeLabel: String { isBuiltIn ? "Built-in" : "External" }
+    var typeIcon: String  { isBuiltIn ? "laptopcomputer" : "display" }
+}
+
 // MARK: - Duplicate Models
 
 struct DuplicateGroup: Identifiable {

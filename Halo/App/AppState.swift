@@ -2,6 +2,7 @@ import SwiftUI
 import Combine
 import AppKit
 import WidgetKit
+import CoreGraphics
 
 // MARK: - App State (Central Store)
 
@@ -42,6 +43,9 @@ final class AppState: ObservableObject {
 
     // MARK: Recent Activity
     @Published var recentActivities: [ActivityEvent] = []
+
+    // MARK: Displays State
+    @Published var connectedDisplayCount: Int = 1
 
     // MARK: Pro State
     @Published var isPro: Bool = false
@@ -104,6 +108,7 @@ final class AppState: ObservableObject {
         networkUpMBps = net.upMBps
         networkDownMBps = net.downMBps
         systemHealthScore = calculateHealthScore()
+        connectedDisplayCount = NSScreen.screens.count
         writeWidgetData()
     }
 
@@ -262,6 +267,7 @@ enum AppModule: String, CaseIterable, Identifiable {
     case applications
     case files
     case clipboard
+    case displays
     case menuBarPreview
 
     var id: String { rawValue }
@@ -275,6 +281,7 @@ enum AppModule: String, CaseIterable, Identifiable {
         case .applications: return "Applications"
         case .files: return "Files"
         case .clipboard: return "Clipboard"
+        case .displays: return "Displays"
         case .menuBarPreview: return "Menu Bar"
         }
     }
@@ -288,6 +295,7 @@ enum AppModule: String, CaseIterable, Identifiable {
         case .applications: return "square.stack.3d.up.fill"
         case .files: return "folder.fill"
         case .clipboard: return "doc.on.clipboard.fill"
+        case .displays: return "sun.max.fill"
         case .menuBarPreview: return "menubar.rectangle"
         }
     }
@@ -301,6 +309,7 @@ enum AppModule: String, CaseIterable, Identifiable {
         case .applications: return [Color(hex: "#2a1a3e"), Color(hex: "#1e1040")]
         case .files: return [Color(hex: "#1a3020"), Color(hex: "#1e3828")]
         case .clipboard: return [Color(hex: "#3a2010"), Color(hex: "#4a2a08")]
+        case .displays: return [Color(hex: "#1a3050"), Color(hex: "#0e2040")]
         case .menuBarPreview: return [Color(hex: "#1a2a3a"), Color(hex: "#0e1f30")]
         }
     }

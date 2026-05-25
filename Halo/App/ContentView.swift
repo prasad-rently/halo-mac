@@ -82,6 +82,9 @@ struct SidebarView: View {
                         SidebarItem(module: .clipboard,
                                     badge: appState.clipboardItems.isEmpty ? nil : "\(appState.clipboardItems.count)",
                                     badgeColor: .haloAmber)
+                        SidebarItem(module: .displays,
+                                    badge: "\(appState.connectedDisplayCount)",
+                                    badgeColor: .haloAccent)
                     }
                 }
                 .padding(.vertical, 8)
@@ -227,6 +230,7 @@ struct DetailView: View {
             case .applications: ApplicationsView()
             case .files:        FilesView()
             case .clipboard:    ClipboardView()
+            case .displays:     DisplaysView()
             case .menuBarPreview: MenuBarPreviewView()
             }
         }

@@ -40,6 +40,8 @@
 		000000000000000000002018 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000002017 /* WidgetKit.framework */; };
 		000000000000000000002019 /* HaloSharedData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000002020 /* HaloSharedData.swift */; };
 		000000000000000000002021 /* HaloSharedData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000002020 /* HaloSharedData.swift */; };
+		000000000000000000002023 /* Halo/Core/Display/DisplayBrightnessManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000002024 /* Halo/Core/Display/DisplayBrightnessManager.swift */; };
+		000000000000000000002025 /* Halo/Features/Displays/DisplaysView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000002026 /* Halo/Features/Displays/DisplaysView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -100,6 +102,8 @@
 		000000000000000000002003 /* HaloWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloWidget.swift; sourceTree = "<group>"; };
 		000000000000000000002017 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		000000000000000000002020 /* HaloSharedData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloSharedData.swift; sourceTree = "<group>"; };
+		000000000000000000002024 /* Halo/Core/Display/DisplayBrightnessManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Display/DisplayBrightnessManager.swift; sourceTree = "<group>"; };
+		000000000000000000002026 /* Halo/Features/Displays/DisplaysView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Displays/DisplaysView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -146,12 +150,14 @@
 				000000000000000000001028 /* Halo/Core/Scanner/SystemMonitor.swift */,
 				000000000000000000001050 /* Halo/Core/Scanner/DuplicateDetector.swift */,
 				000000000000000000001070 /* Halo/Core/Scanner/ProtectionScanner.swift */,
+				000000000000000000002024 /* Halo/Core/Display/DisplayBrightnessManager.swift */,
 				000000000000000000001030 /* Halo/DesignSystem/DesignSystem.swift */,
 				000000000000000000001032 /* Halo/Features/Applications/ApplicationsView.swift */,
 				000000000000000000001034 /* Halo/Features/Cleanup/CleanupView.swift */,
 				000000000000000000001052 /* Halo/Features/Clipboard/ClipboardMonitor.swift */,
 				000000000000000000001067 /* Halo/Features/Clipboard/ClipboardQuickPickerView.swift */,
 				000000000000000000001036 /* Halo/Features/Clipboard/ClipboardView.swift */,
+				000000000000000000002026 /* Halo/Features/Displays/DisplaysView.swift */,
 				000000000000000000001065 /* Halo/Core/HotkeyManager.swift */,
 				000000000000000000001038 /* Halo/Features/Dashboard/DashboardView.swift */,
 				000000000000000000001040 /* Halo/Features/Files/FilesView.swift */,
@@ -326,6 +332,8 @@
 				000000000000000000001049 /* Halo/Features/Protection/ProtectionView.swift in Sources */,
 				000000000000000000001055 /* Halo/Features/SmartScan/SmartScanView.swift in Sources */,
 				000000000000000000002021 /* HaloSharedData.swift in Sources */,
+				000000000000000000002023 /* Halo/Core/Display/DisplayBrightnessManager.swift in Sources */,
+				000000000000000000002025 /* Halo/Features/Displays/DisplaysView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
