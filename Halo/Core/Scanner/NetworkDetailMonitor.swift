@@ -155,13 +155,9 @@ actor NetworkDetailMonitor {
     // entitlement on macOS 12+. We read the SSID via CoreWLAN interface name lookup instead.
 
     private func readSSID() -> String? {
-        // Use NSAppleScript-free approach: parse airport output or return nil gracefully.
-        // On macOS 13+ without the networking.wifi-info entitlement this always returns nil;
-        // the UI shows "—" which is acceptable for a non-sandboxed debug build.
-        if let output = try? Process.run(URL(fileURLWithPath: "/usr/sbin/networksetup"),
-                                         arguments: ["-getairportnetwork", "en0"]) {
-            // not available here — use simpler approach
-        }
+        // CNCopyCurrentNetworkInfo requires com.apple.developer.networking.wifi-info
+        // on macOS 12+. We use `networksetup -getairportnetwork en0` instead,
+        // which works without entitlements in non-sandboxed debug builds.
         return readSSIDViaWiFiInterface()
     }
 

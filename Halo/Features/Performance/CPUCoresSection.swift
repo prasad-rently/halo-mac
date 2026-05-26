@@ -58,7 +58,15 @@ struct CPUCoresSection: View {
     }
 
     private func startTimer() {
-        Task { cores = await monitor.sample() }
+        // Prime the snapshot then immediately take a real diff sample ~200 ms later.
+        // Without this, the first visible sample is always all-zeros (no previous
+        // tick baseline) and users see the spinner for the full 2-second interval.
+        Task {
+            _ = await monitor.sample()                       // primes previousTicks
+            try? await Task.sleep(nanoseconds: 200_000_000) // 200 ms
+            let primed = await monitor.sample()
+            await MainActor.run { cores = primed }
+        }
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
             Task {
                 let s = await monitor.sample()

@@ -60,8 +60,9 @@ final class AppState: ObservableObject {
 
     // MARK: Phase 3 — Bandwidth History (P3-10)
     /// Rolling 30-sample (60 s) buffers — appended in refreshMetrics(), max 30 entries.
-    private(set) var uploadHistory:   [Double] = []
-    private(set) var downloadHistory: [Double] = []
+    /// Must be @Published so NetworkSparklineCard re-renders on every tick.
+    @Published private(set) var uploadHistory:   [Double] = []
+    @Published private(set) var downloadHistory: [Double] = []
 
     // MARK: Pro State
     @Published var isPro: Bool = false

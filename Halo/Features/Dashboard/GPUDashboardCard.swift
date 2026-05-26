@@ -47,6 +47,8 @@ struct GPUDashboardCard: View {
     // MARK: - Sampling
 
     private func startSampling() {
+        // GPUMonitor.sample() is stateless (no diff), so a single call is enough.
+        // Fire immediately then start the 2-second refresh timer.
         Task { await sample() }
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
             Task { await sample() }
@@ -82,10 +84,10 @@ private struct GPURowView: View {
 
             // Name + overall utilisation badge
             HStack(spacing: 8) {
-                Image(systemName: "gpu.amd.pro.fill")
+                // "cpu" is available from macOS 12+; gpu.* symbols require macOS 14+
+                Image(systemName: "cpu")
                     .font(.system(size: 13))
                     .foregroundColor(.haloCyan)
-                    .symbolRenderingMode(.hierarchical)
 
                 Text(cleanName(gpu.name))
                     .font(HaloFont.body(13, weight: .semibold))

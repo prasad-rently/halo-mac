@@ -37,15 +37,21 @@ actor SMCReader {
     ]
 
     // MARK: - IOKit connection handle
-
-    private var conn: io_connect_t = 0
+    // nonisolated(unsafe): conn is set exactly once in init before any concurrent
+    // access is possible, and read-only after that. Safe to mark nonisolated so
+    // Swift 6 strict-concurrency checking doesn't warn about the init call.
+    nonisolated(unsafe) private var conn: io_connect_t = 0
 
     init() {
         openConnection()
     }
 
-    deinit {
+    nonisolated func closeConnection() {
         if conn != 0 { IOServiceClose(conn) }
+    }
+
+    deinit {
+        closeConnection()
     }
 
     // MARK: - Public
@@ -64,7 +70,7 @@ actor SMCReader {
 
     // MARK: - Connection
 
-    private func openConnection() {
+    private nonisolated func openConnection() {
         let service = IOServiceGetMatchingService(kIOMainPortDefault,
                                                   IOServiceMatching("AppleSMC"))
         guard service != 0 else { return }

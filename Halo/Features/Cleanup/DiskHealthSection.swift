@@ -71,8 +71,12 @@ struct DiskHealthSection: View {
     private func runScan() {
         isScanRunning = true
         Task {
-            let result = await monitor.scanAllDisks()
+            // Refresh volumes too on each scan — drives may have been mounted/unmounted
+            async let freshVolumes = monitor.volumeUsage()
+            async let diskResults  = monitor.scanAllDisks()
+            let (v, result) = await (freshVolumes, diskResults)
             await MainActor.run {
+                volumes = v
                 disks = result
                 isScanRunning = false
                 scanDone = true

@@ -58,7 +58,7 @@ struct TopProcessesSection: View {
         }
         .onAppear { startTimer() }
         .onDisappear { stopTimer() }
-        .onChange(of: sortBy) { _ in reload() }
+        .onChange(of: sortBy, perform: { _ in reload() })
         .confirmationDialog(
             processToQuit.map { "Force Quit \"\($0.name)\"?" } ?? "",
             isPresented: .init(get: { processToQuit != nil }, set: { if !$0 { processToQuit = nil } }),
@@ -122,14 +122,25 @@ private struct ProcessRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            // App icon
+            // App icon — use real icon from NSRunningApplication when available,
+            // fall back to generic symbol for daemons/kernel threads.
             ZStack {
                 RoundedRectangle(cornerRadius: 6)
                     .fill(barColor.opacity(0.1))
                     .frame(width: 28, height: 28)
-                Image(systemName: "app.fill")
-                    .font(.system(size: 13))
-                    .foregroundColor(barColor)
+                if let nsApp = NSWorkspace.shared.runningApplications
+                    .first(where: { $0.processIdentifier == process.id }),
+                   let icon = nsApp.icon {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 22, height: 22)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                } else {
+                    Image(systemName: "gear")
+                        .font(.system(size: 12))
+                        .foregroundColor(barColor)
+                }
             }
 
             // Name + bar
