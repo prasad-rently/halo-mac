@@ -49,6 +49,7 @@
 		000000000000000000001097 /* Halo/Features/Performance/TopProcessesSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001096 /* Halo/Features/Performance/TopProcessesSection.swift */; };
 		000000000000000000001099 /* Halo/Features/Dashboard/NetworkSparklineCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001098 /* Halo/Features/Dashboard/NetworkSparklineCard.swift */; };
 		000000000000000000001101 /* Halo/Features/Cleanup/DiskHealthSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001100 /* Halo/Features/Cleanup/DiskHealthSection.swift */; };
+		000000000000000000001103 /* Halo/Features/Dashboard/GPUDashboardCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001102 /* Halo/Features/Dashboard/GPUDashboardCard.swift */; };
 		000000000000000000002004 /* HaloWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000002002 /* HaloWidgetBundle.swift */; };
 		000000000000000000002005 /* HaloWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000002003 /* HaloWidget.swift */; };
 		000000000000000000002016 /* HaloWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 000000000000000000002000 /* HaloWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -125,6 +126,7 @@
 		000000000000000000001096 /* Halo/Features/Performance/TopProcessesSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/TopProcessesSection.swift; sourceTree = "<group>"; };
 		000000000000000000001098 /* Halo/Features/Dashboard/NetworkSparklineCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/NetworkSparklineCard.swift; sourceTree = "<group>"; };
 		000000000000000000001100 /* Halo/Features/Cleanup/DiskHealthSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Cleanup/DiskHealthSection.swift; sourceTree = "<group>"; };
+		000000000000000000001102 /* Halo/Features/Dashboard/GPUDashboardCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/GPUDashboardCard.swift; sourceTree = "<group>"; };
 		000000000000000000002000 /* HaloWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HaloWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000002002 /* HaloWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloWidgetBundle.swift; sourceTree = "<group>"; };
 		000000000000000000002003 /* HaloWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloWidget.swift; sourceTree = "<group>"; };
@@ -194,6 +196,7 @@
 				000000000000000000001065 /* Halo/Core/HotkeyManager.swift */,
 				000000000000000000001038 /* Halo/Features/Dashboard/DashboardView.swift */,
 				000000000000000000001098 /* Halo/Features/Dashboard/NetworkSparklineCard.swift */,
+				000000000000000000001102 /* Halo/Features/Dashboard/GPUDashboardCard.swift */,
 				000000000000000000001040 /* Halo/Features/Files/FilesView.swift */,
 				000000000000000000001042 /* Halo/Features/MenuBar/MenuBarView.swift */,
 				000000000000000000001044 /* Halo/Features/Onboarding/OnboardingView.swift */,
@@ -374,6 +377,7 @@
 				000000000000000000001066 /* Halo/Core/HotkeyManager.swift in Sources */,
 				000000000000000000001039 /* Halo/Features/Dashboard/DashboardView.swift in Sources */,
 				000000000000000000001099 /* Halo/Features/Dashboard/NetworkSparklineCard.swift in Sources */,
+				000000000000000000001103 /* Halo/Features/Dashboard/GPUDashboardCard.swift in Sources */,
 				000000000000000000001041 /* Halo/Features/Files/FilesView.swift in Sources */,
 				000000000000000000001043 /* Halo/Features/MenuBar/MenuBarView.swift in Sources */,
 				000000000000000000001045 /* Halo/Features/Onboarding/OnboardingView.swift in Sources */,

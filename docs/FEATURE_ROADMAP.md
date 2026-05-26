@@ -14,7 +14,7 @@
 
 | ID | Feature | Status | Effort | Depends On |
 |---|---|---|---|---|
-| [F-001](#f-001--gpu-metrics-dashboard-card) | GPU Metrics Dashboard Card | 📋 Queued — #1 | 0.5 d | Phase 3 merged |
+| [F-001](#f-001--gpu-metrics-dashboard-card) | GPU Metrics Dashboard Card | ✅ Done | 0.5 d | Phase 3 merged |
 | [F-002](#f-002--xpc-helper-privileged-operations) | XPC Helper — Privileged Ops | 📋 Queued — #2 | 3 d | none |
 | [F-003](#f-003--storekitmit-2-promanager) | StoreKit 2 ProManager | 📋 Queued — #3 | 3 d | none |
 | [F-004](#f-004--signature-database--real-malware-definitions) | Signature Database | 📋 Queued — #4 | 3 d | none |
@@ -51,6 +51,7 @@
 | ✅ | Dual entitlements (debug non-sandboxed / release sandboxed) | Initial commit |
 | ✅ | Phase 2 · Display Brightness + Night Shift | PR branch `feat/phase2-display-brightness` |
 | ✅ | Phase 3 · 12 monitoring features (P3-01 → P3-12) | PR #4 `feat/phase3-monitoring` |
+| ✅ | F-001 · GPU Metrics Dashboard Card | PR #4 `feat/phase3-monitoring` |
 
 ---
 

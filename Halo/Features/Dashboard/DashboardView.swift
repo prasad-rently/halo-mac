@@ -9,6 +9,7 @@ struct DashboardView: View {
             VStack(spacing: 24) {
                 DashHeader(isScanning: $isScanning)
                 HealthAndMetrics()
+                GPUDashboardCard()            // F-001: GPU utilisation + memory
                 NetworkSparklineCard()        // P3-10: bandwidth history
                 QuickActionsGrid()
                 RecentActivityList()
