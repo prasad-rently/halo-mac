@@ -145,6 +145,11 @@ struct CleanupSidebar: View {
                     }
                 }
                 .padding(.vertical, 8)
+
+                // P3-07: Disk Health at bottom of cleanup sidebar
+                Divider().background(Color.haloBorder)
+                DiskHealthSection()
+                    .padding(12)
             }
         }
     }

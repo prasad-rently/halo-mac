@@ -118,7 +118,7 @@ final class SystemMonitor {
         }
     }
 
-    // MARK: - Battery Stats
+    // MARK: - Battery Stats  (extended in P3-04)
 
     struct BatteryStats {
         let percent: Int
@@ -126,6 +126,16 @@ final class SystemMonitor {
         let timeRemainingMinutes: Int
         let healthPercent: Double
         let cycleCount: Int
+        // P3-04 additions
+        let designCapacityMAh: Int    // manufacturer spec
+        let maxCapacityMAh: Int       // current max (degraded over time)
+        let currentCapacityMAh: Int   // instantaneous level
+        let amperageMa: Int           // negative = discharging, positive = charging
+        let voltageMv: Int            // millivolts
+        let temperatureCelsius: Double // SMC TB0T key; 0 if unavailable
+        let timeToFullMinutes: Int    // 0 if not charging
+        let isOnACPower: Bool
+        let isLowPowerMode: Bool
 
         var timeRemainingString: String {
             guard timeRemainingMinutes > 0 else { return "" }
@@ -133,6 +143,18 @@ final class SystemMonitor {
             let minutes = timeRemainingMinutes % 60
             if hours > 0 { return "\(hours)h \(minutes)m" }
             return "\(minutes)m"
+        }
+
+        var timeToFullString: String {
+            guard timeToFullMinutes > 0 else { return "" }
+            let h = timeToFullMinutes / 60; let m = timeToFullMinutes % 60
+            return h > 0 ? "\(h)h \(m)m" : "\(m)m"
+        }
+
+        var healthLabel: String {
+            if healthPercent >= 0.80 { return "Good" }
+            if healthPercent >= 0.60 { return "Fair" }
+            return "Replace Soon"
         }
     }
 
@@ -145,12 +167,15 @@ final class SystemMonitor {
             let maxCapacity = desc[kIOPSMaxCapacityKey] as? Int ?? 100
             let isCharging = (desc[kIOPSIsChargingKey] as? Bool) ?? false
             let timeToEmpty = desc[kIOPSTimeToEmptyKey] as? Int ?? 0
+            let timeToFull  = desc[kIOPSTimeToFullChargeKey] as? Int ?? 0
+            let powerSource = desc[kIOPSPowerSourceStateKey] as? String ?? ""
+            let isOnAC = powerSource == kIOPSACPowerValue
             let percent = maxCapacity > 0 ? (capacity * 100 / maxCapacity) : 0
 
-            // IOKit for cycle count and health
-            var cycleCount = 248 // fallback
-            var designCapacity = 8000
-            var maxCap = 7280
+            // Extended data from AppleSmartBattery
+            var cycleCount = 0
+            var designCap = 0, maxCap = 0, curCap = 0
+            var amperage = 0, voltage = 0, tempRaw = 0
 
             let service = IOServiceGetMatchingService(kIOMainPortDefault,
                 IOServiceMatching("AppleSmartBattery"))
@@ -158,23 +183,40 @@ final class SystemMonitor {
                 var propsRef: Unmanaged<CFMutableDictionary>?
                 if IORegistryEntryCreateCFProperties(service, &propsRef, kCFAllocatorDefault, 0) == KERN_SUCCESS,
                    let dict = propsRef?.takeRetainedValue() as NSDictionary? {
-                    cycleCount = dict["CycleCount"] as? Int ?? 248
-                    designCapacity = dict["DesignCapacity"] as? Int ?? 8000
-                    maxCap = dict["MaxCapacity"] as? Int ?? 7280
+                    cycleCount  = dict["CycleCount"] as? Int ?? 0
+                    designCap   = dict["DesignCapacity"] as? Int ?? 0
+                    maxCap      = dict["MaxCapacity"] as? Int ?? 0
+                    curCap      = dict["CurrentCapacity"] as? Int ?? 0
+                    amperage    = dict["Amperage"] as? Int ?? 0
+                    voltage     = dict["Voltage"] as? Int ?? 0
+                    tempRaw     = dict["Temperature"] as? Int ?? 0
                 }
                 IOObjectRelease(service)
             }
 
-            let health = designCapacity > 0 ? Double(maxCap) / Double(designCapacity) : 0.91
+            let health = designCap > 0 ? Double(maxCap) / Double(designCap) : 0.91
+            let tempC  = tempRaw > 0 ? Double(tempRaw) / 100.0 : 0
 
-            return BatteryStats(percent: percent,
-                                isCharging: isCharging,
-                                timeRemainingMinutes: timeToEmpty,
-                                healthPercent: health,
-                                cycleCount: cycleCount)
+            let isLP: Bool
+            if #available(macOS 12.0, *) {
+                isLP = ProcessInfo.processInfo.isLowPowerModeEnabled
+            } else {
+                isLP = false
+            }
+
+            return BatteryStats(
+                percent: percent, isCharging: isCharging,
+                timeRemainingMinutes: timeToEmpty, healthPercent: health, cycleCount: cycleCount,
+                designCapacityMAh: designCap, maxCapacityMAh: maxCap, currentCapacityMAh: curCap,
+                amperageMa: amperage, voltageMv: voltage, temperatureCelsius: tempC,
+                timeToFullMinutes: timeToFull, isOnACPower: isOnAC, isLowPowerMode: isLP
+            )
         }
         return BatteryStats(percent: 100, isCharging: true,
-                            timeRemainingMinutes: 0, healthPercent: 1.0, cycleCount: 0)
+                            timeRemainingMinutes: 0, healthPercent: 1.0, cycleCount: 0,
+                            designCapacityMAh: 0, maxCapacityMAh: 0, currentCapacityMAh: 0,
+                            amperageMa: 0, voltageMv: 0, temperatureCelsius: 0,
+                            timeToFullMinutes: 0, isOnACPower: true, isLowPowerMode: false)
     }
 
     // MARK: - Network Stats

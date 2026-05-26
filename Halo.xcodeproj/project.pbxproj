@@ -34,6 +34,21 @@
 		000000000000000000001066 /* Halo/Core/HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001065 /* Halo/Core/HotkeyManager.swift */; };
 		000000000000000000001068 /* Halo/Features/Clipboard/ClipboardQuickPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001067 /* Halo/Features/Clipboard/ClipboardQuickPickerView.swift */; };
 		000000000000000000001071 /* Halo/Core/Scanner/ProtectionScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001070 /* Halo/Core/Scanner/ProtectionScanner.swift */; };
+		000000000000000000001073 /* Halo/Core/AlertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001072 /* Halo/Core/AlertManager.swift */; };
+		000000000000000000001075 /* Halo/Core/Scanner/CPUDetailMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001074 /* Halo/Core/Scanner/CPUDetailMonitor.swift */; };
+		000000000000000000001077 /* Halo/Core/Scanner/SMCReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001076 /* Halo/Core/Scanner/SMCReader.swift */; };
+		000000000000000000001079 /* Halo/Core/Scanner/GPUMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001078 /* Halo/Core/Scanner/GPUMonitor.swift */; };
+		000000000000000000001081 /* Halo/Core/Scanner/NetworkDetailMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001080 /* Halo/Core/Scanner/NetworkDetailMonitor.swift */; };
+		000000000000000000001083 /* Halo/Core/Scanner/SpeedTestService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001082 /* Halo/Core/Scanner/SpeedTestService.swift */; };
+		000000000000000000001085 /* Halo/Core/Scanner/DiskHealthMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001084 /* Halo/Core/Scanner/DiskHealthMonitor.swift */; };
+		000000000000000000001087 /* Halo/Core/Scanner/ProcessMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001086 /* Halo/Core/Scanner/ProcessMonitor.swift */; };
+		000000000000000000001089 /* Halo/Features/Performance/CPUCoresSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001088 /* Halo/Features/Performance/CPUCoresSection.swift */; };
+		000000000000000000001091 /* Halo/Features/Performance/SensorsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001090 /* Halo/Features/Performance/SensorsSection.swift */; };
+		000000000000000000001093 /* Halo/Features/Performance/BatteryDetailSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001092 /* Halo/Features/Performance/BatteryDetailSection.swift */; };
+		000000000000000000001095 /* Halo/Features/Performance/NetworkDetailSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001094 /* Halo/Features/Performance/NetworkDetailSection.swift */; };
+		000000000000000000001097 /* Halo/Features/Performance/TopProcessesSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001096 /* Halo/Features/Performance/TopProcessesSection.swift */; };
+		000000000000000000001099 /* Halo/Features/Dashboard/NetworkSparklineCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001098 /* Halo/Features/Dashboard/NetworkSparklineCard.swift */; };
+		000000000000000000001101 /* Halo/Features/Cleanup/DiskHealthSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001100 /* Halo/Features/Cleanup/DiskHealthSection.swift */; };
 		000000000000000000002004 /* HaloWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000002002 /* HaloWidgetBundle.swift */; };
 		000000000000000000002005 /* HaloWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000002003 /* HaloWidget.swift */; };
 		000000000000000000002016 /* HaloWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 000000000000000000002000 /* HaloWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -95,6 +110,21 @@
 		000000000000000000001065 /* Halo/Core/HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/HotkeyManager.swift; sourceTree = "<group>"; };
 		000000000000000000001067 /* Halo/Features/Clipboard/ClipboardQuickPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/ClipboardQuickPickerView.swift; sourceTree = "<group>"; };
 		000000000000000000001070 /* Halo/Core/Scanner/ProtectionScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ProtectionScanner.swift; sourceTree = "<group>"; };
+		000000000000000000001072 /* Halo/Core/AlertManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AlertManager.swift; sourceTree = "<group>"; };
+		000000000000000000001074 /* Halo/Core/Scanner/CPUDetailMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/CPUDetailMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000001076 /* Halo/Core/Scanner/SMCReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SMCReader.swift; sourceTree = "<group>"; };
+		000000000000000000001078 /* Halo/Core/Scanner/GPUMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/GPUMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000001080 /* Halo/Core/Scanner/NetworkDetailMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/NetworkDetailMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000001082 /* Halo/Core/Scanner/SpeedTestService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SpeedTestService.swift; sourceTree = "<group>"; };
+		000000000000000000001084 /* Halo/Core/Scanner/DiskHealthMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/DiskHealthMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000001086 /* Halo/Core/Scanner/ProcessMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ProcessMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000001088 /* Halo/Features/Performance/CPUCoresSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/CPUCoresSection.swift; sourceTree = "<group>"; };
+		000000000000000000001090 /* Halo/Features/Performance/SensorsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/SensorsSection.swift; sourceTree = "<group>"; };
+		000000000000000000001092 /* Halo/Features/Performance/BatteryDetailSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/BatteryDetailSection.swift; sourceTree = "<group>"; };
+		000000000000000000001094 /* Halo/Features/Performance/NetworkDetailSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/NetworkDetailSection.swift; sourceTree = "<group>"; };
+		000000000000000000001096 /* Halo/Features/Performance/TopProcessesSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/TopProcessesSection.swift; sourceTree = "<group>"; };
+		000000000000000000001098 /* Halo/Features/Dashboard/NetworkSparklineCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/NetworkSparklineCard.swift; sourceTree = "<group>"; };
+		000000000000000000001100 /* Halo/Features/Cleanup/DiskHealthSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Cleanup/DiskHealthSection.swift; sourceTree = "<group>"; };
 		000000000000000000002000 /* HaloWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HaloWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000002002 /* HaloWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloWidgetBundle.swift; sourceTree = "<group>"; };
 		000000000000000000002003 /* HaloWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloWidget.swift; sourceTree = "<group>"; };
@@ -146,18 +176,33 @@
 				000000000000000000001028 /* Halo/Core/Scanner/SystemMonitor.swift */,
 				000000000000000000001050 /* Halo/Core/Scanner/DuplicateDetector.swift */,
 				000000000000000000001070 /* Halo/Core/Scanner/ProtectionScanner.swift */,
+				000000000000000000001072 /* Halo/Core/AlertManager.swift */,
+				000000000000000000001074 /* Halo/Core/Scanner/CPUDetailMonitor.swift */,
+				000000000000000000001076 /* Halo/Core/Scanner/SMCReader.swift */,
+				000000000000000000001078 /* Halo/Core/Scanner/GPUMonitor.swift */,
+				000000000000000000001080 /* Halo/Core/Scanner/NetworkDetailMonitor.swift */,
+				000000000000000000001082 /* Halo/Core/Scanner/SpeedTestService.swift */,
+				000000000000000000001084 /* Halo/Core/Scanner/DiskHealthMonitor.swift */,
+				000000000000000000001086 /* Halo/Core/Scanner/ProcessMonitor.swift */,
 				000000000000000000001030 /* Halo/DesignSystem/DesignSystem.swift */,
 				000000000000000000001032 /* Halo/Features/Applications/ApplicationsView.swift */,
 				000000000000000000001034 /* Halo/Features/Cleanup/CleanupView.swift */,
+				000000000000000000001100 /* Halo/Features/Cleanup/DiskHealthSection.swift */,
 				000000000000000000001052 /* Halo/Features/Clipboard/ClipboardMonitor.swift */,
 				000000000000000000001067 /* Halo/Features/Clipboard/ClipboardQuickPickerView.swift */,
 				000000000000000000001036 /* Halo/Features/Clipboard/ClipboardView.swift */,
 				000000000000000000001065 /* Halo/Core/HotkeyManager.swift */,
 				000000000000000000001038 /* Halo/Features/Dashboard/DashboardView.swift */,
+				000000000000000000001098 /* Halo/Features/Dashboard/NetworkSparklineCard.swift */,
 				000000000000000000001040 /* Halo/Features/Files/FilesView.swift */,
 				000000000000000000001042 /* Halo/Features/MenuBar/MenuBarView.swift */,
 				000000000000000000001044 /* Halo/Features/Onboarding/OnboardingView.swift */,
 				000000000000000000001046 /* Halo/Features/Performance/PerformanceView.swift */,
+				000000000000000000001088 /* Halo/Features/Performance/CPUCoresSection.swift */,
+				000000000000000000001090 /* Halo/Features/Performance/SensorsSection.swift */,
+				000000000000000000001092 /* Halo/Features/Performance/BatteryDetailSection.swift */,
+				000000000000000000001094 /* Halo/Features/Performance/NetworkDetailSection.swift */,
+				000000000000000000001096 /* Halo/Features/Performance/TopProcessesSection.swift */,
 				000000000000000000001048 /* Halo/Features/Protection/ProtectionView.swift */,
 				000000000000000000001054 /* Halo/Features/SmartScan/SmartScanView.swift */,
 				000000000000000000001056 /* Halo/Resources/Assets.xcassets */,
@@ -311,18 +356,33 @@
 				000000000000000000001029 /* Halo/Core/Scanner/SystemMonitor.swift in Sources */,
 				000000000000000000001051 /* Halo/Core/Scanner/DuplicateDetector.swift in Sources */,
 				000000000000000000001071 /* Halo/Core/Scanner/ProtectionScanner.swift in Sources */,
+				000000000000000000001073 /* Halo/Core/AlertManager.swift in Sources */,
+				000000000000000000001075 /* Halo/Core/Scanner/CPUDetailMonitor.swift in Sources */,
+				000000000000000000001077 /* Halo/Core/Scanner/SMCReader.swift in Sources */,
+				000000000000000000001079 /* Halo/Core/Scanner/GPUMonitor.swift in Sources */,
+				000000000000000000001081 /* Halo/Core/Scanner/NetworkDetailMonitor.swift in Sources */,
+				000000000000000000001083 /* Halo/Core/Scanner/SpeedTestService.swift in Sources */,
+				000000000000000000001085 /* Halo/Core/Scanner/DiskHealthMonitor.swift in Sources */,
+				000000000000000000001087 /* Halo/Core/Scanner/ProcessMonitor.swift in Sources */,
 				000000000000000000001031 /* Halo/DesignSystem/DesignSystem.swift in Sources */,
 				000000000000000000001033 /* Halo/Features/Applications/ApplicationsView.swift in Sources */,
 				000000000000000000001035 /* Halo/Features/Cleanup/CleanupView.swift in Sources */,
+				000000000000000000001101 /* Halo/Features/Cleanup/DiskHealthSection.swift in Sources */,
 				000000000000000000001053 /* Halo/Features/Clipboard/ClipboardMonitor.swift in Sources */,
 				000000000000000000001068 /* Halo/Features/Clipboard/ClipboardQuickPickerView.swift in Sources */,
 				000000000000000000001037 /* Halo/Features/Clipboard/ClipboardView.swift in Sources */,
 				000000000000000000001066 /* Halo/Core/HotkeyManager.swift in Sources */,
 				000000000000000000001039 /* Halo/Features/Dashboard/DashboardView.swift in Sources */,
+				000000000000000000001099 /* Halo/Features/Dashboard/NetworkSparklineCard.swift in Sources */,
 				000000000000000000001041 /* Halo/Features/Files/FilesView.swift in Sources */,
 				000000000000000000001043 /* Halo/Features/MenuBar/MenuBarView.swift in Sources */,
 				000000000000000000001045 /* Halo/Features/Onboarding/OnboardingView.swift in Sources */,
 				000000000000000000001047 /* Halo/Features/Performance/PerformanceView.swift in Sources */,
+				000000000000000000001089 /* Halo/Features/Performance/CPUCoresSection.swift in Sources */,
+				000000000000000000001091 /* Halo/Features/Performance/SensorsSection.swift in Sources */,
+				000000000000000000001093 /* Halo/Features/Performance/BatteryDetailSection.swift in Sources */,
+				000000000000000000001095 /* Halo/Features/Performance/NetworkDetailSection.swift in Sources */,
+				000000000000000000001097 /* Halo/Features/Performance/TopProcessesSection.swift in Sources */,
 				000000000000000000001049 /* Halo/Features/Protection/ProtectionView.swift in Sources */,
 				000000000000000000001055 /* Halo/Features/SmartScan/SmartScanView.swift in Sources */,
 				000000000000000000002021 /* HaloSharedData.swift in Sources */,

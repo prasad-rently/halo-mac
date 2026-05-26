@@ -9,6 +9,7 @@ struct DashboardView: View {
             VStack(spacing: 24) {
                 DashHeader(isScanning: $isScanning)
                 HealthAndMetrics()
+                NetworkSparklineCard()        // P3-10: bandwidth history
                 QuickActionsGrid()
                 RecentActivityList()
             }

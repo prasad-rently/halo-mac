@@ -10,6 +10,16 @@ struct PerformanceView: View {
                 PerformanceHeader()
                 LiveMetricsRow()
                 RAMOptimizerCard(viewModel: viewModel)
+                // P3-01: Per-core CPU breakdown
+                CPUCoresSection()
+                // P3-11: Top processes
+                TopProcessesSection()
+                // P3-04: Battery deep intel
+                BatteryDetailSection()
+                // P3-02: Thermal sensors & fans
+                SensorsSection()
+                // P3-05/06: Network + Speed Test
+                NetworkDetailSection()
                 LoginItemsSection(viewModel: viewModel)
                 MaintenanceSection(viewModel: viewModel)
             }
@@ -110,7 +120,7 @@ struct PerformanceHeader: View {
                 Text("Performance")
                     .font(HaloFont.display(22, weight: .bold))
                     .foregroundColor(.haloText)
-                Text("RAM · Login Items · Battery · Maintenance")
+                Text("CPU · RAM · Battery · Sensors · Network · Processes")
                     .font(HaloFont.body(13))
                     .foregroundColor(.haloText2)
             }

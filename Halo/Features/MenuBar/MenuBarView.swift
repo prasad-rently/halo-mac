@@ -91,6 +91,7 @@ struct MenuBarPopoverView: View {
 
 struct MenuBarHeader: View {
     @EnvironmentObject var menuBarManager: MenuBarManager
+    @EnvironmentObject var appState: AppState
 
     var body: some View {
         HStack(spacing: 10) {
@@ -107,6 +108,22 @@ struct MenuBarHeader: View {
             Text("Halo")
                 .font(HaloFont.display(14, weight: .heavy))
                 .foregroundColor(.haloText)
+
+            // P3-05: VPN badge
+            if appState.isVPNActive {
+                HStack(spacing: 4) {
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 9))
+                        .foregroundColor(.haloGreen)
+                    Text("VPN")
+                        .font(HaloFont.body(9, weight: .semibold))
+                        .foregroundColor(.haloGreen)
+                }
+                .padding(.horizontal, 6).padding(.vertical, 3)
+                .background(Color.haloGreen.opacity(0.12))
+                .cornerRadius(5)
+            }
+
             Spacer()
             HStack(spacing: 4) {
                 Circle()
@@ -174,21 +191,36 @@ struct MenuBarRingCard: View {
 
 struct MenuBarStatsSection: View {
     @EnvironmentObject var appState: AppState
+    // P3-09: respect module visibility settings
+    @AppStorage("menuBarShowCPU")     private var showCPU     = true
+    @AppStorage("menuBarShowRAM")     private var showRAM     = true
+    @AppStorage("menuBarShowNet")     private var showNet     = true
+    @AppStorage("menuBarShowBattery") private var showBattery = true
+    @AppStorage("menuBarShowDisk")    private var showDisk    = false
 
     var body: some View {
         VStack(spacing: 8) {
-            MenuBarStatRow(icon: "internaldrive", label: "Disk Free",
-                           value: String(format: "%.0f GB", appState.diskFreeGB),
-                           color: .haloGreen)
-            MenuBarStatRow(icon: "arrow.up.circle", label: "Upload",
-                           value: String(format: "%.1f MB/s", appState.networkUpMBps),
-                           color: .haloCyan)
-            MenuBarStatRow(icon: "arrow.down.circle", label: "Download",
-                           value: String(format: "%.1f MB/s", appState.networkDownMBps),
-                           color: .haloAccent)
-            MenuBarStatRow(icon: "battery.75", label: "Battery",
-                           value: "\(appState.batteryPercent)%\(appState.batteryTimeRemaining.isEmpty ? "" : " · \(appState.batteryTimeRemaining)")",
-                           color: appState.batteryPercent > 20 ? .haloGreen : .haloRed)
+            if showDisk {
+                MenuBarStatRow(icon: "internaldrive", label: "Disk Free",
+                               value: String(format: "%.0f GB", appState.diskFreeGB),
+                               color: .haloGreen)
+            }
+            if showNet {
+                MenuBarStatRow(icon: "arrow.up.circle", label: "Upload",
+                               value: String(format: "%.1f MB/s", appState.networkUpMBps),
+                               color: .haloCyan)
+                MenuBarStatRow(icon: "arrow.down.circle", label: "Download",
+                               value: String(format: "%.1f MB/s", appState.networkDownMBps),
+                               color: .haloAccent)
+            }
+            if showBattery {
+                MenuBarStatRow(
+                    icon: appState.batteryIsCharging ? "bolt.fill" : "battery.75",
+                    label: "Battery",
+                    value: "\(appState.batteryPercent)%\(appState.batteryTimeRemaining.isEmpty ? "" : " · \(appState.batteryTimeRemaining)")",
+                    color: appState.batteryPercent > 20 ? .haloGreen : .haloRed
+                )
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
