@@ -77,7 +77,12 @@ struct HaloApp: App {
                 .environmentObject(appState)
                 .environmentObject(menuBarManager)
         } label: {
-            MenuBarIconView(state: menuBarManager.systemPressure)
+            // F-008: pass live CPU/RAM for text-stats and mini-bar display styles
+            MenuBarIconView(
+                state: menuBarManager.systemPressure,
+                cpuUsage: menuBarManager.cpuUsage,
+                ramUsage: menuBarManager.ramUsage
+            )
         }
         .menuBarExtraStyle(.window)
 

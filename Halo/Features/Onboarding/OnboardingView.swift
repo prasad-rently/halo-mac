@@ -291,6 +291,8 @@ struct SettingsView: View {
     @AppStorage("menuBarShowBattery") private var showBattery = true
     @AppStorage("menuBarShowDisk")    private var showDisk    = false
     @AppStorage("menuBarCompact")     private var compactMode = false
+    // F-008: display style
+    @AppStorage("menuBarDisplayStyle") private var displayStyle = MenuBarDisplayStyle.icon.rawValue
 
     var body: some View {
         TabView {
@@ -391,6 +393,13 @@ struct SettingsView: View {
                     Toggle("Disk I/O", isOn: $showDisk)
                 }
                 Section("Display") {
+                    // F-008: icon style picker
+                    Picker("Status Item Style", selection: $displayStyle) {
+                        ForEach(MenuBarDisplayStyle.allCases) { style in
+                            Text(style.label).tag(style.rawValue)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                     Toggle("Compact mode (smaller text)", isOn: $compactMode)
                     Text("When compact mode is on, values are abbreviated (e.g. 42% → 42).")
                         .font(.caption).foregroundColor(.secondary)
