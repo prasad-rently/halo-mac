@@ -27,10 +27,55 @@ final class ScanScheduler {
 
     /// Computed next-fire date — used by DashHeader countdown.
     var nextFireDate: Date? {
-        guard let lastScan = appState?.lastSmartScanDate else { return nil }
-        let interval = currentInterval
-        guard interval > 0 else { return nil }
-        return lastScan.addingTimeInterval(interval)
+        nextScanDate(
+            frequency: scanFrequency,
+            weekday: UserDefaults.standard.integer(forKey: "scanPreferredWeekday") > 0
+                ? UserDefaults.standard.integer(forKey: "scanPreferredWeekday") : 2,
+            hour: UserDefaults.standard.integer(forKey: "scanPreferredHour")
+        )
+    }
+
+    // MARK: - F-015: next-scan date calculator
+
+    /// Returns the next fire date given frequency + preferred weekday (1=Sun…7=Sat) + hour.
+    func nextScanDate(frequency: String, weekday: Int, hour: Int) -> Date? {
+        guard frequency != "off" else { return nil }
+
+        let cal = Calendar.current
+        let now = Date()
+
+        // Build DateComponents for the desired hour (minute=0)
+        var comps = DateComponents()
+        comps.hour   = max(0, min(23, hour))
+        comps.minute = 0
+        comps.second = 0
+
+        switch frequency {
+        case "daily":
+            // Next occurrence of the preferred hour today-or-tomorrow
+            return cal.nextDate(after: now, matching: comps, matchingPolicy: .nextTime)
+
+        case "weekly":
+            // Next occurrence of (weekday, hour) — may be today if still in future
+            comps.weekday = max(1, min(7, weekday))
+            return cal.nextDate(after: now, matching: comps, matchingPolicy: .nextTime)
+
+        case "monthly":
+            // Same weekday-of-month pattern; simplify to: next month on the weekday
+            // Use Calendar.nextDate matching weekday + hour
+            comps.weekday = max(1, min(7, weekday))
+            // Skip to the matching day in ~4 weeks from now
+            guard let candidate = cal.nextDate(after: now, matching: comps, matchingPolicy: .nextTime) else { return nil }
+            // If that's within a week, add ~3 more weeks to space it out to monthly
+            if candidate.timeIntervalSince(now) < 7 * 24 * 3600 {
+                return cal.nextDate(after: candidate.addingTimeInterval(21 * 24 * 3600),
+                                    matching: comps, matchingPolicy: .nextTime)
+            }
+            return candidate
+
+        default:
+            return nil
+        }
     }
 
     // MARK: - Public API
@@ -66,18 +111,34 @@ final class ScanScheduler {
         }
     }
 
+    private var scanPreferredWeekday: Int {
+        let v = UserDefaults.standard.integer(forKey: "scanPreferredWeekday")
+        return v > 0 ? v : 2   // default Monday
+    }
+
+    private var scanPreferredHour: Int {
+        UserDefaults.standard.integer(forKey: "scanPreferredHour")
+    }
+
     private func applySchedule() {
         // Tear down any existing scheduler first
         activity?.invalidate()
         activity = nil
 
-        let interval = currentInterval
-        guard interval > 0 else { return }   // user turned scheduling off
+        let freq = scanFrequency
+        guard freq != "off" else { return }
+
+        // F-015: compute exact time until next preferred day/hour
+        let weekday = scanPreferredWeekday
+        let hour    = scanPreferredHour
+        let nextDate = nextScanDate(frequency: freq, weekday: weekday, hour: hour) ?? Date().addingTimeInterval(currentInterval)
+        let interval = max(60, nextDate.timeIntervalSinceNow)
+        let repeatInterval = currentInterval
 
         let scheduler = NSBackgroundActivityScheduler(identifier: "com.halo.mac.smartscan")
         scheduler.repeats   = true
-        scheduler.interval  = interval
-        scheduler.tolerance = interval * 0.10   // ±10 % jitter — power-efficient
+        scheduler.interval  = repeatInterval > 0 ? repeatInterval : interval
+        scheduler.tolerance = interval * 0.05   // ±5 % jitter
         scheduler.qualityOfService = .utility
 
         scheduler.schedule { [weak self] completion in

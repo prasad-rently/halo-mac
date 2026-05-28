@@ -44,9 +44,17 @@ struct DashHeader: View {
 
     private var nextScanText: String {
         guard let next = ScanScheduler.shared.nextFireDate else { return "" }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        return " · Next: \(formatter.localizedString(for: next, relativeTo: Date()))"
+        // F-015: show specific day+time when more than 1 day away; relative otherwise
+        let interval = next.timeIntervalSinceNow
+        if interval > 24 * 3600 {
+            let df = DateFormatter()
+            df.dateFormat = "EEEE 'at' h:mm a"
+            return " · Next: \(df.string(from: next))"
+        } else {
+            let formatter = RelativeDateTimeFormatter()
+            formatter.unitsStyle = .short
+            return " · Next: \(formatter.localizedString(for: next, relativeTo: Date()))"
+        }
     }
 
     var body: some View {

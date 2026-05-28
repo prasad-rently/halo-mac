@@ -293,6 +293,9 @@ struct SettingsView: View {
     @AppStorage("menuBarCompact")     private var compactMode = false
     // F-008: display style
     @AppStorage("menuBarDisplayStyle") private var displayStyle = MenuBarDisplayStyle.icon.rawValue
+    // F-015: scan schedule preferences
+    @AppStorage("scanPreferredWeekday") private var scanWeekday: Int = 2  // 1=Sun … 7=Sat (Calendar.Component)
+    @AppStorage("scanPreferredHour")    private var scanHour: Int = 3      // 0–23
 
     var body: some View {
         TabView {
@@ -309,12 +312,41 @@ struct SettingsView: View {
                     ))
                     Toggle("Enable menu bar agent", isOn: $enableMenuBar)
                 }
+                // F-015: rich scan schedule UI
                 Section("Scheduled Scans") {
                     Picker("Frequency", selection: $scanFrequency) {
                         Text("Daily").tag("daily")
                         Text("Weekly").tag("weekly")
                         Text("Monthly").tag("monthly")
                         Text("Off").tag("off")
+                    }
+                    if scanFrequency != "off" {
+                        if scanFrequency == "weekly" || scanFrequency == "monthly" {
+                            Picker("Day", selection: $scanWeekday) {
+                                Text("Sunday").tag(1)
+                                Text("Monday").tag(2)
+                                Text("Tuesday").tag(3)
+                                Text("Wednesday").tag(4)
+                                Text("Thursday").tag(5)
+                                Text("Friday").tag(6)
+                                Text("Saturday").tag(7)
+                            }
+                        }
+                        Picker("Time", selection: $scanHour) {
+                            ForEach(0..<24, id: \.self) { h in
+                                Text(String(format: "%02d:00", h)).tag(h)
+                            }
+                        }
+                        if let next = ScanScheduler.shared.nextScanDate(
+                            frequency: scanFrequency,
+                            weekday: scanWeekday,
+                            hour: scanHour
+                        ) {
+                            let rel = RelativeDateTimeFormatter().localizedString(for: next, relativeTo: Date())
+                            Text("Next scan: \(rel)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
                 Section("Units") {
