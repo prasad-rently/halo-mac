@@ -44,24 +44,118 @@ final class MenuBarManager: ObservableObject {
     }
 }
 
+// MARK: - Menu Bar Display Style (F-008)
+
+/// Controls how the menu-bar status item looks.
+enum MenuBarDisplayStyle: String, CaseIterable, Identifiable {
+    case icon      = "icon"       // Halo icon + pressure glow (default)
+    case textStats = "textStats"  // "47% · 68%" compact text
+    case miniBar   = "miniBar"    // Tiny CPU/RAM progress bars
+    case dot       = "dot"        // Solid colored pressure dot
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .icon:      return "Halo Icon"
+        case .textStats: return "Text Stats"
+        case .miniBar:   return "Mini Bars"
+        case .dot:       return "Dot"
+        }
+    }
+}
+
 // MARK: - Menu Bar Icon
 
 struct MenuBarIconView: View {
     let state: MenuBarManager.SystemPressureLevel
+    var cpuUsage: Double = 0
+    var ramUsage: Double = 0
 
-    private var imageName: String {
-        state == .normal ? "MenuBar_Standby" : "MenuBar_Processing"
+    @AppStorage("menuBarDisplayStyle") private var styleRaw = MenuBarDisplayStyle.icon.rawValue
+
+    private var style: MenuBarDisplayStyle {
+        MenuBarDisplayStyle(rawValue: styleRaw) ?? .icon
+    }
+
+    private var pressureColor: Color {
+        switch state {
+        case .normal:   return .haloGreen
+        case .moderate: return .haloAmber
+        case .critical: return .haloRed
+        }
     }
 
     var body: some View {
+        switch style {
+        case .icon:      iconView
+        case .textStats: textStatsView
+        case .miniBar:   miniBarView
+        case .dot:       dotView
+        }
+    }
+
+    // Style: classic Halo icon with pressure shadow
+    @ViewBuilder private var iconView: some View {
+        let imageName = state == .normal ? "MenuBar_Standby" : "MenuBar_Processing"
         Image(imageName)
             .resizable()
             .interpolation(.high)
             .frame(width: 18, height: 18)
-            // Tint: amber/red glow under load, no tint at normal state
-            .shadow(color: state == .normal ? .clear
-                    : state == .moderate ? Color.haloAmber.opacity(0.8)
-                    : Color.haloRed.opacity(0.8), radius: 3)
+            .shadow(color: state == .normal ? .clear : pressureColor.opacity(0.8), radius: 3)
+    }
+
+    // Style: compact "47% · 68%" text
+    @ViewBuilder private var textStatsView: some View {
+        HStack(spacing: 4) {
+            Text(String(format: "%.0f%%", cpuUsage * 100))
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundColor(cpuUsage > 0.85 ? .haloRed : cpuUsage > 0.60 ? .haloAmber : .primary)
+            Text("·")
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+            Text(String(format: "%.0f%%", ramUsage * 100))
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundColor(ramUsage > 0.90 ? .haloRed : ramUsage > 0.75 ? .haloAmber : .primary)
+        }
+        .frame(height: 18)
+    }
+
+    // Style: two thin horizontal bars
+    @ViewBuilder private var miniBarView: some View {
+        VStack(spacing: 2) {
+            MiniProgressBar(value: cpuUsage,
+                            color: cpuUsage > 0.85 ? .haloRed : cpuUsage > 0.60 ? .haloAmber : .haloAccent)
+            MiniProgressBar(value: ramUsage,
+                            color: ramUsage > 0.90 ? .haloRed : ramUsage > 0.75 ? .haloAmber : .haloCyan)
+        }
+        .frame(width: 28, height: 18)
+    }
+
+    // Style: single colored dot
+    @ViewBuilder private var dotView: some View {
+        Circle()
+            .fill(pressureColor)
+            .frame(width: 8, height: 8)
+            .shadow(color: pressureColor.opacity(0.7), radius: 2)
+            .frame(width: 18, height: 18)
+    }
+}
+
+/// Thin progress bar used by the miniBar display style.
+private struct MiniProgressBar: View {
+    let value: Double   // 0.0–1.0
+    let color: Color
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.15))
+                Capsule().fill(color)
+                    .frame(width: max(2, geo.size.width * CGFloat(min(value, 1.0))))
+            }
+        }
+        .frame(height: 4)
     }
 }
 
@@ -91,6 +185,7 @@ struct MenuBarPopoverView: View {
 
 struct MenuBarHeader: View {
     @EnvironmentObject var menuBarManager: MenuBarManager
+    @EnvironmentObject var appState: AppState
 
     var body: some View {
         HStack(spacing: 10) {
@@ -107,6 +202,22 @@ struct MenuBarHeader: View {
             Text("Halo")
                 .font(HaloFont.display(14, weight: .heavy))
                 .foregroundColor(.haloText)
+
+            // P3-05: VPN badge
+            if appState.isVPNActive {
+                HStack(spacing: 4) {
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 9))
+                        .foregroundColor(.haloGreen)
+                    Text("VPN")
+                        .font(HaloFont.body(9, weight: .semibold))
+                        .foregroundColor(.haloGreen)
+                }
+                .padding(.horizontal, 6).padding(.vertical, 3)
+                .background(Color.haloGreen.opacity(0.12))
+                .cornerRadius(5)
+            }
+
             Spacer()
             HStack(spacing: 4) {
                 Circle()
@@ -174,21 +285,36 @@ struct MenuBarRingCard: View {
 
 struct MenuBarStatsSection: View {
     @EnvironmentObject var appState: AppState
+    // P3-09: respect module visibility settings
+    @AppStorage("menuBarShowCPU")     private var showCPU     = true
+    @AppStorage("menuBarShowRAM")     private var showRAM     = true
+    @AppStorage("menuBarShowNet")     private var showNet     = true
+    @AppStorage("menuBarShowBattery") private var showBattery = true
+    @AppStorage("menuBarShowDisk")    private var showDisk    = false
 
     var body: some View {
         VStack(spacing: 8) {
-            MenuBarStatRow(icon: "internaldrive", label: "Disk Free",
-                           value: String(format: "%.0f GB", appState.diskFreeGB),
-                           color: .haloGreen)
-            MenuBarStatRow(icon: "arrow.up.circle", label: "Upload",
-                           value: String(format: "%.1f MB/s", appState.networkUpMBps),
-                           color: .haloCyan)
-            MenuBarStatRow(icon: "arrow.down.circle", label: "Download",
-                           value: String(format: "%.1f MB/s", appState.networkDownMBps),
-                           color: .haloAccent)
-            MenuBarStatRow(icon: "battery.75", label: "Battery",
-                           value: "\(appState.batteryPercent)%\(appState.batteryTimeRemaining.isEmpty ? "" : " · \(appState.batteryTimeRemaining)")",
-                           color: appState.batteryPercent > 20 ? .haloGreen : .haloRed)
+            if showDisk {
+                MenuBarStatRow(icon: "internaldrive", label: "Disk Free",
+                               value: String(format: "%.0f GB", appState.diskFreeGB),
+                               color: .haloGreen)
+            }
+            if showNet {
+                MenuBarStatRow(icon: "arrow.up.circle", label: "Upload",
+                               value: String(format: "%.1f MB/s", appState.networkUpMBps),
+                               color: .haloCyan)
+                MenuBarStatRow(icon: "arrow.down.circle", label: "Download",
+                               value: String(format: "%.1f MB/s", appState.networkDownMBps),
+                               color: .haloAccent)
+            }
+            if showBattery {
+                MenuBarStatRow(
+                    icon: appState.batteryIsCharging ? "bolt.fill" : "battery.75",
+                    label: "Battery",
+                    value: "\(appState.batteryPercent)%\(appState.batteryTimeRemaining.isEmpty ? "" : " · \(appState.batteryTimeRemaining)")",
+                    color: appState.batteryPercent > 20 ? .haloGreen : .haloRed
+                )
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)

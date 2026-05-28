@@ -289,12 +289,18 @@ struct AppLeftover: Identifiable {
 }
 
 enum LeftoverKind: String {
-    case preferences = "Preferences"
-    case appSupport = "App Support"
-    case cache = "Cache"
-    case container = "Container"
+    case preferences    = "Preferences"
+    case appSupport     = "App Support"
+    case cache          = "Cache"
+    case container      = "Container"
     case groupContainer = "Group Container"
-    case crashLogs = "Crash Logs"
+    case crashLogs      = "Crash Logs"
+    // F-010: additional leftover locations
+    case logs           = "Logs"
+    case savedState     = "Saved State"
+    case cookies        = "Cookies"
+    case webkit         = "WebKit Data"
+    case launchAgent    = "Launch Agent"
 }
 
 // MARK: - Duplicate Models

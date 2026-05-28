@@ -277,15 +277,42 @@ struct SettingsView: View {
     @AppStorage("scanFrequency") private var scanFrequency = "weekly"
     @AppStorage("enableAnalytics") private var enableAnalytics = false
     @AppStorage("clipboardHistoryLimit") private var clipboardLimit = 200
+    // P3-12: thresholds
+    @AppStorage("alertCPUThreshold")    private var alertCPUThreshold: Double = 0.85
+    @AppStorage("alertRAMThreshold")    private var alertRAMThreshold: Double = 0.85
+    @AppStorage("alertDiskFreeGB")      private var alertDiskFreeGB: Double = 5.0
+    @AppStorage("alertBatteryLow")      private var alertBatteryLow: Int = 20
+    @AppStorage("alertBatteryCritical") private var alertBatteryCritical: Int = 10
+    @AppStorage("temperatureUnit")      private var useFahrenheit = false
+    // P3-09: menu bar module visibility
+    @AppStorage("menuBarShowCPU")     private var showCPU     = true
+    @AppStorage("menuBarShowRAM")     private var showRAM     = true
+    @AppStorage("menuBarShowNet")     private var showNet     = true
+    @AppStorage("menuBarShowBattery") private var showBattery = true
+    @AppStorage("menuBarShowDisk")    private var showDisk    = false
+    @AppStorage("menuBarCompact")     private var compactMode = false
+    // F-008: display style
+    @AppStorage("menuBarDisplayStyle") private var displayStyle = MenuBarDisplayStyle.icon.rawValue
+    // F-015: scan schedule preferences
+    @AppStorage("scanPreferredWeekday") private var scanWeekday: Int = 2  // 1=Sun … 7=Sat (Calendar.Component)
+    @AppStorage("scanPreferredHour")    private var scanHour: Int = 3      // 0–23
 
     var body: some View {
         TabView {
             // General
             Form {
                 Section("Startup") {
-                    Toggle("Launch Halo at login", isOn: $launchAtLogin)
+                    // F-009: real SMAppService toggle; fallback to AppStorage on older OS
+                    Toggle("Launch Halo at login", isOn: Binding(
+                        get: { LaunchAtLoginManager.isEnabled || launchAtLogin },
+                        set: { newValue in
+                            launchAtLogin = newValue
+                            LaunchAtLoginManager.setEnabled(newValue)
+                        }
+                    ))
                     Toggle("Enable menu bar agent", isOn: $enableMenuBar)
                 }
+                // F-015: rich scan schedule UI
                 Section("Scheduled Scans") {
                     Picker("Frequency", selection: $scanFrequency) {
                         Text("Daily").tag("daily")
@@ -293,6 +320,37 @@ struct SettingsView: View {
                         Text("Monthly").tag("monthly")
                         Text("Off").tag("off")
                     }
+                    if scanFrequency != "off" {
+                        if scanFrequency == "weekly" || scanFrequency == "monthly" {
+                            Picker("Day", selection: $scanWeekday) {
+                                Text("Sunday").tag(1)
+                                Text("Monday").tag(2)
+                                Text("Tuesday").tag(3)
+                                Text("Wednesday").tag(4)
+                                Text("Thursday").tag(5)
+                                Text("Friday").tag(6)
+                                Text("Saturday").tag(7)
+                            }
+                        }
+                        Picker("Time", selection: $scanHour) {
+                            ForEach(0..<24, id: \.self) { h in
+                                Text(String(format: "%02d:00", h)).tag(h)
+                            }
+                        }
+                        if let next = ScanScheduler.shared.nextScanDate(
+                            frequency: scanFrequency,
+                            weekday: scanWeekday,
+                            hour: scanHour
+                        ) {
+                            let rel = RelativeDateTimeFormatter().localizedString(for: next, relativeTo: Date())
+                            Text("Next scan: \(rel)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                Section("Units") {
+                    Toggle("Show temperatures in Fahrenheit (°F)", isOn: $useFahrenheit)
                 }
                 Section("Privacy") {
                     Toggle("Share anonymous analytics to improve Halo", isOn: $enableAnalytics)
@@ -327,13 +385,74 @@ struct SettingsView: View {
             }
             .tabItem { Label("Clipboard", systemImage: "doc.on.clipboard") }
 
+            // Alerts (P3-08/12)
+            Form {
+                Section("CPU Alerts") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("CPU sustained high: \(Int(alertCPUThreshold * 100))%")
+                        Slider(value: $alertCPUThreshold, in: 0.50...0.99, step: 0.05)
+                            .tint(.haloAccent)
+                        Text("Alert fires when CPU stays above this threshold for 10+ seconds.")
+                            .font(.caption).foregroundColor(.secondary)
+                    }
+                }
+                Section("Memory Alerts") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("RAM pressure: \(Int(alertRAMThreshold * 100))%")
+                        Slider(value: $alertRAMThreshold, in: 0.50...0.99, step: 0.05)
+                            .tint(.haloPurple)
+                    }
+                }
+                Section("Disk Alerts") {
+                    Picker("Alert when free space is below", selection: $alertDiskFreeGB) {
+                        Text("1 GB").tag(1.0)
+                        Text("2 GB").tag(2.0)
+                        Text("5 GB").tag(5.0)
+                        Text("10 GB").tag(10.0)
+                    }
+                }
+                Section("Battery Alerts") {
+                    Stepper("Low battery warning: \(alertBatteryLow)%",
+                            value: $alertBatteryLow, in: 10...40, step: 5)
+                    Stepper("Critical battery alert: \(alertBatteryCritical)%",
+                            value: $alertBatteryCritical, in: 5...20, step: 5)
+                    Text("You'll also get a notification when charging is complete.")
+                        .font(.caption).foregroundColor(.secondary)
+                }
+            }
+            .tabItem { Label("Alerts", systemImage: "bell.fill") }
+
+            // Menu Bar (P3-09)
+            Form {
+                Section("Visible Modules") {
+                    Toggle("CPU usage", isOn: $showCPU)
+                    Toggle("RAM pressure", isOn: $showRAM)
+                    Toggle("Network ↑↓", isOn: $showNet)
+                    Toggle("Battery %", isOn: $showBattery)
+                    Toggle("Disk I/O", isOn: $showDisk)
+                }
+                Section("Display") {
+                    // F-008: icon style picker
+                    Picker("Status Item Style", selection: $displayStyle) {
+                        ForEach(MenuBarDisplayStyle.allCases) { style in
+                            Text(style.label).tag(style.rawValue)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    Toggle("Compact mode (smaller text)", isOn: $compactMode)
+                    Text("When compact mode is on, values are abbreviated (e.g. 42% → 42).")
+                        .font(.caption).foregroundColor(.secondary)
+                }
+            }
+            .tabItem { Label("Menu Bar", systemImage: "menubar.rectangle") }
+
             // About
             VStack(spacing: 16) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 48))
                     .foregroundColor(.haloAccent)
                 Text("Halo").font(HaloFont.display(24, weight: .heavy))
-                Text("Version 1.0.0 (Build 100)").foregroundColor(.secondary)
+                Text("Version 1.2.0 (Build 120)").foregroundColor(.secondary)
                 Divider()
                 Button("Check for Updates") {}
                 Button("View Privacy Policy") {}
@@ -342,7 +461,7 @@ struct SettingsView: View {
             .padding(40)
             .tabItem { Label("About", systemImage: "info.circle") }
         }
-        .frame(width: 480, height: 400)
+        .frame(width: 520, height: 460)
     }
 }
 

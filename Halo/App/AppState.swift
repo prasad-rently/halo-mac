@@ -2,6 +2,7 @@ import SwiftUI
 import Combine
 import AppKit
 import WidgetKit
+import UserNotifications
 
 // MARK: - App State (Central Store)
 
@@ -43,6 +44,26 @@ final class AppState: ObservableObject {
     // MARK: Recent Activity
     @Published var recentActivities: [ActivityEvent] = []
 
+    // MARK: Phase 3 — Battery Deep (P3-04)
+    @Published var batteryIsCharging: Bool = false
+    @Published var batteryIsOnAC: Bool = false
+    @Published var batteryDesignCapMAh: Int = 0
+    @Published var batteryMaxCapMAh: Int = 0
+    @Published var batteryAmperageMa: Int = 0
+    @Published var batteryVoltageMv: Int = 0
+    @Published var batteryTemperatureC: Double = 0
+    @Published var batteryTimeToFull: String = ""
+    @Published var batteryIsLowPower: Bool = false
+
+    // MARK: Phase 3 — Network Intelligence (P3-05)
+    @Published var isVPNActive: Bool = false
+
+    // MARK: Phase 3 — Bandwidth History (P3-10)
+    /// Rolling 30-sample (60 s) buffers — appended in refreshMetrics(), max 30 entries.
+    /// Must be @Published so NetworkSparklineCard re-renders on every tick.
+    @Published private(set) var uploadHistory:   [Double] = []
+    @Published private(set) var downloadHistory: [Double] = []
+
     // MARK: Pro State
     @Published var isPro: Bool = false
 
@@ -59,6 +80,10 @@ final class AppState: ObservableObject {
     private let quickPickerController = ClipboardQuickPickerController()
     private var wasAxTrusted = false
 
+    // Phase 3
+    private let alertManager = AlertManager()
+    private let networkMonitor = NetworkDetailMonitor()
+
     init() {
         systemMonitor = SystemMonitor()
         startMetricsPolling()
@@ -67,6 +92,8 @@ final class AppState: ObservableObject {
         loadClipboardHistory()
         startClipboardMonitoring()
         setupHotkeys()
+        startNetworkMonitoring()
+        AlertManager.requestPermission()
     }
 
     // MARK: - Metrics Polling
@@ -97,14 +124,54 @@ final class AppState: ObservableObject {
         diskTotalGB = disk.totalGB
         let battery = monitor.batteryStats()
         batteryPercent = battery.percent
+        batteryIsCharging   = battery.isCharging
+        batteryIsOnAC       = battery.isOnACPower
         batteryTimeRemaining = battery.timeRemainingString
         batteryHealth = battery.healthPercent
         batteryCycles = battery.cycleCount
+        batteryDesignCapMAh = battery.designCapacityMAh
+        batteryMaxCapMAh    = battery.maxCapacityMAh
+        batteryAmperageMa   = battery.amperageMa
+        batteryVoltageMv    = battery.voltageMv
+        batteryTemperatureC = battery.temperatureCelsius
+        batteryTimeToFull   = battery.timeToFullString
+        batteryIsLowPower   = battery.isLowPowerMode
         let net = monitor.networkStats()
         networkUpMBps = net.upMBps
         networkDownMBps = net.downMBps
+        // P3-10: rolling 60-second bandwidth buffer
+        appendBandwidthHistory(up: net.upMBps, down: net.downMBps)
         systemHealthScore = calculateHealthScore()
+        // P3-08: threshold alert evaluation (zero extra cost — just if-checks)
+        alertManager.evaluate(
+            cpuUsage: cpuUsage,
+            ramUsage: ramUsage,
+            diskFreeGB: diskFreeGB,
+            batteryPercent: batteryPercent,
+            isCharging: batteryIsCharging
+        )
         writeWidgetData()
+    }
+
+    // MARK: - Bandwidth history (P3-10)
+
+    private func appendBandwidthHistory(up: Double, down: Double) {
+        uploadHistory.append(up)
+        downloadHistory.append(down)
+        if uploadHistory.count   > 30 { uploadHistory.removeFirst() }
+        if downloadHistory.count > 30 { downloadHistory.removeFirst() }
+    }
+
+    // MARK: - VPN monitoring (P3-05)
+
+    private func startNetworkMonitoring() {
+        Task {
+            await networkMonitor.startVPNMonitoring { [weak self] isVPN in
+                Task { @MainActor in
+                    self?.isVPNActive = isVPN
+                }
+            }
+        }
     }
 
     private func writeWidgetData() {

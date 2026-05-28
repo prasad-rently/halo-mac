@@ -17,9 +17,37 @@ let package = Package(
             dependencies: [
                 .product(name: "Sentry", package: "sentry-cocoa"),
             ],
-            path: "Halo",
+            // Use project root as path so we can add Shared/HaloHelperProtocol.swift
+            path: ".",
+            // Exclude plists/entitlements and anything SPM should not compile
+            // NOTE: exclude must precede sources in SPM manifests
+            exclude: [
+                "Halo/Resources/Info.plist",
+                "Halo/Resources/PrivacyInfo.xcprivacy",
+                "Halo/Resources/Assets.xcassets",   // re-added as explicit resource below
+                "Halo/Resources/signatures.json",   // re-added as explicit resource below
+                "Halo/Halo.entitlements",
+                "Halo/Halo-Debug.entitlements",
+                // HaloSharedData.swift: Foundation-only, safe to compile in both targets
+                "HaloHelper",
+                "HaloWidget",
+                "HaloTests",
+                "docs",
+                "Assets",
+                "Package.swift",
+                "Package.resolved",
+                "README.md",
+                "CLAUDE.md",
+                "LICENSE",
+            ],
+            sources: [
+                "Halo",
+                "Shared/HaloHelperProtocol.swift",   // F-002: shared XPC protocol
+                "Shared/HaloSharedData.swift",        // HaloWidgetData — Foundation only, no WidgetKit
+            ],
             resources: [
-                .process("Resources")
+                .process("Halo/Resources/Assets.xcassets"),
+                .copy("Halo/Resources/signatures.json"),   // F-004: bundled signature database
             ]
         ),
         .testTarget(

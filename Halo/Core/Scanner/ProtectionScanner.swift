@@ -2,63 +2,15 @@ import Foundation
 
 // MARK: - Protection Scanner
 // Real file-system scanner for malware signatures, browser data, and launch agents.
+// Signature matching is delegated to SignatureDatabase (F-004) which loads from
+// the bundled signatures.json and supports lightweight HTTPS delta updates.
 
 actor ProtectionScanner {
 
-    // MARK: - Malware Signature Database
-    // Curated list of known macOS adware, PUPs, hijackers, and keyloggers.
-
-    private static let signatures: [String: (kind: ThreatKind, risk: ThreatRisk)] = [
-        // Adware
-        "genieo":           (.adware, .high),
-        "resoft":           (.adware, .medium),
-        "vsearch":          (.adware, .high),
-        "conduit":          (.adware, .medium),
-        "crossrider":       (.adware, .medium),
-        "pirrit":           (.adware, .high),
-        "guagua":           (.adware, .high),
-        "downlite":         (.adware, .medium),
-        "vidx":             (.adware, .medium),
-        "yontoo":           (.adware, .low),
-        "zugo":             (.adware, .low),
-        "bundlore":         (.adware, .high),
-        "amonetize":        (.adware, .high),
-        "adload":           (.adware, .high),
-        "bnodge":           (.adware, .high),
-        "rload":            (.adware, .high),
-        "dockster":         (.adware, .medium),
-        "coinhive":         (.adware, .high),
-        "coinminer":        (.adware, .high),
-        // PUPs (Potentially Unwanted Programs)
-        "macbooster":       (.pup, .low),
-        "macoptimizer":     (.pup, .low),
-        "macpurifier":      (.pup, .low),
-        "advancedmaccleaner": (.pup, .medium),
-        "mackeeper":        (.pup, .medium),
-        "zeobit":           (.pup, .medium),
-        "macupdater":       (.pup, .medium),
-        "mymacupdater":     (.pup, .medium),
-        "softwareupdater":  (.pup, .medium),
-        "pcvark":           (.pup, .medium),
-        "pvcore":           (.pup, .medium),
-        // Browser Hijackers
-        "searchbaron":      (.hijacker, .high),
-        "searchmarquis":    (.hijacker, .high),
-        "searchpulse":      (.hijacker, .medium),
-        "lkysearchd":       (.hijacker, .high),
-        "lkysearch":        (.hijacker, .high),
-        "newtab":           (.hijacker, .medium),
-        "gotosearch":       (.hijacker, .high),
-        "cofinderservices": (.hijacker, .high),
-        "trustdaemon":      (.hijacker, .high),
-        "analyticshelper":  (.hijacker, .medium),
-        // Keyloggers / Stalkerware
-        "refog":            (.keylogger, .high),
-        "aobo":             (.keylogger, .high),
-        "spyrix":           (.keylogger, .high),
-        "logkext":          (.keylogger, .high),
-        "elite keylogger":  (.keylogger, .high),
-    ]
+    // MARK: - Signature lookup (delegated to SignatureDatabase)
+    private func sigMatch(_ keyword: String) async -> (kind: ThreatKind, risk: ThreatRisk)? {
+        await SignatureDatabase.shared.matches(keyword: keyword)
+    }
 
     // Directories to scan for malware artefacts
     private static let scanPaths: [String] = {
@@ -85,7 +37,7 @@ actor ProtectionScanner {
 
         for (i, pathStr) in paths.enumerated() {
             onProgress(Double(i) / Double(paths.count))
-            found += scanDirectory(URL(fileURLWithPath: pathStr))
+            found += await scanDirectory(URL(fileURLWithPath: pathStr))
         }
         onProgress(1.0)
 
@@ -94,7 +46,7 @@ actor ProtectionScanner {
         return found.filter { seen.insert($0.filePath).inserted }
     }
 
-    private func scanDirectory(_ url: URL) -> [MalwareThreat] {
+    private func scanDirectory(_ url: URL) async -> [MalwareThreat] {
         let fm = FileManager.default
         guard fm.fileExists(atPath: url.path) else { return [] }
 
@@ -109,25 +61,25 @@ actor ProtectionScanner {
         for child in children {
             let nameLower = child.lastPathComponent.lowercased()
 
-            // Direct name match
-            for (sig, info) in Self.signatures where nameLower.contains(sig) {
+            // Direct name match against signature database
+            if let hit = await sigMatch(nameLower) {
                 threats.append(MalwareThreat(
                     name: child.lastPathComponent,
-                    kind: info.kind, risk: info.risk,
+                    kind: hit.kind, risk: hit.risk,
                     filePath: child.path))
-                break
+                continue   // no need to also inspect the plist for this same file
             }
 
             // Also inspect plist Label / ProgramArguments
             if child.pathExtension.lowercased() == "plist",
-               let t = plistThreat(at: child) {
+               let t = await plistThreat(at: child) {
                 threats.append(t)
             }
         }
         return threats
     }
 
-    private func plistThreat(at url: URL) -> MalwareThreat? {
+    private func plistThreat(at url: URL) async -> MalwareThreat? {
         guard let data = try? Data(contentsOf: url),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil)
                 as? [String: Any] else { return nil }
@@ -135,10 +87,13 @@ actor ProtectionScanner {
         let label = (plist["Label"] as? String ?? "").lowercased()
         let args  = (plist["ProgramArguments"] as? [String] ?? []).joined(separator: " ").lowercased()
 
-        for (sig, info) in Self.signatures where label.contains(sig) || args.contains(sig) {
+        let hitByLabel = await sigMatch(label)
+        let hitByArgs  = hitByLabel == nil ? await sigMatch(args) : nil
+        let hit = hitByLabel ?? hitByArgs
+        if let hit {
             return MalwareThreat(
                 name: plist["Label"] as? String ?? url.lastPathComponent,
-                kind: info.kind, risk: info.risk,
+                kind: hit.kind, risk: hit.risk,
                 filePath: url.path)
         }
 
@@ -288,7 +243,7 @@ actor ProtectionScanner {
             ))?.filter { $0.pathExtension == "plist" } ?? []
 
             for url in plists {
-                if let item = parseLaunchAgent(at: url, scope: dir.scope) {
+                if let item = await parseLaunchAgent(at: url, scope: dir.scope) {
                     results.append(item)
                 }
             }
@@ -301,7 +256,7 @@ actor ProtectionScanner {
         }
     }
 
-    private func parseLaunchAgent(at url: URL, scope: String) -> RealLaunchAgentItem? {
+    private func parseLaunchAgent(at url: URL, scope: String) async -> RealLaunchAgentItem? {
         let modDate = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
 
         let label: String
@@ -318,7 +273,7 @@ actor ProtectionScanner {
             program = ""
         }
 
-        let suspicious = isSuspicious(label: label, program: program)
+        let suspicious = await isSuspicious(label: label, program: program)
 
         return RealLaunchAgentItem(
             label: label,
@@ -330,14 +285,14 @@ actor ProtectionScanner {
         )
     }
 
-    private func isSuspicious(label: String, program: String) -> Bool {
+    private func isSuspicious(label: String, program: String) async -> Bool {
         let l = label.lowercased()
         let p = program.lowercased()
 
-        // Known signature match
-        for sig in Self.signatures.keys where l.contains(sig) || p.contains(sig) {
-            return true
-        }
+        // Known signature match via database
+        if await sigMatch(l) != nil { return true }
+        if await sigMatch(p) != nil { return true }
+
         // Points to volatile temp space
         if p.contains("/private/tmp/") || p.contains("/var/folders/") { return true }
 
