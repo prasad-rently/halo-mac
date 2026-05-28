@@ -50,6 +50,16 @@
 		000000000000000000001099 /* Halo/Features/Dashboard/NetworkSparklineCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001098 /* Halo/Features/Dashboard/NetworkSparklineCard.swift */; };
 		000000000000000000001101 /* Halo/Features/Cleanup/DiskHealthSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001100 /* Halo/Features/Cleanup/DiskHealthSection.swift */; };
 		000000000000000000001103 /* Halo/Features/Dashboard/GPUDashboardCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001102 /* Halo/Features/Dashboard/GPUDashboardCard.swift */; };
+		/* F-002: Shared protocol — compiled into Halo + HaloHelper */
+		000000000000000000003005 /* HaloHelperProtocol.swift in Sources (Halo) */ = {isa = PBXBuildFile; fileRef = 000000000000000000003004 /* HaloHelperProtocol.swift */; };
+		000000000000000000003007 /* HelperClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000003006 /* Halo/Core/HelperClient.swift */; };
+		/* F-002: HaloHelper XPC target sources */
+		000000000000000000003009 /* HaloHelperProtocol.swift in Sources (Helper) */ = {isa = PBXBuildFile; fileRef = 000000000000000000003004 /* HaloHelperProtocol.swift */; };
+		000000000000000000003011 /* main.swift in Sources (Helper) */ = {isa = PBXBuildFile; fileRef = 000000000000000000003010 /* main.swift */; };
+		000000000000000000003013 /* HaloHelperDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000003012 /* HaloHelperDelegate.swift */; };
+		000000000000000000003015 /* HaloHelperImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000003014 /* HaloHelperImpl.swift */; };
+		/* F-002: Embed HaloHelper XPC in main app */
+		000000000000000000003017 /* HaloHelper.xpc in XPC Services */ = {isa = PBXBuildFile; fileRef = 000000000000000000003000 /* HaloHelper.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		000000000000000000002004 /* HaloWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000002002 /* HaloWidgetBundle.swift */; };
 		000000000000000000002005 /* HaloWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000002003 /* HaloWidget.swift */; };
 		000000000000000000002016 /* HaloWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 000000000000000000002000 /* HaloWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -127,6 +137,17 @@
 		000000000000000000001098 /* Halo/Features/Dashboard/NetworkSparklineCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/NetworkSparklineCard.swift; sourceTree = "<group>"; };
 		000000000000000000001100 /* Halo/Features/Cleanup/DiskHealthSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Cleanup/DiskHealthSection.swift; sourceTree = "<group>"; };
 		000000000000000000001102 /* Halo/Features/Dashboard/GPUDashboardCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/GPUDashboardCard.swift; sourceTree = "<group>"; };
+		/* F-002 file refs */
+		000000000000000000003000 /* HaloHelper.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = HaloHelper.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
+		/* Shared group already has path=Shared, so file paths are relative to Shared/ */
+		000000000000000000003004 /* HaloHelperProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloHelperProtocol.swift; sourceTree = "<group>"; };
+		000000000000000000003006 /* Halo/Core/HelperClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/HelperClient.swift; sourceTree = "<group>"; };
+		/* HaloHelper group has path=HaloHelper, so file paths are relative to HaloHelper/ */
+		000000000000000000003010 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		000000000000000000003012 /* HaloHelperDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloHelperDelegate.swift; sourceTree = "<group>"; };
+		000000000000000000003014 /* HaloHelperImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloHelperImpl.swift; sourceTree = "<group>"; };
+		000000000000000000003018 /* Info.plist (HaloHelper) */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		000000000000000000003019 /* HaloHelper.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HaloHelper.entitlements; sourceTree = "<group>"; };
 		000000000000000000002000 /* HaloWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HaloWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000002002 /* HaloWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloWidgetBundle.swift; sourceTree = "<group>"; };
 		000000000000000000002003 /* HaloWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloWidget.swift; sourceTree = "<group>"; };
@@ -162,6 +183,7 @@
 				000000000000000000001064 /* Frameworks */,
 				000000000000000000002001 /* HaloWidget */,
 				000000000000000000002022 /* Shared */,
+				000000000000000000003026 /* HaloHelper */,
 				000000000000000000001003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -179,6 +201,7 @@
 				000000000000000000001050 /* Halo/Core/Scanner/DuplicateDetector.swift */,
 				000000000000000000001070 /* Halo/Core/Scanner/ProtectionScanner.swift */,
 				000000000000000000001072 /* Halo/Core/AlertManager.swift */,
+				000000000000000000003006 /* Halo/Core/HelperClient.swift */,
 				000000000000000000001074 /* Halo/Core/Scanner/CPUDetailMonitor.swift */,
 				000000000000000000001076 /* Halo/Core/Scanner/SMCReader.swift */,
 				000000000000000000001078 /* Halo/Core/Scanner/GPUMonitor.swift */,
@@ -219,8 +242,23 @@
 			children = (
 				000000000000000000001015 /* Halo.app */,
 				000000000000000000002000 /* HaloWidget.appex */,
+				000000000000000000003000 /* HaloHelper.xpc */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		/* F-002: HaloHelper directory group */
+		000000000000000000003026 /* HaloHelper */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000003010 /* main.swift */,
+				000000000000000000003012 /* HaloHelperDelegate.swift */,
+				000000000000000000003014 /* HaloHelperImpl.swift */,
+				000000000000000000003018 /* Info.plist (HaloHelper) */,
+				000000000000000000003019 /* HaloHelper.entitlements */,
+			);
+			name = HaloHelper;
+			path = HaloHelper;
 			sourceTree = "<group>";
 		};
 		000000000000000000001064 /* Frameworks */ = {
@@ -246,6 +284,7 @@
 			isa = PBXGroup;
 			children = (
 				000000000000000000002020 /* HaloSharedData.swift */,
+				000000000000000000003004 /* HaloHelperProtocol.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -261,16 +300,35 @@
 				000000000000000000001012 /* Sources */,
 				000000000000000000001013 /* Resources */,
 				000000000000000000002015 /* Embed App Extensions */,
+				000000000000000000003022 /* Embed XPC Services */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				000000000000000000002014 /* PBXTargetDependency */,
+				000000000000000000003024 /* PBXTargetDependency (HaloHelper) */,
 			);
 			name = Halo;
 			productName = Halo;
 			productReference = 000000000000000000001015 /* Halo.app */;
 			productType = "com.apple.product-type.application";
+		};
+		/* F-002: HaloHelper XPC service target */
+		000000000000000000003001 /* HaloHelper */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 000000000000000000003025 /* Build configuration list for PBXNativeTarget "HaloHelper" */;
+			buildPhases = (
+				000000000000000000003021 /* Frameworks (HaloHelper) */,
+				000000000000000000003020 /* Sources (HaloHelper) */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = HaloHelper;
+			productName = HaloHelper;
+			productReference = 000000000000000000003000 /* HaloHelper.xpc */;
+			productType = "com.apple.product-type.xpc-service";
 		};
 		000000000000000000002009 /* HaloWidget */ = {
 			isa = PBXNativeTarget;
@@ -305,6 +363,9 @@
 					000000000000000000002009 = {
 						CreatedOnToolsVersion = 15.4;
 					};
+					000000000000000000003001 = {
+						CreatedOnToolsVersion = 15.4;
+					};
 				};
 			};
 			buildConfigurationList = 000000000000000000001005 /* Build configuration list for PBXProject "Halo" */;
@@ -322,6 +383,7 @@
 			targets = (
 				000000000000000000001004 /* Halo */,
 				000000000000000000002009 /* HaloWidget */,
+				000000000000000000003001 /* HaloHelper */,
 			);
 		};
 /* End PBXProject section */
@@ -390,6 +452,9 @@
 				000000000000000000001049 /* Halo/Features/Protection/ProtectionView.swift in Sources */,
 				000000000000000000001055 /* Halo/Features/SmartScan/SmartScanView.swift in Sources */,
 				000000000000000000002021 /* HaloSharedData.swift in Sources */,
+				/* F-002 */
+				000000000000000000003005 /* HaloHelperProtocol.swift in Sources (Halo) */,
+				000000000000000000003007 /* HelperClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -403,13 +468,60 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		/* F-002: HaloHelper XPC target Sources */
+		000000000000000000003020 /* Sources (HaloHelper) */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				000000000000000000003009 /* HaloHelperProtocol.swift in Sources (Helper) */,
+				000000000000000000003011 /* main.swift in Sources (Helper) */,
+				000000000000000000003013 /* HaloHelperDelegate.swift in Sources */,
+				000000000000000000003015 /* HaloHelperImpl.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		000000000000000000003021 /* Frameworks (HaloHelper) */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		000000000000000000003022 /* Embed XPC Services */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 16;
+			files = (
+				000000000000000000003017 /* HaloHelper.xpc in XPC Services */,
+			);
+			name = "Embed XPC Services";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXContainerItemProxy section (F-002) */
+		000000000000000000003023 /* PBXContainerItemProxy (HaloHelper) */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000001011 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 000000000000000000003001;
+			remoteInfo = HaloHelper;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXTargetDependency section */
 		000000000000000000002014 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 000000000000000000002009 /* HaloWidget */;
 			targetProxy = 000000000000000000002013 /* PBXContainerItemProxy */;
+		};
+		000000000000000000003024 /* PBXTargetDependency (HaloHelper) */ = {
+			isa = PBXTargetDependency;
+			target = 000000000000000000003001 /* HaloHelper */;
+			targetProxy = 000000000000000000003023 /* PBXContainerItemProxy (HaloHelper) */;
 		};
 /* End PBXTargetDependency section */
 
@@ -530,6 +642,41 @@
 			};
 			name = Release;
 		};
+		/* F-002: HaloHelper build configs */
+		000000000000000000003027 /* Debug (HaloHelper) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = HaloHelper/HaloHelper.entitlements;
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 120;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HaloHelper/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.helper;
+				PRODUCT_NAME = HaloHelper;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		000000000000000000003028 /* Release (HaloHelper) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = HaloHelper/HaloHelper.entitlements;
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 120;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HaloHelper/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.helper;
+				PRODUCT_NAME = HaloHelper;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -556,6 +703,15 @@
 			buildConfigurations = (
 				000000000000000000002010 /* Debug */,
 				000000000000000000002011 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		000000000000000000003025 /* Build configuration list for PBXNativeTarget "HaloHelper" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				000000000000000000003027 /* Debug (HaloHelper) */,
+				000000000000000000003028 /* Release (HaloHelper) */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

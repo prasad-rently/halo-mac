@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- XPC services run sandboxed by default.
+         com.apple.security.app-sandbox = false lets the helper call
+         shell commands (dscacheutil, kill, mdutil, memory_pressure). -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+    <!-- Allow the helper to call arbitrary executables -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <false/>
+    <!-- Shared app group for any data the helper needs to write back -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.com.halo.mac</string>
+    </array>
+</dict>
+</plist>
