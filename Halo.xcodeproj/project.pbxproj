@@ -32,6 +32,7 @@
 		000000000000000000004002 /* Halo/Resources/signatures.json in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004001 /* Halo/Resources/signatures.json */; };
 		000000000000000000001061 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000001060 /* IOKit.framework */; };
 		000000000000000000001063 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000001062 /* SystemConfiguration.framework */; };
+		000000000000000000005001 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000005002 /* Sentry */; };
 		000000000000000000001066 /* Halo/Core/HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001065 /* Halo/Core/HotkeyManager.swift */; };
 		000000000000000000001068 /* Halo/Features/Clipboard/ClipboardQuickPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001067 /* Halo/Features/Clipboard/ClipboardQuickPickerView.swift */; };
 		000000000000000000001071 /* Halo/Core/Scanner/ProtectionScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001070 /* Halo/Core/Scanner/ProtectionScanner.swift */; };
@@ -177,6 +178,7 @@
 				000000000000000000001061 /* IOKit.framework in Frameworks */,
 				000000000000000000001063 /* SystemConfiguration.framework in Frameworks */,
 				000000000000000000002018 /* WidgetKit.framework in Frameworks */,
+				000000000000000000005001 /* Sentry in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -330,6 +332,9 @@
 				000000000000000000003024 /* PBXTargetDependency (HaloHelper) */,
 			);
 			name = Halo;
+			packageProductDependencies = (
+				000000000000000000005002 /* Sentry */,
+			);
 			productName = Halo;
 			productReference = 000000000000000000001015 /* Halo.app */;
 			productType = "com.apple.product-type.application";
@@ -398,6 +403,9 @@
 				Base,
 			);
 			mainGroup = 000000000000000000001000;
+			packageReferences = (
+				000000000000000000005003 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
+			);
 			productRefGroup = 000000000000000000001003 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -745,6 +753,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		000000000000000000005003 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getsentry/sentry-cocoa";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = "8.0.0";
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		000000000000000000005002 /* Sentry */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 000000000000000000005003 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = Sentry;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 000000000000000000001011 /* Project object */;
 }
