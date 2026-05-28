@@ -31,6 +31,9 @@ final class ApplicationsViewModel: ObservableObject {
     @Published var sortMode: SortMode = .size
     @Published var showUnusedOnly = false
 
+    // F-010: real app scanner
+    private let scanner = AppScanner()
+
     enum SortMode: String, CaseIterable {
         case name = "Name"
         case size = "Size"
@@ -60,23 +63,24 @@ final class ApplicationsViewModel: ObservableObject {
 
     func loadApps() async {
         isLoading = true
-        // In production: enumerate /Applications and ~/Applications
-        // Extract bundle info, compute sizes recursively, read kMDItemLastUsedDate
-        apps = InstalledApp.samples
+        // F-010: real enumeration of /Applications and ~/Applications
+        let realApps = await scanner.scanApps()
+        apps = realApps.isEmpty ? InstalledApp.samples : realApps
         isLoading = false
     }
 
     func loadLeftovers(for app: InstalledApp) async {
         guard let idx = apps.firstIndex(where: { $0.id == app.id }) else { return }
-        // In production: search ~/Library for bundleIdentifier
-        apps[idx].leftovers = AppLeftover.samples(for: app)
+        // F-010: real leftover scan across 12 standard locations
+        let found = await scanner.scanLeftovers(for: app)
+        apps[idx].leftovers = found.isEmpty ? AppLeftover.samples(for: app) : found
         if selectedApp?.id == app.id { selectedApp = apps[idx] }
     }
 
     func uninstall(_ app: InstalledApp) async {
         isUninstalling = true
-        // In production: trash app + selected leftovers
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        // F-010: real trash — app bundle + selected leftovers
+        let (_, _) = await scanner.uninstall(app)
         apps.removeAll { $0.id == app.id }
         selectedApp = nil
         isUninstalling = false

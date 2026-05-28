@@ -37,6 +37,7 @@
 		000000000000000000001071 /* Halo/Core/Scanner/ProtectionScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001070 /* Halo/Core/Scanner/ProtectionScanner.swift */; };
 		000000000000000000004004 /* Halo/Core/Scanner/SignatureDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004003 /* Halo/Core/Scanner/SignatureDatabase.swift */; };
 		000000000000000000004008 /* Halo/Core/Scanner/LoginItemScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004007 /* Halo/Core/Scanner/LoginItemScanner.swift */; };
+		000000000000000000004010 /* Halo/Core/Scanner/AppScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004009 /* Halo/Core/Scanner/AppScanner.swift */; };
 		000000000000000000001073 /* Halo/Core/AlertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001072 /* Halo/Core/AlertManager.swift */; };
 		000000000000000000004006 /* Halo/Core/ScanScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004005 /* Halo/Core/ScanScheduler.swift */; };
 		000000000000000000001075 /* Halo/Core/Scanner/CPUDetailMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001074 /* Halo/Core/Scanner/CPUDetailMonitor.swift */; };
@@ -128,6 +129,7 @@
 		000000000000000000001070 /* Halo/Core/Scanner/ProtectionScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ProtectionScanner.swift; sourceTree = "<group>"; };
 		000000000000000000004003 /* Halo/Core/Scanner/SignatureDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SignatureDatabase.swift; sourceTree = "<group>"; };
 		000000000000000000004007 /* Halo/Core/Scanner/LoginItemScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/LoginItemScanner.swift; sourceTree = "<group>"; };
+		000000000000000000004009 /* Halo/Core/Scanner/AppScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/AppScanner.swift; sourceTree = "<group>"; };
 		000000000000000000001072 /* Halo/Core/AlertManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AlertManager.swift; sourceTree = "<group>"; };
 		000000000000000000004005 /* Halo/Core/ScanScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/ScanScheduler.swift; sourceTree = "<group>"; };
 		000000000000000000001074 /* Halo/Core/Scanner/CPUDetailMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/CPUDetailMonitor.swift; sourceTree = "<group>"; };
@@ -210,6 +212,7 @@
 				000000000000000000001070 /* Halo/Core/Scanner/ProtectionScanner.swift */,
 				000000000000000000004003 /* Halo/Core/Scanner/SignatureDatabase.swift */,
 				000000000000000000004007 /* Halo/Core/Scanner/LoginItemScanner.swift */,
+				000000000000000000004009 /* Halo/Core/Scanner/AppScanner.swift */,
 				000000000000000000001072 /* Halo/Core/AlertManager.swift */,
 				000000000000000000004005 /* Halo/Core/ScanScheduler.swift */,
 				000000000000000000003006 /* Halo/Core/HelperClient.swift */,
@@ -436,6 +439,7 @@
 				000000000000000000001071 /* Halo/Core/Scanner/ProtectionScanner.swift in Sources */,
 				000000000000000000004004 /* Halo/Core/Scanner/SignatureDatabase.swift in Sources */,
 				000000000000000000004008 /* Halo/Core/Scanner/LoginItemScanner.swift in Sources */,
+				000000000000000000004010 /* Halo/Core/Scanner/AppScanner.swift in Sources */,
 				000000000000000000001073 /* Halo/Core/AlertManager.swift in Sources */,
 				000000000000000000004006 /* Halo/Core/ScanScheduler.swift in Sources */,
 				000000000000000000001075 /* Halo/Core/Scanner/CPUDetailMonitor.swift in Sources */,
