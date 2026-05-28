@@ -29,6 +29,10 @@ Feature status and future plans. For the detailed iteration pipeline see `docs/F
 - [x] PDF report export (F-012 — 4-page A4 PDF via PDFKit + CoreText)
 - [x] Launch at Login toggle (F-014 — SMAppService.mainApp)
 - [x] Custom scan schedule — day + hour picker (F-015)
+- [x] Reorderable sidebar modules — drag-to-reorder with `UserDefaults` persistence (v2.1)
+- [x] Performance module polish — battery health cycle-aware, real free RAM via `host_statistics64`, Top Processes spinner fix, VPN false-positive fix, speed test improvements, Login Items "Manage All" (v2.1)
+- [x] Applications module fixes — `NSMetadataItem`-based last-used date, real uninstall with confirmation dialog and `trashItem` (v2.1)
+- [x] Future feature roadmap documented — 15 ideas (F-016 → F-030) across 4 themes (v2.1)
 
 ---
 
@@ -113,3 +117,74 @@ Before any release:
 2. Implement server-side versioning (`version` field in JSON)
 3. Consider certificate pinning via `URLAuthenticationChallenge` for added security
 4. Schedule delta updates on a regular cadence (weekly recommended)
+
+---
+
+## Future Ideas (F-016 → F-030)
+
+Brainstormed during v2.0 planning. Full cards with rationale, data sources, and integration points are in `docs/FEATURE_ROADMAP.md`. Grouped by theme below.
+
+---
+
+### Theme A — Privacy & Security
+
+| ID | Feature | Effort | Summary |
+|----|---------|--------|---------|
+| F-016 | **Permission Auditor** | ~3 d | Full map of every app's TCC permissions (mic, camera, screen recording, full disk access). Risk-flags excessive grants. Deep-links to System Settings pane per permission. |
+| F-017 | **Network Traffic Monitor** | ~5 d | Live per-app, per-domain network activity table. Flags telemetry/tracker domains from a bundled list. Read-only — no blocking. Complements existing Network section. |
+| F-018 | **Privacy Data Exposure Scanner** | ~3 d | Scans Downloads/Documents/Desktop for files containing API keys, credit card numbers, SSH private keys, SSNs. Regex-based, entirely on-device. Results grouped by risk level. |
+| F-019 | **Security Posture Dashboard** | ~1.5 d | Checklist of 8 macOS security settings: FileVault, Gatekeeper, SIP, Secure Boot, Find My, Firewall, auto-updates, login window. One-click deep-links. Security Score feeds into health score. |
+
+---
+
+### Theme B — Intelligent Insights
+
+| ID | Feature | Effort | Summary |
+|----|---------|--------|---------|
+| F-020 | **S.M.A.R.T. Disk Health Monitor** | ~3 d | IOKit-based drive health via S.M.A.R.T. attributes: health %, temperature, TBW, reallocated sectors, power-on hours. Lifespan estimate vs manufacturer TBW rating. Alerts on degradation. |
+| F-021 | **App Usage & Screen Time Analytics** | ~3 d | Tracks active foreground time per app using NSWorkspace notifications. Weekly bar chart, context-switch score, "background hog" list. All local — no cloud. |
+| F-022 | **Time Machine Backup Health Monitor** | ~1.5 d | Last backup time, destination free space, 30-day backup-frequency heatmap. Alert if no backup in 48 h. "Back Up Now" button via `tmutil`. |
+| F-023 | **Memory Leak & App Bloat Tracker** | ~3 d | Per-app RAM sparkline (2-hour rolling window). Flags monotonically-growing apps as "Possible leak". Inline Restart button. Alert when any app exceeds configurable threshold. |
+
+---
+
+### Theme C — Cleanup & Storage
+
+| ID | Feature | Effort | Summary |
+|----|---------|--------|---------|
+| F-024 | **Browser Cleaner** | ~2 d | Detects Safari/Chrome/Firefox/Edge/Brave/Arc. Per-browser checklist: HTTP cache, GPU shader cache, history, cookies, crash reports. Master "Clean All" + per-browser buttons. |
+| F-025 | **Duplicate Photos Finder (pHash)** | ~5 d | Perceptual hash clustering for near-duplicate images — same photo at different compressions/crops/sizes. Side-by-side comparison, auto-selects best copy. PhotoKit + loose files. |
+| F-026 | **Downloads Folder Organiser** | ~2 d | Categorises ~/Downloads by type + size. Cross-references .dmg/.pkg installers with installed apps — marks "safe to remove". Stale files list. Optional sort-into-subfolders. |
+| F-030 | **iCloud Storage Analyser** | ~4 d | Donut chart of iCloud quota by category. Drill-down into iCloud Drive files by size. Savings opportunities: large evictable files, duplicate synced files, old device backups. |
+
+---
+
+### Theme D — User Productivity
+
+| ID | Feature | Effort | Summary |
+|----|---------|--------|---------|
+| F-027 | **Snippet Manager** | ~3 d | Promotes clipboard items to permanent labelled snippets with tags and collections. ⌘⇧V picker gains a Snippets tab. Persists across reboots, searchable. Evolution of existing Clipboard module. |
+| F-028 | **Focus Session Companion** | ~3 d | Timed focus sessions (25/50/custom min). Auto-quits distracting apps, suppresses notifications, switches menu bar to session countdown. End-of-session efficiency summary. |
+| F-029 | **Scheduled Reports & Weekly Digest** | ~2 d | Weekly macOS notification summarising health score trend, top storage growers, high-RAM apps, backup status, threats. Optional PDF attachment via existing ReportGenerator. |
+
+---
+
+### Recommended Sequencing
+
+**Quick wins** (low effort, immediate value — implement first):
+- F-019 Security Posture Dashboard (~1.5 d)
+- F-022 Time Machine Backup Health (~1.5 d)
+- F-024 Browser Cleaner (~2 d)
+- F-026 Downloads Organiser (~2 d)
+- F-029 Scheduled Reports (~2 d)
+
+**Core differentiators** (medium effort, highest strategic value):
+- F-016 Permission Auditor
+- F-020 S.M.A.R.T. Disk Health
+- F-027 Snippet Manager
+- F-030 iCloud Storage Analyser
+
+**Ambitious long-term** (high effort, strong market positioning):
+- F-017 Network Traffic Monitor
+- F-023 Memory Leak Tracker
+- F-025 Duplicate Photos Finder (pHash)

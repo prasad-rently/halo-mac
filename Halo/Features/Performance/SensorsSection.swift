@@ -22,13 +22,28 @@ struct SensorsSection: View {
 
             if isExpanded {
                 if readings.isEmpty {
-                    Text("Sensor data unavailable on this Mac.")
-                        .font(HaloFont.body(12))
-                        .foregroundColor(.haloText3)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(14)
-                        .background(Color.haloSurface2)
-                        .cornerRadius(12)
+                    HaloCard {
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: "info.circle")
+                                .font(.system(size: 16))
+                                .foregroundColor(.haloAccent)
+                                .padding(.top, 1)
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("Sensor Data Not Available")
+                                    .font(HaloFont.body(13, weight: .semibold))
+                                    .foregroundColor(.haloText)
+                                Text("Apple Silicon Macs (M1/M2/M3/M4 series) manage thermal sensors entirely on-chip and do not expose raw SMC readings through public APIs. This is by design — macOS handles throttling and fan control automatically with no manual intervention needed.")
+                                    .font(HaloFont.body(12))
+                                    .foregroundColor(.haloText2)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text("Battery temperature is available in the Battery section above.")
+                                    .font(HaloFont.body(11))
+                                    .foregroundColor(.haloText3)
+                                    .padding(.top, 2)
+                            }
+                        }
+                        .padding(16)
+                    }
                 } else {
                     VStack(spacing: 0) {
                         ForEach(Array(readings.enumerated()), id: \.element.id) { idx, reading in

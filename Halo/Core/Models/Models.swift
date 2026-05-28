@@ -272,7 +272,11 @@ struct InstalledApp: Identifiable {
 
     var sizeFormatted: String { ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file) }
     var isUnused: Bool {
-        guard let date = lastUsedDate else { return true }
+        // nil means Spotlight has no record — we cannot say it's unused (it may
+        // have been used before Spotlight indexed it, or may have launched from
+        // a path Spotlight ignores).  Only flag as unused when we have a positive
+        // last-used date AND it is older than 90 days.
+        guard let date = lastUsedDate else { return false }
         return Date().timeIntervalSince(date) > (60 * 60 * 24 * 90)
     }
 }

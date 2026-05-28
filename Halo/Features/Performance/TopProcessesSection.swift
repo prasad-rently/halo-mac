@@ -12,33 +12,46 @@ struct TopProcessesSection: View {
     @State private var sortBy: ProcessMonitor.SortKey = .cpu
     @State private var timer: Timer?
     @State private var isExpanded = true
+    @State private var hasLoaded = false          // true after the first fetch completes
     @State private var processToQuit: ProcessMonitor.ProcessInfo?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                HaloSectionHeader(
-                    title: "Top Processes",
-                    subtitle: "Live · Top 10",
-                    action: { isExpanded.toggle() },
-                    actionLabel: isExpanded ? "Hide" : "Show"
-                )
-                if isExpanded {
+        VStack(alignment: .leading, spacing: 8) {
+            // Header row — title + Hide/Show button only
+            HaloSectionHeader(
+                title: "Top Processes",
+                subtitle: "Live · Top 10",
+                action: { isExpanded.toggle() },
+                actionLabel: isExpanded ? "Hide" : "Show"
+            )
+
+            // CPU / RAM picker on its own row, right-aligned, below header
+            if isExpanded {
+                HStack {
                     Spacer()
                     Picker("Sort by", selection: $sortBy) {
                         Text("CPU").tag(ProcessMonitor.SortKey.cpu)
                         Text("RAM").tag(ProcessMonitor.SortKey.ram)
                     }
                     .pickerStyle(.segmented)
-                    .frame(width: 100)
+                    .frame(width: 110)
                 }
             }
 
             if isExpanded {
-                if processes.isEmpty {
+                if !hasLoaded {
+                    // First load — show spinner with a timeout fallback
                     ProgressView("Loading processes…")
                         .frame(maxWidth: .infinity)
                         .padding()
+                } else if processes.isEmpty {
+                    Text("No process data available.")
+                        .font(HaloFont.body(12))
+                        .foregroundColor(.haloText3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(Color.haloSurface2)
+                        .cornerRadius(12)
                 } else {
                     VStack(spacing: 0) {
                         ForEach(Array(processes.enumerated()), id: \.element.id) { idx, proc in
@@ -87,7 +100,10 @@ struct TopProcessesSection: View {
         let key = sortBy
         Task {
             let list = await monitor.topProcesses(sortBy: key, limit: 10)
-            await MainActor.run { processes = list }
+            await MainActor.run {
+                processes = list
+                hasLoaded = true
+            }
         }
     }
 }

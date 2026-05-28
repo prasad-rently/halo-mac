@@ -29,6 +29,21 @@
 | [F-013](#f-013--icloud-clipboard-sync) | iCloud Clipboard Sync | ⏭ Skipped (user) | 5 d | F-003 |
 | [F-014](#f-014--pdf-health-report-export) | PDF Health Report Export | ✅ Done | 2 d | none |
 | [F-015](#f-015--custom-scan-schedule-ui) | Custom Scan Schedule UI | ✅ Done | 1 d | F-005 |
+| [F-016](#f-016--permission-auditor) | Permission Auditor | 💡 Future Idea | ~3 d | F-002 (release) |
+| [F-017](#f-017--network-traffic-monitor-app-level-firewall-companion) | Network Traffic Monitor | 💡 Future Idea | ~5 d | none |
+| [F-018](#f-018--privacy-data-exposure-scanner) | Privacy Data Exposure Scanner | 💡 Future Idea | ~3 d | none |
+| [F-019](#f-019--security-posture-dashboard) | Security Posture Dashboard | 💡 Future Idea | ~1.5 d | none |
+| [F-020](#f-020--smart-disk-health-monitor) | S.M.A.R.T. Disk Health Monitor | 💡 Future Idea | ~3 d | none |
+| [F-021](#f-021--app-usage--screen-time-analytics) | App Usage & Screen Time Analytics | 💡 Future Idea | ~3 d | none |
+| [F-022](#f-022--time-machine-backup-health-monitor) | Time Machine Backup Health Monitor | 💡 Future Idea | ~1.5 d | AlertManager |
+| [F-023](#f-023--memory-leak--app-bloat-tracker) | Memory Leak & App Bloat Tracker | 💡 Future Idea | ~3 d | ProcessMonitor |
+| [F-024](#f-024--browser-cleaner) | Browser Cleaner | 💡 Future Idea | ~2 d | none |
+| [F-025](#f-025--duplicate-photos-finder-perceptual-hash) | Duplicate Photos Finder (pHash) | 💡 Future Idea | ~5 d | DuplicateDetector |
+| [F-026](#f-026--downloads-folder-organiser) | Downloads Folder Organiser | 💡 Future Idea | ~2 d | AppScanner |
+| [F-027](#f-027--snippet-manager-clipboard-evolution) | Snippet Manager | 💡 Future Idea | ~3 d | Clipboard module |
+| [F-028](#f-028--focus-session-companion) | Focus Session Companion | 💡 Future Idea | ~3 d | MenuBarDisplayStyle |
+| [F-029](#f-029--scheduled-reports--weekly-digest) | Scheduled Reports & Weekly Digest | 💡 Future Idea | ~2 d | ReportGenerator |
+| [F-030](#f-030--icloud-storage-analyser) | iCloud Storage Analyser | 💡 Future Idea | ~4 d | none |
 
 ---
 
@@ -1157,6 +1172,471 @@ F-005 adds background scan scheduling tied to a simple picker (daily/weekly/off)
 
 ---
 
+---
+
+# Future Ideas — Brainstormed Features (F-016 → F-030)
+
+> These cards capture feature ideas identified during the v2.0 planning session.  
+> Status is `💡 Future Idea` — not yet queued for implementation.  
+> To promote a card to the active queue, change status to `📋 Queued`, assign a priority number, add it to the Pipeline Status table, and flesh out the Implementation Steps section.
+
+---
+
+## F-016 · Permission Auditor
+
+**Status:** 💡 Future Idea  
+**Effort estimate:** 3 days  
+**Theme:** Privacy & Security  
+**Branch naming (when ready):** `feat/f016-permission-auditor`  
+**Depends on:** none
+
+### Why
+macOS grants privacy permissions silently over time. A typical Mac accumulates dozens of apps with stale permissions (microphone, camera, screen recording, full disk access) that were approved once and never revisited. Users have no single place to review and clean up this exposure. This is one of the top features in competing tools like CleanMyMac X and Privacy Cleaner Pro.
+
+### What it delivers
+- Full map of all apps' macOS privacy permissions across every TCC category: microphone, camera, location, screen recording, contacts, calendars, reminders, full disk access, photos, Bluetooth, and Accessibility
+- Each app shown with: permission status (granted/denied/not determined), date granted (if available), and a contextual risk flag when the permission seems excessive for the app's purpose (e.g., a note-taking app with screen recording access)
+- "Revoke" deep-link button per permission that opens the exact pane in System Settings → Privacy & Security
+- Summary score: "X of Y apps have excessive permissions"
+
+### Data sources
+- TCC database at `~/Library/Application Support/com.apple.TCC/TCC.db` (read-only, SQLite; readable in non-sandboxed debug build)
+- `NSWorkspace` for app metadata and icons
+- Hardcoded "expected permissions" map (e.g., browser → camera OK; text editor → camera flagged)
+
+### Integration point
+New **"Privacy"** module in the sidebar, or a second tab within the existing Protection module. A summary card on Dashboard showing unread permission count.
+
+### Key design decisions to resolve before implementation
+- Sandboxed release builds cannot read TCC.db directly — will require XPC helper (F-002) or user guidance to open System Settings
+- Risk-flagging heuristics need a curated expected-permissions JSON bundle
+
+---
+
+## F-017 · Network Traffic Monitor (App-Level Firewall Companion)
+
+**Status:** 💡 Future Idea  
+**Effort estimate:** 5 days  
+**Theme:** Privacy & Security  
+**Branch naming (when ready):** `feat/f017-network-traffic-monitor`  
+**Depends on:** none (read-only monitoring only; no blocking)
+
+### Why
+Privacy-conscious users want to know which processes are phoning home and to what domains. The existing Network section in Performance shows aggregate speed and VPN status — this adds per-app, per-domain granularity. A plain "Slack connected to analytics.mixpanel.com 14 times today" is enormously informative without requiring any network blocking infrastructure.
+
+### What it delivers
+- Live scrolling table: App icon | Process name | Remote hostname | Protocol | Bytes sent | Bytes received | Last seen
+- "Suspicious" flag when the remote domain matches a bundled telemetry/tracker domain list (same pattern as `signatures.json`)
+- Filter by app name; sort by traffic volume or recency
+- Session summary card: "Top talker: Chrome — 142 MB sent in this session"
+- Read-only — no blocking, no firewall rules, no kernel extension required
+
+### Data sources
+- `proc_pidinfo` with `PROC_PIDFDINFO` to enumerate open sockets per PID (same category of API as `ProcessMonitor`)
+- `getaddrinfo` / reverse DNS for hostname resolution
+- Bundled tracker domain list (JSON, same update pattern as `signatures.json`)
+
+### Integration point
+New sub-tab within the existing **Network** section of the Performance module, or a standalone **"Privacy"** module alongside Permission Auditor (F-016).
+
+### Key design decisions to resolve before implementation
+- Reverse DNS for every connection is slow — needs async resolution with a local LRU cache
+- May need to be rate-limited (sample connections every 2 s rather than streaming) to avoid CPU overhead
+- Tracker domain list maintenance: needs a hosting endpoint similar to the signatures update endpoint
+
+---
+
+## F-018 · Privacy Data Exposure Scanner
+
+**Status:** 💡 Future Idea  
+**Effort estimate:** 3 days  
+**Theme:** Privacy & Security  
+**Branch naming (when ready):** `feat/f018-privacy-exposure-scanner`  
+**Depends on:** none
+
+### Why
+Developers and professionals routinely accumulate sensitive data in unprotected locations — `.env` files in project folders, exported CSV files with financial data, private SSH keys copied to the Desktop, config files containing hardcoded API keys. No mainstream Mac cleaner scans for this. It is a genuine differentiated value proposition, especially for developer users.
+
+### What it delivers
+- Scans user-writable locations (Downloads, Documents, Desktop, and optionally iCloud Drive local folder) for files containing sensitive patterns
+- Detection categories: credit card numbers (Luhn-validated), AWS/GitHub/Stripe API key patterns, hardcoded passwords in config files, private SSH key headers (`-----BEGIN RSA PRIVATE KEY-----`), SSN patterns
+- Results grouped by risk level (Critical / Warning / Info) with: filename, match type, redacted preview (e.g., `sk_live_••••••••3f2a`), path, and last-modified date
+- "Reveal in Finder" button per result — no automatic deletion, user decides what to do
+- All pattern matching happens in-process; no file content ever leaves the device
+
+### Data sources
+- `FileManager` enumeration of target directories
+- Regex patterns shipped as a bundled `privacy-patterns.json` (same update infrastructure as `signatures.json`)
+- No network calls during scan
+
+### Integration point
+New **"Sensitive Data"** tab within the existing **Protection** module, or an additional scan type surfaced in Smart Scan results.
+
+### Key design decisions to resolve before implementation
+- Binary files, images, and files > 10 MB should be skipped to keep scan fast
+- Regex false-positive rate needs careful tuning (credit card patterns especially)
+- User opt-in required before scanning Documents/iCloud — privacy of the privacy scanner itself
+
+---
+
+## F-019 · Security Posture Dashboard
+
+**Status:** 💡 Future Idea  
+**Effort estimate:** 1.5 days  
+**Theme:** Privacy & Security  
+**Branch naming (when ready):** `feat/f019-security-posture`  
+**Depends on:** none
+
+### Why
+Most users have no idea whether FileVault is on, if their firewall is disabled, or what their Gatekeeper setting is. These invisible system settings directly determine how exposed a Mac is. Surfacing them as a clear, actionable checklist is high-value for low implementation cost — all states are readable via shell commands that run in milliseconds.
+
+### What it delivers
+- Checklist card with 8 security checks, each showing: current state, a green/amber/red indicator, a one-line plain-English explanation, and a "Fix →" button that deep-links to the relevant System Settings pane
+- Checks: FileVault encryption, Gatekeeper state, System Integrity Protection (SIP), Secure Boot policy, Find My Mac, automatic security updates enabled, Application Firewall state, login window security (show name+password, not username list)
+- An overall **Security Score** (0–100) computed from check pass/fail, shown as a prominent card on Dashboard
+- Score feeds into the existing `systemHealthScore` calculation in `AppState`
+
+### Data sources
+- `fdesetup status` → FileVault
+- `spctl --status` → Gatekeeper
+- `csrutil status` → SIP (output parsed from a subprocess)
+- `nvram` → Secure Boot (Apple Silicon)
+- `defaults read /Library/Preferences/com.apple.alf globalstate` → Firewall
+- All via `Process` (read-only, non-blocking, no special entitlements)
+
+### Integration point
+New **"Security Posture"** card in the existing **Protection** module's main view, collapsible. Summary score visible on Dashboard.
+
+---
+
+## F-020 · S.M.A.R.T. Disk Health Monitor
+
+**Status:** 💡 Future Idea  
+**Effort estimate:** 3 days  
+**Theme:** Intelligent Insights  
+**Branch naming (when ready):** `feat/f020-smart-disk-health`  
+**Depends on:** none (IOKit is already used in the codebase)
+
+### Why
+Drive failure is the most catastrophic unrecoverable event that can happen to a Mac. Most users have no warning until the drive fails completely. S.M.A.R.T. data from the drive's internal sensors gives advance warning days or weeks before failure. The commercial tool DriveDx charges $19.99 for this single feature. It aligns directly with Halo's health-monitoring identity and would be a compelling differentiator.
+
+### What it delivers
+- Drive health status: Good / Warning / Failing — based on official S.M.A.R.T. attribute thresholds
+- Key metrics displayed: drive model and serial, capacity, health percentage, current temperature, total bytes written (TBW), power-on hours, reallocated sector count, pending sector count, and uncorrectable error count
+- A **lifespan remaining** progress bar based on TBW vs the manufacturer-rated endurance for the detected model
+- Automatic alert when any critical attribute enters the warning zone (feeds into `AlertManager`)
+- Historical temperature sparkline (sampled every 5 minutes, rolling 24-hour window)
+
+### Data sources
+- `IOKit` — `IOServiceMatching("IOBlockStorageDriver")` to enumerate physical drives, then `IORegistryEntryCreateCFProperties` to read S.M.A.R.T. attribute dictionaries from the IORegistry
+- Model-to-TBW-rating lookup table (bundled JSON — major SSD models and their rated endurance)
+
+### Integration point
+New **"Drive Health"** card on Dashboard (alongside CPU, RAM, battery cards). Expanded detail view as a new section in the Performance module. Alert rule in `AlertManager` for failing attributes.
+
+### Key design decisions to resolve before implementation
+- NVMe drives on Apple Silicon expose limited S.M.A.R.T. data compared to SATA/Intel Macs — graceful degradation needed
+- TBW lookup table needs curation and a maintenance/update strategy
+- Sandboxed build will require IOKit entitlement addition
+
+---
+
+## F-021 · App Usage & Screen Time Analytics
+
+**Status:** 💡 Future Idea  
+**Effort estimate:** 3 days  
+**Theme:** Intelligent Insights  
+**Branch naming (when ready):** `feat/f021-app-usage-analytics`  
+**Depends on:** none
+
+### Why
+Users increasingly want to understand their own Mac habits — how long they spend in each app, which apps they context-switch into most frequently, and which background apps consume resources without ever being actively used. This data creates a feedback loop: "You've spent 6 hours in Slack this week, which consumed an average of 380 MB of RAM." No existing Mac utility combines usage time and resource cost in a single view.
+
+### What it delivers
+- Bar chart: top 5 apps by active foreground time for the past 7 days
+- **"Background Hogs"** list: apps that ran continuously for >8 hours without the user ever activating them (using foreground-time vs uptime ratio)
+- Weekly/monthly trends with week-over-week percentage change arrows
+- "Context switching score": number of app switches per hour as a productivity signal
+- All data stored locally in a lightweight SQLite database; no cloud sync, no third-party analytics
+
+### Data sources
+- `NSWorkspace.didActivateApplicationNotification` and `didDeactivateApplicationNotification` for foreground-time tracking (event-driven, zero polling cost)
+- `ProcessMonitor` (already in codebase) for RAM usage correlation
+- Local SQLite store: `~/Library/Application Support/com.halo.mac/usage.sqlite`
+
+### Integration point
+New **"Insights"** sub-section within the existing Dashboard, below the health ring. Expandable card showing the weekly bar chart. Toggle in Settings to enable/disable tracking.
+
+---
+
+## F-022 · Time Machine Backup Health Monitor
+
+**Status:** 💡 Future Idea  
+**Effort estimate:** 1.5 days  
+**Theme:** Intelligent Insights  
+**Branch naming (when ready):** `feat/f022-time-machine-monitor`  
+**Depends on:** AlertManager (already built)
+
+### Why
+Time Machine is the primary backup for most Mac users, but its status is entirely invisible unless the user checks the menu bar icon. It is extremely common for backups to silently stop for weeks — the destination disk fills up, the backup drive gets disconnected, or corruption causes silent failures. Halo surfacing backup health as a first-class metric prevents data loss. The implementation is almost entirely read-only shell commands.
+
+### What it delivers
+- **Last backup time** displayed prominently (relative: "2 hours ago" / "3 days ago")
+- Backup destination name and available-space progress bar
+- 30-day backup frequency **heatmap** (GitHub-style calendar): green = backed up that day, amber = backup was late, red = missed 2+ days
+- Automatic persistent alert if no backup has run in 48+ hours (feeds into existing `AlertManager`)
+- "Back Up Now" button that calls `tmutil startbackup` via `Process`
+
+### Data sources
+- `/Library/Preferences/com.apple.TimeMachine.plist` for destination info and last backup date
+- `tmutil status` output via `Process` for in-progress backup state
+- Backup destination's `.../Backups.backupdb/` directory listing for historical dates
+
+### Integration point
+New **"Backup Health"** card on the Dashboard. Summary status (last backup time, green/red dot) visible as a persistent Dashboard widget even when collapsed.
+
+---
+
+## F-023 · Memory Leak & App Bloat Tracker
+
+**Status:** 💡 Future Idea  
+**Effort estimate:** 3 days  
+**Theme:** Intelligent Insights  
+**Branch naming (when ready):** `feat/f023-memory-leak-tracker`  
+**Depends on:** ProcessMonitor (already built in Performance module)
+
+### Why
+Memory leaks in long-running apps — Slack, Chrome, Electron apps, Adobe suite — are one of the most common causes of macOS slowdowns. The user currently has no way to know that Slack has ballooned from 180 MB to 1.4 GB over 6 hours. The existing Top Processes section shows current RAM but has no memory over time. Extending it with trend tracking turns a vague "my Mac feels slow" into an actionable "Slack has grown by 900 MB in 4 hours — restart it."
+
+### What it delivers
+- Per-app RAM usage sparkline chart (rolling 2-hour window, sampled every 30 seconds)
+- **"Possible memory leak"** badge when an app's RAM usage grows monotonically for >1 hour without any significant drop
+- Inline **"Restart App"** button with confirmation, for flagged apps
+- Historical data persisted across sessions in a local SQLite store so leaks are visible even after they cause a crash
+- Alert when a single app exceeds a user-configurable threshold (default: 2 GB)
+
+### Data sources
+- `ProcessMonitor.topProcesses()` (already in codebase) — extended to persist a rolling buffer per PID
+- `NSRunningApplication` for mapping PIDs to app names and icons across sessions
+- Local SQLite store for historical RAM samples
+
+### Integration point
+New sub-section in the **Performance** module, directly below the existing Top Processes section. A "Memory Trends" tab alongside "CPU" and "RAM" in the existing picker.
+
+---
+
+## F-024 · Browser Cleaner
+
+**Status:** 💡 Future Idea  
+**Effort estimate:** 2 days  
+**Theme:** Cleanup & Storage  
+**Branch naming (when ready):** `feat/f024-browser-cleaner`  
+**Depends on:** none (extends existing Cleanup module architecture)
+
+### Why
+Browser cache is consistently one of the largest junk sources on a Mac. Chrome's GPU shader cache alone can be 2–4 GB; the HTTP cache for an active user can reach 5–10 GB. Safari accumulates years of WebKit data, cookies, and offline storage. This is the single most-requested feature category in Mac cleaner apps. It is also straightforward to implement — all paths are well-documented and fixed per browser.
+
+### What it delivers
+- Auto-detects installed browsers: Safari, Chrome, Firefox, Edge, Brave, Arc, Opera, Vivaldi
+- For each browser: expandable checklist of data categories with current sizes — HTTP cache, GPU shader cache, browsing history, download history, cookies, crash reports, stored sessions, IndexedDB, WebSQL
+- Master **"Clean All Browsers"** button at top; individual per-browser clean buttons
+- Pre-clean size summary and post-clean "freed X GB" confirmation
+- Checkbox per category (user can keep cookies but clear cache, for example)
+- All deletions use `FileManager.trashItem` with the standard confirmation flow
+
+### Data sources
+- Each browser's fixed data paths (e.g., `~/Library/Caches/com.google.Chrome`, `~/Library/Caches/org.mozilla.firefox`, `~/Library/Safari`)
+- `NSWorkspace` to detect which browsers are actually installed (avoids showing paths that don't exist)
+
+### Integration point
+New **"Browsers"** tab within the existing **Cleanup** module, alongside the existing 10 cleanup categories. Also surfaced as a category in Smart Scan results.
+
+---
+
+## F-025 · Duplicate Photos Finder (Perceptual Hash)
+
+**Status:** 💡 Future Idea  
+**Effort estimate:** 5 days  
+**Theme:** Cleanup & Storage  
+**Branch naming (when ready):** `feat/f025-duplicate-photos`  
+**Depends on:** DuplicateDetector (existing SHA-256 engine — this extends it with a perceptual layer)
+
+### Why
+The existing `DuplicateDetector` finds bit-for-bit identical files using SHA-256. Photos libraries need more: the same photo saved at different compressions, crop variants, burst shots, and screenshots exported multiple times at different sizes all look identical to the eye but have different hashes. Perceptual hashing (pHash) bridges this gap. The commercial app Gemini 2 charges $19.99 specifically for this capability.
+
+### What it delivers
+- Perceptual hash generation for images using `CIFilter` + DCT-based pHash algorithm (64-bit fingerprint per image)
+- Hamming-distance clustering: images within a configurable threshold (default: ≤8 bits different) are grouped as "near-duplicates"
+- Side-by-side comparison UI: cluster grid showing all near-duplicate images, their sizes, dates, and source locations
+- "Recommended keep" auto-selection: highest resolution, most recent, or in Photos Library rather than a loose file
+- Support for both loose image files (`~/Pictures`) and Photos Library (via PhotoKit, with permission)
+- All deletions use `trashItem` with the standard confirmation flow
+
+### Data sources
+- `PhotoKit` (`PHPhotoLibrary`) for Photos Library access (requires `NSPhotoLibraryUsageDescription` permission)
+- `FileManager` for loose image files in `~/Pictures` and other user-specified folders
+- `CIImage` + `CoreImage` for perceptual hash computation
+
+### Integration point
+New **"Similar Photos"** tab in the **Files** module, alongside the existing Duplicate Finder, SpaceLens, and Large Files tabs. The existing exact-duplicate tab is renamed to **"Exact Duplicates"** for clarity.
+
+### Key design decisions to resolve before implementation
+- pHash generation on large libraries (10,000+ photos) needs background processing and progress indication
+- Threshold tuning: too tight misses similar photos; too loose creates false positives
+- PhotoKit access requires sandboxed entitlement addition
+
+---
+
+## F-026 · Downloads Folder Organiser
+
+**Status:** 💡 Future Idea  
+**Effort estimate:** 2 days  
+**Theme:** Cleanup & Storage  
+**Branch naming (when ready):** `feat/f026-downloads-organiser`  
+**Depends on:** AppScanner (for cross-referencing installed apps against .dmg/.pkg files)
+
+### Why
+The Downloads folder on most Macs is years of accumulated chaos — old installers, forgotten PDFs, zip files never unzipped. On average it contains 2–8 GB of files that serve no ongoing purpose. The specific insight that sets this apart from a simple large-files view: identifying `.dmg` and `.pkg` installer files whose apps are already installed, making it safe to delete the installer. This is an obvious, practical feature that no basic cleaner currently offers in an intelligent way.
+
+### What it delivers
+- Categorised summary of `~/Downloads` by file type: PDFs, ZIPs/Archives, DMGs, PKGs, Videos, Images, Code files, Other
+- Size and count per category; oldest file date per category
+- **"Installed App Installers"** subsection: `.dmg`/`.pkg` files cross-referenced against the Applications scanner — if the app is installed, the installer is marked "Safe to remove"
+- **"Stale Files"** list: files not opened in 90+ days with total size
+- Optional **"Sort into Subfolders"** action: organises files into `Downloads/PDFs/`, `Downloads/Archives/` etc.
+- All deletions and moves use the standard confirmation + `trashItem` flow
+
+### Data sources
+- `FileManager` enumeration of `~/Downloads`
+- UTI type detection via `NSWorkspace.type(ofFile:)` or `UTType`
+- `AppScanner.scanApps()` results for installed-app cross-reference
+- `NSMetadataItem` for last-opened date per file
+
+### Integration point
+New **"Downloads"** tab in the **Files** module. Also surfaced as a Smart Scan category.
+
+---
+
+## F-027 · Snippet Manager (Clipboard Evolution)
+
+**Status:** 💡 Future Idea  
+**Effort estimate:** 3 days  
+**Theme:** User Productivity  
+**Branch naming (when ready):** `feat/f027-snippet-manager`  
+**Depends on:** Clipboard module (this is a direct evolution of it)
+
+### Why
+The Clipboard module is already a strong differentiator. Extending it from a passive recorder into an active snippet manager makes it compete with TextExpander and Raycast's snippet feature — tools that charge $40/year and $49/year respectively. The existing infrastructure (ClipboardMonitor, quick-picker overlay ⌘⇧V, 500-item history, AppState) already provides nearly all the plumbing needed.
+
+### What it delivers
+- Any clipboard history item can be promoted to a permanent **Snippet** with a custom label, category tag (e.g., "Dev", "Email", "Address"), and optional keyword trigger
+- Snippets persist indefinitely across reboots, unlike the rolling history cap
+- Searchable by label, tag, and content
+- Collections: user-created folders of related snippets (e.g., "SQL Queries", "Email Templates", "Addresses")
+- The existing `⌘⇧V` quick-picker overlay gains a **"Snippets"** tab alongside History — identical UX, different data source
+- Model change: `ClipboardItem` gains optional `snippetLabel: String?`, `snippetCollection: String?`, and `isSnippet: Bool` fields
+
+### Data sources
+- Extension of the existing `ClipboardItem` model and `AppState.clipboardItems` store
+- Snippet persistence: separate `UserDefaults` key or a local JSON file for the snippet collection (distinct from rolling history)
+
+### Integration point
+**Evolution of the existing Clipboard module.** Three-tab layout: **History** (existing) | **Snippets** (new, permanent) | **Pinned** (existing pin feature promoted to its own tab). No new sidebar module needed.
+
+---
+
+## F-028 · Focus Session Companion
+
+**Status:** 💡 Future Idea  
+**Effort estimate:** 3 days  
+**Theme:** User Productivity  
+**Branch naming (when ready):** `feat/f028-focus-session`  
+**Depends on:** MenuBarDisplayStyle (already built — new session mode needed)
+
+### Why
+This transforms Halo from a passive monitor into an active productivity companion. It taps into the deep-work/Pomodoro trend while staying true to the app's performance identity. No Mac cleaner or monitor currently offers this — it is a meaningful point of differentiation. The menu bar component is fully built; a session countdown mode is a small addition.
+
+### What it delivers
+- **"Start Focus Session"** card on the Dashboard with duration presets: 25 min / 50 min / custom
+- On session start: automatically quits/hides a user-specified list of distracting apps (configurable in Settings), suppresses macOS notification banners, and switches the menu bar display to a **session countdown mode** (replacing the normal CPU/RAM stats)
+- Dismissible minimal fullscreen countdown overlay — shows time remaining, current productivity score, and a "End Session" button
+- Session end: macOS notification + in-app summary: "50-minute session. Top RAM consumer: Chrome (820 MB). CPU stayed below 55%."
+- Session history log: date, duration, productivity summary — visible in a "Focus History" section of the Dashboard
+
+### Data sources
+- `NSWorkspace.shared.runningApplications` + `NSWorkspace.hideOtherApplications()` / `terminate()` for app management
+- `UNUserNotificationCenter` for notification suppression (uses Focus mode API on macOS 12+: `INFocusStatusCenter`)
+- Existing `AppState` CPU/RAM metrics for end-of-session report
+- New `MenuBarDisplayStyle.sessionCountdown` case added to the existing enum
+
+### Integration point
+New collapsible **"Focus"** card on the Dashboard. New `sessionCountdown` style added to `MenuBarDisplayStyle` in `MenuBarView.swift`. Session history stored in `AlertLog` with a new `kindRaw: "focus"` entry.
+
+---
+
+## F-029 · Scheduled Reports & Weekly Digest
+
+**Status:** 💡 Future Idea  
+**Effort estimate:** 2 days  
+**Theme:** User Productivity  
+**Branch naming (when ready):** `feat/f029-scheduled-reports`  
+**Depends on:** ReportGenerator (already built), ScanScheduler (already built), AlertLog (already built)
+
+### Why
+Power users want to stay informed without opening the app every day. A weekly "your Mac health report" notification is a genuinely useful, sticky feature that creates long-term retention. Nearly all the plumbing already exists — `ReportGenerator` produces PDFs, `ScanScheduler` handles timed background execution, and `AlertLog` has a week's worth of events. This feature is largely about wiring them together.
+
+### What it delivers
+- Weekly (or daily) **in-app notification** summarising the past 7 days: health score trend, top storage growers (largest files added), apps with high average RAM, backup status, threats detected, and scans completed
+- Optional **PDF attachment** generated by the existing `ReportGenerator` and shareable via `NSSharingService` (Mail, AirDrop, Messages)
+- A **7-day sparkline** of the health score trend, stored in a rolling local buffer and displayed in a new Dashboard card
+- Settings toggle: "Weekly Digest" with a day + time picker (reuses the existing `ScanScheduler` day/hour picker infrastructure)
+- Digest delivery via macOS notification with a "View Report" action button
+
+### Data sources
+- Existing `AlertLog.entries` for the event summary
+- Existing `AppState` metrics sampled into a rolling 7-day local store (a small new `MetricsHistory` store — lightweight, sampled once/hour)
+- `ReportGenerator` for PDF output
+- `NSBackgroundActivityScheduler` (existing `ScanScheduler` infrastructure) for timed delivery
+
+### Integration point
+New **"Digest"** section in Settings. The 7-day health sparkline appears as a new card on the Dashboard. Entirely reuses existing components — minimal new code.
+
+---
+
+## F-030 · iCloud Storage Analyser
+
+**Status:** 💡 Future Idea  
+**Effort estimate:** 4 days  
+**Theme:** Cleanup & Storage  
+**Branch naming (when ready):** `feat/f030-icloud-storage-analyser`  
+**Depends on:** none
+
+### Why
+iCloud's free 5 GB quota fills within months of typical use. Apple's own iCloud settings show only a top-level pie chart with no drill-down capability beyond broad categories. Most users have no idea what is consuming their quota and cannot make informed decisions about what to delete or offload. A proper drill-down analyser addresses one of the most persistent pain points in the Apple ecosystem.
+
+### What it delivers
+- **Donut chart** showing iCloud storage consumption by category — iCloud Drive, Photos, Backups (other devices), Mail, third-party app data — using Apple's colour coding for familiarity
+- **Drill-down into iCloud Drive**: sorted list of the largest files and folders with sizes, last-modified dates, and sync status (local / evicted / uploading)
+- **Savings Opportunities** section highlighting: duplicate files synced to iCloud, large files that could use "Optimise Mac Storage" (keep in cloud, evict local copy), and old device backups for devices the user no longer owns
+- **Quota usage** progress bar: used / available / total, refreshed on view open
+- "Reveal in Finder" and "Move to Trash" actions for iCloud Drive files (with standard confirmation)
+
+### Data sources
+- `FileManager` on `~/Library/Mobile Documents/` — iCloud Drive's local sync mirror; accessible without entitlements in debug build
+- `NSUbiquitousKeyValueStore` and `NSFileManager.ubiquityIdentityToken` for CloudKit account status
+- `NSMetadataQuery` with `NSMetadataQueryUbiquitousDocumentsScope` for file status (local vs evicted vs uploading/downloading)
+- `CKContainer.default().accountStatus` and `CKContainer.default().fetchUserRecordID` for quota — note: quota numbers require `CKOperation` which needs iCloud entitlement
+
+### Integration point
+New **"iCloud"** tab in the **Files** module, alongside SpaceLens, Exact Duplicates, Similar Photos, Large Files, and Downloads.
+
+### Key design decisions to resolve before implementation
+- Full quota numbers via CloudKit require `com.apple.developer.icloud-services` entitlement — plan for sandboxed build
+- File enumeration of a large iCloud Drive can be slow; needs async streaming with progress indicator
+- "Old device backups" detection depends on accessing CloudKit backup records, which require user authentication
+
+---
+
 ## How to Add a New Feature
 
 1. Copy this template into the Queued section (above F-001):
@@ -1191,4 +1671,4 @@ F-005 adds background scan scheduling tied to a simple picker (daily/weekly/off)
 
 ---
 
-*Last updated: v1.2 + Phase 3 baseline · 15 features queued*
+*Last updated: v2.0 · 15 features shipped · 15 future ideas documented (F-016 → F-030)*

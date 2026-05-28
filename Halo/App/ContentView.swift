@@ -37,10 +37,12 @@ struct MainLayout: View {
 
 struct SidebarView: View {
     @EnvironmentObject var appState: AppState
+    @State private var isEditing = false
 
     var body: some View {
         VStack(spacing: 0) {
-            // Logo
+
+            // ── Logo header ──────────────────────────────────────────────
             HStack(spacing: 10) {
                 ZStack {
                     Circle()
@@ -57,31 +59,60 @@ struct SidebarView: View {
                     .font(HaloFont.display(18, weight: .heavy))
                     .foregroundColor(.haloText)
                 Spacer()
+
+                // Customise / Done button
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { isEditing.toggle() }
+                } label: {
+                    Image(systemName: isEditing ? "checkmark.circle.fill" : "slider.horizontal.3")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(isEditing ? .haloGreen : .haloText3)
+                }
+                .buttonStyle(.plain)
+                .help(isEditing ? "Done customising" : "Customise module order")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 18)
 
-            Divider()
-                .background(Color.haloBorder)
+            Divider().background(Color.haloBorder)
 
+            // ── Module list ──────────────────────────────────────────────
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 2) {
-                    SidebarSection(label: "Overview") {
-                        SidebarItem(module: .dashboard)
+
+                    // "Overview" section — Dashboard is always pinned here
+                    if !isEditing {
+                        SidebarSection(label: "Overview") {
+                            SidebarItem(module: .dashboard)
+                        }
                     }
 
-                    SidebarSection(label: "Modules") {
-                        SidebarItem(module: .cleanup,
-                                    badge: appState.totalCleanableBytes > 0
-                                        ? ByteCountFormatter.string(fromByteCount: appState.totalCleanableBytes, countStyle: .file)
-                                        : nil)
-                        SidebarItem(module: .protection, badge: "Safe", badgeColor: .haloGreen)
-                        SidebarItem(module: .performance, badge: "3", badgeColor: .haloAmber)
-                        SidebarItem(module: .applications)
-                        SidebarItem(module: .files)
-                        SidebarItem(module: .clipboard,
-                                    badge: appState.clipboardItems.isEmpty ? nil : "\(appState.clipboardItems.count)",
-                                    badgeColor: .haloAmber)
+                    // "Modules" section — user-reorderable
+                    SidebarSection(label: isEditing ? "Drag to reorder" : "Modules") {
+                        // We use a fixed-height List so SwiftUI's .onMove drag
+                        // handles work while the outer ScrollView handles overflow.
+                        List {
+                            ForEach(appState.moduleOrder, id: \.self) { module in
+                                let info = badgeInfo(for: module)
+                                SidebarItem(
+                                    module:      module,
+                                    badge:       info.text,
+                                    badgeColor:  info.color,
+                                    isEditing:   isEditing
+                                )
+                                .listRowBackground(Color.clear)
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                            }
+                            .onMove { appState.moveModules(from: $0, to: $1) }
+                        }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
+                        .scrollDisabled(true)
+                        // Height = number of modules × row height (44 pt each)
+                        .frame(height: CGFloat(appState.moduleOrder.count) * 44)
+                        // Note: on macOS, List + .onMove is always drag-active.
+                        // EditMode is an iOS-only concept and is not used here.
                     }
                 }
                 .padding(.vertical, 8)
@@ -94,7 +125,35 @@ struct SidebarView: View {
         .background(Color.haloBackground.opacity(0.8))
         .listStyle(.sidebar)
     }
+
+    // ── Badge data per module ────────────────────────────────────────────
+    // Centralised so the dynamic ForEach can call it rather than having
+    // badge values hardcoded next to each SidebarItem call.
+
+    private func badgeInfo(for module: AppModule) -> (text: String?, color: Color) {
+        switch module {
+        case .cleanup:
+            let bytes = appState.totalCleanableBytes
+            return (bytes > 0
+                ? ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+                : nil,
+                    .haloAccent)
+        case .protection:
+            return ("Safe", .haloGreen)
+        case .performance:
+            return ("3", .haloAmber)
+        case .clipboard:
+            return (appState.clipboardItems.isEmpty
+                ? nil
+                : "\(appState.clipboardItems.count)",
+                    .haloAmber)
+        default:
+            return (nil, .haloAccent)
+        }
+    }
 }
+
+// MARK: - Sidebar Section
 
 struct SidebarSection<Content: View>: View {
     let label: String
@@ -119,39 +178,54 @@ struct SidebarSection<Content: View>: View {
     }
 }
 
+// MARK: - Sidebar Item
+
 struct SidebarItem: View {
     @EnvironmentObject var appState: AppState
     let module: AppModule
     var badge: String? = nil
     var badgeColor: Color = .haloAccent
+    var isEditing: Bool = false
 
     private var isActive: Bool { appState.selectedModule == module }
 
     var body: some View {
         Button {
+            // Suppress navigation while the user is in edit/reorder mode
+            guard !isEditing else { return }
             withAnimation(.easeInOut(duration: 0.15)) {
                 appState.selectedModule = module
             }
         } label: {
             HStack(spacing: 10) {
+                // Module icon
                 ZStack {
                     RoundedRectangle(cornerRadius: 7)
                         .fill(LinearGradient(
-                            colors: isActive ? module.gradientColors : [Color.white.opacity(0.05)],
+                            colors: isActive && !isEditing
+                                ? module.gradientColors
+                                : [Color.white.opacity(0.05)],
                             startPoint: .topLeading, endPoint: .bottomTrailing))
                         .frame(width: 28, height: 28)
                     Image(systemName: module.icon)
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(isActive ? .white : .haloText2)
+                        .foregroundColor(isActive && !isEditing ? .white : .haloText2)
                 }
 
                 Text(module.title)
                     .font(HaloFont.body(13, weight: .medium))
-                    .foregroundColor(isActive ? .haloText : .haloText2)
+                    .foregroundColor(isActive && !isEditing ? .haloText : .haloText2)
 
                 Spacer()
 
-                if let badge = badge {
+                if isEditing {
+                    // Drag handle hint — SwiftUI List renders the system handle
+                    // beside this; we echo it with our own icon so it's visible
+                    // before the user touches the row.
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 11))
+                        .foregroundColor(.haloText3)
+                } else if let badge = badge {
                     HaloBadge(text: badge, color: badgeColor)
                 }
             }
@@ -159,20 +233,29 @@ struct SidebarItem: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(isActive
-                          ? LinearGradient(colors: [Color.haloAccent.opacity(0.12), Color.haloAccent2.opacity(0.08)],
-                                           startPoint: .leading, endPoint: .trailing)
-                          : LinearGradient(colors: [.clear], startPoint: .leading, endPoint: .trailing))
+                    .fill(isActive && !isEditing
+                          ? LinearGradient(
+                              colors: [Color.haloAccent.opacity(0.12), Color.haloAccent2.opacity(0.08)],
+                              startPoint: .leading, endPoint: .trailing)
+                          : LinearGradient(colors: [.clear],
+                                           startPoint: .leading, endPoint: .trailing))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .stroke(isActive ? Color.haloAccent.opacity(0.2) : .clear, lineWidth: 1)
+                    .stroke(isActive && !isEditing
+                            ? Color.haloAccent.opacity(0.2)
+                            : .clear,
+                            lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 8)
+        .opacity(isEditing ? 0.80 : 1.0)
+        .animation(.easeInOut(duration: 0.15), value: isEditing)
     }
 }
+
+// MARK: - Storage Indicator
 
 struct StorageIndicator: View {
     @EnvironmentObject var appState: AppState

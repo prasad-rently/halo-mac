@@ -353,7 +353,7 @@ codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
     `~/Library/Cookies`, `~/Library/Saved Application State`, `~/Library/WebKit`,
     `~/Library/LaunchAgents`
 - `func uninstall(_ app: InstalledApp) async -> (Bool, String?)` — trashItem app bundle; trashItem each leftover
-- `private func spotlightLastUsed(at url: URL) -> Date?` — via `getxattr` for `kMDItemLastUsedDate`
+- `private func spotlightLastUsed(at url: URL) -> Date?` — via `NSMetadataItem(url:).value(forAttribute: "kMDItemLastUsedDate")` (NOT `getxattr` — that does not work for `.app` bundles)
 - `LeftoverKind` cases in `Models.swift`: `.preferences`, `.appSupport`, `.caches`, `.containers`, `.groupContainers`, `.logs`, `.savedState`, `.cookies`, `.webkit`, `.launchAgent`
 
 ---
@@ -450,6 +450,26 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 11. **Sentry in xcodebuild** — must be declared as `XCRemoteSwiftPackageReference` in `project.pbxproj`. `Package.swift` alone is ignored by `xcodebuild -project`.
 12. **Sentry DSN** — `Info.plist["SentryDSN"]` must equal `"SENTRY_DSN_PLACEHOLDER"` in source. Replace only in production build pipeline; never commit the real DSN.
 13. **`options.enableUserInteractionTracing`** — does not exist in Sentry 8.x for macOS. Do not add it.
+14. **`InstalledApp.isUnused`** — `nil` lastUsedDate means Spotlight returned nothing (unknown), treated as `false` (not unused). Only mark unused when date is present AND > 90 days ago.
+15. **`NSMetadataItem` vs `getxattr`** — `getxattr` cannot read `kMDItemLastUsedDate` from `.app` bundles. Always use `NSMetadataItem(url:).value(forAttribute:)` for Spotlight metadata on app bundles.
+16. **`EditMode` is iOS-only** — `\.editMode` environment key does not exist on macOS. `List + .onMove` is always drag-active on macOS without any `EditMode`. Do not use `.environment(\.editMode, ...)` in macOS code.
+17. **VPN detection** — use two-rule strategy: (1) definitive protocol prefixes (`ppp`, `ipsec`, `tap`), then (2) `utun` with active IPv4 AND `path.usesInterfaceType(.other)`. iCloud Private Relay uses `utun` but `.cellular`/`.wifi` path type, so rule 2 correctly excludes it.
+18. **Battery health label** — factor cycle count FIRST, then capacity ratio. Cycles < 100 → "Excellent"; < 300 → "Good"; only fall back to capacity ratio for older batteries with known cycles.
+
+---
+
+## Reorderable Sidebar Modules
+
+`Halo/App/AppState.swift` + `Halo/App/ContentView.swift`
+
+- `AppState.moduleOrder: [AppModule]` — persisted to `UserDefaults["moduleOrder"]` as `[String]` rawValues
+- `AppModule.reorderable` — static list of the 6 user-reorderable modules (excludes `.dashboard` which is always pinned)
+- `moveModules(from:to:)` + `saveModuleOrder()` on `AppState`
+- **Forward-compat:** any new module not in the saved array is appended so it always appears after upgrades
+- **SidebarView** — `@State private var isEditing: Bool`; toggle button (`slider.horizontal.3` / `checkmark.circle.fill`) in header
+- In edit mode: Dashboard row is hidden, section label changes to "Drag to reorder", `SidebarItem` shows `≡` handle and dims to 80% opacity; navigation is suppressed
+- Module list uses `List { ForEach(appState.moduleOrder).onMove }` with `.listStyle(.plain)`, `.scrollContentBackground(.hidden)`, `.scrollDisabled(true)`, `.frame(height: CGFloat(count) * 44)`
+- No `.environment(\.editMode, ...)` — macOS does not support `EditMode`
 
 ---
 
@@ -482,3 +502,30 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | F-013 | iCloud Clipboard Sync | ⏭ Skipped |
 | F-014 | Launch at Login toggle | ✅ Done |
 | F-015 | Custom scan schedule (day + hour picker) | ✅ Done |
+
+---
+
+## Bug Fixes & Polish (v2.1 — 2026-05-29)
+
+### Performance Module
+| Fix | File | Detail |
+|-----|------|--------|
+| Battery health label | `BatteryDetailSection.swift` | Cycle count checked first (< 100 → Excellent, < 300 → Good) before capacity ratio |
+| Free RAM accuracy | `PerformanceView.swift` | Uses real `host_statistics64` / `vm_statistics64_data_t` inactive page count via `import Darwin` |
+| Top Processes spinner | `TopProcessesSection.swift` | `hasLoaded` flag — spinner only shown on first load; empty-state text shown after |
+| CPU/RAM picker alignment | `TopProcessesSection.swift` | Picker moved to its own `HStack` row below section header; no longer overlaps Hide/Show |
+| Sensors unavailable message | `SensorsSection.swift` | Replaced bare text with `HaloCard` containing full explanation of Apple Silicon SMC limitations |
+| VPN false positive | `NetworkDetailMonitor.swift` | Two-rule strategy: definitive protocols first, then `utun` + `path.usesInterfaceType(.other)` (excludes iCloud Private Relay) |
+| Speed test reliability | `SpeedTestService.swift` | 25 MB download (was 5 MB), 64 KB chunk reads, 10-ping median RTT (was 5-ping mean), 5 MB upload, warm-up request |
+| Login Items "Manage All" | `PerformanceView.swift` | Opens `x-apple.systempreferences:com.apple.LoginItems-Settings.extension` via `NSWorkspace` |
+
+### Applications Module
+| Fix | File | Detail |
+|-----|------|--------|
+| "Unused" false positive | `AppScanner.swift` + `Models.swift` | `spotlightLastUsed` rewritten to use `NSMetadataItem`; `isUnused` returns `false` for `nil` date (unknown ≠ unused) |
+| Uninstall non-functional | `ApplicationsView.swift` | Confirmation dialog before destructive action; real `trashItem` for app bundle + selected leftovers; error banner on failure |
+
+### Sidebar Enhancement
+| Feature | Files | Detail |
+|---------|-------|--------|
+| Reorderable modules | `AppState.swift`, `ContentView.swift` | Drag-to-reorder sidebar via `List + .onMove`; order persisted to `UserDefaults["moduleOrder"]`; edit mode toggle in header |

@@ -27,6 +27,8 @@ final class ApplicationsViewModel: ObservableObject {
     @Published var selectedApp: InstalledApp? = nil
     @Published var isLoading = false
     @Published var isUninstalling = false
+    @Published var uninstallError: String? = nil   // non-nil when last uninstall failed
+    @Published var uninstallSuccess = false         // briefly true after successful uninstall
     @Published var searchText = ""
     @Published var sortMode: SortMode = .size
     @Published var showUnusedOnly = false
@@ -77,12 +79,35 @@ final class ApplicationsViewModel: ObservableObject {
         if selectedApp?.id == app.id { selectedApp = apps[idx] }
     }
 
+    /// Toggles the `isSelected` flag on a leftover file so that the user's checkbox
+    /// choices are reflected back into the model before `uninstall()` is called.
+    func toggleLeftover(appId: UUID, leftoverId: UUID) {
+        guard let appIdx = apps.firstIndex(where: { $0.id == appId }),
+              let lvIdx  = apps[appIdx].leftovers.firstIndex(where: { $0.id == leftoverId })
+        else { return }
+        apps[appIdx].leftovers[lvIdx].isSelected.toggle()
+        if selectedApp?.id == appId { selectedApp = apps[appIdx] }
+    }
+
     func uninstall(_ app: InstalledApp) async {
         isUninstalling = true
-        // F-010: real trash — app bundle + selected leftovers
-        let (_, _) = await scanner.uninstall(app)
-        apps.removeAll { $0.id == app.id }
-        selectedApp = nil
+        uninstallError = nil
+
+        // Pass the version of the app that lives in `apps[]` — it carries the
+        // up-to-date `isSelected` flags the user may have toggled.
+        let liveApp = apps.first(where: { $0.id == app.id }) ?? app
+        let (success, error) = await scanner.uninstall(liveApp)
+
+        if success {
+            apps.removeAll { $0.id == app.id }
+            selectedApp = nil
+            uninstallSuccess = true
+        } else {
+            // Keep the app in the list — it wasn't actually removed from disk.
+            uninstallError = error ?? "Could not move \(app.name) to the Trash. " +
+                "If the app is in /Applications, try dragging it to the Trash manually " +
+                "or use Finder → Move to Trash."
+        }
         isUninstalling = false
     }
 }
@@ -224,9 +249,18 @@ struct AppListRow: View {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color.haloAccent.opacity(0.08))
                         .frame(width: 34, height: 34)
-                    Text(String(app.name.prefix(1)))
-                        .font(HaloFont.display(14, weight: .bold))
-                        .foregroundColor(.haloAccent)
+                    if let icon = NSWorkspace.shared.icon(forFile: app.path) as NSImage?,
+                       icon.size.width > 32 {
+                        Image(nsImage: icon)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 28, height: 28)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                    } else {
+                        Text(String(app.name.prefix(1)))
+                            .font(HaloFont.display(14, weight: .bold))
+                            .foregroundColor(.haloAccent)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -268,6 +302,8 @@ struct AppDetailPanel: View {
     let app: InstalledApp
     @ObservedObject var viewModel: ApplicationsViewModel
 
+    @State private var showUninstallConfirm = false
+
     var totalLeftoverBytes: Int64 { app.leftovers.filter(\.isSelected).reduce(0) { $0 + $1.sizeBytes } }
 
     var body: some View {
@@ -275,13 +311,23 @@ struct AppDetailPanel: View {
             VStack(alignment: .leading, spacing: 20) {
                 // App header
                 HStack(spacing: 16) {
+                    // Real app icon from NSWorkspace, fallback to initial letter
                     ZStack {
                         RoundedRectangle(cornerRadius: 14)
                             .fill(Color.haloAccent.opacity(0.1))
                             .frame(width: 56, height: 56)
-                        Text(String(app.name.prefix(1)))
-                            .font(HaloFont.display(24, weight: .heavy))
-                            .foregroundColor(.haloAccent)
+                        if let icon = NSWorkspace.shared.icon(forFile: app.path) as NSImage?,
+                           icon.size.width > 32 {
+                            Image(nsImage: icon)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 48, height: 48)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        } else {
+                            Text(String(app.name.prefix(1)))
+                                .font(HaloFont.display(24, weight: .heavy))
+                                .foregroundColor(.haloAccent)
+                        }
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         Text(app.name)
@@ -296,8 +342,31 @@ struct AppDetailPanel: View {
                     }
                     Spacer()
                     HaloPrimaryButton("Uninstall", icon: "trash.fill", isLoading: viewModel.isUninstalling) {
-                        Task { await viewModel.uninstall(app) }
+                        showUninstallConfirm = true
                     }
+                }
+
+                // Error banner — shown when trashItem failed
+                if let err = viewModel.uninstallError {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 13))
+                            .foregroundColor(.haloAmber)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Uninstall failed")
+                                .font(HaloFont.body(12, weight: .semibold))
+                                .foregroundColor(.haloAmber)
+                            Text(err)
+                                .font(HaloFont.body(11))
+                                .foregroundColor(.haloText2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(12)
+                    .background(Color.haloAmber.opacity(0.08))
+                    .cornerRadius(10)
+                    .overlay(RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.haloAmber.opacity(0.2), lineWidth: 1))
                 }
 
                 Divider().background(Color.haloBorder)
@@ -309,13 +378,18 @@ struct AppDetailPanel: View {
                             .font(HaloFont.display(14, weight: .semibold))
                             .foregroundColor(.haloText)
                         Spacer()
-                        Text(ByteCountFormatter.string(fromByteCount: totalLeftoverBytes, countStyle: .file))
-                            .font(HaloFont.body(13, weight: .semibold))
-                            .foregroundColor(.haloAmber)
+                        if totalLeftoverBytes > 0 {
+                            Text(ByteCountFormatter.string(fromByteCount: totalLeftoverBytes, countStyle: .file))
+                                .font(HaloFont.body(13, weight: .semibold))
+                                .foregroundColor(.haloAmber)
+                        }
                     }
 
                     ForEach(app.leftovers) { leftover in
-                        LeftoverRow(leftover: leftover)
+                        LeftoverRow(
+                            leftover: leftover,
+                            onToggle: { viewModel.toggleLeftover(appId: app.id, leftoverId: leftover.id) }
+                        )
                     }
 
                     if app.leftovers.isEmpty {
@@ -325,20 +399,61 @@ struct AppDetailPanel: View {
                             .padding(.top, 4)
                     }
                 }
+
+                // Info note about what will happen
+                if !app.leftovers.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 11))
+                            .foregroundColor(.haloText3)
+                        Text("Checked items will be moved to the Trash along with the app bundle.")
+                            .font(HaloFont.body(11))
+                            .foregroundColor(.haloText3)
+                    }
+                }
             }
             .padding(24)
+        }
+        // Confirmation sheet before running destructive uninstall
+        .confirmationDialog(
+            "Uninstall \"\(app.name)\"?",
+            isPresented: $showUninstallConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Move to Trash", role: .destructive) {
+                Task { await viewModel.uninstall(app) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            let selectedCount = app.leftovers.filter(\.isSelected).count
+            if selectedCount > 0 {
+                Text("\(app.name) and \(selectedCount) leftover file\(selectedCount == 1 ? "" : "s") will be moved to the Trash. This action can be undone from the Trash.")
+            } else {
+                Text("\(app.name) will be moved to the Trash. This action can be undone from the Trash.")
+            }
         }
     }
 }
 
 struct LeftoverRow: View {
     let leftover: AppLeftover
-    @State private var isChecked: Bool = true
+    /// Called when the checkbox is toggled — lets the ViewModel update model state.
+    let onToggle: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
-            HaloCheckbox(isChecked: $isChecked)
-            Image(systemName: "folder.fill")
+            // Checkbox driven by the model's isSelected flag, not local @State.
+            // Toggling calls back to the ViewModel which updates apps[].leftovers[].isSelected.
+            Button {
+                onToggle()
+            } label: {
+                Image(systemName: leftover.isSelected ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 16))
+                    .foregroundColor(leftover.isSelected ? .haloAccent : .haloText3)
+            }
+            .buttonStyle(.plain)
+
+            Image(systemName: leftoverIcon(for: leftover.kind))
                 .font(.system(size: 13))
                 .foregroundColor(.haloAmber)
             VStack(alignment: .leading, spacing: 2) {
@@ -357,9 +472,26 @@ struct LeftoverRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .background(Color.haloSurface2)
+        .background(leftover.isSelected ? Color.haloSurface2 : Color.haloSurface2.opacity(0.4))
         .cornerRadius(9)
-        .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.haloBorder, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 9)
+            .stroke(leftover.isSelected ? Color.haloBorder : Color.haloBorder.opacity(0.3), lineWidth: 1))
+    }
+
+    private func leftoverIcon(for kind: LeftoverKind) -> String {
+        switch kind {
+        case .preferences:    return "doc.text.fill"
+        case .appSupport:     return "folder.fill"
+        case .cache:          return "clock.arrow.circlepath"
+        case .container:      return "square.stack.fill"
+        case .groupContainer: return "square.stack.3d.up.fill"
+        case .logs:           return "doc.plaintext.fill"
+        case .savedState:     return "arrow.clockwise.circle.fill"
+        case .cookies:        return "lock.doc.fill"
+        case .webkit:         return "globe"
+        case .launchAgent:    return "gearshape.fill"
+        case .crashLogs:      return "exclamationmark.circle.fill"
+        }
     }
 }
 

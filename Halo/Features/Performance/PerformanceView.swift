@@ -1,4 +1,5 @@
 import SwiftUI
+import Darwin
 
 struct PerformanceView: View {
     @EnvironmentObject var appState: AppState
@@ -77,12 +78,39 @@ final class PerformanceViewModel: ObservableObject {
             let freed = await helper.purgeRAM()
             ramFreedMB = freed > 0 ? freed : nil
         } else {
-            // Fallback: brief sleep to show progress UI, then estimate
-            try? await Task.sleep(nanoseconds: 1_200_000_000)
-            let total = Double(ProcessInfo.processInfo.physicalMemory) / (1024 * 1024 * 1024)
-            ramFreedMB = total * 0.08 * 1024  // ~8% of RAM as rough estimate
+            // Helper offline — read actual inactive (reclaimable) pages via
+            // host_statistics64 so we report honest, real numbers rather than
+            // a fake percentage.  This is read-only: we can't purge without root,
+            // but we can tell the user exactly how much is reclaimable.
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            let reclaimable = Self.inactiveMemoryMB()
+            if reclaimable > 0 {
+                ramFreedMB = reclaimable
+                lastTaskError = "Full memory optimisation requires the XPC Helper. " +
+                    "The value above shows currently reclaimable inactive memory."
+            } else {
+                ramFreedMB = nil
+                lastTaskError = "Memory optimisation requires Halo to be installed " +
+                    "in /Applications and the XPC Helper to be running."
+            }
         }
         isFreingRAM = false
+    }
+
+    /// Returns the number of inactive (reclaimable) megabytes reported by the kernel.
+    /// Uses the same host_statistics64 call that Activity Monitor uses.
+    private static func inactiveMemoryMB() -> Double {
+        var stats = vm_statistics64_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size)
+        let kr = withUnsafeMutablePointer(to: &stats) { ptr in
+            ptr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { reboundPtr in
+                host_statistics64(mach_host_self(), HOST_VM_INFO64, reboundPtr, &count)
+            }
+        }
+        guard kr == KERN_SUCCESS else { return 0 }
+        let pageSize = Double(vm_page_size)
+        return Double(stats.inactive_count) * pageSize / (1024 * 1024)
     }
 
     func runMaintenance(_ task: SystemMaintenanceTask) async {
@@ -281,9 +309,14 @@ struct RAMOptimizerCard: View {
                     }
 
                     if let freed = viewModel.ramFreedMB {
-                        Text(String(format: "+%.0f MB freed", freed))
+                        // When helper is online, this is actual freed RAM.
+                        // When offline, it's inactive (reclaimable) RAM from vm_statistics64.
+                        let label = viewModel.helperAvailable
+                            ? String(format: "+%.0f MB freed", freed)
+                            : String(format: "%.0f MB reclaimable", freed)
+                        Text(label)
                             .font(HaloFont.body(12, weight: .semibold))
-                            .foregroundColor(.haloGreen)
+                            .foregroundColor(viewModel.helperAvailable ? .haloGreen : .haloAmber)
                     }
 
                     HaloPrimaryButton("Free RAM", icon: "bolt.fill", isLoading: viewModel.isFreingRAM) {
@@ -335,7 +368,12 @@ struct LoginItemsSection: View {
             HaloSectionHeader(
                 title: "Login Items",
                 subtitle: flaggedCount > 0 ? "\(flaggedCount) flagged" : "All clean",
-                action: {},
+                action: {
+                    // Open System Settings → General → Login Items
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") {
+                        NSWorkspace.shared.open(url)
+                    }
+                },
                 actionLabel: "Manage All"
             )
             if viewModel.isLoadingLoginItems {
@@ -406,8 +444,20 @@ struct LoginItemRow: View {
 
             Spacer()
 
-            HaloToggle(isOn: $isEnabled)
-                .onChange(of: isEnabled) { _ in onToggle() }
+            if item.kind == .launchAgent {
+                // LaunchAgent plists require elevated privileges to disable;
+                // toggling in-app has no persistent effect — direct user to System Settings.
+                Text("System")
+                    .font(HaloFont.body(10))
+                    .foregroundColor(.haloText3)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.haloText3.opacity(0.1))
+                    .cornerRadius(4)
+            } else {
+                HaloToggle(isOn: $isEnabled)
+                    .onChange(of: isEnabled) { _ in onToggle() }
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

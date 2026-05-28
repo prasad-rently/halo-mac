@@ -10,6 +10,10 @@ struct BatteryDetailSection: View {
     @State private var isExpanded = true
 
     private var healthColor: Color {
+        // A battery with very few cycles is essentially new — treat it as green
+        // regardless of the capacity ratio reported by IOKit.
+        let cycles = appState.batteryCycles
+        if cycles > 0 && cycles < 300 { return .haloGreen }
         if appState.batteryHealth >= 0.80 { return .haloGreen }
         if appState.batteryHealth >= 0.60 { return .haloAmber }
         return .haloRed
@@ -144,6 +148,12 @@ struct BatteryDetailSection: View {
     }
 
     private func healthLabel(_ h: Double) -> String {
+        let cycles = appState.batteryCycles
+        // Low cycle count = battery is young; capacity ratio from IOKit can be
+        // inaccurate on a brand-new or lightly-used cell, so let cycle count win.
+        if cycles > 0 && cycles < 100 { return "Excellent" }
+        if cycles > 0 && cycles < 300 { return "Good" }
+        // For older batteries use the actual capacity ratio
         if h >= 0.80 { return "Good" }
         if h >= 0.60 { return "Fair" }
         return "Replace Soon"

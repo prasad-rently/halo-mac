@@ -90,16 +90,39 @@ actor NetworkDetailMonitor {
     }
 
     // MARK: - VPN detection
+    //
+    // Strategy: only flag as "VPN Active" when there is genuine evidence of a
+    // user-initiated VPN tunnel.  macOS creates `utun` interfaces for many
+    // system features that are NOT VPNs:
+    //   • iCloud Private Relay  (utun, no routable IPv4, uses .other path type)
+    //   • Personal Hotspot / USB tethering  (utun or bridge)
+    //   • Sidecar / AirPlay mirroring helpers
+    //   • SSH -D / -L local tunnels
+    //
+    // Rules that avoid false positives:
+    //   1. ppp / ipsec / tap → almost always a real VPN — flag immediately.
+    //   2. utun with a routable IPv4 address AND path.usesInterfaceType(.other)
+    //      → the OS is routing traffic through the tunnel → real VPN.
+    //   3. utun alone (no IPv4, or path uses Wi-Fi/Ethernet) → NOT a VPN.
 
     private func detectVPN(path: NWPath) -> Bool {
-        if path.usesInterfaceType(.other) { return true }
-        // Check interface names for VPN prefixes
-        return readInterfaces().contains { iface in
+        let ifaces = readInterfaces()
+
+        // Rule 1: definitive VPN protocols
+        let definiteVPN = ifaces.contains { iface in
             let n = iface.id
-            return n.hasPrefix("utun") || n.hasPrefix("ppp") ||
-                   n.hasPrefix("ipsec") || n.hasPrefix("tun") ||
-                   n.hasPrefix("tap")
+            return n.hasPrefix("ppp") || n.hasPrefix("ipsec") || n.hasPrefix("tap")
         }
+        if definiteVPN { return true }
+
+        // Rule 2: utun with active IPv4 AND path routes through .other interface
+        //         (both conditions must be true to avoid iCloud Private Relay FP)
+        let utunWithIP = ifaces.contains { iface in
+            iface.id.hasPrefix("utun") && iface.ipv4 != nil && iface.isActive
+        }
+        if utunWithIP && path.usesInterfaceType(.other) { return true }
+
+        return false
     }
 
     // MARK: - Interface enumeration

@@ -13,6 +13,30 @@ final class AppState: ObservableObject {
     @Published var selectedModule: AppModule = .dashboard
     @Published var isOnboardingComplete: Bool = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
 
+    // MARK: Module Order (user-customisable sidebar)
+    /// The display order of the 6 reorderable sidebar modules.
+    /// Persisted to UserDefaults["moduleOrder"] as [String] of rawValues.
+    /// Dashboard is always pinned to "Overview" and is excluded from this list.
+    @Published var moduleOrder: [AppModule] = {
+        if let saved = UserDefaults.standard.array(forKey: "moduleOrder") as? [String] {
+            let parsed = saved.compactMap(AppModule.init(rawValue:))
+            // Forward-compat: any module added in a future version that isn't in
+            // the saved list is appended at the end so it always appears.
+            let missing = AppModule.reorderable.filter { !parsed.contains($0) }
+            return parsed + missing
+        }
+        return AppModule.reorderable   // default — matches current hardcoded sidebar order
+    }()
+
+    func moveModules(from source: IndexSet, to destination: Int) {
+        moduleOrder.move(fromOffsets: source, toOffset: destination)
+        saveModuleOrder()
+    }
+
+    func saveModuleOrder() {
+        UserDefaults.standard.set(moduleOrder.map(\.rawValue), forKey: "moduleOrder")
+    }
+
     // MARK: System Metrics (live)
     @Published var cpuUsage: Double = 0
     @Published var ramUsage: Double = 0
@@ -352,6 +376,12 @@ enum AppModule: String, CaseIterable, Identifiable {
     case menuBarPreview
 
     var id: String { rawValue }
+
+    /// The 6 modules that appear in the "Modules" sidebar section and can be
+    /// freely reordered by the user. Dashboard is always pinned to "Overview".
+    static var reorderable: [AppModule] {
+        [.cleanup, .protection, .performance, .applications, .files, .clipboard]
+    }
 
     var title: String {
         switch self {

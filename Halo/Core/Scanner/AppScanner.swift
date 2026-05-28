@@ -190,13 +190,12 @@ actor AppScanner {
     }
 
     private func spotlightLastUsed(at url: URL) -> Date? {
-        // kMDItemLastUsedDate via getxattr
-        let attrName = "com.apple.metadata:kMDItemLastUsedDate"
-        var value = [UInt8](repeating: 0, count: 512)
-        let len = getxattr(url.path, attrName, &value, 512, 0, 0)
-        guard len > 0 else { return nil }
-        let data = Data(value.prefix(len))
-        return try? PropertyListSerialization.propertyList(from: data, format: nil) as? Date
+        // NSMetadataItem queries Spotlight's on-disk database — the authoritative source
+        // for kMDItemLastUsedDate. The older getxattr approach only works when macOS
+        // happens to mirror that value as a file xattr, which it does not do reliably
+        // for .app bundles.
+        guard let item = NSMetadataItem(url: url) else { return nil }
+        return item.value(forAttribute: "kMDItemLastUsedDate") as? Date
     }
 
     private func groupContainerPath(home: String, bundleId: String) -> (String, LeftoverKind)? {
