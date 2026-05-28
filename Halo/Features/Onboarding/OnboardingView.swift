@@ -299,7 +299,14 @@ struct SettingsView: View {
             // General
             Form {
                 Section("Startup") {
-                    Toggle("Launch Halo at login", isOn: $launchAtLogin)
+                    // F-009: real SMAppService toggle; fallback to AppStorage on older OS
+                    Toggle("Launch Halo at login", isOn: Binding(
+                        get: { LaunchAtLoginManager.isEnabled || launchAtLogin },
+                        set: { newValue in
+                            launchAtLogin = newValue
+                            LaunchAtLoginManager.setEnabled(newValue)
+                        }
+                    ))
                     Toggle("Enable menu bar agent", isOn: $enableMenuBar)
                 }
                 Section("Scheduled Scans") {

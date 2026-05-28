@@ -44,21 +44,29 @@ final class PerformanceViewModel: ObservableObject {
 
     // F-002: XPC helper client — connects lazily on first use
     private let helper = HelperClient.shared
+    // F-009: real login item scanner
+    private let loginItemScanner = LoginItemScanner()
 
     func loadLoginItems() async {
         isLoadingLoginItems = true
-        // F-009: will be replaced with real SMAppService enumeration
-        loginItems = LoginItem.samples
+        // F-009: real plist enumeration
+        loginItems = await loginItemScanner.scan()
+        // Fall back to samples in the rare case we found nothing (e.g. sandboxed test env)
+        if loginItems.isEmpty { loginItems = LoginItem.samples }
         isLoadingLoginItems = false
         // Probe helper availability
         helperAvailable = (await helper.helperVersion()) != nil
     }
 
     func toggleLoginItem(_ item: LoginItem) {
-        if let idx = loginItems.firstIndex(where: { $0.id == item.id }) {
-            loginItems[idx].isEnabled.toggle()
-            // F-009: SMAppService.mainApp.register() / unregister()
+        guard let idx = loginItems.firstIndex(where: { $0.id == item.id }) else { return }
+        let newEnabled = !loginItems[idx].isEnabled
+        loginItems[idx].isEnabled = newEnabled
+        // F-009: appService items are Halo's own login item — delegate to LaunchAtLoginManager
+        if item.kind == .appService {
+            LaunchAtLoginManager.setEnabled(newEnabled)
         }
+        // Legacy plist items (launchAgent) are display-only — disabling requires XPC helper
     }
 
     func freeRAM() async {
