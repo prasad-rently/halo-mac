@@ -5,6 +5,14 @@ struct HaloApp: App {
     @StateObject private var appState = AppState()
     @StateObject private var menuBarManager = MenuBarManager()
 
+    init() {
+        // F-004: Load signature database from bundle, then check for delta update.
+        Task {
+            await SignatureDatabase.shared.load()
+            await SignatureDatabase.shared.checkForUpdate()
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

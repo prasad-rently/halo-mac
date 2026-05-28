@@ -25,6 +25,7 @@ let package = Package(
                 "Halo/Resources/Info.plist",
                 "Halo/Resources/PrivacyInfo.xcprivacy",
                 "Halo/Resources/Assets.xcassets",   // re-added as explicit resource below
+                "Halo/Resources/signatures.json",   // re-added as explicit resource below
                 "Halo/Halo.entitlements",
                 "Halo/Halo-Debug.entitlements",
                 // HaloSharedData.swift: Foundation-only, safe to compile in both targets
@@ -46,6 +47,7 @@ let package = Package(
             ],
             resources: [
                 .process("Halo/Resources/Assets.xcassets"),
+                .copy("Halo/Resources/signatures.json"),   // F-004: bundled signature database
             ]
         ),
         .testTarget(

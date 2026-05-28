@@ -29,11 +29,13 @@
 		000000000000000000001055 /* Halo/Features/SmartScan/SmartScanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001054 /* Halo/Features/SmartScan/SmartScanView.swift */; };
 		000000000000000000001057 /* Halo/Resources/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001056 /* Halo/Resources/Assets.xcassets */; };
 		000000000000000000001059 /* Halo/Resources/PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001058 /* Halo/Resources/PrivacyInfo.xcprivacy */; };
+		000000000000000000004002 /* Halo/Resources/signatures.json in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004001 /* Halo/Resources/signatures.json */; };
 		000000000000000000001061 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000001060 /* IOKit.framework */; };
 		000000000000000000001063 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000001062 /* SystemConfiguration.framework */; };
 		000000000000000000001066 /* Halo/Core/HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001065 /* Halo/Core/HotkeyManager.swift */; };
 		000000000000000000001068 /* Halo/Features/Clipboard/ClipboardQuickPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001067 /* Halo/Features/Clipboard/ClipboardQuickPickerView.swift */; };
 		000000000000000000001071 /* Halo/Core/Scanner/ProtectionScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001070 /* Halo/Core/Scanner/ProtectionScanner.swift */; };
+		000000000000000000004004 /* Halo/Core/Scanner/SignatureDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004003 /* Halo/Core/Scanner/SignatureDatabase.swift */; };
 		000000000000000000001073 /* Halo/Core/AlertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001072 /* Halo/Core/AlertManager.swift */; };
 		000000000000000000001075 /* Halo/Core/Scanner/CPUDetailMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001074 /* Halo/Core/Scanner/CPUDetailMonitor.swift */; };
 		000000000000000000001077 /* Halo/Core/Scanner/SMCReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001076 /* Halo/Core/Scanner/SMCReader.swift */; };
@@ -116,11 +118,13 @@
 		000000000000000000001054 /* Halo/Features/SmartScan/SmartScanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/SmartScan/SmartScanView.swift; sourceTree = "<group>"; };
 		000000000000000000001056 /* Halo/Resources/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Halo/Resources/Assets.xcassets; sourceTree = "<group>"; };
 		000000000000000000001058 /* Halo/Resources/PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = Halo/Resources/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		000000000000000000004001 /* Halo/Resources/signatures.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Halo/Resources/signatures.json; sourceTree = "<group>"; };
 		000000000000000000001060 /* IOKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOKit.framework; path = System/Library/Frameworks/IOKit.framework; sourceTree = SDKROOT; };
 		000000000000000000001062 /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
 		000000000000000000001065 /* Halo/Core/HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/HotkeyManager.swift; sourceTree = "<group>"; };
 		000000000000000000001067 /* Halo/Features/Clipboard/ClipboardQuickPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/ClipboardQuickPickerView.swift; sourceTree = "<group>"; };
 		000000000000000000001070 /* Halo/Core/Scanner/ProtectionScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ProtectionScanner.swift; sourceTree = "<group>"; };
+		000000000000000000004003 /* Halo/Core/Scanner/SignatureDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SignatureDatabase.swift; sourceTree = "<group>"; };
 		000000000000000000001072 /* Halo/Core/AlertManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AlertManager.swift; sourceTree = "<group>"; };
 		000000000000000000001074 /* Halo/Core/Scanner/CPUDetailMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/CPUDetailMonitor.swift; sourceTree = "<group>"; };
 		000000000000000000001076 /* Halo/Core/Scanner/SMCReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SMCReader.swift; sourceTree = "<group>"; };
@@ -200,6 +204,7 @@
 				000000000000000000001028 /* Halo/Core/Scanner/SystemMonitor.swift */,
 				000000000000000000001050 /* Halo/Core/Scanner/DuplicateDetector.swift */,
 				000000000000000000001070 /* Halo/Core/Scanner/ProtectionScanner.swift */,
+				000000000000000000004003 /* Halo/Core/Scanner/SignatureDatabase.swift */,
 				000000000000000000001072 /* Halo/Core/AlertManager.swift */,
 				000000000000000000003006 /* Halo/Core/HelperClient.swift */,
 				000000000000000000001074 /* Halo/Core/Scanner/CPUDetailMonitor.swift */,
@@ -233,6 +238,7 @@
 				000000000000000000001054 /* Halo/Features/SmartScan/SmartScanView.swift */,
 				000000000000000000001056 /* Halo/Resources/Assets.xcassets */,
 				000000000000000000001058 /* Halo/Resources/PrivacyInfo.xcprivacy */,
+				000000000000000000004001 /* Halo/Resources/signatures.json */,
 			);
 			name = Sources;
 			sourceTree = "<group>";
@@ -395,6 +401,7 @@
 			files = (
 				000000000000000000001057 /* Halo/Resources/Assets.xcassets in Resources */,
 				000000000000000000001059 /* Halo/Resources/PrivacyInfo.xcprivacy in Resources */,
+				000000000000000000004002 /* Halo/Resources/signatures.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -421,6 +428,7 @@
 				000000000000000000001029 /* Halo/Core/Scanner/SystemMonitor.swift in Sources */,
 				000000000000000000001051 /* Halo/Core/Scanner/DuplicateDetector.swift in Sources */,
 				000000000000000000001071 /* Halo/Core/Scanner/ProtectionScanner.swift in Sources */,
+				000000000000000000004004 /* Halo/Core/Scanner/SignatureDatabase.swift in Sources */,
 				000000000000000000001073 /* Halo/Core/AlertManager.swift in Sources */,
 				000000000000000000001075 /* Halo/Core/Scanner/CPUDetailMonitor.swift in Sources */,
 				000000000000000000001077 /* Halo/Core/Scanner/SMCReader.swift in Sources */,
