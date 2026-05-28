@@ -129,8 +129,10 @@ final class AlertManager {
             content: content,
             trigger: nil   // deliver immediately
         )
-
         UNUserNotificationCenter.current().add(request)
+
+        // F-011: persist to in-app alert history log
+        AlertLog.shared.append(title: title, body: body, kindRaw: kind.rawValue)
     }
 
     // MARK: - Permission request

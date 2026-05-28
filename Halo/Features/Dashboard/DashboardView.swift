@@ -12,6 +12,7 @@ struct DashboardView: View {
                 GPUDashboardCard()            // F-001: GPU utilisation + memory
                 NetworkSparklineCard()        // P3-10: bandwidth history
                 QuickActionsGrid()
+                AlertHistorySection()          // F-011: system alert history log
                 RecentActivityList()
             }
             .padding(28)
@@ -319,5 +320,121 @@ struct ActivityRow: View {
         .background(Color.haloSurface2)
         .cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.haloBorder, lineWidth: 1))
+    }
+}
+
+// MARK: - Alert History Section (F-011)
+
+struct AlertHistorySection: View {
+    @StateObject private var alertLog = AlertLog.shared
+    @State private var isExpanded = true
+
+    var body: some View {
+        HaloCard {
+            VStack(spacing: 0) {
+                // Header
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+                } label: {
+                    HStack {
+                        Image(systemName: "bell.badge.fill")
+                            .font(.system(size: 13))
+                            .foregroundColor(.haloAmber)
+                        Text("Alert History")
+                            .font(HaloFont.body(13, weight: .semibold))
+                            .foregroundColor(.haloText)
+                        if alertLog.unreadCount > 0 {
+                            Text("\(alertLog.unreadCount)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.haloRed)
+                                .clipShape(Capsule())
+                        }
+                        Spacer()
+                        if !alertLog.entries.isEmpty {
+                            Button("Clear") { alertLog.clearAll() }
+                                .font(HaloFont.body(11))
+                                .foregroundColor(.haloText2)
+                                .buttonStyle(.plain)
+                        }
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10))
+                            .foregroundColor(.haloText2)
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, isExpanded && !alertLog.entries.isEmpty ? 10 : 0)
+
+                if isExpanded {
+                    if alertLog.entries.isEmpty {
+                        Text("No alerts yet — your Mac looks great.")
+                            .font(HaloFont.body(12))
+                            .foregroundColor(.haloText2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 8)
+                    } else {
+                        VStack(spacing: 6) {
+                            ForEach(alertLog.entries.prefix(8)) { entry in
+                                AlertEntryRow(entry: entry)
+                                    .onTapGesture { alertLog.markRead(entry) }
+                            }
+                            if alertLog.entries.count > 8 {
+                                Button("Mark all as read · \(alertLog.entries.count) total") {
+                                    alertLog.markAllRead()
+                                }
+                                .font(HaloFont.body(11))
+                                .foregroundColor(.haloAccent)
+                                .buttonStyle(.plain)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.top, 4)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .onAppear { /* Trigger @StateObject creation so unread badge updates */ }
+    }
+}
+
+struct AlertEntryRow: View {
+    let entry: AlertEntry
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(entry.accentColor.opacity(0.15))
+                    .frame(width: 28, height: 28)
+                Image(systemName: entry.icon)
+                    .font(.system(size: 11))
+                    .foregroundColor(entry.accentColor)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.title)
+                    .font(HaloFont.body(12, weight: entry.isRead ? .regular : .semibold))
+                    .foregroundColor(.haloText)
+                    .lineLimit(1)
+                Text(entry.body)
+                    .font(HaloFont.body(11))
+                    .foregroundColor(.haloText2)
+                    .lineLimit(1)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(RelativeDateTimeFormatter().localizedString(for: entry.date, relativeTo: Date()))
+                    .font(HaloFont.body(10))
+                    .foregroundColor(.haloText2)
+                if !entry.isRead {
+                    Circle()
+                        .fill(Color.haloAccent)
+                        .frame(width: 6, height: 6)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .opacity(entry.isRead ? 0.65 : 1.0)
     }
 }
