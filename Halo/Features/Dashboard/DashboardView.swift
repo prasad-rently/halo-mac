@@ -41,13 +41,20 @@ struct DashHeader: View {
         return "Last scan \(formatter.localizedString(for: date, relativeTo: Date()))"
     }
 
+    private var nextScanText: String {
+        guard let next = ScanScheduler.shared.nextFireDate else { return "" }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return " · Next: \(formatter.localizedString(for: next, relativeTo: Date()))"
+    }
+
     var body: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("\(greeting) ☀️")
                     .font(HaloFont.display(22, weight: .bold))
                     .foregroundColor(.haloText)
-                Text(lastScanText + " · Your Mac is in good shape.")
+                Text(lastScanText + nextScanText + " · Your Mac is in good shape.")
                     .font(HaloFont.body(13))
                     .foregroundColor(.haloText2)
             }

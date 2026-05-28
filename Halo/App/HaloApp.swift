@@ -13,12 +13,18 @@ struct HaloApp: App {
         }
     }
 
+
+
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(appState)
                 .environmentObject(menuBarManager)
                 .frame(minWidth: 900, minHeight: 620)
+                .task {
+                    // F-005: start background scan scheduler now that AppState is ready
+                    ScanScheduler.shared.start(appState: appState)
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
