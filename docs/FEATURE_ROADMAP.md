@@ -16,19 +16,19 @@
 |---|---|---|---|---|
 | [F-001](#f-001--gpu-metrics-dashboard-card) | GPU Metrics Dashboard Card | ✅ Done | 0.5 d | Phase 3 merged |
 | [F-002](#f-002--xpc-helper-privileged-operations) | XPC Helper — Privileged Ops | ✅ Done | 3 d | none |
-| [F-003](#f-003--storekitmit-2-promanager) | StoreKit 2 ProManager | 📋 Queued — #3 | 3 d | none |
-| [F-004](#f-004--signature-database--real-malware-definitions) | Signature Database | 📋 Queued — #4 | 3 d | none |
-| [F-005](#f-005--bgscheduler--scheduled-smart-scan) | BGScheduler — Scheduled Smart Scan | 📋 Queued — #5 | 1 d | none |
-| [F-006](#f-006--sentry-crash-reporting) | Sentry Crash Reporting | 📋 Queued — #6 | 0.5 d | none |
-| [F-007](#f-007--privacyinfoxcprivacy--app-store-assets) | PrivacyInfo + App Store Assets | 📋 Queued — #7 | 2 d | F-002, F-003 |
-| [F-008](#f-008--menu-bar-display-styles-bardot-mode) | Menu Bar Display Styles | 📋 Queued — #8 | 1.5 d | Phase 3 merged |
-| [F-009](#f-009--login-items--real-smappservice-integration) | Login Items — Real SMAppService | 📋 Queued — #9 | 2 d | none |
-| [F-010](#f-010--applications-deep-uninstall--real-leftover-scan) | Applications Deep Uninstall | 📋 Queued — #10 | 2.5 d | none |
-| [F-011](#f-011--in-app-alert-history-log) | In-App Alert History Log | 📋 Queued — #11 | 1 d | F-001, Phase 3 |
-| [F-012](#f-012--maintenance-tasks--xpc-real-execution) | Maintenance Tasks — Real Execution | 📋 Queued — #12 | 1 d | F-002 |
-| [F-013](#f-013--icloud-clipboard-sync) | iCloud Clipboard Sync | 📋 Queued — #13 | 5 d | F-003 |
-| [F-014](#f-014--pdf-health-report-export) | PDF Health Report Export | 📋 Queued — #14 | 2 d | none |
-| [F-015](#f-015--custom-scan-schedule-ui) | Custom Scan Schedule UI | 📋 Queued — #15 | 1 d | F-005 |
+| [F-003](#f-003--storekitmit-2-promanager) | StoreKit 2 ProManager | ⏭ Skipped (user) | 3 d | none |
+| [F-004](#f-004--signature-database--real-malware-definitions) | Signature Database | ✅ Done | 3 d | none |
+| [F-005](#f-005--bgscheduler--scheduled-smart-scan) | BGScheduler — Scheduled Smart Scan | ✅ Done | 1 d | none |
+| [F-006](#f-006--sentry-crash-reporting) | Sentry Crash Reporting | ✅ Done | 0.5 d | none |
+| [F-007](#f-007--privacyinfoxcprivacy--app-store-assets) | PrivacyInfo + App Store Assets | ⏭ Skipped (user) | 2 d | F-002, F-003 |
+| [F-008](#f-008--menu-bar-display-styles-bardot-mode) | Menu Bar Display Styles | ✅ Done | 1.5 d | Phase 3 merged |
+| [F-009](#f-009--login-items--real-smappservice-integration) | Login Items — Real SMAppService | ✅ Done | 2 d | none |
+| [F-010](#f-010--applications-deep-uninstall--real-leftover-scan) | Applications Deep Uninstall | ✅ Done | 2.5 d | none |
+| [F-011](#f-011--in-app-alert-history-log) | In-App Alert History Log | ✅ Done | 1 d | F-001, Phase 3 |
+| [F-012](#f-012--maintenance-tasks--xpc-real-execution) | Maintenance Tasks — Real Execution | ✅ Done | 1 d | F-002 |
+| [F-013](#f-013--icloud-clipboard-sync) | iCloud Clipboard Sync | ⏭ Skipped (user) | 5 d | F-003 |
+| [F-014](#f-014--pdf-health-report-export) | PDF Health Report Export | ✅ Done | 2 d | none |
+| [F-015](#f-015--custom-scan-schedule-ui) | Custom Scan Schedule UI | ✅ Done | 1 d | F-005 |
 
 ---
 
@@ -53,6 +53,16 @@
 | ✅ | Phase 3 · 12 monitoring features (P3-01 → P3-12) | PR #4 `feat/phase3-monitoring` |
 | ✅ | F-001 · GPU Metrics Dashboard Card | PR #4 `feat/phase3-monitoring` |
 | ✅ | F-002 · XPC Helper — Privileged Ops | `feat/f002-xpc-helper` — 11 tests pass |
+| ✅ | F-004 · Signature Database | `feat/f004-signature-database` |
+| ✅ | F-005 · BGTaskScheduler — Scheduled Smart Scan | `feat/f005-bg-scan-scheduler` |
+| ✅ | F-006 · Sentry Crash Reporting | `feat/f006-sentry` |
+| ✅ | F-008 · Menu Bar Display Styles (icon/text/bars/dot) | `feat/f008-menubar-display-styles` |
+| ✅ | F-009 · Login Items Real — plist + SMAppService | `feat/f009-login-items-real` |
+| ✅ | F-010 · Applications Deep Uninstall — 12-path leftover scan | `feat/f010-deep-uninstall` |
+| ✅ | F-011 · In-App Alert History Log | `feat/f011-alert-history` |
+| ✅ | F-012 · Maintenance Tasks Real | completed via F-002 |
+| ✅ | F-014 · PDF Health Report Export | `feat/f014-pdf-health-report` |
+| ✅ | F-015 · Custom Scan Schedule UI | `feat/f015-custom-scan-schedule` |
 
 ---
 
