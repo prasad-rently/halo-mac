@@ -1,33 +1,50 @@
 # Halo — Roadmap
 
-Remaining BRD iterations, in priority order. Each item includes enough context for an AI agent or new developer to implement it without prior knowledge of the conversation history.
+Feature status and future plans. For the detailed iteration pipeline see `docs/FEATURE_ROADMAP.md`.
 
 ---
 
-## 1. XPC Helper Target (Privileged Operations)
+## Completed Features (shipped)
 
-**Why:** The App Store sandbox prevents calling `dscacheutil -flushcache` (DNS), `purge` (RAM), and `diskutil repairPermissions` directly. An XPC helper runs as a separate process with elevated privileges.
-
-**What to build:**
-- New target: `HaloHelper` (XPC service, bundle ID `com.halo.mac.helper`)
-- Entitlement: `com.apple.security.temporary-exception.mach-lookup.global-name`
-- Protocol: `HaloHelperProtocol` with methods `flushDNS()`, `purgeRAM()`, `repairPermissions()`
-- Main app calls via `NSXPCConnection` — the XPC service performs the privileged work
-- `SMJobBless` or `SMAppService` (macOS 13+) for installation
-
-**Files to create:**
-```
-HaloHelper/
-├── HaloHelper.swift          ← NSXPCListener delegate
-├── HaloHelperProtocol.swift  ← shared protocol (compile into both targets)
-└── Info.plist
-```
-
-**Note:** Until this is built, Performance module maintenance tasks (`FlushDNS`, `PurgeRAM`) are no-ops in sandboxed builds. The debug (non-sandboxed) build can call them directly with `Process`/`shell()`.
+- [x] Dashboard with live health score + metric cards
+- [x] Cleanup module — all 10 `CleanupKind` categories
+- [x] Protection module — real threat detection via `SignatureDatabase` (45 definitions, auto-updates)
+- [x] Performance module — real login item enumeration via `LoginItemScanner` (LaunchAgent/Daemon plists)
+- [x] Applications module — installed app list + deep uninstall (12 leftover paths via `AppScanner`)
+- [x] Files module — SpaceLens + Duplicate Finder (SHA-256) + Large Files
+- [x] Clipboard module — history (500 items), filter, pin, delete
+- [x] Clipboard quick-picker overlay (⌘⇧V global shortcut)
+- [x] Menu Bar Extra — 4 display styles (icon / text stats / mini bar / dot)
+- [x] Onboarding flow (permissions + menu bar style + scan schedule + login item)
+- [x] Settings (shortcut recorder, analytics opt-in, scheduled scan config)
+- [x] macOS Widget — Small / Medium / Large sizes
+- [x] Widget live data pipeline via App Group (60-second refresh)
+- [x] HaloTests — DuplicateDetector + Clipboard unit tests
+- [x] Dual entitlements (debug non-sandboxed, release sandboxed)
+- [x] XPC Helper target (F-002 — privileged ops protocol)
+- [x] SignatureDatabase (F-004 — bundled + HTTPS delta updates)
+- [x] Sentry crash reporting (F-005 — opt-in, DSN from Info.plist)
+- [x] Background Smart Scan scheduling (F-006 — NSBackgroundActivityScheduler)
+- [x] Alert history log (F-011 — 50-item persistent in-app log)
+- [x] PDF report export (F-012 — 4-page A4 PDF via PDFKit + CoreText)
+- [x] Launch at Login toggle (F-014 — SMAppService.mainApp)
+- [x] Custom scan schedule — day + hour picker (F-015)
 
 ---
 
-## 2. ProManager — StoreKit 2
+## Skipped (user decision)
+
+| Item | Reason |
+|------|--------|
+| StoreKit 2 ProManager (F-003) | User chose to skip in-app purchases |
+| App Store submission assets (F-007) | User chose to skip |
+| iCloud Clipboard Sync (F-013) | Depends on F-003 (Pro tier); skipped |
+
+---
+
+## Future / Remaining Items
+
+### 1. StoreKit 2 ProManager
 
 **Why:** Monetisation. The app is free with a Pro upgrade.
 
@@ -44,85 +61,13 @@ HaloHelper/
 
 **Files to create:**
 ```
-Core/
-└── ProManager.swift
-Features/
-└── Paywall/PaywallView.swift   ← presented as sheet when user hits a gated feature
+Core/ProManager.swift
+Features/Paywall/PaywallView.swift
 ```
 
 ---
 
-## 3. SignatureDatabase (Malware Definitions)
-
-**Why:** The Protection module currently has sample data. It needs real malware/adware definitions.
-
-**What to build:**
-- Bundled `signatures.json` in `Resources/` — initial seed of known bundle IDs, file hashes, and threat metadata
-- `Core/Scanner/SignatureScanner.swift` — actor that loads signatures and compares against installed apps
-- Delta update endpoint: `GET https://api.halo.mac/signatures/latest.json` with cert pinning (using `URLSession` + custom `URLAuthenticationChallenge` handler)
-- Version tracking in `UserDefaults` so updates only download diffs
-
-**Signature JSON schema:**
-```json
-{
-  "version": 42,
-  "threats": [
-    {
-      "bundleId": "com.known.adware",
-      "name": "SuperClean Adware",
-      "kind": "adware",
-      "risk": "high",
-      "sha256": ["abc123..."]
-    }
-  ]
-}
-```
-
----
-
-## 4. BGTaskScheduler — Scheduled Smart Scan
-
-**Why:** Users want Halo to scan automatically in the background, e.g., once a week.
-
-**What to build:**
-- Register `BGProcessingTaskRequest` with identifier `com.halo.smartscan` in `Info.plist`
-- `BGTaskScheduler.shared.register(forTaskWithIdentifier:)` in `HaloApp.init`
-- Schedule after scan completes: `BGProcessingTaskRequest(identifier: "com.halo.smartscan")` with `earliestBeginDate = Date(timeIntervalSinceNow: 7 * 86400)`
-- On trigger: call `ScanCoordinator.runFullScan()`, then schedule the next one
-
-**Entitlement needed (production):**
-```xml
-<key>com.apple.developer.background-task-scheduler-allowed-identifiers</key>
-<array>
-    <string>com.halo.smartscan</string>
-</array>
-```
-
----
-
-## 5. Sentry Integration — Crash Reporting
-
-**Why:** Production crash visibility.
-
-**What to build:**
-- `Package.swift` already has a placeholder SPM entry — add the real Sentry SDK:
-  ```swift
-  .package(url: "https://github.com/getsentry/sentry-cocoa", from: "8.0.0")
-  ```
-- Initialise in `HaloApp.init`:
-  ```swift
-  SentrySDK.start { options in
-      options.dsn = "https://YOUR_DSN@sentry.io/PROJECT_ID"
-      options.tracesSampleRate = 0.1
-  }
-  ```
-- Add `SENTRY_DSN` to `Info.plist` (read at runtime, not hardcoded)
-
-**Do not** log any user-identifying data (clipboard contents, file paths) to Sentry.
-
----
-
-## 6. App Store Submission Assets
+### 2. App Store Submission Assets
 
 **Checklist:**
 - [ ] Screenshots: 1440×900 for each of the 5 required App Store screenshots
@@ -137,10 +82,11 @@ Features/
 - [ ] Release/production entitlements review: ensure `Halo.entitlements` (sandboxed) is used for the archive scheme
 - [ ] `PrivacyInfo.xcprivacy` — declare all API usage (NSPasteboard, IOKit, FileManager, NSWorkspace)
 - [ ] Notarisation: `xcrun notarytool submit Halo.pkg --apple-id … --team-id R7S39UR27F`
+- [ ] Replace `SENTRY_DSN_PLACEHOLDER` in `Info.plist` with real Sentry DSN (production build pipeline only — never commit real DSN)
 
 ---
 
-## 7. iCloud Sync for Clipboard (Future)
+### 3. iCloud Clipboard Sync
 
 **Why:** Power users want clipboard history across their Mac and iPhone/iPad.
 
@@ -150,20 +96,20 @@ Features/
 
 ---
 
-## Completed
+### 4. Sentry DSN — Production Setup
 
-- [x] Dashboard with live health score + metric cards
-- [x] Cleanup module — all 10 `CleanupKind` categories
-- [x] Protection module — threat detection + permission audit UI
-- [x] Performance module — login item manager + maintenance tasks UI
-- [x] Applications module — installed app list + deep uninstall
-- [x] Files module — SpaceLens + Duplicate Finder (SHA-256) + Large Files
-- [x] Clipboard module — history, filter, pin, delete
-- [x] Clipboard quick-picker overlay (⌘⇧V global shortcut)
-- [x] Menu Bar Extra with live CPU % + popover
-- [x] Onboarding flow (3 steps + permission prompts)
-- [x] Settings (shortcut recorder, pro toggle placeholder)
-- [x] macOS Widget — Small / Medium / Large sizes
-- [x] Widget live data pipeline via App Group (60-second refresh)
-- [x] HaloTests — DuplicateDetector + Clipboard unit tests
-- [x] Dual entitlements (debug non-sandboxed, release sandboxed)
+Before any release:
+1. Create a Sentry project at sentry.io
+2. Copy the DSN
+3. Set `Info.plist["SentryDSN"]` in the release build pipeline (CI/CD secret injection — **never** commit to source)
+4. Verify `enableAnalytics` opt-in flow works end-to-end
+
+---
+
+### 5. Signature Database — Production Endpoint
+
+`SignatureDatabase.checkForUpdate()` currently hits `https://api.halo.mac/signatures/latest.json`. To activate:
+1. Host the JSON at that URL (or configure a CDN)
+2. Implement server-side versioning (`version` field in JSON)
+3. Consider certificate pinning via `URLAuthenticationChallenge` for added security
+4. Schedule delta updates on a regular cadence (weekly recommended)

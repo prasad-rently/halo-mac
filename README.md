@@ -25,15 +25,18 @@
 
 | Module | What it does |
 |--------|-------------|
-| **Dashboard** | Live health score ring, CPU/RAM/disk/network/battery cards, Smart Scan trigger |
+| **Dashboard** | Live health score ring, CPU/RAM/disk/network/battery cards, Smart Scan trigger, alert history, PDF report export |
 | **Cleanup** | Scans caches, logs, temp files, Xcode derived data, iOS backups, language packs, trash |
-| **Protection** | Malware/adware threat detection, permission auditing per app |
-| **Performance** | Login-item manager, RAM/DNS/permission maintenance tasks |
-| **Applications** | Installed app inventory with deep-uninstall leftovers detection |
+| **Protection** | Real malware/adware/PUP/hijacker/keylogger detection via bundled + auto-updated signature database |
+| **Performance** | Login-item manager (real plist enumeration), RAM/DNS/permission maintenance tasks |
+| **Applications** | Installed app inventory with deep-uninstall leftovers detection across 12 standard paths |
 | **Files** | SpaceLens treemap, SHA-256 duplicate finder, large-file browser |
 | **Clipboard** | Full clipboard history (text, URL, code, image, color), ⌘⇧V quick-picker overlay |
-| **Menu Bar** | Persistent CPU %, system-pressure indicator, popover with live stats |
+| **Menu Bar** | Persistent indicator with 4 display styles: icon, text stats, mini progress bars, or coloured dot |
 | **Widget** | macOS Notification Center widget — Small/Medium/Large, updates every 60 s |
+| **Alert History** | Persistent in-app alert log (50 entries, unread badge, tap-to-dismiss) |
+| **Report Export** | 4-page PDF system health report: cover, metrics, storage/battery, alert history |
+| **Scheduled Scan** | Custom day + hour schedule for automatic background Smart Scans |
 
 ---
 
@@ -56,18 +59,26 @@ Halo/
 │   └── project.pbxproj           ← single source of truth for all targets
 ├── Halo/                         ← Main app target (com.halo.mac)
 │   ├── App/
-│   │   ├── HaloApp.swift         ← @main, MenuBarExtra, Settings scene
+│   │   ├── HaloApp.swift         ← @main, Sentry init, SignatureDatabase load, ScanScheduler start
 │   │   ├── AppState.swift        ← @MainActor ObservableObject, central store
 │   │   └── ContentView.swift     ← NavigationSplitView + sidebar routing
 │   ├── Core/
 │   │   ├── Models/Models.swift   ← All data models
 │   │   ├── HotkeyManager.swift   ← Global NSEvent monitor for ⌘⇧V
+│   │   ├── AlertLog.swift        ← @MainActor singleton, 50-item alert history
+│   │   ├── AlertManager.swift    ← UNUserNotification + AlertLog bridge
+│   │   ├── ReportGenerator.swift ← PDFKit 4-page PDF export
+│   │   ├── ScanScheduler.swift   ← NSBackgroundActivityScheduler wrapper
 │   │   └── Scanner/
 │   │       ├── SystemMonitor.swift      ← CPU/RAM/disk/battery/network via IOKit
 │   │       ├── FileSystemScanner.swift  ← async actor, AsyncStream events
 │   │       ├── ScanCoordinator.swift    ← orchestrates Smart Scan pipeline
 │   │       ├── DuplicateDetector.swift  ← SHA-256 3-phase detection
-│   │       └── ClipboardMonitor.swift   ← NSPasteboard polling
+│   │       ├── ClipboardMonitor.swift   ← NSPasteboard polling
+│   │       ├── SignatureDatabase.swift  ← actor; bundled + HTTPS-updated definitions
+│   │       ├── ProtectionScanner.swift  ← async; threat detection via SignatureDatabase
+│   │       ├── LoginItemScanner.swift   ← actor; LaunchAgent/Daemon plist enumeration
+│   │       └── AppScanner.swift         ← actor; installed apps + leftover detection
 │   ├── DesignSystem/
 │   │   └── DesignSystem.swift    ← Colors, HaloCard, buttons, typography tokens
 │   ├── Features/
@@ -87,6 +98,7 @@ Halo/
 │   └── Resources/
 │       ├── Info.plist
 │       ├── PrivacyInfo.xcprivacy
+│       ├── signatures.json            ← 45 bundled malware signatures
 │       ├── Halo.entitlements          ← Release / App Store (sandboxed)
 │       └── Halo-Debug.entitlements    ← Debug (no sandbox, AX monitor works)
 ├── HaloWidget/                   ← Widget extension target (com.halo.mac.widget)
@@ -98,13 +110,14 @@ Halo/
 │   └── HaloSharedData.swift      ← Codable struct shared by both targets via App Group
 ├── HaloTests/
 │   └── HaloTests.swift           ← Swift Testing suite (DuplicateDetector, Clipboard)
-├── Package.swift                 ← SPM (optional Sentry dependency)
+├── Package.swift                 ← SPM (Sentry 8.x dependency)
 ├── CLAUDE.md                     ← AI agent memory / architecture decisions
 └── docs/
     ├── ARCHITECTURE.md           ← Data flow, concurrency, key design decisions
     ├── WIDGET.md                 ← Widget implementation guide
     ├── DESIGN_SYSTEM.md          ← All design tokens and reusable components
-    └── ROADMAP.md                ← Remaining BRD iterations
+    ├── ROADMAP.md                ← Feature status and future plans
+    └── FEATURE_ROADMAP.md        ← Detailed feature iteration pipeline
 ```
 
 ---
@@ -132,6 +145,7 @@ Select the **Halo** scheme → ⌘R. The app targets **macOS 13.0+**.
 Halo's onboarding flow requests:
 - **Full Disk Access** — required for deep cleanup scans (System Settings → Privacy)
 - **Accessibility** — required for the global ⌘⇧V clipboard hotkey
+- **Notifications** — required for threat and scan completion alerts
 
 ### 5. Run tests
 
@@ -157,10 +171,14 @@ xcodebuild -project Halo.xcodeproj \
 APP="/tmp/HaloBuild/Build/Products/Debug/Halo.app"
 CERT="Apple Development: Your Name (XXXXXXXXXX)"
 
-# Sign dylibs first, then the widget extension, then the outer app
+# Sign dylibs first, then Sentry.framework, then the widget extension, then the outer app
 find "$APP" -name "*.dylib" | while read d; do
   codesign --force --sign "$CERT" --timestamp=none "$d"
 done
+if [ -d "$APP/Contents/Frameworks/Sentry.framework" ]; then
+  codesign --force --sign "$CERT" --timestamp=none \
+    "$APP/Contents/Frameworks/Sentry.framework"
+fi
 codesign --force --sign "$CERT" \
   --entitlements HaloWidget/HaloWidget.entitlements \
   --timestamp=none "$APP/Contents/PlugIns/HaloWidget.appex"
@@ -173,7 +191,7 @@ cp -R "$APP" ~/Applications/Halo.app
 pluginkit -a ~/Applications/Halo.app/Contents/PlugIns/HaloWidget.appex
 ```
 
-> **Important:** Sign dylibs → widget appex → outer app in that exact order. Reversing the order causes TeamIdentifier mismatches at launch.
+> **Important:** Sign dylibs → Sentry.framework → widget appex → outer app in that exact order. Reversing the order causes TeamIdentifier mismatches at launch.
 
 ---
 
@@ -183,21 +201,23 @@ pluginkit -a ~/Applications/Halo.app/Contents/PlugIns/HaloWidget.appex
 
 The home screen shows a live **health score** (0–100) computed from CPU, RAM, disk fullness, and battery health. Hit **Smart Scan** to run a full system audit in the background — results appear in the Cleanup and Protection modules.
 
+The **Alert History** card shows the last 50 system alerts (threats found, scans completed). Tap any entry to mark it read. The **Export Report** button generates a 4-page PDF you can save anywhere.
+
 ### Cleanup
 
 Browse by category (System Caches, Logs, Xcode DerivedData, Trash, etc.). Each category is scanned concurrently. Check/uncheck individual files, then click **Clean Selected** — files are moved to Trash (never permanently deleted without review).
 
 ### Protection
 
-Scans for known adware, PUPs, and browser hijackers using a bundled signature database. Also audits which apps hold sensitive permissions (Camera, Microphone, Full Disk Access, etc.).
+Scans for known adware, PUPs, browser hijackers, and keyloggers using a bundled signature database (45 definitions, 5 threat kinds). The database auto-updates over HTTPS at launch.
 
 ### Performance
 
-Manage Login Items — disable or remove startup agents that slow boot time. Run maintenance tasks: purge RAM, flush DNS cache, repair disk permissions.
+Manage Login Items using real plist enumeration of `~/Library/LaunchAgents` and system-wide daemons. Toggle Halo's own launch-at-login via System Extensions. Run maintenance tasks: purge RAM, flush DNS cache.
 
 ### Applications
 
-Lists every installed app with its size and last-used date. Select an app and click **Uninstall** to remove the `.app` bundle plus all detected leftovers (preferences, caches, containers).
+Lists every installed app with its size and last-used date. Select an app and click **Uninstall** to remove the `.app` bundle plus all detected leftovers across 12 standard paths (Preferences, App Support, Caches, Containers, Group Containers, Logs, Cookies, Saved Application State, WebKit, LaunchAgents).
 
 ### Files
 
@@ -214,7 +234,11 @@ Full history of everything copied (up to 500 items). Filter by type (text, URL, 
 
 ### Menu Bar
 
-The Halo icon in the menu bar shows live CPU %. Click to open a popover with CPU, RAM, network, and battery at a glance. The icon changes colour under high system pressure.
+The Halo icon in the menu bar shows live system status. Choose from four display styles in Settings → Menu Bar:
+- **Icon** — Halo icon only
+- **Text Stats** — "CPU 42% · RAM 61%"
+- **Mini Bar** — tiny 4-pixel progress capsules for CPU and RAM
+- **Dot** — colour-coded dot (green/amber/red) based on system pressure
 
 ### Widget
 
@@ -227,6 +251,15 @@ Right-click the desktop → **Edit Widgets** → search **"Halo Monitor"**. Avai
 | Large | CPU + RAM + Network row + up to 5 recent clipboard items |
 
 The widget reads live data from the shared App Group (`group.com.halo.mac`) and refreshes every **60 seconds**.
+
+### Scheduled Scans
+
+Halo can automatically run Smart Scans in the background. Configure in **Settings → Scheduled Scans**:
+- **Frequency** — Daily / Weekly / Monthly
+- **Day** — preferred weekday (weekly/monthly)
+- **Time** — preferred hour (0–23)
+
+The next scheduled scan time is shown on the Dashboard header.
 
 ---
 
@@ -250,9 +283,14 @@ SystemMonitor (every 2 s)
 `reloadAllTimelines()` is called once per minute (not every 2 s) to stay within macOS's reload budget (~40–70 reloads/hour).
 
 ### Swift Concurrency
-- `FileSystemScanner` and `DuplicateDetector` are `actor` types — all file I/O is off the main thread via `AsyncStream`.
+- `FileSystemScanner`, `DuplicateDetector`, `SignatureDatabase`, `LoginItemScanner`, `AppScanner` are `actor` types — all I/O is off the main thread.
 - All ViewModels are `@MainActor final class … ObservableObject`.
 - `ScanCoordinator` uses `withTaskGroup` for parallel category scanning.
+
+### Sentry Crash Reporting
+- Opt-in only (`enableAnalytics` UserDefaults key, defaults to `false`)
+- DSN read from `Info.plist` — never hardcoded in source
+- `sendDefaultPii = false` — no user data ever sent
 
 ---
 
@@ -277,14 +315,13 @@ All tokens live in `DesignSystem/DesignSystem.swift` as `Color` extensions (e.g.
 
 ## Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full list of planned features.
+See [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`docs/FEATURE_ROADMAP.md`](docs/FEATURE_ROADMAP.md) for full status.
 
-Top items:
-1. **XPC Helper** — privileged ops (flush DNS, purge RAM, repair permissions) without disabling sandbox
-2. **ProManager** — StoreKit 2 in-app purchase (annual + lifetime)
-3. **BGTaskScheduler** — scheduled background Smart Scans
-4. **Sentry** — crash reporting via SPM
-5. **App Store assets** — 1440×900 screenshots, privacy policy URL
+Future items:
+1. **StoreKit 2 ProManager** — annual + lifetime in-app purchase
+2. **iCloud Clipboard Sync** — cross-device clipboard history (requires Pro)
+3. **App Store assets** — 1440×900 screenshots, privacy policy URL, notarisation
+4. **Sentry DSN** — replace `SENTRY_DSN_PLACEHOLDER` in `Info.plist` with a real project DSN before release
 
 ---
 

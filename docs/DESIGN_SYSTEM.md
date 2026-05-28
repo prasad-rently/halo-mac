@@ -138,6 +138,68 @@ StatGauge(
 )
 ```
 
+### MenuBarIconView
+
+The live menu bar icon component. Respects `@AppStorage("menuBarDisplayStyle")`.
+
+```swift
+MenuBarIconView(
+    state: menuBarManager.pressureLevel,
+    cpuUsage: appState.cpuUsage,
+    ramUsage: appState.ramUsage
+)
+```
+
+Four display styles, controlled by `MenuBarDisplayStyle` enum:
+
+| Style | Appearance |
+|-------|-----------|
+| `.icon` | Halo SF Symbol glyph (default) |
+| `.textStats` | `"CPU 42% · RAM 61%"` text label |
+| `.miniBar` | Two 4 px capsule progress bars (CPU left, RAM right) |
+| `.dot` | Single filled circle: green/amber/red based on system pressure |
+
+### MiniProgressBar (internal)
+
+Private sub-component of `.miniBar` style. A 4 px tall `Capsule` with a coloured fill overlay.
+
+```swift
+// Internal usage only — not exported from DesignSystem.swift
+MiniProgressBar(value: cpuUsage, color: .rampColor(for: cpuUsage))
+```
+
+### AlertEntryRow
+
+Used in `DashboardView.AlertHistorySection` to render a single `AlertEntry`.
+
+```
+┌─────────────────────────────────────────────┐
+│  [icon circle]  Title (bold if unread)  [•] │
+│                 Body text preview           │
+│                 2 minutes ago               │
+└─────────────────────────────────────────────┘
+```
+
+- Icon circle background: `accentColor.opacity(0.15)`, foreground: `accentColor`
+- Title: `.haloText` bold when `!isRead`, `.haloText2` when read
+- Body: `.haloText3`, single line, truncated
+- Timestamp: relative format via `RelativeDateTimeFormatter`
+- Unread dot: 6 pt filled circle in `.haloAccent` (hidden when read)
+
+### AlertHistorySection (Dashboard)
+
+Expandable card embedded in `DashboardView`:
+
+```swift
+AlertHistorySection()
+    .environmentObject(appState)
+```
+
+- Header: "Recent Alerts" + unread count badge + expand/collapse chevron
+- Shows up to 8 entries when expanded
+- **Clear** button marks all read and calls `AlertLog.shared.clearAll()`
+- Tapping a row calls `AlertLog.shared.markRead(entry.id)`
+
 ---
 
 ## Spacing & Layout Constants
@@ -176,6 +238,24 @@ All icons are **SF Symbols**. Pick the filled variant (`.fill`) for active/selec
 | Pin | `pin.fill` |
 | Search | `magnifyingglass` |
 | Settings | `gearshape.fill` |
+| Alert / threat | `exclamationmark.shield.fill` |
+| Report export | `doc.text.fill` |
+| Schedule | `calendar.badge.clock` |
+| Login item | `person.crop.circle.fill` |
+
+---
+
+## Alert Accent Colours
+
+`AlertEntry.accentColor` is derived from `kindRaw`:
+
+| Kind | Color |
+|------|-------|
+| `"threat"` | `.haloRed` |
+| `"scan"` | `.haloAccent` |
+| `"cleanup"` | `.haloGreen` |
+| `"warning"` | `.haloAmber` |
+| `"info"` / default | `.haloText2` |
 
 ---
 

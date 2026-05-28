@@ -228,6 +228,7 @@ macOS only discovers widget extensions from apps in `/Applications` or `~/Applic
 
 ```bash
 # Register (or re-register after a new build)
+# NOTE: Halo.app must be in ~/Applications or /Applications for macOS to discover the widget.
 pluginkit -a ~/Applications/Halo.app/Contents/PlugIns/HaloWidget.appex
 
 # Verify registration
@@ -264,5 +265,5 @@ pluginkit -e use -i com.halo.mac.widget
 | Widget not in gallery | App not in `~/Applications` or `/Applications` | `cp -R build/Halo.app ~/Applications/` then `pluginkit -a …` |
 | Widget shows placeholder data | App Group not writing | Check `Halo-Debug.entitlements` has `group.com.halo.mac`; verify plist with `python3` snippet above |
 | Widget freezes / stops updating | `reloadAllTimelines()` budget exhausted | Ensure it's called at most once per minute |
-| TeamIdentifier mismatch on launch | dylibs signed after outer bundle | Always sign in order: dylibs → appex → app |
+| TeamIdentifier mismatch on launch | dylibs signed after outer bundle | Always sign in order: dylibs → Sentry.framework → appex → app |
 | `#Preview` compile error | macOS 14 API on 13.0 target | Wrap in `@available(macOS 14.0, *)` |
