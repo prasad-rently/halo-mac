@@ -302,20 +302,40 @@ final class AppState: ObservableObject {
     // MARK: - Smart Scan
 
     func runSmartScan() async {
+        guard !isSmartScanRunning else { return }
         isSmartScanRunning = true
         defer { isSmartScanRunning = false }
 
         let coordinator = ScanCoordinator()
         let result = await coordinator.runFullScan()
+
+        // Populate central state so Cleanup module and Quick Actions reflect real data
         smartScanResult = result
+        cleanupCategories = result.categoryResults
+        totalCleanableBytes = result.totalBytes
+
         lastSmartScanDate = Date()
         UserDefaults.standard.set(lastSmartScanDate, forKey: "lastSmartScanDate")
 
+        let summary: String
+        if result.totalBytes > 0 {
+            summary = "Smart Scan completed — \(result.totalBytesFormatted) found"
+        } else {
+            summary = "Smart Scan completed — your Mac looks clean"
+        }
+
         logActivity(ActivityEvent(
             kind: .scanCompleted,
-            message: "Smart Scan completed — \(result.totalBytesFormatted) found",
+            message: summary,
             date: Date()
         ))
+
+        // Post persistent alert so it appears in Alert History
+        AlertLog.shared.append(
+            title: "Smart Scan Complete",
+            body: summary,
+            kindRaw: "scan"
+        )
     }
 }
 

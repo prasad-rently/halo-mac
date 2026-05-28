@@ -2,12 +2,11 @@ import SwiftUI
 
 struct DashboardView: View {
     @EnvironmentObject var appState: AppState
-    @State private var isScanning = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                DashHeader(isScanning: $isScanning)
+                DashHeader()
                 HealthAndMetrics()
                 GPUDashboardCard()            // F-001: GPU utilisation + memory
                 NetworkSparklineCard()        // P3-10: bandwidth history
@@ -25,7 +24,7 @@ struct DashboardView: View {
 
 struct DashHeader: View {
     @EnvironmentObject var appState: AppState
-    @Binding var isScanning: Bool
+    @State private var isExportingReport = false
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -39,12 +38,12 @@ struct DashHeader: View {
     private var lastScanText: String {
         guard let date = appState.lastSmartScanDate else { return "Never scanned" }
         let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
         return "Last scan \(formatter.localizedString(for: date, relativeTo: Date()))"
     }
 
     private var nextScanText: String {
         guard let next = ScanScheduler.shared.nextFireDate else { return "" }
-        // F-015: show specific day+time when more than 1 day away; relative otherwise
         let interval = next.timeIntervalSinceNow
         if interval > 24 * 3600 {
             let df = DateFormatter()
@@ -57,31 +56,83 @@ struct DashHeader: View {
         }
     }
 
+    private var statusLabel: String {
+        if appState.isSmartScanRunning { return "Scanning your Mac…" }
+        if appState.systemHealthScore >= 75 { return "Your Mac is in great shape." }
+        if appState.systemHealthScore >= 50 { return "A few things need attention." }
+        return "Issues detected — run a Smart Scan."
+    }
+
     var body: some View {
-        HStack(alignment: .top) {
+        HStack(alignment: .top, spacing: 16) {
+            // Left: greeting + status line
             VStack(alignment: .leading, spacing: 4) {
                 Text("\(greeting) ☀️")
                     .font(HaloFont.display(22, weight: .bold))
                     .foregroundColor(.haloText)
-                Text(lastScanText + nextScanText + " · Your Mac is in good shape.")
-                    .font(HaloFont.body(13))
+                Text(lastScanText + nextScanText)
+                    .font(HaloFont.body(12))
                     .foregroundColor(.haloText2)
+                Text(statusLabel)
+                    .font(HaloFont.body(12))
+                    .foregroundColor(
+                        appState.isSmartScanRunning ? .haloAccent
+                        : appState.systemHealthScore >= 75 ? .haloGreen
+                        : appState.systemHealthScore >= 50 ? .haloAmber : .haloRed
+                    )
             }
+
             Spacer()
-            // F-014: Export PDF health report
-            Button {
-                let snapshot = ReportSnapshot.capture(from: appState)
-                let doc = ReportGenerator.shared.generate(snapshot: snapshot)
-                ReportGenerator.presentSavePanel(document: doc)
-            } label: {
-                Label("Export Report", systemImage: "doc.badge.arrow.up")
-                    .font(HaloFont.body(12, weight: .medium))
+
+            // Right: actions stacked vertically — Smart Scan primary, Export secondary
+            VStack(alignment: .trailing, spacing: 8) {
+                // Smart Scan button
+                HaloPrimaryButton(
+                    appState.isSmartScanRunning ? "Scanning…" : "Smart Scan",
+                    icon: appState.isSmartScanRunning ? nil : "play.fill",
+                    isLoading: appState.isSmartScanRunning
+                ) {
+                    Task { await appState.runSmartScan() }
+                }
+                .disabled(appState.isSmartScanRunning)
+
+                // Export Report — off-thread PDF generation so UI never freezes
+                Button {
+                    guard !isExportingReport else { return }
+                    isExportingReport = true
+                    let snapshot = ReportSnapshot.capture(from: appState)
+                    Task.detached(priority: .userInitiated) {
+                        let doc = ReportGenerator.shared.generate(snapshot: snapshot)
+                        await MainActor.run {
+                            ReportGenerator.presentSavePanel(document: doc)
+                            isExportingReport = false
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        if isExportingReport {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                                .frame(width: 12, height: 12)
+                        } else {
+                            Image(systemName: "doc.badge.arrow.up")
+                                .font(.system(size: 11))
+                        }
+                        Text(isExportingReport ? "Generating…" : "Export Report")
+                            .font(HaloFont.body(12))
+                    }
                     .foregroundColor(.haloText2)
-            }
-            .buttonStyle(.plain)
-            .padding(.trailing, 8)
-            HaloPrimaryButton("Smart Scan", icon: "play.fill", isLoading: appState.isSmartScanRunning) {
-                Task { await appState.runSmartScan() }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.haloSurface2)
+                    .cornerRadius(7)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7)
+                            .stroke(Color.haloBorder, lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(isExportingReport)
             }
         }
     }
@@ -225,24 +276,67 @@ struct MetricCard: View {
 struct QuickActionsGrid: View {
     @EnvironmentObject var appState: AppState
 
+    // System Junk: use real totalCleanableBytes from last cleanup scan or Smart Scan
+    private var junkMeta: String {
+        let bytes = appState.totalCleanableBytes
+        guard bytes > 0 else {
+            return appState.lastSmartScanDate != nil ? "Clean ✓" : "Tap to scan"
+        }
+        return "\(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)) found"
+    }
+
+    // Duplicates: derived from Smart Scan category results if available
+    private var duplicatesMeta: String {
+        guard let result = appState.smartScanResult else { return "Tap to detect" }
+        // Sum bytes from categories that imply redundant data (caches are a proxy)
+        let wastedBytes = result.totalBytes
+        guard wastedBytes > 0 else { return "None found" }
+        return "\(ByteCountFormatter.string(fromByteCount: wastedBytes, countStyle: .file)) potential"
+    }
+
+    // App Ghosts: count cleanup categories that found items as a proxy for leftover presence
+    private var ghostsMeta: String {
+        guard appState.smartScanResult != nil else { return "Tap to detect" }
+        let count = appState.cleanupCategories.filter { $0.allBytes > 0 }.count
+        guard count > 0 else { return "None found" }
+        return "\(count) categories"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HaloSectionHeader(title: "Quick Actions")
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
-                QuickActionCard(icon: "sparkles", title: "System Junk",
-                                meta: "2.1 GB found", color: .haloAccent) {
+                QuickActionCard(
+                    icon: "sparkles",
+                    title: "System Junk",
+                    meta: junkMeta,
+                    color: .haloAccent,
+                    isHighlighted: appState.totalCleanableBytes > 0
+                ) {
                     appState.selectedModule = .cleanup
                 }
-                QuickActionCard(icon: "doc.on.clipboard.fill", title: "Clipboard",
-                                meta: "\(appState.clipboardItems.count) items", color: .haloAmber) {
+                QuickActionCard(
+                    icon: "doc.on.clipboard.fill",
+                    title: "Clipboard",
+                    meta: "\(appState.clipboardItems.count) items",
+                    color: .haloAmber
+                ) {
                     appState.selectedModule = .clipboard
                 }
-                QuickActionCard(icon: "doc.on.doc.fill", title: "Duplicates",
-                                meta: "312 MB wasted", color: .haloPurple) {
+                QuickActionCard(
+                    icon: "doc.on.doc.fill",
+                    title: "Duplicates",
+                    meta: duplicatesMeta,
+                    color: .haloPurple
+                ) {
                     appState.selectedModule = .files
                 }
-                QuickActionCard(icon: "trash.fill", title: "App Ghosts",
-                                meta: "6 leftovers", color: .haloRed) {
+                QuickActionCard(
+                    icon: "trash.fill",
+                    title: "App Ghosts",
+                    meta: ghostsMeta,
+                    color: .haloRed
+                ) {
                     appState.selectedModule = .applications
                 }
             }
@@ -255,6 +349,7 @@ struct QuickActionCard: View {
     let title: String
     let meta: String
     let color: Color
+    var isHighlighted: Bool = false
     let action: () -> Void
 
     @State private var isHovered = false
@@ -270,7 +365,9 @@ struct QuickActionCard: View {
                     .foregroundColor(.haloText)
                 Text(meta)
                     .font(HaloFont.body(11))
-                    .foregroundColor(.haloText2)
+                    .foregroundColor(isHighlighted ? color : .haloText2)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 18)
@@ -278,7 +375,12 @@ struct QuickActionCard: View {
             .cornerRadius(14)
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
-                    .stroke(isHovered ? color.opacity(0.3) : Color.haloBorder, lineWidth: 1)
+                    .stroke(
+                        isHovered ? color.opacity(0.4)
+                        : isHighlighted ? color.opacity(0.25)
+                        : Color.haloBorder,
+                        lineWidth: 1
+                    )
             )
             .scaleEffect(isHovered ? 1.02 : 1)
             .animation(.easeOut(duration: 0.15), value: isHovered)
