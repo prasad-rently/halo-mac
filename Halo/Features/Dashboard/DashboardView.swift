@@ -60,6 +60,18 @@ struct DashHeader: View {
                     .foregroundColor(.haloText2)
             }
             Spacer()
+            // F-014: Export PDF health report
+            Button {
+                let snapshot = ReportSnapshot.capture(from: appState)
+                let doc = ReportGenerator.shared.generate(snapshot: snapshot)
+                ReportGenerator.presentSavePanel(document: doc)
+            } label: {
+                Label("Export Report", systemImage: "doc.badge.arrow.up")
+                    .font(HaloFont.body(12, weight: .medium))
+                    .foregroundColor(.haloText2)
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 8)
             HaloPrimaryButton("Smart Scan", icon: "play.fill", isLoading: appState.isSmartScanRunning) {
                 Task { await appState.runSmartScan() }
             }
