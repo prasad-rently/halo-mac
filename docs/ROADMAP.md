@@ -1,6 +1,7 @@
 # Halo — Roadmap
 
 Feature status and future plans. For the detailed iteration pipeline see `docs/FEATURE_ROADMAP.md`.
+For the iOS & Android platform feature mapping see `docs/MOBILE_PLATFORM_FEATURES.md`.
 
 ---
 
@@ -188,3 +189,24 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 - F-017 Network Traffic Monitor
 - F-023 Memory Leak Tracker
 - F-025 Duplicate Photos Finder (pHash)
+
+---
+
+## Mobile Platform Expansion
+
+Full research and platform-specific feature mapping documented in **`docs/MOBILE_PLATFORM_FEATURES.md`**.
+
+### Summary
+| Platform | Fully Feasible | Partially Feasible | Not Feasible |
+|----------|---------------|-------------------|--------------|
+| **iOS** | 8 features | 4 features | 11+ features |
+| **Android** | 9 features | 5 features | 7+ features |
+
+### Mobile-Only Features Identified
+- **iOS:** Battery Charge Optimiser, iCloud Backup Health, Dynamic Island Scan Progress, Shortcut Integration
+- **Android:** APK Cache Cleaner, Auto-Start Permission Manager, Storage Permissions Audit, Background App Restrictor
+
+### Recommended Build Stack
+- **iOS:** Swift / SwiftUI — extensive code reuse with macOS codebase; target iOS 16.0+
+- **Android:** Kotlin / Jetpack Compose; target Android 8.0 (API 26)+
+- **Shared logic:** Kotlin Multiplatform (KMP) for scan algorithms, signature matching, models
