@@ -39,6 +39,7 @@ enum BuiltInAction: String, Codable, CaseIterable {
     case runSpeedTest
     case clearClipboard
     case exportReport
+    case emptyTrash
 }
 
 // MARK: - ActionCommand

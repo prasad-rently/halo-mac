@@ -239,13 +239,10 @@ final class ActionLibrary: ObservableObject {
             subtitle: "Permanently delete everything in ~/.Trash",
             icon: "trash.slash.fill", iconColorHex: "#ff4d6a", category: .system,
             keywords: ["trash", "empty trash", "delete trash", "garbage", "bin", "rubbish"],
-            // Use 'find -delete' — handles hidden files and special chars; avoids
-            // zsh glob-expand errors when Trash is empty ('rm -rf ~/.Trash/*' fails silently)
-            command: .shell("""
-                COUNT=$(find "$HOME/.Trash" -mindepth 1 2>/dev/null | wc -l | tr -d ' ')
-                find "$HOME/.Trash" -mindepth 1 -delete 2>/dev/null
-                echo "✓ Trash emptied ($COUNT items removed)."
-                """),
+            // Uses a BuiltInAction that runs NSAppleScript (→ Finder) inside the Halo
+            // process. Shell subprocesses cannot access ~/.Trash due to macOS ACLs;
+            // running in-process via NSAppleScript bypasses that restriction.
+            command: .builtIn(.emptyTrash),
             requiresPrivilege: false, isBuiltIn: true),
 
         ActionItem(

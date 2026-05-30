@@ -73,7 +73,70 @@ final class ActionRunner: ObservableObject {
             let pdf = ReportGenerator.shared.generate(snapshot: snapshot)
             await ReportGenerator.presentSavePanel(document: pdf)
             finish(execId, success: true, finalLine: "✓ Report exported.")
+
+        case .emptyTrash:
+            appendLine("Emptying Trash…", to: execId)
+            let (ok, msg) = await emptyTrashInProcess()
+            finish(execId, success: ok, finalLine: msg)
         }
+    }
+
+    // MARK: - In-process Trash emptying
+
+    /// Empties the Trash by running NSAppleScript inside the Halo process.
+    /// This is more reliable than a shell subprocess because:
+    ///   • ~/.Trash has a macOS ACL that blocks access from child processes
+    ///   • NSAppleScript sends Apple Events to Finder which holds the ACL grant
+    ///   • Falls back to direct FileManager deletion if Finder AppleScript fails
+    private func emptyTrashInProcess() async -> (Bool, String) {
+        return await Task.detached(priority: .userInitiated) {
+            // Count items first (best-effort)
+            let trashURL = FileManager.default.homeDirectoryForCurrentUser
+                           .appendingPathComponent(".Trash")
+            let count = (try? FileManager.default
+                .contentsOfDirectory(at: trashURL, includingPropertiesForKeys: nil)
+                .count) ?? 0
+
+            // ── Strategy 1: NSAppleScript (runs inside Halo process, uses Finder's ACL) ──
+            var appleScriptError: NSDictionary?
+            let src = "tell application \"Finder\" to empty the trash"
+            if let script = NSAppleScript(source: src) {
+                script.executeAndReturnError(&appleScriptError)
+                if appleScriptError == nil {
+                    let remaining = (try? FileManager.default
+                        .contentsOfDirectory(at: trashURL, includingPropertiesForKeys: nil)
+                        .count) ?? 0
+                    if remaining == 0 || count == 0 {
+                        let label = count == 0 ? "already empty" : "\(count) item\(count == 1 ? "" : "s") removed"
+                        return (true, "✓ Trash emptied (\(label)).")
+                    }
+                }
+            }
+
+            // ── Strategy 2: FileManager direct removal (fallback) ──
+            var deleted = 0
+            var failed  = 0
+            if let items = try? FileManager.default
+                .contentsOfDirectory(at: trashURL, includingPropertiesForKeys: nil) {
+                for item in items {
+                    do {
+                        try FileManager.default.removeItem(at: item)
+                        deleted += 1
+                    } catch {
+                        failed += 1
+                    }
+                }
+            }
+
+            if failed == 0 {
+                return (true, "✓ Trash emptied (\(deleted) item\(deleted == 1 ? "" : "s") removed).")
+            } else if deleted > 0 {
+                return (true, "⚠ Partially emptied — \(deleted) removed, \(failed) could not be deleted.")
+            } else {
+                let errMsg = (appleScriptError?[NSAppleScript.errorMessage] as? String) ?? "Permission denied"
+                return (false, "⚠ Could not empty Trash: \(errMsg). Try emptying via Finder.")
+            }
+        }.value
     }
 
     // MARK: - Shell execution router
