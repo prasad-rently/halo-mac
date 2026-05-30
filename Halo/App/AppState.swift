@@ -101,7 +101,8 @@ final class AppState: ObservableObject {
     private var widgetReloadTimer: AnyCancellable?
     private var clipboardMonitor: ClipboardMonitor?
     private let hotkeyManager = HotkeyManager()
-    private let quickPickerController = ClipboardQuickPickerController()
+    private let quickPickerController  = ClipboardQuickPickerController()
+    private let actionPickerController = QuickActionPickerController()
     private var wasAxTrusted = false
 
     // Phase 3
@@ -276,6 +277,19 @@ final class AppState: ObservableObject {
             guard let self else { return }
             self.quickPickerController.show(allItems: self.clipboardItems)
         }
+        // ⌘⇧A → Quick Action Picker
+        actionPickerController.onRun = { [weak self] action in
+            guard let self else { return }
+            ActionRunner.shared.run(action, appState: self)
+        }
+        hotkeyManager.onActionShortcut = { [weak self] in
+            guard let self else { return }
+            if self.actionPickerController.isVisible {
+                self.actionPickerController.hide()
+            } else {
+                self.actionPickerController.show()
+            }
+        }
         wasAxTrusted = AXIsProcessTrusted()
         hotkeyManager.start(keyCode: UInt16(shortcutKeyCode),
                             modifiers: NSEvent.ModifierFlags(rawValue: UInt(shortcutModifiers)))
@@ -373,51 +387,55 @@ enum AppModule: String, CaseIterable, Identifiable {
     case applications
     case files
     case clipboard
+    case actions
     case menuBarPreview
 
     var id: String { rawValue }
 
-    /// The 6 modules that appear in the "Modules" sidebar section and can be
+    /// The 7 modules that appear in the "Modules" sidebar section and can be
     /// freely reordered by the user. Dashboard is always pinned to "Overview".
     static var reorderable: [AppModule] {
-        [.cleanup, .protection, .performance, .applications, .files, .clipboard]
+        [.cleanup, .protection, .performance, .applications, .files, .clipboard, .actions]
     }
 
     var title: String {
         switch self {
-        case .dashboard: return "Dashboard"
-        case .cleanup: return "Cleanup"
-        case .protection: return "Protection"
-        case .performance: return "Performance"
-        case .applications: return "Applications"
-        case .files: return "Files"
-        case .clipboard: return "Clipboard"
+        case .dashboard:     return "Dashboard"
+        case .cleanup:       return "Cleanup"
+        case .protection:    return "Protection"
+        case .performance:   return "Performance"
+        case .applications:  return "Applications"
+        case .files:         return "Files"
+        case .clipboard:     return "Clipboard"
+        case .actions:       return "Actions"
         case .menuBarPreview: return "Menu Bar"
         }
     }
 
     var icon: String {
         switch self {
-        case .dashboard: return "house.fill"
-        case .cleanup: return "sparkles"
-        case .protection: return "shield.fill"
-        case .performance: return "bolt.fill"
-        case .applications: return "square.stack.3d.up.fill"
-        case .files: return "folder.fill"
-        case .clipboard: return "doc.on.clipboard.fill"
+        case .dashboard:     return "house.fill"
+        case .cleanup:       return "sparkles"
+        case .protection:    return "shield.fill"
+        case .performance:   return "bolt.fill"
+        case .applications:  return "square.stack.3d.up.fill"
+        case .files:         return "folder.fill"
+        case .clipboard:     return "doc.on.clipboard.fill"
+        case .actions:       return "bolt.circle.fill"
         case .menuBarPreview: return "menubar.rectangle"
         }
     }
 
     var gradientColors: [Color] {
         switch self {
-        case .dashboard: return [Color.haloAccent, Color.haloAccent2]
-        case .cleanup: return [Color(hex: "#1e3a5f"), Color(hex: "#1e4080")]
-        case .protection: return [Color(hex: "#1c3a2a"), Color(hex: "#1a4030")]
-        case .performance: return [Color(hex: "#3b2260"), Color(hex: "#2d1a4a")]
-        case .applications: return [Color(hex: "#2a1a3e"), Color(hex: "#1e1040")]
-        case .files: return [Color(hex: "#1a3020"), Color(hex: "#1e3828")]
-        case .clipboard: return [Color(hex: "#3a2010"), Color(hex: "#4a2a08")]
+        case .dashboard:     return [Color.haloAccent, Color.haloAccent2]
+        case .cleanup:       return [Color(hex: "#1e3a5f"), Color(hex: "#1e4080")]
+        case .protection:    return [Color(hex: "#1c3a2a"), Color(hex: "#1a4030")]
+        case .performance:   return [Color(hex: "#3b2260"), Color(hex: "#2d1a4a")]
+        case .applications:  return [Color(hex: "#2a1a3e"), Color(hex: "#1e1040")]
+        case .files:         return [Color(hex: "#1a3020"), Color(hex: "#1e3828")]
+        case .clipboard:     return [Color(hex: "#3a2010"), Color(hex: "#4a2a08")]
+        case .actions:       return [Color(hex: "#2a1a0e"), Color(hex: "#3a1e08")]
         case .menuBarPreview: return [Color(hex: "#1a2a3a"), Color(hex: "#0e1f30")]
         }
     }

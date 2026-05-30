@@ -1,0 +1,333 @@
+import Foundation
+import SwiftUI
+
+// MARK: - ActionLibrary
+
+/// Central registry of built-in and user-created custom actions.
+/// Singleton — shared across ActionsView, QuickActionPickerController, and ActionRunner.
+@MainActor
+final class ActionLibrary: ObservableObject {
+
+    static let shared = ActionLibrary()
+
+    @Published private(set) var actions: [ActionItem] = []
+
+    private let customKey = "haloCustomActions"
+    private let usageKey  = "haloActionUsage"
+
+    private init() { reload() }
+
+    // MARK: - Load / Save
+
+    func reload() {
+        var all = ActionLibrary.predefined
+
+        // Merge saved usage counts into predefined entries
+        if let usageData = UserDefaults.standard.data(forKey: usageKey),
+           let usageMap = try? JSONDecoder().decode([String: Int].self, from: usageData) {
+            for i in all.indices {
+                all[i].usageCount = usageMap[all[i].id.uuidString] ?? 0
+            }
+        }
+
+        // Append persisted custom actions
+        if let data   = UserDefaults.standard.data(forKey: customKey),
+           let custom = try? JSONDecoder().decode([ActionItem].self, from: data) {
+            all += custom
+        }
+
+        actions = all
+    }
+
+    private func persistCustomActions() {
+        let custom = actions.filter { !$0.isBuiltIn }
+        if let data = try? JSONEncoder().encode(custom) {
+            UserDefaults.standard.set(data, forKey: customKey)
+        }
+    }
+
+    private func persistUsage() {
+        var map: [String: Int] = [:]
+        for a in actions { map[a.id.uuidString] = a.usageCount }
+        if let data = try? JSONEncoder().encode(map) {
+            UserDefaults.standard.set(data, forKey: usageKey)
+        }
+    }
+
+    // MARK: - Mutations
+
+    func recordUsage(of action: ActionItem) {
+        if let idx = actions.firstIndex(where: { $0.id == action.id }) {
+            actions[idx].usageCount += 1
+            actions[idx].lastUsed = Date()
+        }
+        persistUsage()
+    }
+
+    func add(custom action: ActionItem) {
+        var a = action; a.isBuiltIn = false
+        actions.append(a)
+        persistCustomActions()
+    }
+
+    func update(_ action: ActionItem) {
+        if let idx = actions.firstIndex(where: { $0.id == action.id }) {
+            actions[idx] = action
+        }
+        if !action.isBuiltIn { persistCustomActions() }
+    }
+
+    func delete(_ action: ActionItem) {
+        actions.removeAll { $0.id == action.id }
+        persistCustomActions()
+    }
+
+    func togglePin(_ action: ActionItem) {
+        if let idx = actions.firstIndex(where: { $0.id == action.id }) {
+            actions[idx].isPinned.toggle()
+        }
+        if !action.isBuiltIn { persistCustomActions() }
+        else { persistUsage() }
+    }
+
+    // MARK: - Search / Suggestions
+
+    /// Returns actions ranked by fuzzy relevance to `query`.
+    /// Empty query → most-used first (pinned always at top).
+    func search(query: String) -> [ActionItem] {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            return actions.sorted {
+                if $0.isPinned != $1.isPinned { return $0.isPinned }
+                return $0.usageCount > $1.usageCount
+            }
+        }
+        let terms = normalize(trimmed).split(separator: " ").map(String.init)
+        return actions
+            .compactMap { a -> (ActionItem, Int)? in
+                let s = score(a, terms: terms)
+                return s > 0 ? (a, s) : nil
+            }
+            .sorted { lhs, rhs in
+                if lhs.1 != rhs.1  { return lhs.1 > rhs.1 }
+                if lhs.0.isPinned != rhs.0.isPinned { return lhs.0.isPinned }
+                return lhs.0.usageCount > rhs.0.usageCount
+            }
+            .map(\.0)
+    }
+
+    // MARK: - Fuzzy scoring
+
+    private func normalize(_ s: String) -> String {
+        s.lowercased()
+         .components(separatedBy: CharacterSet.alphanumerics.inverted)
+         .filter { !$0.isEmpty }
+         .joined(separator: " ")
+    }
+
+    private func score(_ action: ActionItem, terms: [String]) -> Int {
+        let targets = ([action.name, action.subtitle] + action.keywords).map { normalize($0) }
+        var total = 0
+        for term in terms {
+            var best = 0
+            for t in targets {
+                let words = t.split(separator: " ").map(String.init)
+                // exact word match
+                if words.contains(term)           { best = max(best, 100); continue }
+                // prefix on any word
+                if words.contains(where: { $0.hasPrefix(term) })  { best = max(best, 80); continue }
+                // substring anywhere in target
+                if t.contains(term)               { best = max(best, 60); continue }
+                // fuzzy: every char of term appears in order in t
+                if subsequenceMatch(term, in: t)  { best = max(best, 30) }
+            }
+            if best == 0 { return 0 }   // every term must match something
+            total += best
+        }
+        return total
+    }
+
+    private func subsequenceMatch(_ needle: String, in haystack: String) -> Bool {
+        var hi = haystack.startIndex
+        for ch in needle {
+            guard let found = haystack[hi...].firstIndex(of: ch) else { return false }
+            hi = haystack.index(after: found)
+        }
+        return true
+    }
+
+    // MARK: - Predefined Actions
+
+    // swiftlint:disable line_length
+    static let predefined: [ActionItem] = [
+
+        // ── Xcode ─────────────────────────────────────────────────────────
+        ActionItem(
+            name: "Clear Derived Data",
+            subtitle: "Delete ~/Library/Developer/Xcode/DerivedData",
+            icon: "trash.fill", iconColorHex: "#4f7cff", category: .xcode,
+            keywords: ["derived data", "clean xcode", "delete derived", "xcode clean",
+                       "clear build cache", "xcode derived", "remove derived"],
+            command: .shell("""
+                COUNT=$(du -sh ~/Library/Developer/Xcode/DerivedData 2>/dev/null | cut -f1 || echo "0")
+                rm -rf ~/Library/Developer/Xcode/DerivedData
+                echo "✓ Derived Data cleared (was ~$COUNT)."
+                """),
+            requiresPrivilege: false, isBuiltIn: true),
+
+        ActionItem(
+            name: "Clear SPM Cache",
+            subtitle: "Remove Swift Package Manager resolved package cache",
+            icon: "shippingbox.fill", iconColorHex: "#4f7cff", category: .xcode,
+            keywords: ["spm", "swift package", "package cache", "swift pm",
+                       "resolve packages", "spm cache", "clear packages"],
+            command: .shell("""
+                rm -rf ~/Library/Caches/org.swift.swiftpm
+                rm -rf ~/Library/org.swift.swiftpm
+                echo "✓ Swift Package Manager cache cleared."
+                """),
+            requiresPrivilege: false, isBuiltIn: true),
+
+        ActionItem(
+            name: "Reset iOS Simulators",
+            subtitle: "Erase all iOS/watchOS/tvOS simulator content and settings",
+            icon: "iphone.slash", iconColorHex: "#4f7cff", category: .xcode,
+            keywords: ["simulator", "ios simulator", "reset simulator",
+                       "erase simulator", "clean simulator", "simctl erase"],
+            command: .shell("""
+                xcrun simctl erase all
+                echo "✓ All simulators reset."
+                """),
+            requiresPrivilege: false, isBuiltIn: true),
+
+        ActionItem(
+            name: "Kill Xcode",
+            subtitle: "Force-quit Xcode (useful when it hangs)",
+            icon: "xmark.app.fill", iconColorHex: "#ff4d6a", category: .xcode,
+            keywords: ["kill xcode", "force quit xcode", "xcode hang", "xcode crash",
+                       "quit xcode", "restart xcode"],
+            command: .shell("pkill -x Xcode; echo '✓ Xcode killed.'"),
+            requiresPrivilege: false, isBuiltIn: true),
+
+        // ── System ────────────────────────────────────────────────────────
+        ActionItem(
+            name: "Flush DNS Cache",
+            subtitle: "Clear the macOS DNS resolver cache",
+            icon: "globe.badge.chevron.backward", iconColorHex: "#22d97a", category: .system,
+            keywords: ["dns", "flush dns", "clear dns", "dns cache",
+                       "dns reset", "network dns", "domain name"],
+            command: .shell("""
+                dscacheutil -flushcache
+                killall -HUP mDNSResponder
+                echo "✓ DNS cache flushed."
+                """),
+            requiresPrivilege: true, isBuiltIn: true),
+
+        ActionItem(
+            name: "Purge Inactive RAM",
+            subtitle: "Force macOS to reclaim inactive memory pages",
+            icon: "memorychip.fill", iconColorHex: "#22d97a", category: .system,
+            keywords: ["ram", "memory", "purge", "free memory",
+                       "clear ram", "inactive memory", "release ram"],
+            command: .shell("purge && echo '✓ Inactive memory purged.'"),
+            requiresPrivilege: true, isBuiltIn: true),
+
+        ActionItem(
+            name: "Empty Trash",
+            subtitle: "Permanently delete everything in ~/.Trash",
+            icon: "trash.slash.fill", iconColorHex: "#ff4d6a", category: .system,
+            keywords: ["trash", "empty trash", "delete trash", "garbage", "bin", "rubbish"],
+            command: .shell("""
+                COUNT=$(ls -1 ~/.Trash 2>/dev/null | wc -l | tr -d ' ')
+                rm -rf ~/.Trash/*
+                echo "✓ Trash emptied ($COUNT items removed)."
+                """),
+            requiresPrivilege: false, isBuiltIn: true),
+
+        ActionItem(
+            name: "Rebuild Spotlight Index",
+            subtitle: "Force Spotlight to re-index the entire disk",
+            icon: "magnifyingglass.circle.fill", iconColorHex: "#f5a623", category: .system,
+            keywords: ["spotlight", "reindex", "search index", "mdutil",
+                       "spotlight index", "rebuild index"],
+            command: .shell("""
+                mdutil -E /
+                echo "✓ Spotlight re-indexing started. This runs in the background."
+                """),
+            requiresPrivilege: true, isBuiltIn: true),
+
+        ActionItem(
+            name: "Repair Disk Permissions",
+            subtitle: "Reset home directory permissions to macOS defaults",
+            icon: "lock.rotation", iconColorHex: "#f5a623", category: .system,
+            keywords: ["permissions", "disk permissions", "repair permissions",
+                       "fix permissions", "file permissions"],
+            command: .shell("""
+                diskutil resetUserPermissions / $(id -u)
+                echo "✓ User folder permissions repaired."
+                """),
+            requiresPrivilege: false, isBuiltIn: true),
+
+        // ── Network ───────────────────────────────────────────────────────
+        ActionItem(
+            name: "Run Speed Test",
+            subtitle: "Measure current internet download and upload speeds",
+            icon: "speedometer", iconColorHex: "#00d4e8", category: .network,
+            keywords: ["speed", "speedtest", "internet speed", "bandwidth",
+                       "download speed", "upload speed", "network speed", "speed test"],
+            command: .builtIn(.runSpeedTest),
+            requiresPrivilege: false, isBuiltIn: true),
+
+        ActionItem(
+            name: "Check Connectivity",
+            subtitle: "Ping 1.1.1.1 and 8.8.8.8 to verify internet is reachable",
+            icon: "wifi.circle.fill", iconColorHex: "#00d4e8", category: .network,
+            keywords: ["ping", "connectivity", "check internet", "network check",
+                       "online", "connection test", "internet check"],
+            command: .shell("""
+                echo "--- Ping 1.1.1.1 (Cloudflare) ---"
+                ping -c 4 -i 0.5 1.1.1.1
+                echo ""
+                echo "--- Ping 8.8.8.8 (Google DNS) ---"
+                ping -c 4 -i 0.5 8.8.8.8
+                """),
+            requiresPrivilege: false, isBuiltIn: true),
+
+        ActionItem(
+            name: "Show Network Interfaces",
+            subtitle: "List all active network interfaces and their IP addresses",
+            icon: "antenna.radiowaves.left.and.right", iconColorHex: "#00d4e8", category: .network,
+            keywords: ["network interfaces", "ip address", "ifconfig", "network info",
+                       "mac address", "network adapter", "show ip"],
+            command: .shell("ifconfig | grep -E '^[a-z]|inet ' | awk '{print $0}'"),
+            requiresPrivilege: false, isBuiltIn: true),
+
+        // ── Halo ──────────────────────────────────────────────────────────
+        ActionItem(
+            name: "Run Smart Scan",
+            subtitle: "Scan for junk files, threats, and performance issues",
+            icon: "sparkles", iconColorHex: "#7b5ea7", category: .halo,
+            keywords: ["scan", "smart scan", "halo scan", "clean scan",
+                       "full scan", "scan mac", "analyze mac"],
+            command: .builtIn(.runSmartScan),
+            requiresPrivilege: false, isBuiltIn: true),
+
+        ActionItem(
+            name: "Export Health Report",
+            subtitle: "Generate and save a 4-page PDF system health report",
+            icon: "doc.text.fill", iconColorHex: "#7b5ea7", category: .halo,
+            keywords: ["report", "pdf", "export", "health report", "system report", "generate report"],
+            command: .builtIn(.exportReport),
+            requiresPrivilege: false, isBuiltIn: true),
+
+        ActionItem(
+            name: "Clear Clipboard History",
+            subtitle: "Delete all entries from the Halo clipboard history",
+            icon: "doc.on.clipboard", iconColorHex: "#f5a623", category: .halo,
+            keywords: ["clipboard", "clear clipboard", "delete clipboard",
+                       "clipboard history", "clipboard items"],
+            command: .builtIn(.clearClipboard),
+            requiresPrivilege: false, isBuiltIn: true),
+    ]
+    // swiftlint:enable line_length
+}

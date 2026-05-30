@@ -400,6 +400,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | Files (SpaceLens) | ✅ | SpaceLensViewModel | — | — |
 | Files (Duplicates) | ✅ | DuplicateFinderViewModel | DuplicateDetector | ✅ |
 | Clipboard | ✅ | ClipboardViewModel | ClipboardMonitor | ✅ |
+| Actions | ✅ | ActionsViewModel | ActionRunner + ActionLibrary | — |
 | Menu Bar | ✅ | MenuBarManager | SystemMonitor | — |
 | Smart Scan | ✅ | ScanScheduler | ScanCoordinator | — |
 | Onboarding / Settings | ✅ | @AppStorage | — | — |
@@ -432,6 +433,12 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `5001` | Sentry in Frameworks build file |
 | `5002` | XCSwiftPackageProductDependency (Sentry) |
 | `5003` | XCRemoteSwiftPackageReference (sentry-cocoa) |
+| `6001` / `6002` | ActionModels.swift file ref / sources build file |
+| `6003` / `6004` | ActionLibrary.swift file ref / sources build file |
+| `6005` / `6006` | ActionRunner.swift file ref / sources build file |
+| `6007` / `6008` | QuickActionPickerView.swift file ref / sources build file |
+| `6009` / `6010` | ActionsView.swift file ref / sources build file |
+| `6011` / `6012` | CustomActionEditor.swift file ref / sources build file |
 
 ---
 
@@ -529,3 +536,64 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | Feature | Files | Detail |
 |---------|-------|--------|
 | Reorderable modules | `AppState.swift`, `ContentView.swift` | Drag-to-reorder sidebar via `List + .onMove`; order persisted to `UserDefaults["moduleOrder"]`; edit mode toggle in header |
+
+---
+
+## Actions Module
+
+`Halo/Core/Actions/` + `Halo/Features/Actions/`
+
+### Architecture
+
+| File | Role |
+|------|------|
+| `ActionModels.swift` | All value types: `ActionItem`, `ActionCategory`, `ActionCommand`, `ActionExecution`, `ActionExecutionState` |
+| `ActionLibrary.swift` | `@MainActor` singleton — predefined action registry, custom action CRUD, fuzzy search, usage tracking |
+| `ActionRunner.swift` | `@MainActor` singleton — async execution engine, stdout streaming, privilege escalation, execution history |
+| `ActionsView.swift` + `ActionsViewModel` | Module view: category tile grid, execution history list, custom actions section |
+| `QuickActionPickerView.swift` + `QuickActionPickerController` | Floating `NSPanel` overlay, identical pattern to `ClipboardQuickPickerView` |
+| `CustomActionEditor.swift` | Sheet for create/edit custom actions: name, icon, keywords, script, sudo toggle |
+
+### Key Patterns
+
+**ActionCommand** — two cases:
+```swift
+enum ActionCommand: Codable {
+    case builtIn(BuiltInAction)   // calls into AppState directly
+    case shell(String)             // /bin/zsh -c script
+}
+```
+
+**Privilege escalation** — commands with `requiresPrivilege = true` run via:
+```
+osascript -e 'do shell script "…" with administrator privileges'
+```
+This presents the native macOS auth dialog. Multi-line scripts are collapsed to `; ` for osascript.
+
+**Fuzzy search** — multi-term word matching across name + subtitle + keywords:
+- Exact word match → score 100
+- Prefix match → score 80
+- Substring match → score 60
+- Character subsequence → score 30
+- All terms must match (AND logic); sorted by score then by usage count
+
+**Quick Action Picker shortcut** — `⌘⇧A` (keyCode `0`, modifiers `.command + .shift`).
+Registered alongside the clipboard shortcut in `HotkeyManager.start()`. Toggle behaviour: second press dismisses the panel.
+
+**Predefined actions** (15 built-in):
+- **Xcode**: Clear Derived Data, Clear SPM Cache, Reset iOS Simulators, Kill Xcode
+- **System**: Flush DNS Cache (sudo), Purge Inactive RAM (sudo), Empty Trash, Rebuild Spotlight Index (sudo), Repair Disk Permissions
+- **Network**: Run Speed Test, Check Connectivity, Show Network Interfaces
+- **Halo**: Run Smart Scan, Export Health Report, Clear Clipboard History
+
+**Custom actions** persisted to `UserDefaults["haloCustomActions"]` as JSON-encoded `[ActionItem]`.
+Usage counts persisted separately to `UserDefaults["haloActionUsage"]` so built-in counts survive app updates.
+
+### Execution History
+
+`ActionRunner.executions: [ActionExecution]` — ordered most-recent-first, capped at 50.
+Each `ActionExecution` has:
+- `state: ActionExecutionState` — `.queued / .running / .completed / .failed(String)`
+- `outputLines: [String]` — streamed stdout/stderr (collapsible in `ExecutionRow`)
+- `progress: Double` — `-1` = indeterminate spinner, `1.0` = complete bar
+- `duration: String` — formatted elapsed time

@@ -58,6 +58,13 @@
 		000000000000000000001099 /* Halo/Features/Dashboard/NetworkSparklineCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001098 /* Halo/Features/Dashboard/NetworkSparklineCard.swift */; };
 		000000000000000000001101 /* Halo/Features/Cleanup/DiskHealthSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001100 /* Halo/Features/Cleanup/DiskHealthSection.swift */; };
 		000000000000000000001103 /* Halo/Features/Dashboard/GPUDashboardCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001102 /* Halo/Features/Dashboard/GPUDashboardCard.swift */; };
+		/* Actions module */
+		000000000000000000006002 /* Halo/Core/Actions/ActionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006001 /* Halo/Core/Actions/ActionModels.swift */; };
+		000000000000000000006004 /* Halo/Core/Actions/ActionLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006003 /* Halo/Core/Actions/ActionLibrary.swift */; };
+		000000000000000000006006 /* Halo/Core/Actions/ActionRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006005 /* Halo/Core/Actions/ActionRunner.swift */; };
+		000000000000000000006008 /* Halo/Features/Actions/QuickActionPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006007 /* Halo/Features/Actions/QuickActionPickerView.swift */; };
+		000000000000000000006010 /* Halo/Features/Actions/ActionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006009 /* Halo/Features/Actions/ActionsView.swift */; };
+		000000000000000000006012 /* Halo/Features/Actions/CustomActionEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006011 /* Halo/Features/Actions/CustomActionEditor.swift */; };
 		/* F-002: Shared protocol — compiled into Halo + HaloHelper */
 		000000000000000000003005 /* HaloHelperProtocol.swift in Sources (Halo) */ = {isa = PBXBuildFile; fileRef = 000000000000000000003004 /* HaloHelperProtocol.swift */; };
 		000000000000000000003007 /* HelperClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000003006 /* Halo/Core/HelperClient.swift */; };
@@ -152,6 +159,13 @@
 		000000000000000000001098 /* Halo/Features/Dashboard/NetworkSparklineCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/NetworkSparklineCard.swift; sourceTree = "<group>"; };
 		000000000000000000001100 /* Halo/Features/Cleanup/DiskHealthSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Cleanup/DiskHealthSection.swift; sourceTree = "<group>"; };
 		000000000000000000001102 /* Halo/Features/Dashboard/GPUDashboardCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/GPUDashboardCard.swift; sourceTree = "<group>"; };
+		/* Actions module file refs */
+		000000000000000000006001 /* Halo/Core/Actions/ActionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionModels.swift; sourceTree = "<group>"; };
+		000000000000000000006003 /* Halo/Core/Actions/ActionLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionLibrary.swift; sourceTree = "<group>"; };
+		000000000000000000006005 /* Halo/Core/Actions/ActionRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionRunner.swift; sourceTree = "<group>"; };
+		000000000000000000006007 /* Halo/Features/Actions/QuickActionPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/QuickActionPickerView.swift; sourceTree = "<group>"; };
+		000000000000000000006009 /* Halo/Features/Actions/ActionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/ActionsView.swift; sourceTree = "<group>"; };
+		000000000000000000006011 /* Halo/Features/Actions/CustomActionEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/CustomActionEditor.swift; sourceTree = "<group>"; };
 		/* F-002 file refs */
 		000000000000000000003000 /* HaloHelper.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = HaloHelper.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
 		/* Shared group already has path=Shared, so file paths are relative to Shared/ */
@@ -476,6 +490,12 @@
 				000000000000000000001039 /* Halo/Features/Dashboard/DashboardView.swift in Sources */,
 				000000000000000000001099 /* Halo/Features/Dashboard/NetworkSparklineCard.swift in Sources */,
 				000000000000000000001103 /* Halo/Features/Dashboard/GPUDashboardCard.swift in Sources */,
+				000000000000000000006002 /* Halo/Core/Actions/ActionModels.swift in Sources */,
+				000000000000000000006004 /* Halo/Core/Actions/ActionLibrary.swift in Sources */,
+				000000000000000000006006 /* Halo/Core/Actions/ActionRunner.swift in Sources */,
+				000000000000000000006008 /* Halo/Features/Actions/QuickActionPickerView.swift in Sources */,
+				000000000000000000006010 /* Halo/Features/Actions/ActionsView.swift in Sources */,
+				000000000000000000006012 /* Halo/Features/Actions/CustomActionEditor.swift in Sources */,
 				000000000000000000001041 /* Halo/Features/Files/FilesView.swift in Sources */,
 				000000000000000000001043 /* Halo/Features/MenuBar/MenuBarView.swift in Sources */,
 				000000000000000000001045 /* Halo/Features/Onboarding/OnboardingView.swift in Sources */,

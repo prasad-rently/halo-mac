@@ -8,16 +8,22 @@ import AppKit
 final class HotkeyManager {
     private var globalMonitor: Any?
     private var localMonitor: Any?
-    var onClipboardShortcut: (() -> Void)?
 
-    private(set) var keyCode: UInt16 = 9                                     // V
-    private(set) var modifiers: NSEvent.ModifierFlags = [.command, .shift]   // ⌘⇧
+    // Clipboard shortcut — default ⌘⇧V
+    var onClipboardShortcut: (() -> Void)?
+    private(set) var keyCode:   UInt16                = 9                       // V
+    private(set) var modifiers: NSEvent.ModifierFlags = [.command, .shift]      // ⌘⇧
+
+    // Actions shortcut — default ⌘⇧A (fixed, not user-configurable yet)
+    var onActionShortcut: (() -> Void)?
+    private let actionKeyCode:   UInt16                = 0                      // A
+    private let actionModifiers: NSEvent.ModifierFlags = [.command, .shift]     // ⌘⇧
 
     // MARK: - Public API
 
     func start(keyCode: UInt16 = 9, modifiers: NSEvent.ModifierFlags = [.command, .shift]) {
         stop()
-        self.keyCode = keyCode
+        self.keyCode   = keyCode
         self.modifiers = modifiers
 
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -25,6 +31,10 @@ final class HotkeyManager {
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if flags == self.modifiers && event.keyCode == self.keyCode {
                 DispatchQueue.main.async { self.onClipboardShortcut?() }
+                return nil
+            }
+            if flags == self.actionModifiers && event.keyCode == self.actionKeyCode {
+                DispatchQueue.main.async { self.onActionShortcut?() }
                 return nil
             }
             return event
@@ -38,9 +48,13 @@ final class HotkeyManager {
         if let m = globalMonitor { NSEvent.removeMonitor(m); globalMonitor = nil }
         guard AXIsProcessTrusted() else { return }
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            guard flags == self?.modifiers, event.keyCode == self?.keyCode else { return }
-            DispatchQueue.main.async { self?.onClipboardShortcut?() }
+            if flags == self.modifiers && event.keyCode == self.keyCode {
+                DispatchQueue.main.async { self.onClipboardShortcut?() }
+            } else if flags == self.actionModifiers && event.keyCode == self.actionKeyCode {
+                DispatchQueue.main.async { self.onActionShortcut?() }
+            }
         }
     }
 
@@ -48,7 +62,7 @@ final class HotkeyManager {
         if let m = globalMonitor { NSEvent.removeMonitor(m) }
         if let m = localMonitor  { NSEvent.removeMonitor(m) }
         globalMonitor = nil
-        localMonitor = nil
+        localMonitor  = nil
     }
 
     // MARK: - Display helpers

@@ -34,6 +34,7 @@ For the iOS & Android platform feature mapping see `docs/MOBILE_PLATFORM_FEATURE
 - [x] Performance module polish — battery health cycle-aware, real free RAM via `host_statistics64`, Top Processes spinner fix, VPN false-positive fix, speed test improvements, Login Items "Manage All" (v2.1)
 - [x] Applications module fixes — `NSMetadataItem`-based last-used date, real uninstall with confirmation dialog and `trashItem` (v2.1)
 - [x] Future feature roadmap documented — 15 ideas (F-016 → F-030) across 4 themes (v2.1)
+- [x] Quick Actions module (v2.2) — `⌘⇧A` floating picker, 15 predefined actions, custom bash/script support, privilege escalation via macOS auth dialog, live execution log with output streaming
 
 ---
 

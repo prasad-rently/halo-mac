@@ -147,6 +147,9 @@ struct SidebarView: View {
                 ? nil
                 : "\(appState.clipboardItems.count)",
                     .haloAmber)
+        case .actions:
+            let running = ActionRunner.shared.executions.filter { $0.state == .running }.count
+            return (running > 0 ? "\(running)" : nil, .haloAmber)
         default:
             return (nil, .haloAccent)
         }
@@ -303,13 +306,14 @@ struct DetailView: View {
         ZStack {
             Color.haloSurface.ignoresSafeArea()
             switch appState.selectedModule {
-            case .dashboard:    DashboardView()
-            case .cleanup:      CleanupView()
-            case .protection:   ProtectionView()
-            case .performance:  PerformanceView()
-            case .applications: ApplicationsView()
-            case .files:        FilesView()
-            case .clipboard:    ClipboardView()
+            case .dashboard:      DashboardView()
+            case .cleanup:        CleanupView()
+            case .protection:     ProtectionView()
+            case .performance:    PerformanceView()
+            case .applications:   ApplicationsView()
+            case .files:          FilesView()
+            case .clipboard:      ClipboardView()
+            case .actions:        ActionsView()
             case .menuBarPreview: MenuBarPreviewView()
             }
         }
