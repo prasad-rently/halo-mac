@@ -92,18 +92,21 @@ final class ActionLibrary: ObservableObject {
 
     // MARK: - Search / Suggestions
 
-    /// Returns actions ranked by fuzzy relevance to `query`.
-    /// Empty query → most-used first (pinned always at top).
+    /// Returns ENABLED actions ranked by fuzzy relevance to `query`.
+    /// Custom actions are always shown regardless of the enabled-keys setting
+    /// (the user explicitly created them). Built-in actions are filtered by
+    /// ActionSettingsStore.shared.enabledKeys.
     func search(query: String) -> [ActionItem] {
+        let pool    = enabledActions
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty {
-            return actions.sorted {
+            return pool.sorted {
                 if $0.isPinned != $1.isPinned { return $0.isPinned }
                 return $0.usageCount > $1.usageCount
             }
         }
         let terms = normalize(trimmed).split(separator: " ").map(String.init)
-        return actions
+        return pool
             .compactMap { a -> (ActionItem, Int)? in
                 let s = score(a, terms: terms)
                 return s > 0 ? (a, s) : nil
@@ -114,6 +117,14 @@ final class ActionLibrary: ObservableObject {
                 return lhs.0.usageCount > rhs.0.usageCount
             }
             .map(\.0)
+    }
+
+    /// Actions visible in the Quick Actions picker (enabled built-ins + all custom).
+    var enabledActions: [ActionItem] {
+        let store = ActionSettingsStore.shared
+        return actions.filter { a in
+            !a.isBuiltIn || store.isEnabled(a.stableKey)
+        }
     }
 
     // MARK: - Fuzzy scoring

@@ -131,6 +131,9 @@ struct QuickActionPickerView: View {
     /// Drives cursor focus into the search TextField automatically on appear.
     @FocusState private var searchFocused: Bool
 
+    @StateObject private var voice  = VoiceSearchController()
+    @ObservedObject private var settings = ActionSettingsStore.shared
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -194,6 +197,36 @@ struct QuickActionPickerView: View {
                         .foregroundColor(.haloText3)
                 }
                 .buttonStyle(.plain)
+            }
+
+            // Voice search mic button — only shown when enabled in Settings
+            if settings.voiceSearchEnabled {
+                Button {
+                    if voice.isListening {
+                        voice.stop()
+                    } else {
+                        Task {
+                            await voice.start { transcript in
+                                state.query = transcript
+                                state.refresh()
+                            }
+                        }
+                    }
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(voice.isListening
+                                  ? Color.haloRed.opacity(0.2)
+                                  : Color.haloSurface2)
+                            .frame(width: 26, height: 26)
+                        Image(systemName: voice.isListening ? "mic.fill" : "mic")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(voice.isListening ? .haloRed : .haloText3)
+                            .opacity(voice.isListening ? 1.0 : 0.7)
+                    }
+                }
+                .buttonStyle(.plain)
+                .help(voice.isListening ? "Tap to stop listening" : "Voice search — speak your task")
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)

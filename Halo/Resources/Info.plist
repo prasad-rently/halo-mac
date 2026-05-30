@@ -35,6 +35,11 @@
     <!-- Apple Events / Automation — required for NSAppleScript to control other apps -->
     <key>NSAppleEventsUsageDescription</key>
     <string>Halo uses Finder to safely empty your Trash and perform system maintenance tasks.</string>
+    <!-- Voice search in Quick Actions -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Halo uses the microphone for optional voice-to-text search in the Quick Actions panel.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Halo uses speech recognition so you can say a task name (e.g. "clear xcode cache") and have matching Quick Actions suggested automatically.</string>
     <!-- Required usage descriptions -->
     <key>NSDesktopFolderUsageDescription</key>
     <string>Halo scans your Desktop for large and duplicate files.</string>

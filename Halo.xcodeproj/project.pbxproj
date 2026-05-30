@@ -8,6 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		000000000000000000007001 /* Halo/App/BuildToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007000 /* Halo/App/BuildToken.swift */; };
+		000000000000000000007002 /* Halo/Core/Actions/ActionSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007003 /* Halo/Core/Actions/ActionSettingsStore.swift */; };
+		000000000000000000007004 /* Halo/Core/Actions/VoiceSearchController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007005 /* Halo/Core/Actions/VoiceSearchController.swift */; };
+		000000000000000000007006 /* Halo/Features/Actions/ActionSettingsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007007 /* Halo/Features/Actions/ActionSettingsTab.swift */; };
 		000000000000000000001017 /* Halo/App/AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001016 /* Halo/App/AppState.swift */; };
 		000000000000000000001019 /* Halo/App/ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001018 /* Halo/App/ContentView.swift */; };
 		000000000000000000001021 /* Halo/App/HaloApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001020 /* Halo/App/HaloApp.swift */; };
@@ -111,6 +114,9 @@
 /* Begin PBXFileReference section */
 		000000000000000000001015 /* Halo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Halo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000007000 /* Halo/App/BuildToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/BuildToken.swift; sourceTree = "<group>"; };
+		000000000000000000007003 /* Halo/Core/Actions/ActionSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionSettingsStore.swift; sourceTree = "<group>"; };
+		000000000000000000007005 /* Halo/Core/Actions/VoiceSearchController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/VoiceSearchController.swift; sourceTree = "<group>"; };
+		000000000000000000007007 /* Halo/Features/Actions/ActionSettingsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/ActionSettingsTab.swift; sourceTree = "<group>"; };
 		000000000000000000001016 /* Halo/App/AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/AppState.swift; sourceTree = "<group>"; };
 		000000000000000000001018 /* Halo/App/ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/ContentView.swift; sourceTree = "<group>"; };
 		000000000000000000001020 /* Halo/App/HaloApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/HaloApp.swift; sourceTree = "<group>"; };
@@ -499,6 +505,9 @@
 				000000000000000000006008 /* Halo/Features/Actions/QuickActionPickerView.swift in Sources */,
 				000000000000000000006010 /* Halo/Features/Actions/ActionsView.swift in Sources */,
 				000000000000000000006012 /* Halo/Features/Actions/CustomActionEditor.swift in Sources */,
+				000000000000000000007002 /* Halo/Core/Actions/ActionSettingsStore.swift in Sources */,
+				000000000000000000007004 /* Halo/Core/Actions/VoiceSearchController.swift in Sources */,
+				000000000000000000007006 /* Halo/Features/Actions/ActionSettingsTab.swift in Sources */,
 				000000000000000000001041 /* Halo/Features/Files/FilesView.swift in Sources */,
 				000000000000000000001043 /* Halo/Features/MenuBar/MenuBarView.swift in Sources */,
 				000000000000000000001045 /* Halo/Features/Onboarding/OnboardingView.swift in Sources */,

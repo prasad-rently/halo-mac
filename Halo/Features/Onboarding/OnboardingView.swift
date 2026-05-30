@@ -446,13 +446,18 @@ struct SettingsView: View {
             }
             .tabItem { Label("Menu Bar", systemImage: "menubar.rectangle") }
 
+            // Quick Actions
+            ActionSettingsTab()
+                .tabItem { Label("Quick Actions", systemImage: "bolt.circle.fill") }
+
             // About
             VStack(spacing: 16) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 48))
                     .foregroundColor(.haloAccent)
                 Text("Halo").font(HaloFont.display(24, weight: .heavy))
-                Text("Version 1.2.0 (Build 120)").foregroundColor(.secondary)
+                Text("Version 2.2 (Build \(Build.commit))").foregroundColor(.secondary)
+                Text("dev · \(Build.token)").font(.caption2).foregroundColor(.secondary)
                 Divider()
                 Button("Check for Updates") {}
                 Button("View Privacy Policy") {}
@@ -461,7 +466,7 @@ struct SettingsView: View {
             .padding(40)
             .tabItem { Label("About", systemImage: "info.circle") }
         }
-        .frame(width: 520, height: 460)
+        .frame(width: 560, height: 520)
     }
 }
 

@@ -90,6 +90,14 @@ struct ActionItem: Identifiable, Codable, Equatable {
     var lastUsed:         Date?         = nil
 
     var iconColor: Color { Color(hex: iconColorHex) }
+
+    /// Stable string key used for persisting enabled/disabled state across launches.
+    /// Built-in actions use a deterministic slug; custom actions use their UUID.
+    var stableKey: String {
+        isBuiltIn
+            ? "\(category.rawValue.lowercased()).\(name.lowercased().replacingOccurrences(of: " ", with: "_").filter { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "." })"
+            : id.uuidString
+    }
 }
 
 // MARK: - ActionExecutionState

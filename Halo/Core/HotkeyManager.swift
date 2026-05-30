@@ -14,10 +14,10 @@ final class HotkeyManager {
     private(set) var keyCode:   UInt16                = 9                       // V
     private(set) var modifiers: NSEvent.ModifierFlags = [.command, .shift]      // ⌘⇧
 
-    // Actions shortcut — default ⌘⇧A (fixed, not user-configurable yet)
+    // Actions shortcut — configurable; stored in ActionSettingsStore
     var onActionShortcut: (() -> Void)?
-    private let actionKeyCode:   UInt16                = 0                      // A
-    private let actionModifiers: NSEvent.ModifierFlags = [.command, .shift]     // ⌘⇧
+    private(set) var actionKeyCode:   UInt16                = 0                 // A (default)
+    private(set) var actionModifiers: NSEvent.ModifierFlags = [.command, .shift] // ⌘⇧
 
     // MARK: - Public API
 
@@ -56,6 +56,15 @@ final class HotkeyManager {
                 DispatchQueue.main.async { self.onActionShortcut?() }
             }
         }
+    }
+
+    /// Called when the user records a new action-picker shortcut in Settings.
+    /// Re-registers monitors with the new key combination.
+    func updateActionShortcut(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) {
+        actionKeyCode   = keyCode
+        actionModifiers = modifiers
+        // Re-register monitors so the new key takes effect immediately
+        start(keyCode: self.keyCode, modifiers: self.modifiers)
     }
 
     func stop() {

@@ -291,18 +291,32 @@ final class AppState: ObservableObject {
             }
         }
         wasAxTrusted = AXIsProcessTrusted()
+        // Restore persisted action-picker shortcut from ActionSettingsStore
+        let acs = ActionSettingsStore.shared
+        hotkeyManager.updateActionShortcut(
+            keyCode:   UInt16(acs.shortcutKeyCode),
+            modifiers: NSEvent.ModifierFlags(rawValue: UInt(acs.shortcutModifiers))
+        )
         hotkeyManager.start(keyCode: UInt16(shortcutKeyCode),
                             modifiers: NSEvent.ModifierFlags(rawValue: UInt(shortcutModifiers)))
     }
 
-    // Called from Settings when the user picks a new shortcut.
+    // Called from Settings when the user picks a new clipboard shortcut.
     func updateShortcut(keyCode: Int, modifiers: Int) {
-        shortcutKeyCode = keyCode
+        shortcutKeyCode   = keyCode
         shortcutModifiers = modifiers
-        UserDefaults.standard.set(keyCode, forKey: "clipboardShortcutKeyCode")
+        UserDefaults.standard.set(keyCode,   forKey: "clipboardShortcutKeyCode")
         UserDefaults.standard.set(modifiers, forKey: "clipboardShortcutModifiers")
         hotkeyManager.start(keyCode: UInt16(keyCode),
                             modifiers: NSEvent.ModifierFlags(rawValue: UInt(modifiers)))
+    }
+
+    /// Called from Action Settings tab when the user records a new action-picker shortcut.
+    func updateActionShortcut(keyCode: Int, modifiers: Int) {
+        hotkeyManager.updateActionShortcut(
+            keyCode:   UInt16(keyCode),
+            modifiers: NSEvent.ModifierFlags(rawValue: UInt(modifiers))
+        )
     }
 
     func pasteToSystemClipboard(_ item: ClipboardItem) {
