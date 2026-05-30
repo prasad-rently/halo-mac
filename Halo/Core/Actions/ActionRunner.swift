@@ -9,6 +9,10 @@ import AppKit
 /// Privilege escalation: commands marked `requiresPrivilege = true` are executed via
 /// `osascript do shell script … with administrator privileges`, which presents the
 /// standard macOS credential dialog.
+///
+/// FIX: Uses `Task.detached { process.waitUntilExit() }` instead of
+/// `terminationHandler` to avoid a race condition where the process can terminate
+/// before the handler is assigned (causing the continuation to never resume).
 @MainActor
 final class ActionRunner: ObservableObject {
 
@@ -55,10 +59,9 @@ final class ActionRunner: ObservableObject {
             finish(execId, success: true, finalLine: "✓ Smart Scan complete.")
 
         case .runSpeedTest:
-            appendLine("Navigate to Performance → Network to see live results.", to: execId)
-            // Navigate to performance module
+            appendLine("Navigating to Performance → Network for live speed test…", to: execId)
             appState.selectedModule = .performance
-            finish(execId, success: true, finalLine: "✓ Opened Performance module.")
+            finish(execId, success: true, finalLine: "✓ Opened Performance → Network module.")
 
         case .clearClipboard:
             appState.clearAllClipboard()
@@ -73,7 +76,7 @@ final class ActionRunner: ObservableObject {
         }
     }
 
-    // MARK: - Shell execution
+    // MARK: - Shell execution router
 
     private func runShell(_ command: String, requiresPrivilege: Bool, execId: UUID) async {
         if requiresPrivilege {
@@ -83,18 +86,23 @@ final class ActionRunner: ObservableObject {
         }
     }
 
+    // MARK: - Unprivileged process (streams stdout live)
+
     private func runProcess(_ command: String, execId: UUID) async {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         process.arguments     = ["-c", command]
-        process.environment   = ProcessInfo.processInfo.environment
+        // Carry the current environment so PATH, HOME etc. are available
+        var env = ProcessInfo.processInfo.environment
+        env["TERM"] = "xterm-256color"
+        process.environment = env
 
         let outPipe = Pipe()
         let errPipe = Pipe()
         process.standardOutput = outPipe
         process.standardError  = errPipe
 
-        // Stream stdout
+        // Live-stream stdout
         outPipe.fileHandleForReading.readabilityHandler = { [weak self] fh in
             let data = fh.availableData
             guard !data.isEmpty, let str = String(data: data, encoding: .utf8) else { return }
@@ -103,7 +111,7 @@ final class ActionRunner: ObservableObject {
                 lines.forEach { self?.appendLine($0, to: execId) }
             }
         }
-        // Merge stderr into same output
+        // Live-stream stderr (prefixed with ⚠)
         errPipe.fileHandleForReading.readabilityHandler = { [weak self] fh in
             let data = fh.availableData
             guard !data.isEmpty, let str = String(data: data, encoding: .utf8) else { return }
@@ -115,61 +123,93 @@ final class ActionRunner: ObservableObject {
 
         do {
             try process.run()
-            // Await termination without blocking the main actor
-            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                process.terminationHandler = { _ in cont.resume() }
-            }
-            // Drain remaining buffered data
+        } catch {
             outPipe.fileHandleForReading.readabilityHandler = nil
             errPipe.fileHandleForReading.readabilityHandler = nil
-            let rest = outPipe.fileHandleForReading.readDataToEndOfFile()
-            if !rest.isEmpty, let s = String(data: rest, encoding: .utf8) {
-                s.components(separatedBy: "\n").filter { !$0.isEmpty }.forEach { appendLine($0, to: execId) }
-            }
-            let errRest = errPipe.fileHandleForReading.readDataToEndOfFile()
-            if !errRest.isEmpty, let s = String(data: errRest, encoding: .utf8) {
-                s.components(separatedBy: "\n").filter { !$0.isEmpty }.forEach { appendLine("⚠ \($0)", to: execId) }
-            }
-            let ok = process.terminationStatus == 0
-            finish(execId, success: ok,
-                   finalLine: ok ? nil : "Exit code \(process.terminationStatus)")
-        } catch {
-            finish(execId, success: false, finalLine: error.localizedDescription)
+            finish(execId, success: false, finalLine: "Launch error: \(error.localizedDescription)")
+            return
         }
+
+        // Wait for completion on a background thread — does NOT block the main actor.
+        // Using Task.detached + waitUntilExit() avoids the terminationHandler race
+        // condition (handler set after process can already have exited).
+        await Task.detached(priority: .userInitiated) {
+            process.waitUntilExit()
+        }.value
+
+        // Stop streaming and drain anything still in the pipe buffer
+        outPipe.fileHandleForReading.readabilityHandler = nil
+        errPipe.fileHandleForReading.readabilityHandler = nil
+
+        let rest = outPipe.fileHandleForReading.readDataToEndOfFile()
+        if !rest.isEmpty, let s = String(data: rest, encoding: .utf8) {
+            s.components(separatedBy: "\n")
+             .filter { !$0.isEmpty }
+             .forEach { appendLine($0, to: execId) }
+        }
+        let errRest = errPipe.fileHandleForReading.readDataToEndOfFile()
+        if !errRest.isEmpty, let s = String(data: errRest, encoding: .utf8) {
+            s.components(separatedBy: "\n")
+             .filter { !$0.isEmpty }
+             .forEach { appendLine("⚠ \($0)", to: execId) }
+        }
+
+        let ok = process.terminationStatus == 0
+        finish(execId, success: ok,
+               finalLine: ok ? nil : "Process exited with code \(process.terminationStatus)")
     }
+
+    // MARK: - Privileged process (admin auth dialog, no live streaming)
 
     private func runPrivileged(_ command: String, execId: UUID) async {
         appendLine("🔑 Requesting administrator privileges…", to: execId)
 
-        // Escape the command for embedding inside an AppleScript string literal
-        let escaped = command
+        // Collapse multi-line to semicolons, then escape for an AppleScript string literal
+        let collapsed = command
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("#") }  // drop blank lines and comments
+            .joined(separator: "; ")
+
+        let escaped = collapsed
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\n", with: "; ")   // collapse multi-line for osascript
         let script = "do shell script \"\(escaped)\" with administrator privileges"
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         process.arguments     = ["-e", script]
 
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError  = pipe
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError  = errPipe
 
         do {
             try process.run()
-            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                process.terminationHandler = { _ in cont.resume() }
-            }
-            let data   = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8) ?? ""
-            output.components(separatedBy: "\n").filter { !$0.isEmpty }.forEach { appendLine($0, to: execId) }
-            let ok = process.terminationStatus == 0
-            finish(execId, success: ok,
-                   finalLine: ok ? nil : "Command failed or authentication was cancelled.")
         } catch {
-            finish(execId, success: false, finalLine: error.localizedDescription)
+            finish(execId, success: false, finalLine: "Launch error: \(error.localizedDescription)")
+            return
         }
+
+        // Same race-condition-free wait pattern
+        await Task.detached(priority: .userInitiated) {
+            process.waitUntilExit()
+        }.value
+
+        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+
+        if let s = String(data: outData, encoding: .utf8), !s.isEmpty {
+            s.components(separatedBy: "\n").filter { !$0.isEmpty }.forEach { appendLine($0, to: execId) }
+        }
+        if let s = String(data: errData, encoding: .utf8), !s.isEmpty {
+            s.components(separatedBy: "\n").filter { !$0.isEmpty }.forEach { appendLine("⚠ \($0)", to: execId) }
+        }
+
+        let ok = process.terminationStatus == 0
+        finish(execId, success: ok,
+               finalLine: ok ? nil : "Command failed or authentication was cancelled.")
     }
 
     // MARK: - Execution state helpers
@@ -179,12 +219,12 @@ final class ActionRunner: ObservableObject {
         if executions.count > 50 { executions.removeLast() }
     }
 
-    private func appendLine(_ line: String, to id: UUID) {
+    func appendLine(_ line: String, to id: UUID) {
         guard let idx = executions.firstIndex(where: { $0.id == id }) else { return }
         executions[idx].outputLines.append(line)
     }
 
-    private func finish(_ id: UUID, success: Bool, finalLine: String?) {
+    func finish(_ id: UUID, success: Bool, finalLine: String?) {
         guard let idx = executions.firstIndex(where: { $0.id == id }) else { return }
         if let line = finalLine { executions[idx].outputLines.append(line) }
         executions[idx].endDate  = Date()

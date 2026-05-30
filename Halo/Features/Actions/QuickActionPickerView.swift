@@ -68,6 +68,13 @@ final class QuickActionPickerController: NSObject, NSWindowDelegate {
         p.makeKeyAndOrderFront(nil)
         panel = p
         installKeyMonitor()
+
+        // Drive focus into the SwiftUI TextField a tick after the window is on screen.
+        // NSHostingController wraps the view in a standard NSView hierarchy; making
+        // the hosting controller's view first responder triggers @FocusState propagation.
+        DispatchQueue.main.async {
+            hosting.view.window?.makeFirstResponder(hosting.view)
+        }
     }
 
     func hide() {
@@ -121,6 +128,9 @@ struct QuickActionPickerView: View {
     let onRun:     (ActionItem) -> Void
     let onDismiss: () -> Void
 
+    /// Drives cursor focus into the search TextField automatically on appear.
+    @FocusState private var searchFocused: Bool
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -136,6 +146,8 @@ struct QuickActionPickerView: View {
                 .keyboardShortcut(.cancelAction)
                 .opacity(0).frame(width: 0, height: 0)
         )
+        // Activate cursor in the search field as soon as the panel appears
+        .onAppear { searchFocused = true }
     }
 
     // MARK: Sub-views
@@ -174,6 +186,7 @@ struct QuickActionPickerView: View {
                 .textFieldStyle(.plain)
                 .font(HaloFont.body(14))
                 .foregroundColor(.haloText)
+                .focused($searchFocused)
                 .onChange(of: state.query) { _ in state.refresh() }
             if !state.query.isEmpty {
                 Button { state.query = "" } label: {

@@ -282,6 +282,29 @@ private struct ActionTile: View {
     }
 }
 
+// MARK: - Indeterminate progress bar (sweeping amber segment)
+
+private struct IndeterminateBar: View {
+    @State private var position: Double = -0.4   // starts off-screen left
+
+    var body: some View {
+        GeometryReader { geo in
+            Color.haloAmber.opacity(0.75)
+                .frame(width: geo.size.width * 0.38, height: 3)
+                .offset(x: position * geo.size.width)
+                .onAppear {
+                    withAnimation(
+                        .easeInOut(duration: 1.1)
+                        .repeatForever(autoreverses: true)
+                    ) { position = 0.62 }
+                }
+        }
+        .frame(height: 3)
+        .background(Color.haloSurface2)
+        .clipped()
+    }
+}
+
 // MARK: - Execution Row
 
 struct ExecutionRow: View {
@@ -347,17 +370,14 @@ struct ExecutionRow: View {
                 }
                 .padding(12)
 
-                // Progress bar
+                // Progress bar (shown while running and for 0.5 s after completion)
                 if execution.state == .running {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             Color.haloSurface2.frame(height: 3)
                             if execution.progress < 0 {
-                                // Indeterminate: animated shimmer
-                                Color.haloAmber.opacity(0.7)
-                                    .frame(width: geo.size.width * 0.4, height: 3)
-                                    .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true),
-                                               value: UUID())
+                                // Indeterminate — sweeping bar managed by IndeterminateBar
+                                IndeterminateBar()
                             } else {
                                 Color.haloGreen
                                     .frame(width: geo.size.width * execution.progress, height: 3)

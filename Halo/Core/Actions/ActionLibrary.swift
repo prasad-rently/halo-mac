@@ -206,30 +206,32 @@ final class ActionLibrary: ObservableObject {
             icon: "xmark.app.fill", iconColorHex: "#ff4d6a", category: .xcode,
             keywords: ["kill xcode", "force quit xcode", "xcode hang", "xcode crash",
                        "quit xcode", "restart xcode"],
-            command: .shell("pkill -x Xcode; echo '✓ Xcode killed.'"),
+            // pkill returns non-zero if no process matched — suppress that exit code
+            command: .shell("pkill -x Xcode && echo '✓ Xcode killed.' || echo 'ℹ Xcode is not running.'"),
             requiresPrivilege: false, isBuiltIn: true),
 
         // ── System ────────────────────────────────────────────────────────
         ActionItem(
             name: "Flush DNS Cache",
-            subtitle: "Clear the macOS DNS resolver cache",
+            subtitle: "Clear the macOS DNS resolver cache (requires admin)",
             icon: "globe.badge.chevron.backward", iconColorHex: "#22d97a", category: .system,
             keywords: ["dns", "flush dns", "clear dns", "dns cache",
                        "dns reset", "network dns", "domain name"],
-            command: .shell("""
-                dscacheutil -flushcache
-                killall -HUP mDNSResponder
-                echo "✓ DNS cache flushed."
-                """),
+            // Privileged: collapses to one semi-colon-separated line via runPrivileged
+            command: .shell(
+                "dscacheutil -flushcache\n" +
+                "killall -HUP mDNSResponder\n" +
+                "echo '✓ DNS cache flushed.'"
+            ),
             requiresPrivilege: true, isBuiltIn: true),
 
         ActionItem(
             name: "Purge Inactive RAM",
-            subtitle: "Force macOS to reclaim inactive memory pages",
+            subtitle: "Force macOS to reclaim inactive memory pages (requires admin)",
             icon: "memorychip.fill", iconColorHex: "#22d97a", category: .system,
             keywords: ["ram", "memory", "purge", "free memory",
                        "clear ram", "inactive memory", "release ram"],
-            command: .shell("purge && echo '✓ Inactive memory purged.'"),
+            command: .shell("purge\necho '✓ Inactive memory purged.'"),
             requiresPrivilege: true, isBuiltIn: true),
 
         ActionItem(
@@ -237,23 +239,25 @@ final class ActionLibrary: ObservableObject {
             subtitle: "Permanently delete everything in ~/.Trash",
             icon: "trash.slash.fill", iconColorHex: "#ff4d6a", category: .system,
             keywords: ["trash", "empty trash", "delete trash", "garbage", "bin", "rubbish"],
+            // Use 'find -delete' — handles hidden files and special chars; avoids
+            // zsh glob-expand errors when Trash is empty ('rm -rf ~/.Trash/*' fails silently)
             command: .shell("""
-                COUNT=$(ls -1 ~/.Trash 2>/dev/null | wc -l | tr -d ' ')
-                rm -rf ~/.Trash/*
+                COUNT=$(find "$HOME/.Trash" -mindepth 1 2>/dev/null | wc -l | tr -d ' ')
+                find "$HOME/.Trash" -mindepth 1 -delete 2>/dev/null
                 echo "✓ Trash emptied ($COUNT items removed)."
                 """),
             requiresPrivilege: false, isBuiltIn: true),
 
         ActionItem(
             name: "Rebuild Spotlight Index",
-            subtitle: "Force Spotlight to re-index the entire disk",
+            subtitle: "Force Spotlight to re-index the entire disk (requires admin)",
             icon: "magnifyingglass.circle.fill", iconColorHex: "#f5a623", category: .system,
             keywords: ["spotlight", "reindex", "search index", "mdutil",
                        "spotlight index", "rebuild index"],
-            command: .shell("""
-                mdutil -E /
-                echo "✓ Spotlight re-indexing started. This runs in the background."
-                """),
+            command: .shell(
+                "mdutil -E /\n" +
+                "echo '✓ Spotlight re-indexing started (runs in background).'"
+            ),
             requiresPrivilege: true, isBuiltIn: true),
 
         ActionItem(
@@ -280,26 +284,27 @@ final class ActionLibrary: ObservableObject {
 
         ActionItem(
             name: "Check Connectivity",
-            subtitle: "Ping 1.1.1.1 and 8.8.8.8 to verify internet is reachable",
+            subtitle: "Ping Cloudflare (1.1.1.1) and Google DNS (8.8.8.8)",
             icon: "wifi.circle.fill", iconColorHex: "#00d4e8", category: .network,
             keywords: ["ping", "connectivity", "check internet", "network check",
                        "online", "connection test", "internet check"],
+            // Avoid empty echo lines — they cause issues when collapsed to semicolons
             command: .shell("""
-                echo "--- Ping 1.1.1.1 (Cloudflare) ---"
+                echo "=== Cloudflare 1.1.1.1 ==="
                 ping -c 4 -i 0.5 1.1.1.1
-                echo ""
-                echo "--- Ping 8.8.8.8 (Google DNS) ---"
+                echo "=== Google DNS 8.8.8.8 ==="
                 ping -c 4 -i 0.5 8.8.8.8
+                echo "✓ Connectivity check complete."
                 """),
             requiresPrivilege: false, isBuiltIn: true),
 
         ActionItem(
             name: "Show Network Interfaces",
-            subtitle: "List all active network interfaces and their IP addresses",
+            subtitle: "List all active network interfaces and IP addresses",
             icon: "antenna.radiowaves.left.and.right", iconColorHex: "#00d4e8", category: .network,
             keywords: ["network interfaces", "ip address", "ifconfig", "network info",
                        "mac address", "network adapter", "show ip"],
-            command: .shell("ifconfig | grep -E '^[a-z]|inet ' | awk '{print $0}'"),
+            command: .shell("ifconfig | grep -E '^[a-z0-9]|inet ' | sed 's/^[[:space:]]*//'"),
             requiresPrivilege: false, isBuiltIn: true),
 
         // ── Halo ──────────────────────────────────────────────────────────
