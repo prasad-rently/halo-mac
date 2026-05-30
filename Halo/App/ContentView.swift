@@ -110,7 +110,9 @@ struct SidebarView: View {
                         .scrollContentBackground(.hidden)
                         .scrollDisabled(true)
                         // Height = number of modules × row height (44 pt each)
-                        .frame(height: CGFloat(appState.moduleOrder.count) * 44)
+                        // 46 pt per row — macOS List rows render slightly taller than 44 pt
+                        // due to internal padding; this ensures all modules always stay visible.
+                        .frame(height: CGFloat(appState.moduleOrder.count) * 46)
                         // Note: on macOS, List + .onMove is always drag-active.
                         // EditMode is an iOS-only concept and is not used here.
                     }
