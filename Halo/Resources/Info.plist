@@ -32,6 +32,9 @@
     <string>AppIcon</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <!-- Apple Events / Automation — required for NSAppleScript to control other apps -->
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Halo uses Finder to safely empty your Trash and perform system maintenance tasks.</string>
     <!-- Required usage descriptions -->
     <key>NSDesktopFolderUsageDescription</key>
     <string>Halo scans your Desktop for large and duplicate files.</string>

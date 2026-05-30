@@ -18,10 +18,10 @@ enum Build {
     /// 6-char hex string regenerated each time `xcodebuild` is invoked.
     /// Compare this with the value printed in the Claude console to confirm
     /// the running binary matches the latest build.
-    static let token  = "60047c"
+    static let token  = "b11444"
 
     /// Short git commit SHA at the time of the last build.
-    static let commit = "9c1bc01"
+    static let commit = "c26ee4e"
 
     // MARK: - Computed display label
 

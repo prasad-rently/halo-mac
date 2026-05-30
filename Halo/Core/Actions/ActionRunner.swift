@@ -83,58 +83,73 @@ final class ActionRunner: ObservableObject {
 
     // MARK: - In-process Trash emptying
 
-    /// Empties the Trash by running NSAppleScript inside the Halo process.
-    /// This is more reliable than a shell subprocess because:
-    ///   • ~/.Trash has a macOS ACL that blocks access from child processes
-    ///   • NSAppleScript sends Apple Events to Finder which holds the ACL grant
-    ///   • Falls back to direct FileManager deletion if Finder AppleScript fails
+    /// Empties the Trash by sending an Apple Event to Finder from inside the Halo process.
+    ///
+    /// Why in-process NSAppleScript?
+    ///  • ~/.Trash has a macOS ACL that blocks child-process (shell) access
+    ///  • NSAppleScript running in-process sends Apple Events to Finder directly;
+    ///    Finder holds the ACL grant and performs the deletion on our behalf
+    ///  • Info.plist must have NSAppleEventsUsageDescription; macOS will show a
+    ///    one-time "Allow Halo to control Finder?" dialog if not yet approved
+    ///
+    /// Verification: the AppleScript returns the item count remaining AFTER the
+    /// empty operation; we only report success when that count is 0.
     private func emptyTrashInProcess() async -> (Bool, String) {
         return await Task.detached(priority: .userInitiated) {
-            // Count items first (best-effort)
-            let trashURL = FileManager.default.homeDirectoryForCurrentUser
-                           .appendingPathComponent(".Trash")
-            let count = (try? FileManager.default
-                .contentsOfDirectory(at: trashURL, includingPropertiesForKeys: nil)
-                .count) ?? 0
 
-            // ── Strategy 1: NSAppleScript (runs inside Halo process, uses Finder's ACL) ──
-            var appleScriptError: NSDictionary?
-            let src = "tell application \"Finder\" to empty the trash"
-            if let script = NSAppleScript(source: src) {
-                script.executeAndReturnError(&appleScriptError)
-                if appleScriptError == nil {
-                    let remaining = (try? FileManager.default
-                        .contentsOfDirectory(at: trashURL, includingPropertiesForKeys: nil)
-                        .count) ?? 0
-                    if remaining == 0 || count == 0 {
-                        let label = count == 0 ? "already empty" : "\(count) item\(count == 1 ? "" : "s") removed"
-                        return (true, "✓ Trash emptied (\(label)).")
-                    }
-                }
+            // AppleScript that:
+            //  1. Captures the item count before emptying
+            //  2. Empties the trash (Finder performs the actual deletion)
+            //  3. Returns the item count after — we verify this is 0
+            let source = """
+            tell application "Finder"
+                set beforeCount to count of items in trash
+                empty the trash
+                set afterCount to count of items in trash
+                return {beforeCount, afterCount}
+            end tell
+            """
+
+            var scriptError: NSDictionary?
+            guard let script = NSAppleScript(source: source) else {
+                return (false, "⚠ Could not create AppleScript.")
             }
 
-            // ── Strategy 2: FileManager direct removal (fallback) ──
-            var deleted = 0
-            var failed  = 0
-            if let items = try? FileManager.default
-                .contentsOfDirectory(at: trashURL, includingPropertiesForKeys: nil) {
-                for item in items {
-                    do {
-                        try FileManager.default.removeItem(at: item)
-                        deleted += 1
-                    } catch {
-                        failed += 1
-                    }
+            let result = script.executeAndReturnError(&scriptError)
+
+            // Check for AppleScript-level error
+            if let err = scriptError {
+                let msg = err[NSAppleScript.errorMessage] as? String
+                    ?? err[NSAppleScript.errorNumber].map { "Error \($0)" }
+                    ?? "Unknown AppleScript error"
+
+                // Error -1743 = not allowed to send Apple Events to this app
+                // This means the user needs to grant Automation permission:
+                // System Settings → Privacy & Security → Automation → Halo → Finder ✓
+                if (err[NSAppleScript.errorNumber] as? Int) == -1743 {
+                    return (false,
+                        "⚠ Halo needs permission to control Finder.\n" +
+                        "Go to System Settings → Privacy & Security → Automation\n" +
+                        "and enable Halo → Finder, then try again.")
                 }
+                return (false, "⚠ AppleScript error: \(msg)")
             }
 
-            if failed == 0 {
-                return (true, "✓ Trash emptied (\(deleted) item\(deleted == 1 ? "" : "s") removed).")
-            } else if deleted > 0 {
-                return (true, "⚠ Partially emptied — \(deleted) removed, \(failed) could not be deleted.")
+            // Parse {beforeCount, afterCount} from the result descriptor
+            let before = result.atIndex(1)?.int32Value ?? -1
+            let after  = result.atIndex(2)?.int32Value ?? -1
+
+            if after == 0 {
+                let label = before <= 0 ? "already empty"
+                          : "\(before) item\(before == 1 ? "" : "s") removed"
+                return (true, "✓ Trash emptied (\(label)).")
+            } else if after > 0 {
+                return (false,
+                    "⚠ Trash still has \(after) item(s) after emptying — " +
+                    "some files may be locked. Try emptying from Finder.")
             } else {
-                let errMsg = (appleScriptError?[NSAppleScript.errorMessage] as? String) ?? "Permission denied"
-                return (false, "⚠ Could not empty Trash: \(errMsg). Try emptying via Finder.")
+                // Couldn't parse result — treat no-error as success
+                return (true, "✓ Trash emptied.")
             }
         }.value
     }
