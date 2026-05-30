@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		000000000000000000007001 /* Halo/App/BuildToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007000 /* Halo/App/BuildToken.swift */; };
 		000000000000000000001017 /* Halo/App/AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001016 /* Halo/App/AppState.swift */; };
 		000000000000000000001019 /* Halo/App/ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001018 /* Halo/App/ContentView.swift */; };
 		000000000000000000001021 /* Halo/App/HaloApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001020 /* Halo/App/HaloApp.swift */; };
@@ -109,6 +110,7 @@
 
 /* Begin PBXFileReference section */
 		000000000000000000001015 /* Halo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Halo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000007000 /* Halo/App/BuildToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/BuildToken.swift; sourceTree = "<group>"; };
 		000000000000000000001016 /* Halo/App/AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/AppState.swift; sourceTree = "<group>"; };
 		000000000000000000001018 /* Halo/App/ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/ContentView.swift; sourceTree = "<group>"; };
 		000000000000000000001020 /* Halo/App/HaloApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/HaloApp.swift; sourceTree = "<group>"; };
@@ -456,6 +458,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				000000000000000000007001 /* Halo/App/BuildToken.swift in Sources */,
 				000000000000000000001017 /* Halo/App/AppState.swift in Sources */,
 				000000000000000000001019 /* Halo/App/ContentView.swift in Sources */,
 				000000000000000000001021 /* Halo/App/HaloApp.swift in Sources */,

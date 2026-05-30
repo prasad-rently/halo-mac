@@ -55,9 +55,16 @@ struct SidebarView: View {
                         .foregroundColor(.white)
                 }
                 .shadow(color: Color.haloAccent.opacity(0.5), radius: 6)
-                Text("Halo")
-                    .font(HaloFont.display(18, weight: .heavy))
-                    .foregroundColor(.haloText)
+                // App name + build token / version subtitle
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Halo")
+                        .font(HaloFont.display(18, weight: .heavy))
+                        .foregroundColor(.haloText)
+                    Text(Build.displayLabel)
+                        .font(HaloFont.mono(9))
+                        .foregroundColor(.haloText3)
+                        .help(Build.fullLabel)   // tooltip shows full detail on hover
+                }
                 Spacer()
 
                 // Customise / Done button
