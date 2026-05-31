@@ -183,7 +183,7 @@ struct MenuBarPopoverView: View {
         .cornerRadius(14)
         .onAppear {
             menuBarManager.update(from: appState)
-            SystemControlsManager.shared.refreshCameraState()
+            SystemControlsManager.shared.refreshAll()
         }
         .onChange(of: appState.cpuUsage) { _ in menuBarManager.update(from: appState) }
     }
@@ -192,105 +192,22 @@ struct MenuBarPopoverView: View {
 // MARK: - System Controls section in menu bar popup
 
 private struct MenuBarSystemControls: View {
-    @ObservedObject private var controls = SystemControlsManager.shared
+    @ObservedObject private var ctrl = SystemControlsManager.shared
 
     var body: some View {
         VStack(spacing: 8) {
             HStack {
-                Text("SYSTEM CONTROLS")
+                Text("PRIVACY & CONTROLS")
                     .font(HaloFont.body(9, weight: .semibold))
                     .foregroundColor(.haloText3)
                     .tracking(1.5)
                 Spacer()
-                // Status badges for quick glance
                 MicCameraStatusBadges()
             }
-            // Compact pill buttons side by side
-            HStack(spacing: 8) {
-                micPill
-                cameraPill
-            }
+            // Full three-pill compact row
+            MicCameraControlsView(compact: true)
         }
         .padding(12)
-    }
-
-    private var micPill: some View {
-        Button {
-            withAnimation(.spring(response: 0.2)) {
-                controls.toggleMic()
-            }
-        } label: {
-            HStack(spacing: 7) {
-                Image(systemName: controls.isMicMuted ? "mic.slash.fill" : "mic.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(controls.isMicMuted ? .haloRed : .haloGreen)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(controls.isMicMuted ? "Mic Muted" : "Mic Live")
-                        .font(HaloFont.body(11, weight: .semibold))
-                        .foregroundColor(.haloText)
-                    Text(controls.isMicMuted ? "Tap to unmute" : "Tap to mute")
-                        .font(HaloFont.body(9))
-                        .foregroundColor(.haloText3)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 10).padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 9)
-                    .fill(controls.isMicMuted
-                          ? Color.haloRed.opacity(0.10)
-                          : Color.haloGreen.opacity(0.07))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 9)
-                    .stroke(controls.isMicMuted
-                            ? Color.haloRed.opacity(0.35)
-                            : Color.haloGreen.opacity(0.25),
-                            lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .frame(maxWidth: .infinity)
-    }
-
-    @State private var showCameraPopover = false
-
-    private var cameraPill: some View {
-        Button { showCameraPopover = true } label: {
-            HStack(spacing: 7) {
-                Image(systemName: controls.isCameraInUse ? "video.fill" : "video.slash")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(controls.isCameraInUse ? .haloAmber : .haloText3)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(controls.isCameraInUse ? "Cam Active" : "Cam Idle")
-                        .font(HaloFont.body(11, weight: .semibold))
-                        .foregroundColor(.haloText)
-                    Text(controls.isCameraInUse ? "LED is on · tap options" : "Not in use")
-                        .font(HaloFont.body(9))
-                        .foregroundColor(.haloText3)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 10).padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 9)
-                    .fill(controls.isCameraInUse
-                          ? Color.haloAmber.opacity(0.10)
-                          : Color.haloSurface2)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 9)
-                    .stroke(controls.isCameraInUse
-                            ? Color.haloAmber.opacity(0.35)
-                            : Color.haloBorder,
-                            lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .frame(maxWidth: .infinity)
-        .popover(isPresented: $showCameraPopover, arrowEdge: .bottom) {
-            CameraOptionsPopover()
-        }
     }
 }
 

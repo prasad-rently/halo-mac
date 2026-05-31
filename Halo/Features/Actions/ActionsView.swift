@@ -37,17 +37,16 @@ struct ActionsView: View {
         }
     }
 
-    // MARK: - System Controls Strip (mic + camera, always pinned at top)
+    // MARK: - System Controls Strip (mic + camera + screen, always pinned at top)
 
     private var systemControlsStrip: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("SYSTEM CONTROLS")
+                Label("Privacy Controls", systemImage: "lock.shield.fill")
                     .font(HaloFont.body(10, weight: .semibold))
                     .foregroundColor(.haloText3)
-                    .tracking(1.2)
                 Spacer()
-                Text("Available globally · also in ⌘⇧A panel")
+                Text("⌘⇧A · Menu Bar · here")
                     .font(HaloFont.body(9))
                     .foregroundColor(.haloText3)
             }
