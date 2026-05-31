@@ -92,21 +92,24 @@ final class ActionLibrary: ObservableObject {
 
     // MARK: - Search / Suggestions
 
-    /// Returns ENABLED actions ranked by fuzzy relevance to `query`.
-    /// Custom actions are always shown regardless of the enabled-keys setting
-    /// (the user explicitly created them). Built-in actions are filtered by
-    /// ActionSettingsStore.shared.enabledKeys.
+    /// Returns ALL actions ranked by fuzzy relevance to `query`.
+    ///
+    /// The ⌘⇧A Quick Action picker intentionally searches ALL actions —
+    /// it is a comprehensive keyboard-driven tool and should never have a
+    /// blind spot. The enabled/disabled preference from ActionSettingsStore
+    /// applies only to the tile grid in ActionsView, not here.
+    ///
+    /// Empty query → most-used / pinned first.
     func search(query: String) -> [ActionItem] {
-        let pool    = enabledActions
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty {
-            return pool.sorted {
+            return actions.sorted {
                 if $0.isPinned != $1.isPinned { return $0.isPinned }
                 return $0.usageCount > $1.usageCount
             }
         }
         let terms = normalize(trimmed).split(separator: " ").map(String.init)
-        return pool
+        return actions
             .compactMap { a -> (ActionItem, Int)? in
                 let s = score(a, terms: terms)
                 return s > 0 ? (a, s) : nil
@@ -119,7 +122,8 @@ final class ActionLibrary: ObservableObject {
             .map(\.0)
     }
 
-    /// Actions visible in the Quick Actions picker (enabled built-ins + all custom).
+    /// Subset used by ActionsView tile grid — respects ActionSettingsStore enabled/disabled.
+    /// Custom actions are always included regardless of settings.
     var enabledActions: [ActionItem] {
         let store = ActionSettingsStore.shared
         return actions.filter { a in

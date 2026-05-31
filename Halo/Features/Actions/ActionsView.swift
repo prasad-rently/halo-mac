@@ -88,7 +88,8 @@ struct ActionsView: View {
     private var predefinedGrid: some View {
         VStack(alignment: .leading, spacing: 14) {
             ForEach(ActionCategory.allCases) { cat in
-                let catActions = library.actions.filter { $0.category == cat }
+                // Use enabledActions so Settings → Quick Actions toggles apply here
+                let catActions = library.enabledActions.filter { $0.category == cat }
                 if !catActions.isEmpty {
                     categorySection(cat, actions: catActions)
                 }

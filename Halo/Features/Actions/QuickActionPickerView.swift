@@ -131,8 +131,7 @@ struct QuickActionPickerView: View {
     /// Drives cursor focus into the search TextField automatically on appear.
     @FocusState private var searchFocused: Bool
 
-    @StateObject private var voice  = VoiceSearchController()
-    @ObservedObject private var settings = ActionSettingsStore.shared
+    @StateObject private var voice = VoiceSearchController()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -200,7 +199,7 @@ struct QuickActionPickerView: View {
             }
 
             // Voice search mic button — only shown when enabled in Settings
-            if settings.voiceSearchEnabled {
+            if ActionSettingsStore.shared.voiceSearchEnabled {
                 Button {
                     if voice.isListening {
                         voice.stop()
@@ -239,14 +238,23 @@ struct QuickActionPickerView: View {
         ScrollView {
             VStack(spacing: 3) {
                 if state.results.isEmpty {
-                    HStack {
-                        Image(systemName: "questionmark.circle")
+                    VStack(spacing: 8) {
+                        Image(systemName: state.query.isEmpty ? "bolt.slash" : "questionmark.circle")
+                            .font(.system(size: 24))
                             .foregroundColor(.haloText3)
-                        Text("No actions match \"\(state.query)\"")
+                        Text(state.query.isEmpty
+                             ? "No actions loaded"
+                             : "No actions match \"\(state.query)\"")
                             .font(HaloFont.body(13))
                             .foregroundColor(.haloText3)
+                        if state.query.isEmpty {
+                            Text("Check that actions are enabled in Settings → Quick Actions")
+                                .font(HaloFont.body(11))
+                                .foregroundColor(.haloText3)
+                                .multilineTextAlignment(.center)
+                        }
                     }
-                    .padding(24)
+                    .padding(32)
                 } else {
                     ForEach(Array(state.results.enumerated()), id: \.element.id) { idx, action in
                         ActionPickerRow(
