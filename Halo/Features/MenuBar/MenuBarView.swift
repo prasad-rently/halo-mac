@@ -204,8 +204,8 @@ private struct MenuBarSystemControls: View {
                 Spacer()
                 MicCameraStatusBadges()
             }
-            // Full three-pill compact row
-            MicCameraControlsView(compact: true)
+            // Full pills with labels — compact: false shows icon + title + sublabel
+            MicCameraControlsView(compact: false)
         }
         .padding(12)
     }
