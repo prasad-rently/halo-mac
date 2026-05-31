@@ -42,7 +42,7 @@ struct ActionsView: View {
     private var systemControlsStrip: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("Privacy Controls", systemImage: "lock.shield.fill")
+                Label("Mic & Camera Controls", systemImage: "lock.shield.fill")
                     .font(HaloFont.body(10, weight: .semibold))
                     .foregroundColor(.haloText3)
                 Spacer()

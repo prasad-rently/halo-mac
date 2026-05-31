@@ -1,8 +1,8 @@
 import SwiftUI
 
 // MARK: - MicCameraControlsView
-// Three-section privacy strip: Microphone · Camera · Screen
-// Used in both MenuBar popup (compact) and ActionsView (full).
+// Two-section privacy strip: Microphone · Camera
+// Screen Sharing section is implemented but hidden from UI (see ScreenPrivacyPopover below).
 
 struct MicCameraControlsView: View {
     @ObservedObject private var ctrl = SystemControlsManager.shared
@@ -12,7 +12,6 @@ struct MicCameraControlsView: View {
         HStack(spacing: compact ? 6 : 10) {
             micPill
             cameraPill
-            screenPill
         }
     }
 
@@ -57,32 +56,9 @@ struct MicCameraControlsView: View {
         }
     }
 
-    // MARK: Screen pill
-
-    @State private var showScreenPopover = false
-
-    private var screenPill: some View {
-        let isActive = ctrl.isSharingScreen || ctrl.isScreenRecording
-        return ControlPillButton(
-            icon:     ctrl.isSharingScreen  ? "display.2"
-                    : ctrl.isScreenRecording ? "record.circle.fill"
-                    : "rectangle.on.rectangle.slash",
-            label:    ctrl.isSharingScreen  ? "Sharing"
-                    : ctrl.isScreenRecording ? "Recording"
-                    : "Screen OK",
-            sublabel: ctrl.isSharingScreen  ? "Screen is shared"
-                    : ctrl.isScreenRecording ? "\(ctrl.screenRecordingApps.count) app\(ctrl.screenRecordingApps.count == 1 ? "" : "s")"
-                    : "Not shared",
-            color:    ctrl.isSharingScreen  ? .haloRed
-                    : ctrl.isScreenRecording ? .haloAmber
-                    : .haloText3,
-            isActive: isActive,
-            compact:  compact
-        ) { showScreenPopover = true }
-        .popover(isPresented: $showScreenPopover, arrowEdge: .bottom) {
-            ScreenPrivacyPopover()
-        }
-    }
+    // Screen pill intentionally hidden from UI.
+    // Backend detection (isSharingScreen, isScreenRecording, screenRecordingApps)
+    // is fully implemented in SystemControlsManager — re-enable by adding screenPill here.
 }
 
 // MARK: - ControlPillButton
@@ -383,11 +359,7 @@ struct MicCameraStatusBadges: View {
                       label: ctrl.isCameraHardCut ? "Blocked" : "Cam",
                       color: ctrl.isCameraHardCut ? .haloText3 : .haloAmber)
             }
-            if ctrl.isSharingScreen || ctrl.isScreenRecording {
-                badge(icon: ctrl.isSharingScreen ? "display.2" : "record.circle.fill",
-                      label: ctrl.isSharingScreen ? "Sharing" : "Recording",
-                      color: ctrl.isSharingScreen ? .haloRed : .haloAmber)
-            }
+            // Screen sharing badge hidden from UI (backend detection still active)
         }
     }
 

@@ -197,7 +197,7 @@ private struct MenuBarSystemControls: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack {
-                Text("PRIVACY & CONTROLS")
+                Text("MIC & CAMERA")
                     .font(HaloFont.body(9, weight: .semibold))
                     .foregroundColor(.haloText3)
                     .tracking(1.5)
