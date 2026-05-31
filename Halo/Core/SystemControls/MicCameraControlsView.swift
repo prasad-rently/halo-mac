@@ -36,16 +36,21 @@ struct MicCameraControlsView: View {
 
     // MARK: - Camera
 
+    @State private var showCameraMenu = false
+
     private var cameraButton: some View {
         ControlPillButton(
-            icon:     controls.cameraAppRunning ? "video.fill"        : "video.slash",
-            label:    controls.cameraAppRunning ? "Cam Active"        : "Cam Idle",
-            sublabel: controls.cameraAppRunning ? "Meeting app open"  : "No video calls",
-            color:    controls.cameraAppRunning ? Color.haloAmber     : Color.haloText3,
-            isActive: controls.cameraAppRunning,
+            icon:     controls.isCameraInUse ? "video.fill"             : "video.slash",
+            label:    controls.isCameraInUse ? "Camera Active"          : "Camera Idle",
+            sublabel: controls.isCameraInUse ? "LED is on — tap options": "Not in use",
+            color:    controls.isCameraInUse ? Color.haloAmber          : Color.haloText3,
+            isActive: controls.isCameraInUse,
             compact:  compact
         ) {
-            controls.openCameraPrivacySettings()
+            showCameraMenu = true
+        }
+        .popover(isPresented: $showCameraMenu, arrowEdge: .bottom) {
+            CameraOptionsPopover()
         }
     }
 }
@@ -109,6 +114,99 @@ struct ControlPillButton: View {
     }
 }
 
+// MARK: - Camera Options Popover
+
+struct CameraOptionsPopover: View {
+    @ObservedObject private var controls = SystemControlsManager.shared
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            HStack(spacing: 8) {
+                Image(systemName: controls.isCameraInUse ? "video.fill" : "video.slash")
+                    .foregroundColor(controls.isCameraInUse ? .haloAmber : .haloText3)
+                Text(controls.isCameraInUse ? "Camera is Active" : "Camera is Idle")
+                    .font(HaloFont.body(13, weight: .bold))
+                    .foregroundColor(.haloText)
+            }
+            .padding(14)
+
+            Divider().background(Color.haloBorder)
+
+            // Option 1 — Privacy settings
+            optionRow(
+                icon: "lock.shield.fill",
+                iconColor: .haloAccent,
+                title: "Manage App Permissions",
+                subtitle: "Revoke camera access per-app in System Settings → Privacy → Camera"
+            ) {
+                controls.openCameraPrivacySettings()
+                dismiss()
+            }
+
+            Divider().background(Color.haloBorder).padding(.leading, 44)
+
+            // Option 2 — Force-kill daemon
+            optionRow(
+                icon: "power",
+                iconColor: .haloRed,
+                title: "Hard-Cut Camera Signal",
+                subtitle: "Kills VDCAssistant daemon (admin required). Apps will restart it on next frame request — temporary only."
+            ) {
+                controls.forceKillCameraDaemon()
+                dismiss()
+            }
+
+            Divider().background(Color.haloBorder)
+
+            // Info footer
+            HStack(spacing: 6) {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 10))
+                    .foregroundColor(.haloText3)
+                Text("macOS does not allow apps to permanently block camera access for other running processes. Per-app TCC permissions are the reliable solution.")
+                    .font(HaloFont.body(10))
+                    .foregroundColor(.haloText3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .background(Color.haloSurface2)
+        }
+        .frame(width: 320)
+        .background(Color.haloBackground)
+        .cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.haloBorder, lineWidth: 1))
+    }
+
+    private func optionRow(icon: String, iconColor: Color,
+                           title: String, subtitle: String,
+                           action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 14))
+                    .foregroundColor(iconColor)
+                    .frame(width: 20)
+                    .padding(.top, 1)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(HaloFont.body(12, weight: .semibold))
+                        .foregroundColor(.haloText)
+                    Text(subtitle)
+                        .font(HaloFont.body(10))
+                        .foregroundColor(.haloText3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+    }
+}
+
 // MARK: - Preview helper (compact status-only display)
 
 struct MicCameraStatusBadges: View {
@@ -130,7 +228,7 @@ struct MicCameraStatusBadges: View {
             .cornerRadius(4)
 
             // Camera badge (only shown when active)
-            if controls.cameraAppRunning {
+            if controls.isCameraInUse {
                 HStack(spacing: 3) {
                     Image(systemName: "video.fill")
                         .font(.system(size: 9, weight: .semibold))

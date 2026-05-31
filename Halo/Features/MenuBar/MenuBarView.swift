@@ -253,17 +253,19 @@ private struct MenuBarSystemControls: View {
         .frame(maxWidth: .infinity)
     }
 
+    @State private var showCameraPopover = false
+
     private var cameraPill: some View {
-        Button { controls.openCameraPrivacySettings() } label: {
+        Button { showCameraPopover = true } label: {
             HStack(spacing: 7) {
-                Image(systemName: controls.cameraAppRunning ? "video.fill" : "video.slash")
+                Image(systemName: controls.isCameraInUse ? "video.fill" : "video.slash")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(controls.cameraAppRunning ? .haloAmber : .haloText3)
+                    .foregroundColor(controls.isCameraInUse ? .haloAmber : .haloText3)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(controls.cameraAppRunning ? "Cam Active" : "Cam Idle")
+                    Text(controls.isCameraInUse ? "Cam Active" : "Cam Idle")
                         .font(HaloFont.body(11, weight: .semibold))
                         .foregroundColor(.haloText)
-                    Text("Privacy Settings →")
+                    Text(controls.isCameraInUse ? "LED is on · tap options" : "Not in use")
                         .font(HaloFont.body(9))
                         .foregroundColor(.haloText3)
                 }
@@ -272,13 +274,13 @@ private struct MenuBarSystemControls: View {
             .padding(.horizontal, 10).padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 9)
-                    .fill(controls.cameraAppRunning
+                    .fill(controls.isCameraInUse
                           ? Color.haloAmber.opacity(0.10)
                           : Color.haloSurface2)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 9)
-                    .stroke(controls.cameraAppRunning
+                    .stroke(controls.isCameraInUse
                             ? Color.haloAmber.opacity(0.35)
                             : Color.haloBorder,
                             lineWidth: 1)
@@ -286,7 +288,9 @@ private struct MenuBarSystemControls: View {
         }
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity)
-        .help("Opens System Settings → Privacy → Camera")
+        .popover(isPresented: $showCameraPopover, arrowEdge: .bottom) {
+            CameraOptionsPopover()
+        }
     }
 }
 
