@@ -241,59 +241,60 @@ final class SystemControlsManager: ObservableObject {
     // MARK: - Camera App Detection (Phase 2)
     // ──────────────────────────────────────────────────────────────────────
 
-    /// Refresh which running apps have been granted camera TCC permission.
+    // ──────────────────────────────────────────────────────────────────────
+    // MARK: - Camera App Detection (Phase 2) — fully async, never blocks main
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// Fire-and-forget: resolves camera apps on a background thread, then
+    /// publishes results back to the main actor.
     func refreshCameraApps() {
-        let permitted = cameraPermittedBundleIDs()
-        cameraApps = NSWorkspace.shared.runningApplications.filter { app in
-            guard let id = app.bundleIdentifier else { return false }
-            return permitted.contains(id) && id != Bundle.main.bundleIdentifier
+        Task.detached(priority: .utility) { [weak self] in
+            let ids  = tccPermittedIDs(service: "kTCCServiceCamera")
+            let apps = NSWorkspace.shared.runningApplications.filter { app in
+                guard let id = app.bundleIdentifier else { return false }
+                return ids.contains(id) && id != Bundle.main.bundleIdentifier
+            }
+            await MainActor.run { self?.cameraApps = apps }
         }
     }
 
-    /// Read ~/Library/Application Support/com.apple.TCC/TCC.db for camera grants.
-    private func cameraPermittedBundleIDs() -> Set<String> {
-        let tccPath = NSHomeDirectory() +
-            "/Library/Application Support/com.apple.TCC/TCC.db"
-        guard FileManager.default.fileExists(atPath: tccPath) else { return [] }
-
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-        proc.arguments = [
-            tccPath,
-            "SELECT client FROM access WHERE service='kTCCServiceCamera' AND auth_value=2"
-        ]
-        let pipe = Pipe()
-        proc.standardOutput = pipe
-        proc.standardError  = Pipe()   // discard errors silently
-        do {
-            try proc.run(); proc.waitUntilExit()
-        } catch { return [] }
-        let raw = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        return Set(raw.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
-                      .filter { !$0.isEmpty })
-    }
-
     // ──────────────────────────────────────────────────────────────────────
-    // MARK: - Screen Sharing & Recording (Phase 3)
+    // MARK: - Screen Sharing & Recording (Phase 3) — fully async
     // ──────────────────────────────────────────────────────────────────────
 
     private func startPolling() {
-        // Poll every 2 seconds — fast enough for UX, cheap enough for battery
+        // Timer fires on main run loop; callback dispatches work to background
         pollTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refreshScreenState() }
+            self?.refreshScreenState()
         }
-        refreshScreenState()
+        refreshScreenState()   // initial probe — also dispatches to background
     }
 
+    /// Fire-and-forget: probes launchctl on a background thread, publishes results.
     func refreshScreenState() {
-        // Outgoing screen share via macOS Screen Sharing / Remote Desktop
-        isSharingScreen   = launchctlServiceActive("com.apple.screensharing.agent")
-        // App-based screen recording (ScreenCaptureKit / ReplayKit)
-        isScreenRecording = launchctlServiceActive("com.apple.screencaptureui.agent")
-        screenRecordingApps = isScreenRecording ? screenRecordingPermittedApps() : []
+        let capturedUID = uid
+        Task.detached(priority: .utility) { [weak self] in
+            let sharing   = launchctlActive("com.apple.screensharing.agent",   uid: capturedUID)
+            let recording = launchctlActive("com.apple.screencaptureui.agent", uid: capturedUID)
+            let recApps: [NSRunningApplication]
+            if recording {
+                let ids = tccPermittedIDs(service: "kTCCServiceScreenCapture")
+                recApps = NSWorkspace.shared.runningApplications.filter { app in
+                    guard let id = app.bundleIdentifier else { return false }
+                    return ids.contains(id) && id != Bundle.main.bundleIdentifier
+                }
+            } else {
+                recApps = []
+            }
+            await MainActor.run {
+                self?.isSharingScreen     = sharing
+                self?.isScreenRecording   = recording
+                self?.screenRecordingApps = recApps
+            }
+        }
     }
 
-    /// Stop outgoing screen sharing (e.g. Remote Desktop session).
+    /// Stop outgoing screen sharing — launchctl in background, no admin needed.
     func stopScreenSharing() {
         Task.detached(priority: .userInitiated) { [uid = self.uid] in
             runLaunchctl(["stop", "gui/\(uid)/com.apple.screensharing.agent"])
@@ -306,60 +307,61 @@ final class SystemControlsManager: ObservableObject {
         }
     }
 
-    /// Returns `true` when the launchd service has active count > 0.
-    private func launchctlServiceActive(_ label: String) -> Bool {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-        proc.arguments = ["print", "gui/\(uid)/\(label)"]
-        let pipe = Pipe()
-        proc.standardOutput = pipe
-        proc.standardError  = Pipe()
-        do { try proc.run(); proc.waitUntilExit() } catch { return false }
-        let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        // Active service shows "active count = N" where N > 0
-        if let range = out.range(of: #"active count = (\d+)"#, options: .regularExpression),
-           let numStr = out[range].split(separator: "=").last.map({ String($0).trimmingCharacters(in: .whitespaces) }),
-           let count  = Int(numStr) {
-            return count > 0
-        }
-        return false
-    }
-
-    /// TCC-permitted screen-recording apps that are currently running.
-    private func screenRecordingPermittedApps() -> [NSRunningApplication] {
-        let tccPath = NSHomeDirectory() +
-            "/Library/Application Support/com.apple.TCC/TCC.db"
-        guard FileManager.default.fileExists(atPath: tccPath) else { return [] }
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-        proc.arguments = [
-            tccPath,
-            "SELECT client FROM access WHERE service='kTCCServiceScreenCapture' AND auth_value=2"
-        ]
-        let pipe = Pipe()
-        proc.standardOutput = pipe
-        proc.standardError  = Pipe()
-        do { try proc.run(); proc.waitUntilExit() } catch { return [] }
-        let raw   = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let ids   = Set(raw.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
-        return NSWorkspace.shared.runningApplications.filter { app in
-            guard let id = app.bundleIdentifier else { return false }
-            return ids.contains(id) && id != Bundle.main.bundleIdentifier
-        }
-    }
-
+    /// Kicks off all async refreshes — returns immediately, never blocks.
     func refreshAll() {
-        refreshMuteState()
-        isCameraInUse = queryCameraInUse()
-        refreshCameraApps()
-        refreshScreenState()
+        refreshMuteState()                   // CoreAudio read — fast, synchronous ok
+        isCameraInUse = queryCameraInUse()   // CoreMediaIO read — fast, synchronous ok
+        refreshCameraApps()                  // async → background
+        refreshScreenState()                 // async → background
     }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// MARK: - Process Helpers (non-actor, pure C-level)
+// MARK: - Free-function helpers (nonisolated — safe to call from background)
+// All Process.waitUntilExit() calls live here, NEVER on the main actor.
 // ──────────────────────────────────────────────────────────────────────────
 
+/// Returns bundle IDs granted the given TCC service (auth_value = 2 = allowed).
+/// Runs sqlite3 synchronously — must only be called from a background thread.
+private func tccPermittedIDs(service: String) -> Set<String> {
+    let tccPath = NSHomeDirectory() +
+        "/Library/Application Support/com.apple.TCC/TCC.db"
+    guard FileManager.default.fileExists(atPath: tccPath) else { return [] }
+    let proc = Process()
+    proc.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+    proc.arguments = [tccPath,
+        "SELECT client FROM access WHERE service='\(service)' AND auth_value=2"]
+    let pipe = Pipe()
+    proc.standardOutput = pipe
+    proc.standardError  = Pipe()
+    do { try proc.run(); proc.waitUntilExit() } catch { return [] }
+    let raw = String(data: pipe.fileHandleForReading.readDataToEndOfFile(),
+                     encoding: .utf8) ?? ""
+    return Set(raw.components(separatedBy: "\n")
+                  .map { $0.trimmingCharacters(in: .whitespaces) }
+                  .filter { !$0.isEmpty })
+}
+
+/// Returns true if the launchd service's active count > 0.
+/// Runs launchctl synchronously — must only be called from a background thread.
+private func launchctlActive(_ label: String, uid: uid_t) -> Bool {
+    let proc = Process()
+    proc.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+    proc.arguments = ["print", "gui/\(uid)/\(label)"]
+    let pipe = Pipe()
+    proc.standardOutput = pipe
+    proc.standardError  = Pipe()
+    do { try proc.run(); proc.waitUntilExit() } catch { return false }
+    let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(),
+                     encoding: .utf8) ?? ""
+    guard let match = out.range(of: #"active count = (\d+)"#, options: .regularExpression),
+          let numStr = out[match].split(separator: "=").last
+                           .map({ String($0).trimmingCharacters(in: .whitespaces) }),
+          let count = Int(numStr) else { return false }
+    return count > 0
+}
+
+/// Finds the PID of a process by exact name — background-safe.
 private func pidOf(_ name: String) -> pid_t? {
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
@@ -367,7 +369,8 @@ private func pidOf(_ name: String) -> pid_t? {
     let pipe = Pipe()
     proc.standardOutput = pipe
     try? proc.run(); proc.waitUntilExit()
-    let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(),
+                     encoding: .utf8) ?? ""
     guard let pid = Int32(out.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
     return pid_t(pid)
 }
@@ -379,7 +382,6 @@ private func runLaunchctl(_ args: [String]) -> Int32 {
     proc.arguments = args
     proc.standardOutput = Pipe()
     proc.standardError  = Pipe()
-    try? proc.run()
-    proc.waitUntilExit()
+    try? proc.run(); proc.waitUntilExit()
     return proc.terminationStatus
 }
