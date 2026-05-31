@@ -78,6 +78,23 @@ final class ActionRunner: ObservableObject {
             appendLine("Emptying Trash…", to: execId)
             let (ok, msg) = await emptyTrashInProcess()
             finish(execId, success: ok, finalLine: msg)
+
+        case .toggleMic:
+            let controls = SystemControlsManager.shared
+            let wasMuted = controls.isMicMuted
+            controls.toggleMic()
+            let nowMuted = controls.isMicMuted
+            finish(execId, success: true,
+                   finalLine: nowMuted
+                       ? "🔇 Microphone muted globally."
+                       : "🎙 Microphone unmuted.")
+            _ = wasMuted  // suppress unused warning
+
+        case .cameraPrivacy:
+            appendLine("Opening Camera Privacy Settings…", to: execId)
+            SystemControlsManager.shared.openCameraPrivacySettings()
+            finish(execId, success: true,
+                   finalLine: "✓ Opened System Settings → Privacy → Camera.")
         }
     }
 

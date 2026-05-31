@@ -12,6 +12,7 @@ struct ActionsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 quickActionsHeader
+                systemControlsStrip     // Mic mute + Camera status always at top
                 predefinedGrid
                 if !runner.executions.isEmpty {
                     recentSection
@@ -33,6 +34,24 @@ struct ActionsView: View {
             Button("Cancel", role: .cancel)      { }
         } message: {
             Text("\"\(vm.actionToDelete?.name ?? "")\" will be permanently removed.")
+        }
+    }
+
+    // MARK: - System Controls Strip (mic + camera, always pinned at top)
+
+    private var systemControlsStrip: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("SYSTEM CONTROLS")
+                    .font(HaloFont.body(10, weight: .semibold))
+                    .foregroundColor(.haloText3)
+                    .tracking(1.2)
+                Spacer()
+                Text("Available globally · also in ⌘⇧A panel")
+                    .font(HaloFont.body(9))
+                    .foregroundColor(.haloText3)
+            }
+            MicCameraControlsView(compact: false)
         }
     }
 

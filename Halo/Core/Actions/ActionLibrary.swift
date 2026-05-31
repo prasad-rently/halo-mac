@@ -280,6 +280,24 @@ final class ActionLibrary: ObservableObject {
                 """),
             requiresPrivilege: false, isBuiltIn: true),
 
+        ActionItem(
+            name: "Toggle Microphone",
+            subtitle: "Mute or unmute the system microphone globally across all apps",
+            icon: "mic.fill", iconColorHex: "#ff4d6a", category: .system,
+            keywords: ["mute", "unmute", "microphone", "mic", "silence mic",
+                       "mute all", "meeting mute", "global mute", "mic off", "mic on"],
+            command: .builtIn(.toggleMic),
+            requiresPrivilege: false, isBuiltIn: true),
+
+        ActionItem(
+            name: "Camera Privacy Settings",
+            subtitle: "Open System Settings to manage per-app camera permissions",
+            icon: "video.slash.fill", iconColorHex: "#f5a623", category: .system,
+            keywords: ["camera", "camera off", "disable camera", "camera privacy",
+                       "video off", "webcam", "camera permissions", "block camera"],
+            command: .builtIn(.cameraPrivacy),
+            requiresPrivilege: false, isBuiltIn: true),
+
         // ── Network ───────────────────────────────────────────────────────
         ActionItem(
             name: "Run Speed Test",

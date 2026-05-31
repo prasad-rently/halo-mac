@@ -40,6 +40,8 @@ enum BuiltInAction: String, Codable, CaseIterable {
     case clearClipboard
     case exportReport
     case emptyTrash
+    case toggleMic         // mute ↔ unmute microphone
+    case cameraPrivacy     // open System Settings → Privacy → Camera
 }
 
 // MARK: - ActionCommand
