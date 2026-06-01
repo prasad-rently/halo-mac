@@ -71,6 +71,16 @@
 		000000000000000000006008 /* Halo/Features/Actions/QuickActionPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006007 /* Halo/Features/Actions/QuickActionPickerView.swift */; };
 		000000000000000000006010 /* Halo/Features/Actions/ActionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006009 /* Halo/Features/Actions/ActionsView.swift */; };
 		000000000000000000006012 /* Halo/Features/Actions/CustomActionEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006011 /* Halo/Features/Actions/CustomActionEditor.swift */; };
+		/* HaloShare (LocalSend) module */
+		000000000000000000007101 /* Halo/Core/LocalShare/Models/LocalShareModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007100 /* Halo/Core/LocalShare/Models/LocalShareModels.swift */; };
+		000000000000000000007103 /* Halo/Core/LocalShare/Crypto/TLSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007102 /* Halo/Core/LocalShare/Crypto/TLSManager.swift */; };
+		000000000000000000007105 /* Halo/Core/LocalShare/Network/MulticastDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007104 /* Halo/Core/LocalShare/Network/MulticastDiscovery.swift */; };
+		000000000000000000007107 /* Halo/Core/LocalShare/Network/LocalShareServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007106 /* Halo/Core/LocalShare/Network/LocalShareServer.swift */; };
+		000000000000000000007109 /* Halo/Core/LocalShare/Network/LocalShareClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007108 /* Halo/Core/LocalShare/Network/LocalShareClient.swift */; };
+		000000000000000000007111 /* Halo/Core/LocalShare/Network/TransferPowerAssertion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007110 /* Halo/Core/LocalShare/Network/TransferPowerAssertion.swift */; };
+		000000000000000000007113 /* Halo/Core/LocalShare/Manager/LocalShareManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007112 /* Halo/Core/LocalShare/Manager/LocalShareManager.swift */; };
+		000000000000000000007115 /* Halo/Features/LocalShare/LocalShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007114 /* Halo/Features/LocalShare/LocalShareView.swift */; };
+		000000000000000000007117 /* Halo/Features/LocalShare/ReceiveConsentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007116 /* Halo/Features/LocalShare/ReceiveConsentView.swift */; };
 		/* F-002: Shared protocol — compiled into Halo + HaloHelper */
 		000000000000000000003005 /* HaloHelperProtocol.swift in Sources (Halo) */ = {isa = PBXBuildFile; fileRef = 000000000000000000003004 /* HaloHelperProtocol.swift */; };
 		000000000000000000003007 /* HelperClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000003006 /* Halo/Core/HelperClient.swift */; };
@@ -178,6 +188,16 @@
 		000000000000000000006007 /* Halo/Features/Actions/QuickActionPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/QuickActionPickerView.swift; sourceTree = "<group>"; };
 		000000000000000000006009 /* Halo/Features/Actions/ActionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/ActionsView.swift; sourceTree = "<group>"; };
 		000000000000000000006011 /* Halo/Features/Actions/CustomActionEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/CustomActionEditor.swift; sourceTree = "<group>"; };
+		/* HaloShare (LocalSend) module file refs */
+		000000000000000000007100 /* Halo/Core/LocalShare/Models/LocalShareModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Models/LocalShareModels.swift; sourceTree = "<group>"; };
+		000000000000000000007102 /* Halo/Core/LocalShare/Crypto/TLSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Crypto/TLSManager.swift; sourceTree = "<group>"; };
+		000000000000000000007104 /* Halo/Core/LocalShare/Network/MulticastDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Network/MulticastDiscovery.swift; sourceTree = "<group>"; };
+		000000000000000000007106 /* Halo/Core/LocalShare/Network/LocalShareServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Network/LocalShareServer.swift; sourceTree = "<group>"; };
+		000000000000000000007108 /* Halo/Core/LocalShare/Network/LocalShareClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Network/LocalShareClient.swift; sourceTree = "<group>"; };
+		000000000000000000007110 /* Halo/Core/LocalShare/Network/TransferPowerAssertion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Network/TransferPowerAssertion.swift; sourceTree = "<group>"; };
+		000000000000000000007112 /* Halo/Core/LocalShare/Manager/LocalShareManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Manager/LocalShareManager.swift; sourceTree = "<group>"; };
+		000000000000000000007114 /* Halo/Features/LocalShare/LocalShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LocalShare/LocalShareView.swift; sourceTree = "<group>"; };
+		000000000000000000007116 /* Halo/Features/LocalShare/ReceiveConsentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LocalShare/ReceiveConsentView.swift; sourceTree = "<group>"; };
 		/* F-002 file refs */
 		000000000000000000003000 /* HaloHelper.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = HaloHelper.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
 		/* Shared group already has path=Shared, so file paths are relative to Shared/ */
@@ -509,6 +529,15 @@
 				000000000000000000006008 /* Halo/Features/Actions/QuickActionPickerView.swift in Sources */,
 				000000000000000000006010 /* Halo/Features/Actions/ActionsView.swift in Sources */,
 				000000000000000000006012 /* Halo/Features/Actions/CustomActionEditor.swift in Sources */,
+				000000000000000000007101 /* Halo/Core/LocalShare/Models/LocalShareModels.swift in Sources */,
+				000000000000000000007103 /* Halo/Core/LocalShare/Crypto/TLSManager.swift in Sources */,
+				000000000000000000007105 /* Halo/Core/LocalShare/Network/MulticastDiscovery.swift in Sources */,
+				000000000000000000007107 /* Halo/Core/LocalShare/Network/LocalShareServer.swift in Sources */,
+				000000000000000000007109 /* Halo/Core/LocalShare/Network/LocalShareClient.swift in Sources */,
+				000000000000000000007111 /* Halo/Core/LocalShare/Network/TransferPowerAssertion.swift in Sources */,
+				000000000000000000007113 /* Halo/Core/LocalShare/Manager/LocalShareManager.swift in Sources */,
+				000000000000000000007115 /* Halo/Features/LocalShare/LocalShareView.swift in Sources */,
+				000000000000000000007117 /* Halo/Features/LocalShare/ReceiveConsentView.swift in Sources */,
 				000000000000000000007002 /* Halo/Core/Actions/ActionSettingsStore.swift in Sources */,
 				000000000000000000007004 /* Halo/Core/Actions/VoiceSearchController.swift in Sources */,
 				000000000000000000007006 /* Halo/Features/Actions/ActionSettingsTab.swift in Sources */,
@@ -646,12 +675,12 @@
 				CODE_SIGN_ENTITLEMENTS = "Halo/Halo-Debug.entitlements";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 200;
+				CURRENT_PROJECT_VERSION = 210;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Halo/Resources/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.0;
+				MARKETING_VERSION = 2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -668,12 +697,12 @@
 				CODE_SIGN_ENTITLEMENTS = Halo/Halo.entitlements;
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 200;
+				CURRENT_PROJECT_VERSION = 210;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Halo/Resources/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.0;
+				MARKETING_VERSION = 2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -687,11 +716,11 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = HaloWidget/HaloWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 200;
+				CURRENT_PROJECT_VERSION = 210;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HaloWidget/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.0;
+				MARKETING_VERSION = 2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.widget;
 				PRODUCT_NAME = HaloWidget;
 				SKIP_INSTALL = YES;
@@ -704,11 +733,11 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = HaloWidget/HaloWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 200;
+				CURRENT_PROJECT_VERSION = 210;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HaloWidget/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.0;
+				MARKETING_VERSION = 2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.widget;
 				PRODUCT_NAME = HaloWidget;
 				SKIP_INSTALL = YES;
@@ -722,11 +751,11 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = HaloHelper/HaloHelper.entitlements;
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 200;
+				CURRENT_PROJECT_VERSION = 210;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HaloHelper/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.0;
+				MARKETING_VERSION = 2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.helper;
 				PRODUCT_NAME = HaloHelper;
 				SKIP_INSTALL = YES;
@@ -739,11 +768,11 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = HaloHelper/HaloHelper.entitlements;
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 200;
+				CURRENT_PROJECT_VERSION = 210;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HaloHelper/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.0;
+				MARKETING_VERSION = 2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.helper;
 				PRODUCT_NAME = HaloHelper;
 				SKIP_INSTALL = YES;

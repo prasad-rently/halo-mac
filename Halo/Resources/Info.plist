@@ -56,6 +56,13 @@
     <array>
         <string>com.halo.smartscan</string>
     </array>
+    <!-- HaloShare: local network file transfer -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Halo uses the local network to discover and transfer files with nearby devices running Halo or LocalSend.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_localsend._tcp</string>
+    </array>
     <!-- F-006: Sentry crash reporting — replace placeholder with real DSN before release -->
     <key>SentryDSN</key>
     <string>SENTRY_DSN_PLACEHOLDER</string>

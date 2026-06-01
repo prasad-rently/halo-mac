@@ -159,6 +159,9 @@ struct SidebarView: View {
         case .actions:
             let running = ActionRunner.shared.executions.filter { $0.state == .running }.count
             return (running > 0 ? "\(running)" : nil, .haloAmber)
+        case .localShare:
+            let active = LocalShareManager.shared.activeSessions.count
+            return (active > 0 ? "\(active)" : nil, .haloGreen)
         default:
             return (nil, .haloAccent)
         }
@@ -323,6 +326,7 @@ struct DetailView: View {
             case .files:          FilesView()
             case .clipboard:      ClipboardView()
             case .actions:        ActionsView()
+            case .localShare:     LocalShareView()
             case .menuBarPreview: MenuBarPreviewView()
             }
         }
