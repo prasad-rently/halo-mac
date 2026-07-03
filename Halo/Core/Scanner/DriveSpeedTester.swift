@@ -87,12 +87,17 @@ enum DriveTestSize: String, CaseIterable, Identifiable, Sendable {
 
 enum DriveSpeedError: LocalizedError {
     case notWritable(String)
+    case insufficientSpace(volume: String, needed: Int64, free: Int64)
     case ioFailure(String)
     case cancelled
 
     var errorDescription: String? {
         switch self {
         case .notWritable(let v): return "Halo can't write a test file to \(v). Grant access to this drive, or the volume may be read-only."
+        case let .insufficientSpace(v, needed, free):
+            let f = ByteCountFormatter.string(fromByteCount: free, countStyle: .file)
+            let n = ByteCountFormatter.string(fromByteCount: needed, countStyle: .file)
+            return "Not enough free space on \(v) — this test needs \(n) but only \(f) is available. Pick a smaller test size."
         case .ioFailure(let m):   return "Benchmark failed: \(m)"
         case .cancelled:          return "Benchmark cancelled."
         }
@@ -152,13 +157,30 @@ actor DriveSpeedTester {
              progress: @Sendable @escaping (DriveSpeedProgress) -> Void) async throws -> DriveSpeedResult {
         progress(.preparing)
 
+        let totalBytes = size.bytes
+
+        // Guard against filling a nearly-full drive. Only enforced when we
+        // actually know the free space (0 means the capacity was unreadable at
+        // enumeration time — don't false-positive in that case). We reuse a
+        // single scratch file across passes, so one copy + a small margin is enough.
+        let margin: Int64 = 64 * 1_000_000
+        if volume.freeBytes > 0, volume.freeBytes < totalBytes + margin {
+            throw DriveSpeedError.insufficientSpace(volume: volume.name,
+                                                    needed: totalBytes,
+                                                    free: volume.freeBytes)
+        }
+
         let fileURL = try scratchURL(for: volume)
         // Ensure the scratch file is always removed, even on error/cancel.
         // NOTE: this is Halo's own temp benchmark file (never user data), so it
-        // is unlinked immediately rather than moved to Trash.
-        defer { unlink(fileURL.path) }
-
-        let totalBytes = size.bytes
+        // is unlinked immediately rather than moved to Trash. On external drives
+        // we also rmdir the .HaloSpeedTest dir we created (rmdir only removes it
+        // if empty, so it can never clobber unrelated content).
+        defer {
+            unlink(fileURL.path)
+            let parent = fileURL.deletingLastPathComponent()
+            if parent.lastPathComponent == ".HaloSpeedTest" { rmdir(parent.path) }
+        }
         let chunk = makeRandomChunk(chunkBytes)
 
         var writeSamples: [Double] = []

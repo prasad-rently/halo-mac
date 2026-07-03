@@ -50,6 +50,25 @@ struct DriveSpeedTesterTests {
         #expect(result.fileSizeBytes == DriveTestSize.quick.bytes)
     }
 
+    @Test("Insufficient free space throws before writing")
+    func testInsufficientSpaceGuard() async {
+        let tester = DriveSpeedTester()
+        // A volume that claims only ~1 KB free — the guard must reject a 128 MB
+        // Quick test before touching the disk.
+        let tiny = DriveVolume(
+            id: "/tmp/halo-tiny",
+            name: "TinyVol",
+            url: FileManager.default.temporaryDirectory,
+            isInternal: true,
+            isRemovable: false,
+            totalBytes: 1_000_000,
+            freeBytes: 1_000
+        )
+        await #expect(throws: DriveSpeedError.self) {
+            _ = try await tester.run(volume: tiny, size: .quick) { _ in }
+        }
+    }
+
     @Test("Cancellation stops a run")
     func testCancellation() async {
         let tester = DriveSpeedTester()
