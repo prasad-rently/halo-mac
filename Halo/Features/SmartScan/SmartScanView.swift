@@ -84,6 +84,13 @@ struct SmartScanView: View {
         // Run actual scan
         await appState.runSmartScan()
         phase = .reviewing
+
+        // F-037: Celebrate scan complete — healthy system gets sparkle burst, otherwise pulse
+        if appState.systemHealthScore >= 90 {
+            CelebrationManager.shared.trigger(.healthySystem)
+        } else {
+            CelebrationManager.shared.trigger(.scanComplete)
+        }
     }
 }
 

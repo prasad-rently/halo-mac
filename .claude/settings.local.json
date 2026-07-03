@@ -192,7 +192,24 @@
       "Bash(awk '{print $2, \"started:\", $9}')",
       "Bash(awk '{print $2, \"started:\", $9, \"cpu:\", $4}')",
       "Bash(ps -p 7611 -o pid,etime,cputime=)",
-      "Bash(kill -9 7611)"
+      "Bash(kill -9 7611)",
+      "Bash(git commit -m 'docs: mark F-002 XPC Helper as done in roadmap *)",
+      "Bash(git merge --no-ff feat/f015-custom-scan-schedule -m ' *)",
+      "Bash(git stash *)",
+      "Bash(xcodebuild -resolvePackageDependencies -project Halo.xcodeproj -scheme Halo)",
+      "Bash(xcodebuild -project Halo.xcodeproj -scheme Halo -configuration Debug -derivedDataPath /tmp/HaloBuild CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY= -destination platform=macOS build)",
+      "Bash(# Check if Sentry package was resolved *)",
+      "Bash(xcodebuild -project Halo.xcodeproj -scheme Halo -configuration Debug -derivedDataPath /Users/gokulprasadm/Library/Developer/Xcode/DerivedData/Halo-bywasmmnprdbcbbkszihjhksbpsv CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY= -destination platform=macOS build)",
+      "Bash(# The xcworkspace has its own swiftpm state - check if Sentry is cached in SPM cache *)",
+      "Bash(codesign --force --sign 'Apple Development: MobileApp Developers \\(ZWA6Q77327\\)' --entitlements HaloWidget/HaloWidget.entitlements --timestamp=none /tmp/HaloBuild/Build/Products/Debug/Halo.app/Contents/PlugIns/HaloWidget.appex)",
+      "Bash(codesign --force --sign 'Apple Development: MobileApp Developers \\(ZWA6Q77327\\)' --entitlements Halo/Halo-Debug.entitlements --timestamp=none /tmp/HaloBuild/Build/Products/Debug/Halo.app)",
+      "Bash(codesign --verify --deep --strict /tmp/HaloBuild/Build/Products/Debug/Halo.app)",
+      "Bash(rm -rf ~/Applications/Halo.app)",
+      "Bash(cp -R /tmp/HaloBuild/Build/Products/Debug/Halo.app ~/Applications/Halo.app)",
+      "Bash(pluginkit -a ~/Applications/Halo.app/Contents/PlugIns/HaloWidget.appex)",
+      "Bash(xcodebuild -project Halo.xcodeproj -scheme Halo -configuration Debug -derivedDataPath /tmp/HaloBuildFix CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY= build)",
+      "Bash(codesign --verify --deep --strict ~/Applications/Halo.app)",
+      "Bash(system_profiler SPDisplaysDataType)"
     ]
   }
 }

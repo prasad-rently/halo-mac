@@ -35,6 +35,20 @@ For the iOS & Android platform feature mapping see `docs/MOBILE_PLATFORM_FEATURE
 - [x] Applications module fixes — `NSMetadataItem`-based last-used date, real uninstall with confirmation dialog and `trashItem` (v2.1)
 - [x] Future feature roadmap documented — 15 ideas (F-016 → F-030) across 4 themes (v2.1)
 - [x] Quick Actions module (v2.2) — `⌘⇧A` floating picker, 15 predefined actions, custom bash/script support, privilege escalation via macOS auth dialog, live execution log with output streaming
+- [x] Quick Actions Phase 1 expansion (v3.0) — 24 new shell-based actions (39 total), 3 new categories (Developer, Files, Clipboard), covering system maintenance, network utils, dev tools, clipboard transforms
+- [x] Quick Actions Phase 2 expansion (v3.0) — 29 new actions (70 total), 2 new categories (Creative, Media), covering creative suite cache cleanup, clipboard transforms, media/image/video utilities
+- [x] Quick Actions Phase R1 expansion (v4.0) — 37 new actions (107 total), 3 new categories (Dock & Desktop, Display, Audio), covering Dock tinker (spacers, animations, orientation), display/screenshot controls, audio/mic management, system junk cleanup (resource forks, font cache, logs, symlinks, QuickLook, Launch Services), developer cache cleanup (CocoaPods, Gradle, Docker, pip, Homebrew)
+- [x] Port Manager module (v4.0) — F-034: dedicated sidebar module with `PortScanner` actor, list/kill open TCP/UDP ports, named ports with friendly labels, configurable kill signals (ask/SIGTERM/SIGKILL), copy lsof/kill commands, 5s auto-refresh, search/sort
+- [x] Downloads Manager (v4.0) — F-026: "Downloads" tab in Files module with age-based grouping (Today/Week/Month/Older/Stale), type-based grouping, installer cross-reference with installed apps ("Safe to remove"), one-click stale cleanup, organize into subfolders by type, search/filter, breakdown bar visualization
+- [x] Customizable Menu Bar Format Strings (v4.0) — F-036: 5th "Custom" display style with user-editable format strings, 11 tokens ({cpu}, {ram}, {disk}, {battery}, {net_down}, {net_up}, {health}, etc.), 5 preset templates (Minimal/Standard/Full/Network/Battery), live preview, clickable token insertion grid
+- [x] Celebration & Delight Moments (v4.0) — F-037: Canvas particle overlay with 4 animation types (green sparkle burst for healthy scan, blue floating particles for space recovered >1GB, expanding ring pulse for scan complete, green checkmark flash for action success), CelebrationManager singleton, toggleable via Settings, non-blocking overlay
+- [x] Code Snippet Beautifier (v4.0) — F-038: native ray.so equivalent with regex-based SyntaxHighlighter (14 languages), 8 dark themes (Midnight/Noir/Aurora/Sunset/Ocean/Forest/Candy/Ice), CodeBeautifierView sheet with live preview, auto-detect language from clipboard, customizable padding/background/chrome/line numbers, PNG export at 2x/4x via NSHostingView render, copy to clipboard, "Beautify Code" action in Clipboard category
+- [x] Auto-Quit Idle Apps (v4.0) — F-039: IdleAppMonitor actor tracking app idle state via NSWorkspace.didActivateApplicationNotification + AX window count check, IdleAppsSection in Performance module with enable/disable toggle, configurable timeout (15m/30m/1h/2h), suggest vs auto-quit mode, per-app exclude list, daily stats (apps quit + RAM recovered), quit confirmation dialog, "Quit All" button
+- [x] Snippet Manager & Text Expansion (v4.0) — F-027: SnippetManager singleton with 20 bundled starter snippets (Symbols/Date/Dev/Email), SnippetExpander engine with 5 placeholder types ({date}, {time}, {clipboard}, {uuid}, {random:N}), SnippetEditorView sheet with live preview + token insertion buttons, SnippetListSection with search/filter/category chips, ClipboardView gains History/Snippets tab bar, JSON/CSV import/export
+- [x] Shareable Action Configurations (v4.0) — F-041: `halo://` URL scheme registered in Info.plist, ActionShareManager singleton handling deep link encode/decode (base64url), ActionImportSheet with script preview + privilege warning, QR code generation via CIFilter, per-action context menu (Copy Share Link, Show QR Code), import/export menu in Actions header (JSON file), `.onOpenURL` handler in HaloApp
+- [x] Siri Shortcuts / App Intents (v4.0) — F-042: 8 AppIntents (GetHealthScore, GetCPUUsage, GetBatteryHealth, GetDiskSpace, RunSmartScan, RunAction with HaloAction AppEntity + EntityQuery, GetClipboardHistory with count parameter, ExportReport returning IntentFile PDF), HaloShortcutsProvider with Siri phrases for all 8 intents, AppState.shared static reference for intent access
+- [x] Siri Shortcuts / App Intents (v4.0) — F-042: 8 AppIntents (GetHealthScore, GetCPUUsage, GetBatteryHealth, GetDiskSpace, RunSmartScan, RunAction, GetClipboardHistory, ExportReport), HaloShortcutsProvider with Siri phrases, HaloAction AppEntity for action discovery in Shortcuts.app, IntentFile PDF export
+- [x] Drive Read & Write Speed Test (v4.1) — F-043 / NFeat-121: "Drive Speed" tab in Files module with `DriveSpeedTester` actor; enumerates internal & external volumes; uncached (`F_NOCACHE`) sequential write+read benchmark with `F_FULLFSYNC` durability flush and incompressible random payload; 3-pass multi-sample run reporting both average (sustained) and optimal (peak) MB/s; Quick/Standard/Thorough sizes (128 MB/512 MB/1 GB); live progress, cancellation, friendly error banner for read-only/permission-denied volumes
 
 ---
 
@@ -119,6 +133,80 @@ Before any release:
 2. Implement server-side versioning (`version` field in JSON)
 3. Consider certificate pinning via `URLAuthenticationChallenge` for added security
 4. Schedule delta updates on a regular cadence (weekly recommended)
+
+---
+
+## Raycast-Inspired Features (F-031 → F-042) — v4.0 Execution Plan
+
+> Source: Analysis of [raycast/extensions](https://github.com/raycast/extensions) (2,962 extensions, 7.5k stars) and [raycast/ray-so](https://github.com/raycast/ray-so) (8 web tools). Full analysis in `docs/RAYCAST_ANALYSIS.md`. Full execution cards in `docs/FEATURE_ROADMAP.md`.
+
+### Execution Phases
+
+#### Phase R1 — Quick Action Expansion (1.5 days total)
+
+*Three batches of shell actions added to `ActionLibrary.swift`. No new views, no new models. Ship all three in one session.*
+
+| ID | Feature | Effort | Actions Added | New Total |
+|----|---------|--------|---------------|-----------|
+| F-031 | **Dock & Desktop Tinker Actions** | 0.5 d | 14 (spacers, animation, orientation, auto-hide, reset) | 84 |
+| F-032 | **Display & Audio Quick Actions** | 0.5 d | 11 (dark mode, screenshots, mic mute, volume, DND) | 95 |
+| F-033 | **System Junk & Dev Cache Cleaner Actions** | 0.5 d | 12 (resource forks, font cache, logs, CocoaPods, Gradle, Docker, pip, brew) | 107 |
+
+**Result:** Halo goes from 70 → 107 predefined actions across 13 categories (3 new: Dock & Desktop, Display, Audio). Immediate value with zero infrastructure changes.
+
+#### Phase R2 — High-Value Feature Views (6.5 days total)
+
+*Three features that add visible new capabilities. Each is a 2–2.5 day build with a new view + viewmodel.*
+
+| ID | Feature | Effort | What It Adds |
+|----|---------|--------|-------------|
+| F-034 | **Port Manager** | 2.5 d | Dedicated port view: list/kill open ports, named ports ("React Dev → 3000"), configurable kill signals, copy lsof/kill commands |
+| F-026 | **Downloads Folder Organiser & Manager** | 2.5 d | "Downloads" tab in Files: age + type grouping, installer cross-ref, stale cleanup, auto-organize *(merged F-035 into existing F-026)* |
+| F-036 | **Customizable Menu Bar Format Strings** | 2 d | User-editable format strings with tokens (`{cpu}`, `{ram}`, `{battery}`, `{net_down}`), preset templates, live preview |
+
+**Depends on:** F-031–F-033 shipped. No inter-dependencies within this phase.
+
+#### Phase R3 — Differentiators (7 days total)
+
+*Features that no other macOS utility offers. Position Halo as uniquely comprehensive.*
+
+| ID | Feature | Effort | What It Adds |
+|----|---------|--------|-------------|
+| F-037 | **Celebration & Delight Moments** | 1.5 d | Canvas particle animations on significant events (healthy scan, space recovered, action complete) |
+| F-038 | **Code Snippet Beautifier** | 3 d | Native ray.so: syntax-highlighted code → beautiful PNG export. 8 themes, 12 languages, 2x/4x export |
+| F-039 | **Auto-Quit Idle Apps** | 2.5 d | Smart resource reclamation: detect idle apps (no windows), suggest/auto-quit, RAM recovery tracking |
+
+**Depends on:** F-034–F-036 shipped. F-037 has no dependencies and can start anytime.
+
+#### Phase R4 — Platform Integration (9.5 days total)
+
+*Strategic investments that create long-term value through sharing, automation, and ecosystem integration.*
+
+| ID | Feature | Effort | What It Adds |
+|----|---------|--------|-------------|
+| F-027 | **Snippet Manager & Text Expansion Engine** | 3.5 d | Keyword-triggered snippets with `{date}`, `{clipboard}`, `{uuid}` placeholders, collections, starter packs, CSV import *(merged F-040 into existing F-027)* |
+| F-041 | **Shareable Action Configurations** | 2 d | `halo://action/BASE64` deep links, QR code export, JSON import/export for custom actions |
+| F-042 | **Siri Shortcuts / App Intents** | 4 d | 8 intents: health score, CPU, battery, disk, scan, run action, clipboard, export report. Siri-invocable |
+
+**Depends on:** F-037–F-039 shipped.
+
+---
+
+### Full Timeline
+
+```
+Phase R1 (1.5 days) ─── F-031, F-032, F-033 ───→  107 actions, 13 categories
+     │
+Phase R2 (7 days) ──── F-034, F-026, F-036 ───→  Port Manager + Downloads + Menu Bar format strings
+     │
+Phase R3 (7 days) ──── F-037, F-038, F-039 ───→  Celebrations + Code Beautifier + Auto-Quit
+     │
+Phase R4 (9.5 days) ── F-027, F-041, F-042 ───→  Snippets + Shareable Actions + Siri Shortcuts
+```
+
+**Total: 10 net-new features · ~25 days · 37 new actions + 4 new views + 1 new module + 8 Siri intents**
+
+> **Note:** F-035 (Downloads Manager) was merged into F-026 (Downloads Folder Organiser). F-040 (Snippet/Text Expansion) was merged into F-027 (Snippet Manager). See duplicate analysis in this document and full cards in `FEATURE_ROADMAP.md`.
 
 ---
 

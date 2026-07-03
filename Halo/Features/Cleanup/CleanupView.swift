@@ -65,6 +65,11 @@ final class CleanupViewModel: ObservableObject {
         let refreshed = await coordinator.scanCategory(kind)
         categories[idx] = refreshed
         isCleaning = false
+
+        // F-037: Celebrate when > 1 GB freed
+        if freed > 1_073_741_824 {
+            CelebrationManager.shared.trigger(.spaceRecovered)
+        }
     }
 
     /// Clean a single item — called from the per-row trash button.

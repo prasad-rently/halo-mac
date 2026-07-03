@@ -4,13 +4,54 @@ import AppKit
 struct ClipboardView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var viewModel = ClipboardViewModel()
+    @State private var activeTab: ClipboardTab = .history
+
+    enum ClipboardTab: String, CaseIterable {
+        case history  = "History"
+        case snippets = "Snippets"
+    }
 
     var body: some View {
-        HStack(spacing: 0) {
-            ClipboardSidebar(viewModel: viewModel)
-                .frame(width: 230)
+        VStack(spacing: 0) {
+            // F-027: Tab bar — History | Snippets
+            HStack(spacing: 4) {
+                ForEach(ClipboardTab.allCases, id: \.self) { tab in
+                    Button(tab.rawValue) {
+                        withAnimation(.easeInOut(duration: 0.2)) { activeTab = tab }
+                    }
+                    .font(HaloFont.body(13, weight: activeTab == tab ? .semibold : .regular))
+                    .foregroundColor(activeTab == tab ? .haloText : .haloText2)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .fill(activeTab == tab ? Color.haloSurface2 : Color.clear)
+                            .overlay(
+                                Capsule().stroke(activeTab == tab ? Color.haloBorder2 : Color.clear, lineWidth: 1)
+                            )
+                    )
+                    .buttonStyle(.plain)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
             Divider().background(Color.haloBorder)
-            ClipboardItemList(viewModel: viewModel)
+
+            // Tab content
+            switch activeTab {
+            case .history:
+                HStack(spacing: 0) {
+                    ClipboardSidebar(viewModel: viewModel)
+                        .frame(width: 230)
+                    Divider().background(Color.haloBorder)
+                    ClipboardItemList(viewModel: viewModel)
+                }
+            case .snippets:
+                SnippetListSection(manager: SnippetManager.shared)
+            }
         }
         .background(Color.haloSurface)
         .onAppear {

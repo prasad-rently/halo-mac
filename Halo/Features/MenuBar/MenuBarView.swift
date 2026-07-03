@@ -13,6 +13,7 @@ final class MenuBarManager: ObservableObject {
     @Published var networkDownMBps: Double = 0
     @Published var batteryPercent: Int = 100
     @Published var batteryTimeRemaining: String = ""
+    @Published var tokenValues: MenuBarTokenValues = MenuBarTokenValues()
 
     enum SystemPressureLevel {
         case normal, moderate, critical
@@ -41,6 +42,21 @@ final class MenuBarManager: ObservableObject {
         } else {
             systemPressure = .normal
         }
+
+        // Update token values for custom format string rendering
+        tokenValues = MenuBarTokenValues(
+            cpuUsage: appState.cpuUsage,
+            ramUsage: appState.ramUsage,
+            ramUsedGB: appState.ramUsedGB,
+            ramTotalGB: appState.ramTotalGB,
+            diskFreeGB: appState.diskFreeGB,
+            diskTotalGB: appState.diskTotalGB,
+            batteryPercent: appState.batteryPercent,
+            networkDownMBps: appState.networkDownMBps,
+            networkUpMBps: appState.networkUpMBps,
+            healthScore: appState.systemHealthScore,
+            temperatureC: appState.batteryTemperatureC
+        )
     }
 }
 
@@ -52,6 +68,7 @@ enum MenuBarDisplayStyle: String, CaseIterable, Identifiable {
     case textStats = "textStats"  // "47% · 68%" compact text
     case miniBar   = "miniBar"    // Tiny CPU/RAM progress bars
     case dot       = "dot"        // Solid colored pressure dot
+    case custom    = "custom"     // User-defined format string with tokens
 
     var id: String { rawValue }
 
@@ -61,7 +78,122 @@ enum MenuBarDisplayStyle: String, CaseIterable, Identifiable {
         case .textStats: return "Text Stats"
         case .miniBar:   return "Mini Bars"
         case .dot:       return "Dot"
+        case .custom:    return "Custom"
         }
+    }
+}
+
+// MARK: - Menu Bar Format String Engine
+
+/// Available tokens for custom format strings.
+/// Usage: "CPU {cpu}% · RAM {ram}%" → "CPU 42% · RAM 61%"
+enum MenuBarToken: String, CaseIterable {
+    case cpu      = "{cpu}"       // CPU usage as integer %
+    case ram      = "{ram}"       // RAM usage as integer %
+    case ramUsed  = "{ram_used}"  // RAM used in GB (e.g. "8.2")
+    case ramTotal = "{ram_total}" // RAM total in GB (e.g. "16.0")
+    case disk     = "{disk}"      // Disk usage as integer %
+    case diskFree = "{disk_free}" // Disk free in GB (e.g. "120.5")
+    case battery  = "{battery}"   // Battery %
+    case netDown  = "{net_down}"  // Download speed (e.g. "1.2MB/s")
+    case netUp    = "{net_up}"    // Upload speed (e.g. "340KB/s")
+    case health   = "{health}"    // Health score (0-100)
+    case temp     = "{temp}"      // Battery temperature °C
+
+    var description: String {
+        switch self {
+        case .cpu:      return "CPU usage %"
+        case .ram:      return "RAM usage %"
+        case .ramUsed:  return "RAM used (GB)"
+        case .ramTotal: return "RAM total (GB)"
+        case .disk:     return "Disk usage %"
+        case .diskFree: return "Disk free (GB)"
+        case .battery:  return "Battery %"
+        case .netDown:  return "Download speed"
+        case .netUp:    return "Upload speed"
+        case .health:   return "Health score"
+        case .temp:     return "Temperature °C"
+        }
+    }
+}
+
+/// Preset format string templates.
+enum MenuBarFormatPreset: String, CaseIterable, Identifiable {
+    case minimal  = "Minimal"
+    case standard = "Standard"
+    case full     = "Full"
+    case network  = "Network"
+    case battery  = "Battery Focus"
+
+    var id: String { rawValue }
+
+    var template: String {
+        switch self {
+        case .minimal:  return "{cpu}%"
+        case .standard: return "CPU {cpu}% · RAM {ram}%"
+        case .full:     return "{cpu}% · {ram}% · {disk}% · {battery}%"
+        case .network:  return "↓{net_down} ↑{net_up}"
+        case .battery:  return "{battery}% · {temp}°C"
+        }
+    }
+}
+
+/// Renders a format string by replacing tokens with live values.
+struct MenuBarFormatRenderer {
+    static func render(format: String, values: MenuBarTokenValues) -> String {
+        var result = format
+        result = result.replacingOccurrences(of: MenuBarToken.cpu.rawValue,
+                                             with: String(format: "%.0f", values.cpuUsage * 100))
+        result = result.replacingOccurrences(of: MenuBarToken.ram.rawValue,
+                                             with: String(format: "%.0f", values.ramUsage * 100))
+        result = result.replacingOccurrences(of: MenuBarToken.ramUsed.rawValue,
+                                             with: String(format: "%.1f", values.ramUsedGB))
+        result = result.replacingOccurrences(of: MenuBarToken.ramTotal.rawValue,
+                                             with: String(format: "%.0f", values.ramTotalGB))
+        result = result.replacingOccurrences(of: MenuBarToken.disk.rawValue,
+                                             with: String(format: "%.0f", values.diskUsagePercent))
+        result = result.replacingOccurrences(of: MenuBarToken.diskFree.rawValue,
+                                             with: String(format: "%.0f", values.diskFreeGB))
+        result = result.replacingOccurrences(of: MenuBarToken.battery.rawValue,
+                                             with: "\(values.batteryPercent)")
+        result = result.replacingOccurrences(of: MenuBarToken.netDown.rawValue,
+                                             with: values.formattedNetDown)
+        result = result.replacingOccurrences(of: MenuBarToken.netUp.rawValue,
+                                             with: values.formattedNetUp)
+        result = result.replacingOccurrences(of: MenuBarToken.health.rawValue,
+                                             with: "\(values.healthScore)")
+        result = result.replacingOccurrences(of: MenuBarToken.temp.rawValue,
+                                             with: String(format: "%.0f", values.temperatureC))
+        return result
+    }
+}
+
+/// Snapshot of all token values for format string rendering.
+struct MenuBarTokenValues {
+    var cpuUsage: Double = 0
+    var ramUsage: Double = 0
+    var ramUsedGB: Double = 0
+    var ramTotalGB: Double = 0
+    var diskFreeGB: Double = 0
+    var diskTotalGB: Double = 0
+    var batteryPercent: Int = 0
+    var networkDownMBps: Double = 0
+    var networkUpMBps: Double = 0
+    var healthScore: Int = 0
+    var temperatureC: Double = 0
+
+    var diskUsagePercent: Double {
+        guard diskTotalGB > 0 else { return 0 }
+        return ((diskTotalGB - diskFreeGB) / diskTotalGB) * 100
+    }
+
+    var formattedNetDown: String { formatSpeed(networkDownMBps) }
+    var formattedNetUp: String { formatSpeed(networkUpMBps) }
+
+    private func formatSpeed(_ mbps: Double) -> String {
+        if mbps < 0.01 { return "0KB/s" }
+        if mbps < 1.0 { return String(format: "%.0fKB/s", mbps * 1024) }
+        return String(format: "%.1fMB/s", mbps)
     }
 }
 
@@ -71,8 +203,10 @@ struct MenuBarIconView: View {
     let state: MenuBarManager.SystemPressureLevel
     var cpuUsage: Double = 0
     var ramUsage: Double = 0
+    var tokenValues: MenuBarTokenValues = MenuBarTokenValues()
 
     @AppStorage("menuBarDisplayStyle") private var styleRaw = MenuBarDisplayStyle.icon.rawValue
+    @AppStorage("menuBarFormatString") private var formatString = "CPU {cpu}% · RAM {ram}%"
 
     private var style: MenuBarDisplayStyle {
         MenuBarDisplayStyle(rawValue: styleRaw) ?? .icon
@@ -92,6 +226,7 @@ struct MenuBarIconView: View {
         case .textStats: textStatsView
         case .miniBar:   miniBarView
         case .dot:       dotView
+        case .custom:    customFormatView
         }
     }
 
@@ -139,6 +274,15 @@ struct MenuBarIconView: View {
             .frame(width: 8, height: 8)
             .shadow(color: pressureColor.opacity(0.7), radius: 2)
             .frame(width: 18, height: 18)
+    }
+
+    // Style: user-defined format string
+    @ViewBuilder private var customFormatView: some View {
+        let rendered = MenuBarFormatRenderer.render(format: formatString, values: tokenValues)
+        Text(rendered)
+            .font(.system(size: 10, weight: .medium, design: .monospaced))
+            .foregroundColor(.primary)
+            .frame(height: 18)
     }
 }
 
@@ -459,6 +603,9 @@ struct MenuBarPreviewView: View {
                         .foregroundColor(.haloText2)
                 }
 
+                // F-036: Display style selector + custom format editor
+                MenuBarStyleSelector(tokenValues: menuBarManager.tokenValues)
+
                 HStack(alignment: .top, spacing: 24) {
                     // Live popover preview
                     VStack(alignment: .leading, spacing: 8) {
@@ -495,6 +642,146 @@ struct MenuBarPreviewView: View {
             .padding(28)
         }
         .background(Color.haloSurface)
+    }
+}
+
+// MARK: - Menu Bar Style Selector (F-036)
+
+struct MenuBarStyleSelector: View {
+    let tokenValues: MenuBarTokenValues
+    @AppStorage("menuBarDisplayStyle") private var styleRaw = MenuBarDisplayStyle.icon.rawValue
+    @AppStorage("menuBarFormatString") private var formatString = "CPU {cpu}% · RAM {ram}%"
+
+    private var style: MenuBarDisplayStyle {
+        get { MenuBarDisplayStyle(rawValue: styleRaw) ?? .icon }
+        nonmutating set { styleRaw = newValue.rawValue }
+    }
+
+    var body: some View {
+        HaloCard {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Display Style")
+                    .font(HaloFont.body(14, weight: .semibold))
+                    .foregroundColor(.haloText)
+
+                // Style picker
+                HStack(spacing: 8) {
+                    ForEach(MenuBarDisplayStyle.allCases) { s in
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.15)) { styleRaw = s.rawValue }
+                        } label: {
+                            Text(s.label)
+                                .font(HaloFont.body(12, weight: style == s ? .semibold : .regular))
+                                .foregroundColor(style == s ? .haloText : .haloText3)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .background(
+                                    Capsule()
+                                        .fill(style == s ? Color.haloAccent.opacity(0.15) : Color.haloSurface2)
+                                )
+                                .overlay(
+                                    Capsule()
+                                        .stroke(style == s ? Color.haloAccent.opacity(0.4) : Color.haloBorder, lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Spacer()
+                }
+
+                // Custom format string editor — only shown when "Custom" is selected
+                if style == .custom {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Divider().background(Color.haloBorder)
+
+                        // Live preview
+                        HStack(spacing: 8) {
+                            Text("Preview:")
+                                .font(HaloFont.body(12))
+                                .foregroundColor(.haloText3)
+                            Text(MenuBarFormatRenderer.render(format: formatString, values: tokenValues))
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundColor(.haloAccent)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(Color.haloSurface)
+                                .cornerRadius(6)
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.haloBorder, lineWidth: 1))
+                        }
+
+                        // Format string input
+                        HStack(spacing: 8) {
+                            Image(systemName: "textformat.abc")
+                                .foregroundColor(.haloText3)
+                            TextField("Format string", text: $formatString)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(.haloText)
+                        }
+                        .padding(10)
+                        .background(Color.haloSurface)
+                        .cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.haloBorder, lineWidth: 1))
+
+                        // Preset buttons
+                        HStack(spacing: 6) {
+                            Text("Presets:")
+                                .font(HaloFont.body(11))
+                                .foregroundColor(.haloText3)
+                            ForEach(MenuBarFormatPreset.allCases) { preset in
+                                Button {
+                                    formatString = preset.template
+                                } label: {
+                                    Text(preset.rawValue)
+                                        .font(HaloFont.body(10, weight: .medium))
+                                        .foregroundColor(.haloAccent)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.haloAccent.opacity(0.08))
+                                        .cornerRadius(5)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+
+                        // Available tokens
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Available tokens:")
+                                .font(HaloFont.body(11))
+                                .foregroundColor(.haloText3)
+
+                            LazyVGrid(columns: [
+                                GridItem(.flexible()), GridItem(.flexible()),
+                                GridItem(.flexible()), GridItem(.flexible())
+                            ], spacing: 4) {
+                                ForEach(MenuBarToken.allCases, id: \.rawValue) { token in
+                                    Button {
+                                        formatString += token.rawValue
+                                    } label: {
+                                        VStack(spacing: 2) {
+                                            Text(token.rawValue)
+                                                .font(.system(size: 10, design: .monospaced))
+                                                .foregroundColor(.haloAccent)
+                                            Text(token.description)
+                                                .font(HaloFont.body(9))
+                                                .foregroundColor(.haloText3)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 5)
+                                        .background(Color.haloSurface)
+                                        .cornerRadius(6)
+                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.haloBorder, lineWidth: 1))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("Click to insert \(token.rawValue)")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(16)
+        }
     }
 }
 

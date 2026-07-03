@@ -35,6 +35,12 @@ struct ActionsView: View {
         } message: {
             Text("\"\(vm.actionToDelete?.name ?? "")\" will be permanently removed.")
         }
+        // F-041: QR Code sheet
+        .sheet(isPresented: $vm.showQRSheet) {
+            if let action = vm.qrAction, let qr = vm.qrImage {
+                ActionQRCodeSheet(action: action, qrImage: qr)
+            }
+        }
     }
 
     // MARK: - System Controls Strip (mic + camera + screen, always pinned at top)
@@ -67,6 +73,32 @@ struct ActionsView: View {
                     .foregroundColor(.haloText3)
             }
             Spacer()
+
+            // F-041: Import/Export menu
+            Menu {
+                Button {
+                    ActionShareManager.shared.importFromFile()
+                } label: {
+                    Label("Import Actions from File…", systemImage: "square.and.arrow.down")
+                }
+                Button {
+                    ActionShareManager.shared.exportAllCustomActions()
+                } label: {
+                    Label("Export Custom Actions…", systemImage: "square.and.arrow.up")
+                }
+            } label: {
+                Image(systemName: "square.and.arrow.up.on.square")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.haloText2)
+                    .padding(7)
+                    .background(Color.haloSurface2)
+                    .cornerRadius(8)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.haloBorder, lineWidth: 1))
+            }
+            .menuStyle(.borderlessButton)
+            .frame(width: 32)
+            .help("Import / Export actions")
+
             Button {
                 vm.editorMode  = .create
                 vm.showEditor  = true
@@ -122,6 +154,10 @@ struct ActionsView: View {
                         vm.requestDelete(action)
                     } onPin: {
                         library.togglePin(action)
+                    } onShowQR: { action, qrImage in
+                        vm.qrAction = action
+                        vm.qrImage = qrImage
+                        vm.showQRSheet = true
                     }
                 }
             }
@@ -221,6 +257,7 @@ private struct ActionTile: View {
     let onEdit:   () -> Void
     let onDelete: () -> Void
     let onPin:    () -> Void
+    var onShowQR: ((ActionItem, NSImage) -> Void)? = nil
     @State private var isHovered  = false
     @State private var justRan    = false
 
@@ -284,6 +321,20 @@ private struct ActionTile: View {
                 Button { onPin() } label: {
                     Label(action.isPinned ? "Unpin" : "Pin to Top",
                           systemImage: action.isPinned ? "pin.slash" : "pin.fill")
+                }
+                // F-041: Share action
+                Divider()
+                Button {
+                    ActionShareManager.shared.copyLink(for: action)
+                } label: {
+                    Label("Copy Share Link", systemImage: "link")
+                }
+                Button {
+                    if let qr = ActionShareManager.shared.generateQRCode(for: action) {
+                        onShowQR?(action, qr)
+                    }
+                } label: {
+                    Label("Show QR Code", systemImage: "qrcode")
                 }
                 if !action.isBuiltIn {
                     Divider()
@@ -498,6 +549,10 @@ final class ActionsViewModel: ObservableObject {
     @Published var showDeleteConfirm  = false
     @Published var editorMode:  CustomActionEditor.Mode = .create
     @Published var actionToDelete: ActionItem?
+    // F-041: QR Code sharing
+    @Published var showQRSheet = false
+    @Published var qrAction: ActionItem?
+    @Published var qrImage: NSImage?
 
     func saveAction(_ action: ActionItem) {
         if case .edit = editorMode {

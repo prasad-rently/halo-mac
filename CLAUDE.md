@@ -47,15 +47,27 @@ Halo/
 │   │       ├── SignatureDatabase.swift   actor; loads signatures.json + HTTPS delta updates
 │   │       ├── ProtectionScanner.swift   async; uses SignatureDatabase for threat detection
 │   │       ├── LoginItemScanner.swift    actor; enumerates LaunchAgent/Daemon plists
-│   │       └── AppScanner.swift          actor; enumerates apps + leftover detection
+│   │       ├── AppScanner.swift          actor; enumerates apps + leftover detection
+│   │       └── DriveSpeedTester.swift     actor; internal/external drive read+write benchmark (F-043)
 │   ├── DesignSystem/DesignSystem.swift   colours, components, typography
+│   ├── Intents/
+│   │   ├── GetHealthScoreIntent.swift
+│   │   ├── GetCPUUsageIntent.swift
+│   │   ├── GetBatteryHealthIntent.swift
+│   │   ├── GetDiskSpaceIntent.swift
+│   │   ├── RunSmartScanIntent.swift
+│   │   ├── RunActionIntent.swift
+│   │   ├── GetClipboardHistoryIntent.swift
+│   │   ├── ExportReportIntent.swift
+│   │   └── HaloShortcutsProvider.swift
 │   ├── Features/
 │   │   ├── Dashboard/DashboardView.swift      health score, metrics, AlertHistorySection, Export Report
 │   │   ├── Cleanup/CleanupView.swift
 │   │   ├── Protection/ProtectionView.swift
 │   │   ├── Performance/PerformanceView.swift  login items via LoginItemScanner
 │   │   ├── Applications/ApplicationsView.swift AppScanner + deep uninstall
-│   │   ├── Files/FilesView.swift              SpaceLens + Duplicates + LargeFiles tabs
+│   │   ├── Files/FilesView.swift              SpaceLens + Duplicates + LargeFiles + Downloads + Drive Speed tabs
+│   │   ├── Files/DriveSpeedView.swift          drive read/write benchmark screen (F-043)
 │   │   ├── Clipboard/
 │   │   │   ├── ClipboardView.swift
 │   │   │   ├── ClipboardMonitor.swift
@@ -358,6 +370,25 @@ codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
 
 ---
 
+## DriveSpeedTester (F-043 / NFeat-121)
+
+`Halo/Core/Scanner/DriveSpeedTester.swift` + `Halo/Features/Files/DriveSpeedView.swift`
+
+- `actor DriveSpeedTester` — read/write throughput benchmark for internal & external drives. Surfaced as the **"Drive Speed"** tab in the Files module.
+- `func availableVolumes() -> [DriveVolume]` — `FileManager.mountedVolumeURLs`, filtered to **local + browsable**, sorted internal-first.
+- `func run(volume:size:progress:) async throws -> DriveSpeedResult` — 3-pass sequential write then read.
+- **Accuracy techniques (do not remove):**
+  - `fcntl(fd, F_NOCACHE, 1)` on the scratch fd → bypasses buffer cache (otherwise the read test just measures RAM).
+  - `fcntl(fd, F_FULLFSYNC)` after writes → flushes the drive's own write-back cache to media.
+  - Write buffer filled with `arc4random_buf` random bytes → defeats compressing/dedup controllers.
+- **Average vs Optimal:** each 8 MB chunk is timed. `average = total ÷ total time` (sustained); `optimal = max chunk` (peak). Both reported for read and write.
+- `DriveTestSize`: `.quick` (128 MB) / `.standard` (512 MB) / `.thorough` (1 GB).
+- **Scratch file:** internal → `FileManager.temporaryDirectory`; external → `<volume>/.HaloSpeedTest/`. Removed via `unlink` in a `defer` — this is Halo's own temp data, the one sanctioned exception to the trashItem-only rule (commented in source).
+- `DriveSpeedError.notWritable` surfaces as a friendly banner when a volume is read-only or sandbox-blocked.
+- `@MainActor DriveSpeedViewModel` owns the run `Task`; the actor's `@Sendable` progress callback hops to `MainActor` to update published state.
+
+---
+
 ## MenuBar Display Styles
 
 `Halo/Features/MenuBar/MenuBarView.swift`
@@ -368,11 +399,17 @@ enum MenuBarDisplayStyle: String, CaseIterable, Identifiable {
     case textStats  // "CPU 42% · RAM 61%"
     case miniBar    // 4px capsule progress bars for CPU and RAM
     case dot        // coloured dot (green/amber/red) based on system pressure
+    case custom     // User-defined format string with tokens
 }
 ```
 
 - Persisted via `@AppStorage("menuBarDisplayStyle")` in `MenuBarIconView`
 - `MiniProgressBar` — private 4px capsule progress indicator in `.miniBar` style
+- **Custom format strings** (F-036): `@AppStorage("menuBarFormatString")` — user-editable template with 11 tokens:
+  - `{cpu}`, `{ram}`, `{ram_used}`, `{ram_total}`, `{disk}`, `{disk_free}`, `{battery}`, `{net_down}`, `{net_up}`, `{health}`, `{temp}`
+  - 5 presets: Minimal (`{cpu}%`), Standard (`CPU {cpu}% · RAM {ram}%`), Full, Network (`↓{net_down} ↑{net_up}`), Battery Focus
+  - `MenuBarFormatRenderer.render(format:values:)` — replaces tokens with live values from `MenuBarTokenValues`
+  - `MenuBarStyleSelector` — in-app editor with live preview, preset buttons, clickable token grid
 
 ---
 
@@ -399,14 +436,17 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | Applications | ✅ | ApplicationsViewModel | AppScanner | — |
 | Files (SpaceLens) | ✅ | SpaceLensViewModel | — | — |
 | Files (Duplicates) | ✅ | DuplicateFinderViewModel | DuplicateDetector | ✅ |
+| Files (Drive Speed) | ✅ | DriveSpeedViewModel | DriveSpeedTester | ✅ |
 | Clipboard | ✅ | ClipboardViewModel | ClipboardMonitor | ✅ |
 | Actions | ✅ | ActionsViewModel | ActionRunner + ActionLibrary | — |
+| Ports | ✅ | PortManagerViewModel | PortScanner | — |
 | Menu Bar | ✅ | MenuBarManager | SystemMonitor | — |
 | Smart Scan | ✅ | ScanScheduler | ScanCoordinator | — |
 | Onboarding / Settings | ✅ | @AppStorage | — | — |
 | Widget | ✅ | HaloProvider | — | — |
 | Alert History | ✅ | AlertLog | AlertManager | — |
 | Report Export | ✅ | ReportGenerator | — | — |
+| Siri Shortcuts | ✅ | HaloShortcutsProvider | 8 AppIntents | — |
 
 ---
 
@@ -439,6 +479,74 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `6007` / `6008` | QuickActionPickerView.swift file ref / sources build file |
 | `6009` / `6010` | ActionsView.swift file ref / sources build file |
 | `6011` / `6012` | CustomActionEditor.swift file ref / sources build file |
+| `8001` / `8002` | PortScanner.swift file ref / sources build file |
+| `8003` / `8004` | PortManagerView.swift file ref / sources build file |
+| `8005` / `8006` | PortManagerViewModel.swift file ref / sources build file |
+| `8007` / `8008` | DownloadsView.swift file ref / sources build file |
+| `8009` / `8010` | DownloadsViewModel.swift file ref / sources build file |
+| `8011` / `8012` | CelebrationOverlay.swift file ref / sources build file |
+| `8013` / `8014` | CodeBeautifierView.swift file ref / sources build file |
+| `8015` / `8016` | CodeTheme.swift file ref / sources build file |
+| `8017` / `8018` | SyntaxHighlighter.swift file ref / sources build file |
+| `8019` / `8020` | IdleAppMonitor.swift file ref / sources build file |
+| `8021` / `8022` | IdleAppsSection.swift file ref / sources build file |
+| `8023` / `8024` | SnippetManager.swift file ref / sources build file |
+| `8025` / `8026` | SnippetEditorView.swift file ref / sources build file |
+| `8027` / `8028` | SnippetListSection.swift file ref / sources build file |
+| `8029` / `8030` | ActionShareManager.swift file ref / sources build file |
+| `9001` / `9002` | GetHealthScoreIntent.swift file ref / sources build file |
+| `9003` / `9004` | GetCPUUsageIntent.swift file ref / sources build file |
+| `9005` / `9006` | GetBatteryHealthIntent.swift file ref / sources build file |
+| `9007` / `9008` | GetDiskSpaceIntent.swift file ref / sources build file |
+| `9009` / `9010` | RunSmartScanIntent.swift file ref / sources build file |
+| `9011` / `9012` | RunActionIntent.swift file ref / sources build file |
+| `9013` / `9014` | GetClipboardHistoryIntent.swift file ref / sources build file |
+| `9015` / `9016` | ExportReportIntent.swift file ref / sources build file |
+| `9017` / `9018` | HaloShortcutsProvider.swift file ref / sources build file |
+
+---
+
+## PortScanner
+
+`Halo/Core/Scanner/PortScanner.swift`
+
+- `actor PortScanner` — parses `lsof -iTCP -sTCP:LISTEN -P -n` and `lsof -iUDP -P -n`
+- `func scan() async -> [PortEntry]` — returns deduplicated, port-sorted list
+- `func killProcess(pid:force:) async -> (Bool, String)` — sends SIGTERM or SIGKILL
+- Process path resolution via `ps -p <pid> -o comm=`
+- `PortEntry` model: `pid`, `processName`, `processPath`, `port`, `protocolType`, `state`, `friendlyName`
+- `NamedPort` model: user-assigned `port → name` mapping, persisted to `UserDefaults["haloNamedPorts"]`
+- `KillSignalPreference` enum: `.ask` / `.sigterm` / `.sigkill`, persisted to `UserDefaults["haloKillSignalPref"]`
+
+---
+
+## Siri Shortcuts / App Intents (F-042)
+
+`Halo/Intents/`
+
+- 8 `AppIntent` structs + 1 `AppShortcutsProvider`, compiled into the main app target
+- Intents read live metrics from `AppState.shared` (set by HaloApp on launch)
+- `HaloShortcutsProvider` registers all 8 intents with Siri phrases for voice invocation
+
+### Intent catalog
+
+| Intent | File | Input | Output |
+|--------|------|-------|--------|
+| GetHealthScoreIntent | `GetHealthScoreIntent.swift` | — | `Int` (0–100) |
+| GetCPUUsageIntent | `GetCPUUsageIntent.swift` | — | `Double` (%) |
+| GetBatteryHealthIntent | `GetBatteryHealthIntent.swift` | — | `String` (summary) |
+| GetDiskSpaceIntent | `GetDiskSpaceIntent.swift` | — | `String` (summary) |
+| RunSmartScanIntent | `RunSmartScanIntent.swift` | — | `String` (result) |
+| RunActionIntent | `RunActionIntent.swift` | `HaloAction` entity | `String` (output) |
+| GetClipboardHistoryIntent | `GetClipboardHistoryIntent.swift` | `count: Int` (1–10) | `[String]` |
+| ExportReportIntent | `ExportReportIntent.swift` | — | `IntentFile` (PDF) |
+
+### Key types
+
+- `HaloAction: AppEntity` — wraps `ActionItem.stableKey` as ID for Shortcuts discovery
+- `HaloActionQuery: EntityQuery` — provides `suggestedEntities()` from `ActionLibrary.shared.actions`
+- `IntentError` — shared error enum: `.appNotRunning`, `.reportGenerationFailed`, `.actionNotFound`
+- `AppState.shared: AppState?` — static reference set by HaloApp for intents to access live metrics
 
 ---
 
@@ -462,6 +570,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 16. **`EditMode` is iOS-only** — `\.editMode` environment key does not exist on macOS. `List + .onMove` is always drag-active on macOS without any `EditMode`. Do not use `.environment(\.editMode, ...)` in macOS code.
 17. **VPN detection** — use two-rule strategy: (1) definitive protocol prefixes (`ppp`, `ipsec`, `tap`), then (2) `utun` with active IPv4 AND `path.usesInterfaceType(.other)`. iCloud Private Relay uses `utun` but `.cellular`/`.wifi` path type, so rule 2 correctly excludes it.
 18. **Battery health label** — factor cycle count FIRST, then capacity ratio. Cycles < 100 → "Excellent"; < 300 → "Good"; only fall back to capacity ratio for older batteries with known cycles.
+19. **Drive speed benchmark accuracy** — the scratch fd MUST set `fcntl(fd, F_NOCACHE, 1)` (else reads measure RAM) and `fcntl(fd, F_FULLFSYNC)` after writes (else writes measure the SSD's DRAM cache). Write buffer must be random (`arc4random_buf`), not zeros — zeros let compressing controllers report fake speeds. The scratch file is `unlink`-ed (not trashed) — the only sanctioned exception to the trashItem rule, because it's Halo's own temp data that must vanish immediately.
 
 ---
 
@@ -580,11 +689,19 @@ This presents the native macOS auth dialog. Multi-line scripts are collapsed to 
 **Quick Action Picker shortcut** — `⌘⇧A` (keyCode `0`, modifiers `.command + .shift`).
 Registered alongside the clipboard shortcut in `HotkeyManager.start()`. Toggle behaviour: second press dismisses the panel.
 
-**Predefined actions** (15 built-in):
-- **Xcode**: Clear Derived Data, Clear SPM Cache, Reset iOS Simulators, Kill Xcode
-- **System**: Flush DNS Cache (sudo), Purge Inactive RAM (sudo), Empty Trash, Rebuild Spotlight Index (sudo), Repair Disk Permissions
-- **Network**: Run Speed Test, Check Connectivity, Show Network Interfaces
-- **Halo**: Run Smart Scan, Export Health Report, Clear Clipboard History
+**Predefined actions** (108 built-in):
+- **Xcode** (4): Clear Derived Data, Clear SPM Cache, Reset iOS Simulators, Kill Xcode
+- **Developer** (11): Remove node_modules, Clear npm Cache, Clear Yarn Cache, Kill Process on Port, Show All Listening Ports, Copy SSH Public Key, Clear CocoaPods Cache, Clear Gradle Cache, Docker System Prune, Clear pip Cache, Clear Homebrew Cache
+- **System** (25): Flush DNS Cache (sudo), Purge Inactive RAM (sudo), Empty Trash, Rebuild Spotlight Index (sudo), Repair Disk Permissions, Toggle Microphone, Camera Privacy Settings, Restart Finder, Restart Dock, Restart Menu Bar, Toggle Hidden Files, Remove .DS_Store Files, Show Disk Usage by Folder, Lock Screen, Set Volume to 0% (Mute), Set Volume to 50%, Generate Secure Password, Generate UUID, Remove ._ Resource Fork Files, Clear Font Caches (sudo), Clear User Logs, Remove Broken Symlinks, Flush QuickLook Cache, Rebuild Launch Services Database, Kill All Background Apps
+- **Network** (5): Run Speed Test, Check Connectivity, Show Network Interfaces, Show Public IP Address, Show Wi-Fi Password
+- **Files** (2): Show Largest Files, Eject All External Disks
+- **Clipboard** (15): Format JSON, Minify JSON, Count Words, Sort Lines, URL Encode/Decode, Base64 Encode/Decode, UPPERCASE, lowercase, Remove Duplicates, Strip Formatting, Hash SHA-256, Generate QR Code, Beautify Code
+- **Creative** (10): Clear caches for FCP, Motion, DaVinci Resolve, Premiere, After Effects, Photoshop, Lightroom, Figma, Logic Pro, Sketch
+- **Media** (8): Convert HEIC→JPEG, Optimise Images, Get Video Info, Extract Audio, Create GIF, Take Screenshot, Screen Recording, Resize to 1080p
+- **Halo** (3): Run Smart Scan, Export Health Report, Clear Clipboard History
+- **Dock & Desktop** (14): Add Dock Spacer, Add Small Spacer, Reset Dock, Toggle Auto-Hide, Remove/Restore Auto-Hide Delay, Minimize Effect (Suck/Scale/Genie), Hide/Show Recent Apps, Dock Position (Left/Right/Bottom)
+- **Display** (6): Toggle Dark Mode, Screenshot to Clipboard, Screenshot Region, Screenshot with Timer, Toggle Desktop Icons, Open Display Settings
+- **Audio** (5): Mute Microphone, Unmute Microphone, Set Volume 25%, Set Volume 75%, Toggle Do Not Disturb
 
 **Custom actions** persisted to `UserDefaults["haloCustomActions"]` as JSON-encoded `[ActionItem]`.
 Usage counts persisted separately to `UserDefaults["haloActionUsage"]` so built-in counts survive app updates.

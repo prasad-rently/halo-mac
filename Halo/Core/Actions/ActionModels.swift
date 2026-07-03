@@ -3,31 +3,55 @@ import SwiftUI
 // MARK: - ActionCategory
 
 enum ActionCategory: String, Codable, CaseIterable, Identifiable {
-    case xcode   = "Xcode"
-    case system  = "System"
-    case network = "Network"
-    case halo    = "Halo"
-    case custom  = "Custom"
+    case xcode     = "Xcode"
+    case developer = "Developer"
+    case system    = "System"
+    case network   = "Network"
+    case files     = "Files"
+    case clipboard = "Clipboard"
+    case creative  = "Creative"
+    case media     = "Media"
+    case halo      = "Halo"
+    case dock      = "Dock & Desktop"
+    case display   = "Display"
+    case audio     = "Audio"
+    case custom    = "Custom"
 
     var id: String { rawValue }
 
     var icon: String {
         switch self {
-        case .xcode:   return "hammer.fill"
-        case .system:  return "gearshape.2.fill"
-        case .network: return "network"
-        case .halo:    return "sparkles"
-        case .custom:  return "terminal.fill"
+        case .xcode:     return "hammer.fill"
+        case .developer: return "chevron.left.forwardslash.chevron.right"
+        case .system:    return "gearshape.2.fill"
+        case .network:   return "network"
+        case .files:     return "folder.fill"
+        case .clipboard: return "text.justify.left"
+        case .creative:  return "paintbrush.fill"
+        case .media:     return "photo.fill"
+        case .halo:      return "sparkles"
+        case .dock:      return "dock.rectangle"
+        case .display:   return "display"
+        case .audio:     return "speaker.wave.3.fill"
+        case .custom:    return "terminal.fill"
         }
     }
 
     var color: Color {
         switch self {
-        case .xcode:   return Color(hex: "#4f7cff")
-        case .system:  return Color(hex: "#22d97a")
-        case .network: return Color(hex: "#00d4e8")
-        case .halo:    return Color(hex: "#7b5ea7")
-        case .custom:  return Color(hex: "#f5a623")
+        case .xcode:     return Color(hex: "#4f7cff")
+        case .developer: return Color(hex: "#f97316")
+        case .system:    return Color(hex: "#22d97a")
+        case .network:   return Color(hex: "#00d4e8")
+        case .files:     return Color(hex: "#34d399")
+        case .clipboard: return Color(hex: "#b06cff")
+        case .creative:  return Color(hex: "#ec4899")
+        case .media:     return Color(hex: "#f59e0b")
+        case .halo:      return Color(hex: "#7b5ea7")
+        case .dock:      return Color(hex: "#06b6d4")
+        case .display:   return Color(hex: "#8b5cf6")
+        case .audio:     return Color(hex: "#14b8a6")
+        case .custom:    return Color(hex: "#f5a623")
         }
     }
 }
@@ -42,6 +66,7 @@ enum BuiltInAction: String, Codable, CaseIterable {
     case emptyTrash
     case toggleMic         // mute ↔ unmute microphone
     case cameraPrivacy     // open System Settings → Privacy → Camera
+    case beautifyCode      // open Code Beautifier sheet with clipboard content
 }
 
 // MARK: - ActionCommand

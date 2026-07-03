@@ -61,8 +61,20 @@ struct HaloApp: App {
                 .environmentObject(menuBarManager)
                 .frame(minWidth: 900, minHeight: 620)
                 .task {
+                    // F-042: expose shared reference for App Intents
+                    AppState.shared = appState
                     // F-005: start background scan scheduler now that AppState is ready
                     ScanScheduler.shared.start(appState: appState)
+                }
+                // F-041: handle halo:// deep links for action sharing
+                .onOpenURL { url in
+                    ActionShareManager.shared.handleURL(url)
+                }
+                .sheet(isPresented: Binding(
+                    get: { ActionShareManager.shared.showImportSheet },
+                    set: { ActionShareManager.shared.showImportSheet = $0 }
+                )) {
+                    ActionImportSheet(shareManager: ActionShareManager.shared)
                 }
         }
         .windowStyle(.hiddenTitleBar)
@@ -78,10 +90,12 @@ struct HaloApp: App {
                 .environmentObject(menuBarManager)
         } label: {
             // F-008: pass live CPU/RAM for text-stats and mini-bar display styles
+            // F-036: pass all token values for custom format string rendering
             MenuBarIconView(
                 state: menuBarManager.systemPressure,
                 cpuUsage: menuBarManager.cpuUsage,
-                ramUsage: menuBarManager.ramUsage
+                ramUsage: menuBarManager.ramUsage,
+                tokenValues: menuBarManager.tokenValues
             )
         }
         .menuBarExtraStyle(.window)

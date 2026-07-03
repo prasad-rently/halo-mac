@@ -4,9 +4,11 @@ struct FilesView: View {
     @State private var activeTab: FilesTab = .spaceLens
 
     enum FilesTab: String, CaseIterable {
-        case spaceLens = "Space Lens"
+        case spaceLens  = "Space Lens"
         case duplicates = "Duplicates"
         case largeFiles = "Large Files"
+        case downloads  = "Downloads"
+        case driveSpeed = "Drive Speed"
     }
 
     var body: some View {
@@ -40,9 +42,11 @@ struct FilesView: View {
 
             // Content
             switch activeTab {
-            case .spaceLens: SpaceLensView()
+            case .spaceLens:  SpaceLensView()
             case .duplicates: DuplicateFinderView()
             case .largeFiles: LargeFilesView()
+            case .downloads:  DownloadsView()
+            case .driveSpeed: DriveSpeedView()
             }
         }
         .background(Color.haloSurface)

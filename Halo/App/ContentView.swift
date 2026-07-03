@@ -20,16 +20,27 @@ struct ContentView: View {
 
 struct MainLayout: View {
     @EnvironmentObject var appState: AppState
+    @StateObject private var celebrationManager = CelebrationManager.shared
+    @ObservedObject private var actionRunner = ActionRunner.shared
     @State private var columnVisibility = NavigationSplitViewVisibility.all
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView()
-                .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 240)
-        } detail: {
-            DetailView()
+        ZStack {
+            NavigationSplitView(columnVisibility: $columnVisibility) {
+                SidebarView()
+                    .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 240)
+            } detail: {
+                DetailView()
+            }
+
+            // F-037: Celebration overlay — sits above all content, non-interactive
+            CelebrationOverlay(manager: celebrationManager)
         }
         .background(Color.haloBackground)
+        // F-038: Code Beautifier sheet — triggered from Actions module
+        .sheet(isPresented: $actionRunner.showCodeBeautifier) {
+            CodeBeautifierView()
+        }
     }
 }
 
@@ -326,6 +337,7 @@ struct DetailView: View {
             case .files:          FilesView()
             case .clipboard:      ClipboardView()
             case .actions:        ActionsView()
+            case .ports:          PortManagerView()
             case .localShare:     LocalShareView()
             case .menuBarPreview: MenuBarPreviewView()
             }

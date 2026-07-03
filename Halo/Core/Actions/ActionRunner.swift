@@ -20,6 +20,8 @@ final class ActionRunner: ObservableObject {
 
     /// Ordered most-recent-first. Capped at 50 entries.
     @Published private(set) var executions: [ActionExecution] = []
+    /// F-038: Code Beautifier sheet trigger
+    @Published var showCodeBeautifier = false
 
     private init() {}
 
@@ -95,6 +97,12 @@ final class ActionRunner: ObservableObject {
             SystemControlsManager.shared.openCameraPrivacySettings()
             finish(execId, success: true,
                    finalLine: "✓ Opened System Settings → Privacy → Camera.")
+
+        case .beautifyCode:
+            appendLine("Opening Code Beautifier…", to: execId)
+            showCodeBeautifier = true
+            finish(execId, success: true,
+                   finalLine: "✓ Code Beautifier opened.")
         }
     }
 
@@ -325,5 +333,10 @@ final class ActionRunner: ObservableObject {
         executions[idx].endDate  = Date()
         executions[idx].progress = success ? 1.0 : -1
         executions[idx].state    = success ? .completed : .failed(finalLine ?? "Error")
+
+        // F-037: Celebration on action success
+        if success {
+            CelebrationManager.shared.trigger(.actionSuccess)
+        }
     }
 }

@@ -7,96 +7,130 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		000000000000000000007001 /* Halo/App/BuildToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007000 /* Halo/App/BuildToken.swift */; };
-		000000000000000000007002 /* Halo/Core/Actions/ActionSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007003 /* Halo/Core/Actions/ActionSettingsStore.swift */; };
-		000000000000000000007004 /* Halo/Core/Actions/VoiceSearchController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007005 /* Halo/Core/Actions/VoiceSearchController.swift */; };
-		000000000000000000007006 /* Halo/Features/Actions/ActionSettingsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007007 /* Halo/Features/Actions/ActionSettingsTab.swift */; };
-		000000000000000000007008 /* Halo/Core/SystemControls/SystemControlsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007009 /* Halo/Core/SystemControls/SystemControlsManager.swift */; };
-		000000000000000000007010 /* Halo/Core/SystemControls/MicCameraControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007011 /* Halo/Core/SystemControls/MicCameraControlsView.swift */; };
-		000000000000000000001017 /* Halo/App/AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001016 /* Halo/App/AppState.swift */; };
-		000000000000000000001019 /* Halo/App/ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001018 /* Halo/App/ContentView.swift */; };
-		000000000000000000001021 /* Halo/App/HaloApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001020 /* Halo/App/HaloApp.swift */; };
-		000000000000000000001023 /* Halo/Core/Models/Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001022 /* Halo/Core/Models/Models.swift */; };
-		000000000000000000001025 /* Halo/Core/Scanner/FileSystemScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001024 /* Halo/Core/Scanner/FileSystemScanner.swift */; };
-		000000000000000000001027 /* Halo/Core/Scanner/ScanCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001026 /* Halo/Core/Scanner/ScanCoordinator.swift */; };
-		000000000000000000001029 /* Halo/Core/Scanner/SystemMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001028 /* Halo/Core/Scanner/SystemMonitor.swift */; };
-		000000000000000000001031 /* Halo/DesignSystem/DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001030 /* Halo/DesignSystem/DesignSystem.swift */; };
-		000000000000000000001033 /* Halo/Features/Applications/ApplicationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001032 /* Halo/Features/Applications/ApplicationsView.swift */; };
-		000000000000000000001035 /* Halo/Features/Cleanup/CleanupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001034 /* Halo/Features/Cleanup/CleanupView.swift */; };
-		000000000000000000001037 /* Halo/Features/Clipboard/ClipboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001036 /* Halo/Features/Clipboard/ClipboardView.swift */; };
-		000000000000000000001039 /* Halo/Features/Dashboard/DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001038 /* Halo/Features/Dashboard/DashboardView.swift */; };
-		000000000000000000001041 /* Halo/Features/Files/FilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001040 /* Halo/Features/Files/FilesView.swift */; };
-		000000000000000000001043 /* Halo/Features/MenuBar/MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001042 /* Halo/Features/MenuBar/MenuBarView.swift */; };
-		000000000000000000001045 /* Halo/Features/Onboarding/OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001044 /* Halo/Features/Onboarding/OnboardingView.swift */; };
-		000000000000000000001047 /* Halo/Features/Performance/PerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001046 /* Halo/Features/Performance/PerformanceView.swift */; };
-		000000000000000000001049 /* Halo/Features/Protection/ProtectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001048 /* Halo/Features/Protection/ProtectionView.swift */; };
-		000000000000000000001051 /* Halo/Core/Scanner/DuplicateDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001050 /* Halo/Core/Scanner/DuplicateDetector.swift */; };
-		000000000000000000001053 /* Halo/Features/Clipboard/ClipboardMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001052 /* Halo/Features/Clipboard/ClipboardMonitor.swift */; };
-		000000000000000000001055 /* Halo/Features/SmartScan/SmartScanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001054 /* Halo/Features/SmartScan/SmartScanView.swift */; };
-		000000000000000000001057 /* Halo/Resources/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001056 /* Halo/Resources/Assets.xcassets */; };
-		000000000000000000001059 /* Halo/Resources/PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001058 /* Halo/Resources/PrivacyInfo.xcprivacy */; };
-		000000000000000000004002 /* Halo/Resources/signatures.json in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004001 /* Halo/Resources/signatures.json */; };
+		000000000000000000001017 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001016 /* AppState.swift */; };
+		000000000000000000001019 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001018 /* ContentView.swift */; };
+		000000000000000000001021 /* HaloApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001020 /* HaloApp.swift */; };
+		000000000000000000001023 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001022 /* Models.swift */; };
+		000000000000000000001025 /* FileSystemScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001024 /* FileSystemScanner.swift */; };
+		000000000000000000001027 /* ScanCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001026 /* ScanCoordinator.swift */; };
+		000000000000000000001029 /* SystemMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001028 /* SystemMonitor.swift */; };
+		000000000000000000001031 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001030 /* DesignSystem.swift */; };
+		000000000000000000001033 /* ApplicationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001032 /* ApplicationsView.swift */; };
+		000000000000000000001035 /* CleanupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001034 /* CleanupView.swift */; };
+		000000000000000000001037 /* ClipboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001036 /* ClipboardView.swift */; };
+		000000000000000000001039 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001038 /* DashboardView.swift */; };
+		000000000000000000001041 /* FilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001040 /* FilesView.swift */; };
+		000000000000000000001043 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001042 /* MenuBarView.swift */; };
+		000000000000000000001045 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001044 /* OnboardingView.swift */; };
+		000000000000000000001047 /* PerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001046 /* PerformanceView.swift */; };
+		000000000000000000001049 /* ProtectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001048 /* ProtectionView.swift */; };
+		000000000000000000001051 /* DuplicateDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001050 /* DuplicateDetector.swift */; };
+		000000000000000000001053 /* ClipboardMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001052 /* ClipboardMonitor.swift */; };
+		000000000000000000001055 /* SmartScanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001054 /* SmartScanView.swift */; };
+		000000000000000000001057 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001056 /* Assets.xcassets */; };
+		000000000000000000001059 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001058 /* PrivacyInfo.xcprivacy */; };
 		000000000000000000001061 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000001060 /* IOKit.framework */; };
 		000000000000000000001063 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000001062 /* SystemConfiguration.framework */; };
-		000000000000000000005001 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000005002 /* Sentry */; };
-		000000000000000000001066 /* Halo/Core/HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001065 /* Halo/Core/HotkeyManager.swift */; };
-		000000000000000000001068 /* Halo/Features/Clipboard/ClipboardQuickPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001067 /* Halo/Features/Clipboard/ClipboardQuickPickerView.swift */; };
-		000000000000000000001071 /* Halo/Core/Scanner/ProtectionScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001070 /* Halo/Core/Scanner/ProtectionScanner.swift */; };
-		000000000000000000004004 /* Halo/Core/Scanner/SignatureDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004003 /* Halo/Core/Scanner/SignatureDatabase.swift */; };
-		000000000000000000004008 /* Halo/Core/Scanner/LoginItemScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004007 /* Halo/Core/Scanner/LoginItemScanner.swift */; };
-		000000000000000000004010 /* Halo/Core/Scanner/AppScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004009 /* Halo/Core/Scanner/AppScanner.swift */; };
-		000000000000000000001073 /* Halo/Core/AlertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001072 /* Halo/Core/AlertManager.swift */; };
-		000000000000000000004012 /* Halo/Core/AlertLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004011 /* Halo/Core/AlertLog.swift */; };
-		000000000000000000004014 /* Halo/Core/ReportGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004013 /* Halo/Core/ReportGenerator.swift */; };
-		000000000000000000004006 /* Halo/Core/ScanScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004005 /* Halo/Core/ScanScheduler.swift */; };
-		000000000000000000001075 /* Halo/Core/Scanner/CPUDetailMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001074 /* Halo/Core/Scanner/CPUDetailMonitor.swift */; };
-		000000000000000000001077 /* Halo/Core/Scanner/SMCReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001076 /* Halo/Core/Scanner/SMCReader.swift */; };
-		000000000000000000001079 /* Halo/Core/Scanner/GPUMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001078 /* Halo/Core/Scanner/GPUMonitor.swift */; };
-		000000000000000000001081 /* Halo/Core/Scanner/NetworkDetailMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001080 /* Halo/Core/Scanner/NetworkDetailMonitor.swift */; };
-		000000000000000000001083 /* Halo/Core/Scanner/SpeedTestService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001082 /* Halo/Core/Scanner/SpeedTestService.swift */; };
-		000000000000000000001085 /* Halo/Core/Scanner/DiskHealthMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001084 /* Halo/Core/Scanner/DiskHealthMonitor.swift */; };
-		000000000000000000001087 /* Halo/Core/Scanner/ProcessMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001086 /* Halo/Core/Scanner/ProcessMonitor.swift */; };
-		000000000000000000001089 /* Halo/Features/Performance/CPUCoresSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001088 /* Halo/Features/Performance/CPUCoresSection.swift */; };
-		000000000000000000001091 /* Halo/Features/Performance/SensorsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001090 /* Halo/Features/Performance/SensorsSection.swift */; };
-		000000000000000000001093 /* Halo/Features/Performance/BatteryDetailSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001092 /* Halo/Features/Performance/BatteryDetailSection.swift */; };
-		000000000000000000001095 /* Halo/Features/Performance/NetworkDetailSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001094 /* Halo/Features/Performance/NetworkDetailSection.swift */; };
-		000000000000000000001097 /* Halo/Features/Performance/TopProcessesSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001096 /* Halo/Features/Performance/TopProcessesSection.swift */; };
-		000000000000000000001099 /* Halo/Features/Dashboard/NetworkSparklineCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001098 /* Halo/Features/Dashboard/NetworkSparklineCard.swift */; };
-		000000000000000000001101 /* Halo/Features/Cleanup/DiskHealthSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001100 /* Halo/Features/Cleanup/DiskHealthSection.swift */; };
-		000000000000000000001103 /* Halo/Features/Dashboard/GPUDashboardCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001102 /* Halo/Features/Dashboard/GPUDashboardCard.swift */; };
-		/* Actions module */
-		000000000000000000006002 /* Halo/Core/Actions/ActionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006001 /* Halo/Core/Actions/ActionModels.swift */; };
-		000000000000000000006004 /* Halo/Core/Actions/ActionLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006003 /* Halo/Core/Actions/ActionLibrary.swift */; };
-		000000000000000000006006 /* Halo/Core/Actions/ActionRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006005 /* Halo/Core/Actions/ActionRunner.swift */; };
-		000000000000000000006008 /* Halo/Features/Actions/QuickActionPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006007 /* Halo/Features/Actions/QuickActionPickerView.swift */; };
-		000000000000000000006010 /* Halo/Features/Actions/ActionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006009 /* Halo/Features/Actions/ActionsView.swift */; };
-		000000000000000000006012 /* Halo/Features/Actions/CustomActionEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006011 /* Halo/Features/Actions/CustomActionEditor.swift */; };
-		/* HaloShare (LocalSend) module */
-		000000000000000000007101 /* Halo/Core/LocalShare/Models/LocalShareModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007100 /* Halo/Core/LocalShare/Models/LocalShareModels.swift */; };
-		000000000000000000007103 /* Halo/Core/LocalShare/Crypto/TLSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007102 /* Halo/Core/LocalShare/Crypto/TLSManager.swift */; };
-		000000000000000000007105 /* Halo/Core/LocalShare/Network/MulticastDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007104 /* Halo/Core/LocalShare/Network/MulticastDiscovery.swift */; };
-		000000000000000000007107 /* Halo/Core/LocalShare/Network/LocalShareServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007106 /* Halo/Core/LocalShare/Network/LocalShareServer.swift */; };
-		000000000000000000007109 /* Halo/Core/LocalShare/Network/LocalShareClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007108 /* Halo/Core/LocalShare/Network/LocalShareClient.swift */; };
-		000000000000000000007111 /* Halo/Core/LocalShare/Network/TransferPowerAssertion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007110 /* Halo/Core/LocalShare/Network/TransferPowerAssertion.swift */; };
-		000000000000000000007113 /* Halo/Core/LocalShare/Manager/LocalShareManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007112 /* Halo/Core/LocalShare/Manager/LocalShareManager.swift */; };
-		000000000000000000007115 /* Halo/Features/LocalShare/LocalShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007114 /* Halo/Features/LocalShare/LocalShareView.swift */; };
-		000000000000000000007117 /* Halo/Features/LocalShare/ReceiveConsentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007116 /* Halo/Features/LocalShare/ReceiveConsentView.swift */; };
-		/* F-002: Shared protocol — compiled into Halo + HaloHelper */
-		000000000000000000003005 /* HaloHelperProtocol.swift in Sources (Halo) */ = {isa = PBXBuildFile; fileRef = 000000000000000000003004 /* HaloHelperProtocol.swift */; };
-		000000000000000000003007 /* HelperClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000003006 /* Halo/Core/HelperClient.swift */; };
-		/* F-002: HaloHelper XPC target sources */
-		000000000000000000003009 /* HaloHelperProtocol.swift in Sources (Helper) */ = {isa = PBXBuildFile; fileRef = 000000000000000000003004 /* HaloHelperProtocol.swift */; };
-		000000000000000000003011 /* main.swift in Sources (Helper) */ = {isa = PBXBuildFile; fileRef = 000000000000000000003010 /* main.swift */; };
-		000000000000000000003013 /* HaloHelperDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000003012 /* HaloHelperDelegate.swift */; };
-		000000000000000000003015 /* HaloHelperImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000003014 /* HaloHelperImpl.swift */; };
-		/* F-002: Embed HaloHelper XPC in main app */
-		000000000000000000003017 /* HaloHelper.xpc in XPC Services */ = {isa = PBXBuildFile; fileRef = 000000000000000000003000 /* HaloHelper.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		000000000000000000001066 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001065 /* HotkeyManager.swift */; };
+		000000000000000000001068 /* ClipboardQuickPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001067 /* ClipboardQuickPickerView.swift */; };
+		000000000000000000001071 /* ProtectionScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001070 /* ProtectionScanner.swift */; };
+		000000000000000000001073 /* AlertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001072 /* AlertManager.swift */; };
+		000000000000000000001075 /* CPUDetailMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001074 /* CPUDetailMonitor.swift */; };
+		000000000000000000001077 /* SMCReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001076 /* SMCReader.swift */; };
+		000000000000000000001079 /* GPUMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001078 /* GPUMonitor.swift */; };
+		000000000000000000001081 /* NetworkDetailMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001080 /* NetworkDetailMonitor.swift */; };
+		000000000000000000001083 /* SpeedTestService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001082 /* SpeedTestService.swift */; };
+		000000000000000000001085 /* DiskHealthMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001084 /* DiskHealthMonitor.swift */; };
+		000000000000000000001087 /* ProcessMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001086 /* ProcessMonitor.swift */; };
+		000000000000000000001089 /* CPUCoresSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001088 /* CPUCoresSection.swift */; };
+		000000000000000000001091 /* SensorsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001090 /* SensorsSection.swift */; };
+		000000000000000000001093 /* BatteryDetailSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001092 /* BatteryDetailSection.swift */; };
+		000000000000000000001095 /* NetworkDetailSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001094 /* NetworkDetailSection.swift */; };
+		000000000000000000001097 /* TopProcessesSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001096 /* TopProcessesSection.swift */; };
+		000000000000000000001099 /* NetworkSparklineCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001098 /* NetworkSparklineCard.swift */; };
+		000000000000000000001101 /* DiskHealthSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001100 /* DiskHealthSection.swift */; };
+		000000000000000000001103 /* GPUDashboardCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001102 /* GPUDashboardCard.swift */; };
 		000000000000000000002004 /* HaloWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000002002 /* HaloWidgetBundle.swift */; };
 		000000000000000000002005 /* HaloWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000002003 /* HaloWidget.swift */; };
 		000000000000000000002016 /* HaloWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 000000000000000000002000 /* HaloWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		000000000000000000002018 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000000002017 /* WidgetKit.framework */; };
 		000000000000000000002019 /* HaloSharedData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000002020 /* HaloSharedData.swift */; };
 		000000000000000000002021 /* HaloSharedData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000002020 /* HaloSharedData.swift */; };
+		000000000000000000003005 /* HaloHelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000003004 /* HaloHelperProtocol.swift */; };
+		000000000000000000003007 /* HelperClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000003006 /* HelperClient.swift */; };
+		000000000000000000003009 /* HaloHelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000003004 /* HaloHelperProtocol.swift */; };
+		000000000000000000003011 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000003010 /* main.swift */; };
+		000000000000000000003013 /* HaloHelperDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000003012 /* HaloHelperDelegate.swift */; };
+		000000000000000000003015 /* HaloHelperImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000003014 /* HaloHelperImpl.swift */; };
+		000000000000000000003017 /* HaloHelper.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = 000000000000000000003000 /* HaloHelper.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		000000000000000000004002 /* signatures.json in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004001 /* signatures.json */; };
+		000000000000000000004004 /* SignatureDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004003 /* SignatureDatabase.swift */; };
+		000000000000000000004006 /* ScanScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004005 /* ScanScheduler.swift */; };
+		000000000000000000004008 /* LoginItemScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004007 /* LoginItemScanner.swift */; };
+		000000000000000000004010 /* AppScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004009 /* AppScanner.swift */; };
+		000000000000000000004012 /* AlertLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004011 /* AlertLog.swift */; };
+		000000000000000000004014 /* ReportGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004013 /* ReportGenerator.swift */; };
+		000000000000000000005001 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000005002 /* Sentry */; };
+		000000000000000000006002 /* ActionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006001 /* ActionModels.swift */; };
+		000000000000000000006004 /* ActionLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006003 /* ActionLibrary.swift */; };
+		000000000000000000006006 /* ActionRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006005 /* ActionRunner.swift */; };
+		000000000000000000006008 /* QuickActionPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006007 /* QuickActionPickerView.swift */; };
+		000000000000000000006010 /* ActionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006009 /* ActionsView.swift */; };
+		000000000000000000006012 /* CustomActionEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006011 /* CustomActionEditor.swift */; };
+		000000000000000000007001 /* BuildToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007000 /* BuildToken.swift */; };
+		000000000000000000007002 /* ActionSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007003 /* ActionSettingsStore.swift */; };
+		000000000000000000007004 /* VoiceSearchController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007005 /* VoiceSearchController.swift */; };
+		000000000000000000007006 /* ActionSettingsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007007 /* ActionSettingsTab.swift */; };
+		000000000000000000007008 /* SystemControlsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007009 /* SystemControlsManager.swift */; };
+		000000000000000000007010 /* MicCameraControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007011 /* MicCameraControlsView.swift */; };
+		000000000000000000007101 /* LocalShareModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007100 /* LocalShareModels.swift */; };
+		000000000000000000007103 /* TLSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007102 /* TLSManager.swift */; };
+		000000000000000000007105 /* MulticastDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007104 /* MulticastDiscovery.swift */; };
+		000000000000000000007107 /* LocalShareServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007106 /* LocalShareServer.swift */; };
+		000000000000000000007109 /* LocalShareClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007108 /* LocalShareClient.swift */; };
+		000000000000000000007111 /* TransferPowerAssertion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007110 /* TransferPowerAssertion.swift */; };
+		000000000000000000007113 /* LocalShareManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007112 /* LocalShareManager.swift */; };
+		000000000000000000007115 /* LocalShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007114 /* LocalShareView.swift */; };
+		000000000000000000007117 /* ReceiveConsentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000007116 /* ReceiveConsentView.swift */; };
+		000000000000000000008002 /* PortScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008001 /* PortScanner.swift */; };
+		000000000000000000008004 /* PortManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008003 /* PortManagerView.swift */; };
+		000000000000000000008006 /* PortManagerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008005 /* PortManagerViewModel.swift */; };
+		000000000000000000008008 /* DownloadsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008007 /* DownloadsView.swift */; };
+		000000000000000000008010 /* DownloadsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008009 /* DownloadsViewModel.swift */; };
+		000000000000000000008012 /* CelebrationOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008011 /* CelebrationOverlay.swift */; };
+		000000000000000000008014 /* CodeBeautifierView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008013 /* CodeBeautifierView.swift */; };
+		000000000000000000008016 /* CodeTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008015 /* CodeTheme.swift */; };
+		000000000000000000008018 /* SyntaxHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008017 /* SyntaxHighlighter.swift */; };
+		000000000000000000008020 /* IdleAppMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008019 /* IdleAppMonitor.swift */; };
+		000000000000000000008022 /* IdleAppsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008021 /* IdleAppsSection.swift */; };
+		000000000000000000008024 /* SnippetManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008023 /* SnippetManager.swift */; };
+		000000000000000000008026 /* SnippetEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008025 /* SnippetEditorView.swift */; };
+		000000000000000000008028 /* SnippetListSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008027 /* SnippetListSection.swift */; };
+		000000000000000000008030 /* ActionShareManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008029 /* ActionShareManager.swift */; };
+		000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009001 /* GetHealthScoreIntent.swift */; };
+		000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009003 /* GetCPUUsageIntent.swift */; };
+		000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009005 /* GetBatteryHealthIntent.swift */; };
+		000000000000000000009008 /* GetDiskSpaceIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009007 /* GetDiskSpaceIntent.swift */; };
+		000000000000000000009010 /* RunSmartScanIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009009 /* RunSmartScanIntent.swift */; };
+		000000000000000000009012 /* RunActionIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009011 /* RunActionIntent.swift */; };
+		000000000000000000009014 /* GetClipboardHistoryIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009013 /* GetClipboardHistoryIntent.swift */; };
+		000000000000000000009016 /* ExportReportIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009015 /* ExportReportIntent.swift */; };
+		000000000000000000009018 /* HaloShortcutsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009017 /* HaloShortcutsProvider.swift */; };
+		0D95339BD7D85794863633C8 /* HaloUITestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */; };
+		1A276975BC00655241248D7B /* DriveSpeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C310900DF7BB88C2E7AFC1B /* DriveSpeedView.swift */; };
+		1AF88E6C0D5612EADBB0766C /* HelperClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A2E8C7296BB40EA82204C70 /* HelperClientTests.swift */; };
+		318D18283567FA7F9C3FCD89 /* DriveSpeedTesterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629A9D17BDFF863DCB0206F2 /* DriveSpeedTesterTests.swift */; };
+		428DD9830BBDEBECB1200590 /* SmokeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74D974CC4B2FB109632BF14A /* SmokeUITests.swift */; };
+		5AED20F642AB7CB6348B957A /* HaloTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFEE33412198DD09C82F2E15 /* HaloTests.swift */; };
+		7FA28EC1DD42807C6EFD8148 /* SidebarReorderUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED172401B83B65197881BFC /* SidebarReorderUITests.swift */; };
+		8A4DFF3A40CA9ADDBF8405AE /* HaloTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C5BDF389221BADF1F31152C /* HaloTests.swift */; };
+		8A64A32F27E6245BD6EAEB93 /* CleanupUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8908A278C13A1F3B9E21BFE9 /* CleanupUITests.swift */; };
+		97FC4C5E35CB7030A2F01C9C /* HaloSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */; };
+		AE6FACECB50C6D438440D382 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
+		CFA15D1C5EDA3ED07CCE2326 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
+		D52607DADA626DF2FA479956 /* HelperClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00C37BFCA463AB410245B802 /* HelperClientTests.swift */; };
+		D6C27E0D2D06F494CFF23FBF /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
+		EABEEEF5BBF1D9D3F61FB453 /* DriveSpeedTester.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4555BA206584E6C688FD51F1 /* DriveSpeedTester.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -106,6 +140,34 @@
 			proxyType = 1;
 			remoteGlobalIDString = 000000000000000000002009;
 			remoteInfo = HaloWidget;
+		};
+		000000000000000000003023 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000001011 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 000000000000000000003001;
+			remoteInfo = HaloHelper;
+		};
+		26D25A124256763F35F80B16 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000001011 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 000000000000000000001004;
+			remoteInfo = Halo;
+		};
+		2CE7239D8ACBB89A39DF27FF /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000001011 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 000000000000000000001004;
+			remoteInfo = Halo;
+		};
+		D3BA2CB3FCE39C3C73262CE1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000001011 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 000000000000000000001004;
+			remoteInfo = Halo;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -121,99 +183,145 @@
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		000000000000000000003022 /* Embed XPC Services */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 16;
+			files = (
+				000000000000000000003017 /* HaloHelper.xpc in Embed XPC Services */,
+			);
+			name = "Embed XPC Services";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		000000000000000000001015 /* Halo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Halo.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		000000000000000000007000 /* Halo/App/BuildToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/BuildToken.swift; sourceTree = "<group>"; };
-		000000000000000000007003 /* Halo/Core/Actions/ActionSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionSettingsStore.swift; sourceTree = "<group>"; };
-		000000000000000000007005 /* Halo/Core/Actions/VoiceSearchController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/VoiceSearchController.swift; sourceTree = "<group>"; };
-		000000000000000000007007 /* Halo/Features/Actions/ActionSettingsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/ActionSettingsTab.swift; sourceTree = "<group>"; };
-		000000000000000000007009 /* Halo/Core/SystemControls/SystemControlsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/SystemControls/SystemControlsManager.swift; sourceTree = "<group>"; };
-		000000000000000000007011 /* Halo/Core/SystemControls/MicCameraControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/SystemControls/MicCameraControlsView.swift; sourceTree = "<group>"; };
-		000000000000000000001016 /* Halo/App/AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/AppState.swift; sourceTree = "<group>"; };
-		000000000000000000001018 /* Halo/App/ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/ContentView.swift; sourceTree = "<group>"; };
-		000000000000000000001020 /* Halo/App/HaloApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/HaloApp.swift; sourceTree = "<group>"; };
-		000000000000000000001022 /* Halo/Core/Models/Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Models/Models.swift; sourceTree = "<group>"; };
-		000000000000000000001024 /* Halo/Core/Scanner/FileSystemScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/FileSystemScanner.swift; sourceTree = "<group>"; };
-		000000000000000000001026 /* Halo/Core/Scanner/ScanCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ScanCoordinator.swift; sourceTree = "<group>"; };
-		000000000000000000001028 /* Halo/Core/Scanner/SystemMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SystemMonitor.swift; sourceTree = "<group>"; };
-		000000000000000000001030 /* Halo/DesignSystem/DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/DesignSystem/DesignSystem.swift; sourceTree = "<group>"; };
-		000000000000000000001032 /* Halo/Features/Applications/ApplicationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Applications/ApplicationsView.swift; sourceTree = "<group>"; };
-		000000000000000000001034 /* Halo/Features/Cleanup/CleanupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Cleanup/CleanupView.swift; sourceTree = "<group>"; };
-		000000000000000000001036 /* Halo/Features/Clipboard/ClipboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/ClipboardView.swift; sourceTree = "<group>"; };
-		000000000000000000001038 /* Halo/Features/Dashboard/DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/DashboardView.swift; sourceTree = "<group>"; };
-		000000000000000000001040 /* Halo/Features/Files/FilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/FilesView.swift; sourceTree = "<group>"; };
-		000000000000000000001042 /* Halo/Features/MenuBar/MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/MenuBar/MenuBarView.swift; sourceTree = "<group>"; };
-		000000000000000000001044 /* Halo/Features/Onboarding/OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Onboarding/OnboardingView.swift; sourceTree = "<group>"; };
-		000000000000000000001046 /* Halo/Features/Performance/PerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/PerformanceView.swift; sourceTree = "<group>"; };
-		000000000000000000001048 /* Halo/Features/Protection/ProtectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Protection/ProtectionView.swift; sourceTree = "<group>"; };
-		000000000000000000001050 /* Halo/Core/Scanner/DuplicateDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/DuplicateDetector.swift; sourceTree = "<group>"; };
-		000000000000000000001052 /* Halo/Features/Clipboard/ClipboardMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/ClipboardMonitor.swift; sourceTree = "<group>"; };
-		000000000000000000001054 /* Halo/Features/SmartScan/SmartScanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/SmartScan/SmartScanView.swift; sourceTree = "<group>"; };
-		000000000000000000001056 /* Halo/Resources/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Halo/Resources/Assets.xcassets; sourceTree = "<group>"; };
-		000000000000000000001058 /* Halo/Resources/PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = Halo/Resources/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		000000000000000000004001 /* Halo/Resources/signatures.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Halo/Resources/signatures.json; sourceTree = "<group>"; };
+		000000000000000000001016 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/AppState.swift; sourceTree = "<group>"; };
+		000000000000000000001018 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/ContentView.swift; sourceTree = "<group>"; };
+		000000000000000000001020 /* HaloApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/HaloApp.swift; sourceTree = "<group>"; };
+		000000000000000000001022 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Models/Models.swift; sourceTree = "<group>"; };
+		000000000000000000001024 /* FileSystemScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/FileSystemScanner.swift; sourceTree = "<group>"; };
+		000000000000000000001026 /* ScanCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ScanCoordinator.swift; sourceTree = "<group>"; };
+		000000000000000000001028 /* SystemMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SystemMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000001030 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/DesignSystem/DesignSystem.swift; sourceTree = "<group>"; };
+		000000000000000000001032 /* ApplicationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Applications/ApplicationsView.swift; sourceTree = "<group>"; };
+		000000000000000000001034 /* CleanupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Cleanup/CleanupView.swift; sourceTree = "<group>"; };
+		000000000000000000001036 /* ClipboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/ClipboardView.swift; sourceTree = "<group>"; };
+		000000000000000000001038 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/DashboardView.swift; sourceTree = "<group>"; };
+		000000000000000000001040 /* FilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/FilesView.swift; sourceTree = "<group>"; };
+		000000000000000000001042 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/MenuBar/MenuBarView.swift; sourceTree = "<group>"; };
+		000000000000000000001044 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Onboarding/OnboardingView.swift; sourceTree = "<group>"; };
+		000000000000000000001046 /* PerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/PerformanceView.swift; sourceTree = "<group>"; };
+		000000000000000000001048 /* ProtectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Protection/ProtectionView.swift; sourceTree = "<group>"; };
+		000000000000000000001050 /* DuplicateDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/DuplicateDetector.swift; sourceTree = "<group>"; };
+		000000000000000000001052 /* ClipboardMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/ClipboardMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000001054 /* SmartScanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/SmartScan/SmartScanView.swift; sourceTree = "<group>"; };
+		000000000000000000001056 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Halo/Resources/Assets.xcassets; sourceTree = "<group>"; };
+		000000000000000000001058 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = Halo/Resources/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		000000000000000000001060 /* IOKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOKit.framework; path = System/Library/Frameworks/IOKit.framework; sourceTree = SDKROOT; };
 		000000000000000000001062 /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
-		000000000000000000001065 /* Halo/Core/HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/HotkeyManager.swift; sourceTree = "<group>"; };
-		000000000000000000001067 /* Halo/Features/Clipboard/ClipboardQuickPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/ClipboardQuickPickerView.swift; sourceTree = "<group>"; };
-		000000000000000000001070 /* Halo/Core/Scanner/ProtectionScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ProtectionScanner.swift; sourceTree = "<group>"; };
-		000000000000000000004003 /* Halo/Core/Scanner/SignatureDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SignatureDatabase.swift; sourceTree = "<group>"; };
-		000000000000000000004007 /* Halo/Core/Scanner/LoginItemScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/LoginItemScanner.swift; sourceTree = "<group>"; };
-		000000000000000000004009 /* Halo/Core/Scanner/AppScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/AppScanner.swift; sourceTree = "<group>"; };
-		000000000000000000001072 /* Halo/Core/AlertManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AlertManager.swift; sourceTree = "<group>"; };
-		000000000000000000004011 /* Halo/Core/AlertLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AlertLog.swift; sourceTree = "<group>"; };
-		000000000000000000004013 /* Halo/Core/ReportGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/ReportGenerator.swift; sourceTree = "<group>"; };
-		000000000000000000004005 /* Halo/Core/ScanScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/ScanScheduler.swift; sourceTree = "<group>"; };
-		000000000000000000001074 /* Halo/Core/Scanner/CPUDetailMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/CPUDetailMonitor.swift; sourceTree = "<group>"; };
-		000000000000000000001076 /* Halo/Core/Scanner/SMCReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SMCReader.swift; sourceTree = "<group>"; };
-		000000000000000000001078 /* Halo/Core/Scanner/GPUMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/GPUMonitor.swift; sourceTree = "<group>"; };
-		000000000000000000001080 /* Halo/Core/Scanner/NetworkDetailMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/NetworkDetailMonitor.swift; sourceTree = "<group>"; };
-		000000000000000000001082 /* Halo/Core/Scanner/SpeedTestService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SpeedTestService.swift; sourceTree = "<group>"; };
-		000000000000000000001084 /* Halo/Core/Scanner/DiskHealthMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/DiskHealthMonitor.swift; sourceTree = "<group>"; };
-		000000000000000000001086 /* Halo/Core/Scanner/ProcessMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ProcessMonitor.swift; sourceTree = "<group>"; };
-		000000000000000000001088 /* Halo/Features/Performance/CPUCoresSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/CPUCoresSection.swift; sourceTree = "<group>"; };
-		000000000000000000001090 /* Halo/Features/Performance/SensorsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/SensorsSection.swift; sourceTree = "<group>"; };
-		000000000000000000001092 /* Halo/Features/Performance/BatteryDetailSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/BatteryDetailSection.swift; sourceTree = "<group>"; };
-		000000000000000000001094 /* Halo/Features/Performance/NetworkDetailSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/NetworkDetailSection.swift; sourceTree = "<group>"; };
-		000000000000000000001096 /* Halo/Features/Performance/TopProcessesSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/TopProcessesSection.swift; sourceTree = "<group>"; };
-		000000000000000000001098 /* Halo/Features/Dashboard/NetworkSparklineCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/NetworkSparklineCard.swift; sourceTree = "<group>"; };
-		000000000000000000001100 /* Halo/Features/Cleanup/DiskHealthSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Cleanup/DiskHealthSection.swift; sourceTree = "<group>"; };
-		000000000000000000001102 /* Halo/Features/Dashboard/GPUDashboardCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/GPUDashboardCard.swift; sourceTree = "<group>"; };
-		/* Actions module file refs */
-		000000000000000000006001 /* Halo/Core/Actions/ActionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionModels.swift; sourceTree = "<group>"; };
-		000000000000000000006003 /* Halo/Core/Actions/ActionLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionLibrary.swift; sourceTree = "<group>"; };
-		000000000000000000006005 /* Halo/Core/Actions/ActionRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionRunner.swift; sourceTree = "<group>"; };
-		000000000000000000006007 /* Halo/Features/Actions/QuickActionPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/QuickActionPickerView.swift; sourceTree = "<group>"; };
-		000000000000000000006009 /* Halo/Features/Actions/ActionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/ActionsView.swift; sourceTree = "<group>"; };
-		000000000000000000006011 /* Halo/Features/Actions/CustomActionEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/CustomActionEditor.swift; sourceTree = "<group>"; };
-		/* HaloShare (LocalSend) module file refs */
-		000000000000000000007100 /* Halo/Core/LocalShare/Models/LocalShareModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Models/LocalShareModels.swift; sourceTree = "<group>"; };
-		000000000000000000007102 /* Halo/Core/LocalShare/Crypto/TLSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Crypto/TLSManager.swift; sourceTree = "<group>"; };
-		000000000000000000007104 /* Halo/Core/LocalShare/Network/MulticastDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Network/MulticastDiscovery.swift; sourceTree = "<group>"; };
-		000000000000000000007106 /* Halo/Core/LocalShare/Network/LocalShareServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Network/LocalShareServer.swift; sourceTree = "<group>"; };
-		000000000000000000007108 /* Halo/Core/LocalShare/Network/LocalShareClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Network/LocalShareClient.swift; sourceTree = "<group>"; };
-		000000000000000000007110 /* Halo/Core/LocalShare/Network/TransferPowerAssertion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Network/TransferPowerAssertion.swift; sourceTree = "<group>"; };
-		000000000000000000007112 /* Halo/Core/LocalShare/Manager/LocalShareManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Manager/LocalShareManager.swift; sourceTree = "<group>"; };
-		000000000000000000007114 /* Halo/Features/LocalShare/LocalShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LocalShare/LocalShareView.swift; sourceTree = "<group>"; };
-		000000000000000000007116 /* Halo/Features/LocalShare/ReceiveConsentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LocalShare/ReceiveConsentView.swift; sourceTree = "<group>"; };
-		/* F-002 file refs */
-		000000000000000000003000 /* HaloHelper.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = HaloHelper.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
-		/* Shared group already has path=Shared, so file paths are relative to Shared/ */
-		000000000000000000003004 /* HaloHelperProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloHelperProtocol.swift; sourceTree = "<group>"; };
-		000000000000000000003006 /* Halo/Core/HelperClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/HelperClient.swift; sourceTree = "<group>"; };
-		/* HaloHelper group has path=HaloHelper, so file paths are relative to HaloHelper/ */
-		000000000000000000003010 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
-		000000000000000000003012 /* HaloHelperDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloHelperDelegate.swift; sourceTree = "<group>"; };
-		000000000000000000003014 /* HaloHelperImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloHelperImpl.swift; sourceTree = "<group>"; };
-		000000000000000000003018 /* Info.plist (HaloHelper) */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		000000000000000000003019 /* HaloHelper.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HaloHelper.entitlements; sourceTree = "<group>"; };
+		000000000000000000001065 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/HotkeyManager.swift; sourceTree = "<group>"; };
+		000000000000000000001067 /* ClipboardQuickPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/ClipboardQuickPickerView.swift; sourceTree = "<group>"; };
+		000000000000000000001070 /* ProtectionScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ProtectionScanner.swift; sourceTree = "<group>"; };
+		000000000000000000001072 /* AlertManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AlertManager.swift; sourceTree = "<group>"; };
+		000000000000000000001074 /* CPUDetailMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/CPUDetailMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000001076 /* SMCReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SMCReader.swift; sourceTree = "<group>"; };
+		000000000000000000001078 /* GPUMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/GPUMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000001080 /* NetworkDetailMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/NetworkDetailMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000001082 /* SpeedTestService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SpeedTestService.swift; sourceTree = "<group>"; };
+		000000000000000000001084 /* DiskHealthMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/DiskHealthMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000001086 /* ProcessMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ProcessMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000001088 /* CPUCoresSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/CPUCoresSection.swift; sourceTree = "<group>"; };
+		000000000000000000001090 /* SensorsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/SensorsSection.swift; sourceTree = "<group>"; };
+		000000000000000000001092 /* BatteryDetailSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/BatteryDetailSection.swift; sourceTree = "<group>"; };
+		000000000000000000001094 /* NetworkDetailSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/NetworkDetailSection.swift; sourceTree = "<group>"; };
+		000000000000000000001096 /* TopProcessesSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/TopProcessesSection.swift; sourceTree = "<group>"; };
+		000000000000000000001098 /* NetworkSparklineCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/NetworkSparklineCard.swift; sourceTree = "<group>"; };
+		000000000000000000001100 /* DiskHealthSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Cleanup/DiskHealthSection.swift; sourceTree = "<group>"; };
+		000000000000000000001102 /* GPUDashboardCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/GPUDashboardCard.swift; sourceTree = "<group>"; };
 		000000000000000000002000 /* HaloWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HaloWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000002002 /* HaloWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloWidgetBundle.swift; sourceTree = "<group>"; };
 		000000000000000000002003 /* HaloWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloWidget.swift; sourceTree = "<group>"; };
 		000000000000000000002017 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		000000000000000000002020 /* HaloSharedData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloSharedData.swift; sourceTree = "<group>"; };
+		000000000000000000003000 /* HaloHelper.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = HaloHelper.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000003004 /* HaloHelperProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloHelperProtocol.swift; sourceTree = "<group>"; };
+		000000000000000000003006 /* HelperClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/HelperClient.swift; sourceTree = "<group>"; };
+		000000000000000000003010 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		000000000000000000003012 /* HaloHelperDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloHelperDelegate.swift; sourceTree = "<group>"; };
+		000000000000000000003014 /* HaloHelperImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloHelperImpl.swift; sourceTree = "<group>"; };
+		000000000000000000003018 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		000000000000000000003019 /* HaloHelper.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HaloHelper.entitlements; sourceTree = "<group>"; };
+		000000000000000000004001 /* signatures.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Halo/Resources/signatures.json; sourceTree = "<group>"; };
+		000000000000000000004003 /* SignatureDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SignatureDatabase.swift; sourceTree = "<group>"; };
+		000000000000000000004005 /* ScanScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/ScanScheduler.swift; sourceTree = "<group>"; };
+		000000000000000000004007 /* LoginItemScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/LoginItemScanner.swift; sourceTree = "<group>"; };
+		000000000000000000004009 /* AppScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/AppScanner.swift; sourceTree = "<group>"; };
+		000000000000000000004011 /* AlertLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AlertLog.swift; sourceTree = "<group>"; };
+		000000000000000000004013 /* ReportGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/ReportGenerator.swift; sourceTree = "<group>"; };
+		000000000000000000006001 /* ActionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionModels.swift; sourceTree = "<group>"; };
+		000000000000000000006003 /* ActionLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionLibrary.swift; sourceTree = "<group>"; };
+		000000000000000000006005 /* ActionRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionRunner.swift; sourceTree = "<group>"; };
+		000000000000000000006007 /* QuickActionPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/QuickActionPickerView.swift; sourceTree = "<group>"; };
+		000000000000000000006009 /* ActionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/ActionsView.swift; sourceTree = "<group>"; };
+		000000000000000000006011 /* CustomActionEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/CustomActionEditor.swift; sourceTree = "<group>"; };
+		000000000000000000007000 /* BuildToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/BuildToken.swift; sourceTree = "<group>"; };
+		000000000000000000007003 /* ActionSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionSettingsStore.swift; sourceTree = "<group>"; };
+		000000000000000000007005 /* VoiceSearchController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/VoiceSearchController.swift; sourceTree = "<group>"; };
+		000000000000000000007007 /* ActionSettingsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/ActionSettingsTab.swift; sourceTree = "<group>"; };
+		000000000000000000007009 /* SystemControlsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/SystemControls/SystemControlsManager.swift; sourceTree = "<group>"; };
+		000000000000000000007011 /* MicCameraControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/SystemControls/MicCameraControlsView.swift; sourceTree = "<group>"; };
+		000000000000000000007100 /* LocalShareModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Models/LocalShareModels.swift; sourceTree = "<group>"; };
+		000000000000000000007102 /* TLSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Crypto/TLSManager.swift; sourceTree = "<group>"; };
+		000000000000000000007104 /* MulticastDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Network/MulticastDiscovery.swift; sourceTree = "<group>"; };
+		000000000000000000007106 /* LocalShareServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Network/LocalShareServer.swift; sourceTree = "<group>"; };
+		000000000000000000007108 /* LocalShareClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Network/LocalShareClient.swift; sourceTree = "<group>"; };
+		000000000000000000007110 /* TransferPowerAssertion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Network/TransferPowerAssertion.swift; sourceTree = "<group>"; };
+		000000000000000000007112 /* LocalShareManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LocalShare/Manager/LocalShareManager.swift; sourceTree = "<group>"; };
+		000000000000000000007114 /* LocalShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LocalShare/LocalShareView.swift; sourceTree = "<group>"; };
+		000000000000000000007116 /* ReceiveConsentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LocalShare/ReceiveConsentView.swift; sourceTree = "<group>"; };
+		000000000000000000008001 /* PortScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PortScanner.swift; sourceTree = "<group>"; };
+		000000000000000000008003 /* PortManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Ports/PortManagerView.swift; sourceTree = "<group>"; };
+		000000000000000000008005 /* PortManagerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Ports/PortManagerViewModel.swift; sourceTree = "<group>"; };
+		000000000000000000008007 /* DownloadsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/DownloadsView.swift; sourceTree = "<group>"; };
+		000000000000000000008009 /* DownloadsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/DownloadsViewModel.swift; sourceTree = "<group>"; };
+		000000000000000000008011 /* CelebrationOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/DesignSystem/CelebrationOverlay.swift; sourceTree = "<group>"; };
+		000000000000000000008013 /* CodeBeautifierView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/CodeBeautifier/CodeBeautifierView.swift; sourceTree = "<group>"; };
+		000000000000000000008015 /* CodeTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/CodeBeautifier/CodeTheme.swift; sourceTree = "<group>"; };
+		000000000000000000008017 /* SyntaxHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/CodeBeautifier/SyntaxHighlighter.swift; sourceTree = "<group>"; };
+		000000000000000000008019 /* IdleAppMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/IdleAppMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000008021 /* IdleAppsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/IdleAppsSection.swift; sourceTree = "<group>"; };
+		000000000000000000008023 /* SnippetManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/SnippetManager.swift; sourceTree = "<group>"; };
+		000000000000000000008025 /* SnippetEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/SnippetEditorView.swift; sourceTree = "<group>"; };
+		000000000000000000008027 /* SnippetListSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/SnippetListSection.swift; sourceTree = "<group>"; };
+		000000000000000000008029 /* ActionShareManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/ActionShareManager.swift; sourceTree = "<group>"; };
+		000000000000000000009001 /* GetHealthScoreIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetHealthScoreIntent.swift; sourceTree = "<group>"; };
+		000000000000000000009003 /* GetCPUUsageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetCPUUsageIntent.swift; sourceTree = "<group>"; };
+		000000000000000000009005 /* GetBatteryHealthIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetBatteryHealthIntent.swift; sourceTree = "<group>"; };
+		000000000000000000009007 /* GetDiskSpaceIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetDiskSpaceIntent.swift; sourceTree = "<group>"; };
+		000000000000000000009009 /* RunSmartScanIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/RunSmartScanIntent.swift; sourceTree = "<group>"; };
+		000000000000000000009011 /* RunActionIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/RunActionIntent.swift; sourceTree = "<group>"; };
+		000000000000000000009013 /* GetClipboardHistoryIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetClipboardHistoryIntent.swift; sourceTree = "<group>"; };
+		000000000000000000009015 /* ExportReportIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/ExportReportIntent.swift; sourceTree = "<group>"; };
+		000000000000000000009017 /* HaloShortcutsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/HaloShortcutsProvider.swift; sourceTree = "<group>"; };
+		00C37BFCA463AB410245B802 /* HelperClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HelperClientTests.swift; sourceTree = "<group>"; };
+		3ED172401B83B65197881BFC /* SidebarReorderUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SidebarReorderUITests.swift; sourceTree = "<group>"; };
+		4555BA206584E6C688FD51F1 /* DriveSpeedTester.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedTester.swift; sourceTree = "<group>"; };
+		4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloUITestCase.swift; sourceTree = "<group>"; };
+		629A9D17BDFF863DCB0206F2 /* DriveSpeedTesterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedTesterTests.swift; sourceTree = "<group>"; };
+		67D626412F39854842AE0A36 /* HaloUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		74D974CC4B2FB109632BF14A /* SmokeUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SmokeUITests.swift; sourceTree = "<group>"; };
+		7C310900DF7BB88C2E7AFC1B /* DriveSpeedView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedView.swift; sourceTree = "<group>"; };
+		7C5BDF389221BADF1F31152C /* HaloTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloTests.swift; sourceTree = "<group>"; };
+		8908A278C13A1F3B9E21BFE9 /* CleanupUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CleanupUITests.swift; sourceTree = "<group>"; };
+		94E717DB998E0BBF1AE83F94 /* HaloTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		9A2E8C7296BB40EA82204C70 /* HelperClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HelperClientTests.swift; sourceTree = "<group>"; };
+		BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloSidebar.swift; sourceTree = "<group>"; };
+		D1749E8BBBF48CFF49E42B5A /* HaloTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D3824F98C3251B8B75207CE9 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
+		EFEE33412198DD09C82F2E15 /* HaloTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -235,6 +343,29 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		000000000000000000003021 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6A8180851501AE7536D27282 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AE6FACECB50C6D438440D382 /* Cocoa.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FE01D268A054C5BF7D1CEDD5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D6C27E0D2D06F494CFF23FBF /* Cocoa.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -247,61 +378,88 @@
 				000000000000000000002022 /* Shared */,
 				000000000000000000003026 /* HaloHelper */,
 				000000000000000000001003 /* Products */,
+				3FC68D77CD5D51D58443674D /* HaloUITests */,
+				DFBC888F5DBC7A3BBDFF40F0 /* Halo */,
+				78260093923C98A7E00A3FCD /* HaloTests */,
 			);
 			sourceTree = "<group>";
 		};
 		000000000000000000001001 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
-				000000000000000000001016 /* Halo/App/AppState.swift */,
-				000000000000000000001018 /* Halo/App/ContentView.swift */,
-				000000000000000000001020 /* Halo/App/HaloApp.swift */,
-				000000000000000000001022 /* Halo/Core/Models/Models.swift */,
-				000000000000000000001024 /* Halo/Core/Scanner/FileSystemScanner.swift */,
-				000000000000000000001026 /* Halo/Core/Scanner/ScanCoordinator.swift */,
-				000000000000000000001028 /* Halo/Core/Scanner/SystemMonitor.swift */,
-				000000000000000000001050 /* Halo/Core/Scanner/DuplicateDetector.swift */,
-				000000000000000000001070 /* Halo/Core/Scanner/ProtectionScanner.swift */,
-				000000000000000000004003 /* Halo/Core/Scanner/SignatureDatabase.swift */,
-				000000000000000000004007 /* Halo/Core/Scanner/LoginItemScanner.swift */,
-				000000000000000000004009 /* Halo/Core/Scanner/AppScanner.swift */,
-				000000000000000000001072 /* Halo/Core/AlertManager.swift */,
-				000000000000000000004011 /* Halo/Core/AlertLog.swift */,
-				000000000000000000004013 /* Halo/Core/ReportGenerator.swift */,
-				000000000000000000004005 /* Halo/Core/ScanScheduler.swift */,
-				000000000000000000003006 /* Halo/Core/HelperClient.swift */,
-				000000000000000000001074 /* Halo/Core/Scanner/CPUDetailMonitor.swift */,
-				000000000000000000001076 /* Halo/Core/Scanner/SMCReader.swift */,
-				000000000000000000001078 /* Halo/Core/Scanner/GPUMonitor.swift */,
-				000000000000000000001080 /* Halo/Core/Scanner/NetworkDetailMonitor.swift */,
-				000000000000000000001082 /* Halo/Core/Scanner/SpeedTestService.swift */,
-				000000000000000000001084 /* Halo/Core/Scanner/DiskHealthMonitor.swift */,
-				000000000000000000001086 /* Halo/Core/Scanner/ProcessMonitor.swift */,
-				000000000000000000001030 /* Halo/DesignSystem/DesignSystem.swift */,
-				000000000000000000001032 /* Halo/Features/Applications/ApplicationsView.swift */,
-				000000000000000000001034 /* Halo/Features/Cleanup/CleanupView.swift */,
-				000000000000000000001100 /* Halo/Features/Cleanup/DiskHealthSection.swift */,
-				000000000000000000001052 /* Halo/Features/Clipboard/ClipboardMonitor.swift */,
-				000000000000000000001067 /* Halo/Features/Clipboard/ClipboardQuickPickerView.swift */,
-				000000000000000000001036 /* Halo/Features/Clipboard/ClipboardView.swift */,
-				000000000000000000001065 /* Halo/Core/HotkeyManager.swift */,
-				000000000000000000001038 /* Halo/Features/Dashboard/DashboardView.swift */,
-				000000000000000000001098 /* Halo/Features/Dashboard/NetworkSparklineCard.swift */,
-				000000000000000000001102 /* Halo/Features/Dashboard/GPUDashboardCard.swift */,
-				000000000000000000001040 /* Halo/Features/Files/FilesView.swift */,
-				000000000000000000001042 /* Halo/Features/MenuBar/MenuBarView.swift */,
-				000000000000000000001044 /* Halo/Features/Onboarding/OnboardingView.swift */,
-				000000000000000000001046 /* Halo/Features/Performance/PerformanceView.swift */,
-				000000000000000000001088 /* Halo/Features/Performance/CPUCoresSection.swift */,
-				000000000000000000001090 /* Halo/Features/Performance/SensorsSection.swift */,
-				000000000000000000001092 /* Halo/Features/Performance/BatteryDetailSection.swift */,
-				000000000000000000001094 /* Halo/Features/Performance/NetworkDetailSection.swift */,
-				000000000000000000001096 /* Halo/Features/Performance/TopProcessesSection.swift */,
-				000000000000000000001048 /* Halo/Features/Protection/ProtectionView.swift */,
-				000000000000000000001054 /* Halo/Features/SmartScan/SmartScanView.swift */,
-				000000000000000000001056 /* Halo/Resources/Assets.xcassets */,
-				000000000000000000001058 /* Halo/Resources/PrivacyInfo.xcprivacy */,
-				000000000000000000004001 /* Halo/Resources/signatures.json */,
+				000000000000000000001016 /* AppState.swift */,
+				000000000000000000001018 /* ContentView.swift */,
+				000000000000000000001020 /* HaloApp.swift */,
+				000000000000000000001022 /* Models.swift */,
+				000000000000000000001024 /* FileSystemScanner.swift */,
+				000000000000000000001026 /* ScanCoordinator.swift */,
+				000000000000000000001028 /* SystemMonitor.swift */,
+				000000000000000000001050 /* DuplicateDetector.swift */,
+				000000000000000000001070 /* ProtectionScanner.swift */,
+				000000000000000000004003 /* SignatureDatabase.swift */,
+				000000000000000000004007 /* LoginItemScanner.swift */,
+				000000000000000000004009 /* AppScanner.swift */,
+				000000000000000000001072 /* AlertManager.swift */,
+				000000000000000000004011 /* AlertLog.swift */,
+				000000000000000000004013 /* ReportGenerator.swift */,
+				000000000000000000004005 /* ScanScheduler.swift */,
+				000000000000000000003006 /* HelperClient.swift */,
+				000000000000000000001074 /* CPUDetailMonitor.swift */,
+				000000000000000000001076 /* SMCReader.swift */,
+				000000000000000000001078 /* GPUMonitor.swift */,
+				000000000000000000001080 /* NetworkDetailMonitor.swift */,
+				000000000000000000001082 /* SpeedTestService.swift */,
+				000000000000000000001084 /* DiskHealthMonitor.swift */,
+				000000000000000000001086 /* ProcessMonitor.swift */,
+				000000000000000000008001 /* PortScanner.swift */,
+				000000000000000000008019 /* IdleAppMonitor.swift */,
+				000000000000000000001030 /* DesignSystem.swift */,
+				000000000000000000008011 /* CelebrationOverlay.swift */,
+				000000000000000000001032 /* ApplicationsView.swift */,
+				000000000000000000001034 /* CleanupView.swift */,
+				000000000000000000001100 /* DiskHealthSection.swift */,
+				000000000000000000001052 /* ClipboardMonitor.swift */,
+				000000000000000000001067 /* ClipboardQuickPickerView.swift */,
+				000000000000000000001036 /* ClipboardView.swift */,
+				000000000000000000008023 /* SnippetManager.swift */,
+				000000000000000000008025 /* SnippetEditorView.swift */,
+				000000000000000000008027 /* SnippetListSection.swift */,
+				000000000000000000001065 /* HotkeyManager.swift */,
+				000000000000000000001038 /* DashboardView.swift */,
+				000000000000000000001098 /* NetworkSparklineCard.swift */,
+				000000000000000000001102 /* GPUDashboardCard.swift */,
+				000000000000000000001040 /* FilesView.swift */,
+				000000000000000000008007 /* DownloadsView.swift */,
+				000000000000000000008009 /* DownloadsViewModel.swift */,
+				000000000000000000001042 /* MenuBarView.swift */,
+				000000000000000000001044 /* OnboardingView.swift */,
+				000000000000000000001046 /* PerformanceView.swift */,
+				000000000000000000001088 /* CPUCoresSection.swift */,
+				000000000000000000001090 /* SensorsSection.swift */,
+				000000000000000000001092 /* BatteryDetailSection.swift */,
+				000000000000000000001094 /* NetworkDetailSection.swift */,
+				000000000000000000001096 /* TopProcessesSection.swift */,
+				000000000000000000008021 /* IdleAppsSection.swift */,
+				000000000000000000008029 /* ActionShareManager.swift */,
+				000000000000000000008013 /* CodeBeautifierView.swift */,
+				000000000000000000008015 /* CodeTheme.swift */,
+				000000000000000000008017 /* SyntaxHighlighter.swift */,
+				000000000000000000008003 /* PortManagerView.swift */,
+				000000000000000000008005 /* PortManagerViewModel.swift */,
+				000000000000000000001048 /* ProtectionView.swift */,
+				000000000000000000001054 /* SmartScanView.swift */,
+				000000000000000000001056 /* Assets.xcassets */,
+				000000000000000000001058 /* PrivacyInfo.xcprivacy */,
+				000000000000000000004001 /* signatures.json */,
+				000000000000000000009001 /* GetHealthScoreIntent.swift */,
+				000000000000000000009003 /* GetCPUUsageIntent.swift */,
+				000000000000000000009005 /* GetBatteryHealthIntent.swift */,
+				000000000000000000009007 /* GetDiskSpaceIntent.swift */,
+				000000000000000000009009 /* RunSmartScanIntent.swift */,
+				000000000000000000009011 /* RunActionIntent.swift */,
+				000000000000000000009013 /* GetClipboardHistoryIntent.swift */,
+				000000000000000000009015 /* ExportReportIntent.swift */,
+				000000000000000000009017 /* HaloShortcutsProvider.swift */,
 			);
 			name = Sources;
 			sourceTree = "<group>";
@@ -312,22 +470,11 @@
 				000000000000000000001015 /* Halo.app */,
 				000000000000000000002000 /* HaloWidget.appex */,
 				000000000000000000003000 /* HaloHelper.xpc */,
+				67D626412F39854842AE0A36 /* HaloUITests.xctest */,
+				94E717DB998E0BBF1AE83F94 /* HaloTests.xctest */,
+				D1749E8BBBF48CFF49E42B5A /* HaloTests.xctest */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		/* F-002: HaloHelper directory group */
-		000000000000000000003026 /* HaloHelper */ = {
-			isa = PBXGroup;
-			children = (
-				000000000000000000003010 /* main.swift */,
-				000000000000000000003012 /* HaloHelperDelegate.swift */,
-				000000000000000000003014 /* HaloHelperImpl.swift */,
-				000000000000000000003018 /* Info.plist (HaloHelper) */,
-				000000000000000000003019 /* HaloHelper.entitlements */,
-			);
-			name = HaloHelper;
-			path = HaloHelper;
 			sourceTree = "<group>";
 		};
 		000000000000000000001064 /* Frameworks */ = {
@@ -336,6 +483,7 @@
 				000000000000000000001060 /* IOKit.framework */,
 				000000000000000000001062 /* SystemConfiguration.framework */,
 				000000000000000000002017 /* WidgetKit.framework */,
+				F3C703782CA1E12019C0141D /* OS X */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -358,6 +506,97 @@
 			path = Shared;
 			sourceTree = "<group>";
 		};
+		000000000000000000003026 /* HaloHelper */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000003010 /* main.swift */,
+				000000000000000000003012 /* HaloHelperDelegate.swift */,
+				000000000000000000003014 /* HaloHelperImpl.swift */,
+				000000000000000000003018 /* Info.plist */,
+				000000000000000000003019 /* HaloHelper.entitlements */,
+			);
+			name = HaloHelper;
+			path = HaloHelper;
+			sourceTree = "<group>";
+		};
+		0E2AB6F5D2E1B5E920E3EF8E /* Scanner */ = {
+			isa = PBXGroup;
+			children = (
+				4555BA206584E6C688FD51F1 /* DriveSpeedTester.swift */,
+			);
+			name = Scanner;
+			path = Scanner;
+			sourceTree = "<group>";
+		};
+		3FC68D77CD5D51D58443674D /* HaloUITests */ = {
+			isa = PBXGroup;
+			children = (
+				8908A278C13A1F3B9E21BFE9 /* CleanupUITests.swift */,
+				BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */,
+				4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */,
+				3ED172401B83B65197881BFC /* SidebarReorderUITests.swift */,
+				74D974CC4B2FB109632BF14A /* SmokeUITests.swift */,
+			);
+			name = HaloUITests;
+			path = HaloUITests;
+			sourceTree = "<group>";
+		};
+		78260093923C98A7E00A3FCD /* HaloTests */ = {
+			isa = PBXGroup;
+			children = (
+				629A9D17BDFF863DCB0206F2 /* DriveSpeedTesterTests.swift */,
+				7C5BDF389221BADF1F31152C /* HaloTests.swift */,
+				00C37BFCA463AB410245B802 /* HelperClientTests.swift */,
+			);
+			name = HaloTests;
+			path = HaloTests;
+			sourceTree = "<group>";
+		};
+		831E06F76773A70833D4AD12 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				D2B9FF24DEEB6AD1B681E7B7 /* Files */,
+			);
+			name = Features;
+			path = Features;
+			sourceTree = "<group>";
+		};
+		8763EB3A9BDA7EE00E9F6563 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				0E2AB6F5D2E1B5E920E3EF8E /* Scanner */,
+			);
+			name = Core;
+			path = Core;
+			sourceTree = "<group>";
+		};
+		D2B9FF24DEEB6AD1B681E7B7 /* Files */ = {
+			isa = PBXGroup;
+			children = (
+				7C310900DF7BB88C2E7AFC1B /* DriveSpeedView.swift */,
+			);
+			name = Files;
+			path = Files;
+			sourceTree = "<group>";
+		};
+		DFBC888F5DBC7A3BBDFF40F0 /* Halo */ = {
+			isa = PBXGroup;
+			children = (
+				8763EB3A9BDA7EE00E9F6563 /* Core */,
+				831E06F76773A70833D4AD12 /* Features */,
+			);
+			name = Halo;
+			path = Halo;
+			sourceTree = "<group>";
+		};
+		F3C703782CA1E12019C0141D /* OS X */ = {
+			isa = PBXGroup;
+			children = (
+				D3824F98C3251B8B75207CE9 /* Cocoa.framework */,
+			);
+			name = "OS X";
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -375,7 +614,7 @@
 			);
 			dependencies = (
 				000000000000000000002014 /* PBXTargetDependency */,
-				000000000000000000003024 /* PBXTargetDependency (HaloHelper) */,
+				000000000000000000003024 /* PBXTargetDependency */,
 			);
 			name = Halo;
 			packageProductDependencies = (
@@ -384,23 +623,6 @@
 			productName = Halo;
 			productReference = 000000000000000000001015 /* Halo.app */;
 			productType = "com.apple.product-type.application";
-		};
-		/* F-002: HaloHelper XPC service target */
-		000000000000000000003001 /* HaloHelper */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 000000000000000000003025 /* Build configuration list for PBXNativeTarget "HaloHelper" */;
-			buildPhases = (
-				000000000000000000003021 /* Frameworks (HaloHelper) */,
-				000000000000000000003020 /* Sources (HaloHelper) */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = HaloHelper;
-			productName = HaloHelper;
-			productReference = 000000000000000000003000 /* HaloHelper.xpc */;
-			productType = "com.apple.product-type.xpc-service";
 		};
 		000000000000000000002009 /* HaloWidget */ = {
 			isa = PBXNativeTarget;
@@ -418,6 +640,58 @@
 			productName = HaloWidget;
 			productReference = 000000000000000000002000 /* HaloWidget.appex */;
 			productType = "com.apple.product-type.app-extension";
+		};
+		000000000000000000003001 /* HaloHelper */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 000000000000000000003025 /* Build configuration list for PBXNativeTarget "HaloHelper" */;
+			buildPhases = (
+				000000000000000000003021 /* Frameworks */,
+				000000000000000000003020 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = HaloHelper;
+			productName = HaloHelper;
+			productReference = 000000000000000000003000 /* HaloHelper.xpc */;
+			productType = "com.apple.product-type.xpc-service";
+		};
+		A9F6BED9499AC0DB2CD92F48 /* HaloUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 62C32D39FABB18D42035F9FE /* Build configuration list for PBXNativeTarget "HaloUITests" */;
+			buildPhases = (
+				341C6A1C502475A725C5A138 /* Sources */,
+				6A8180851501AE7536D27282 /* Frameworks */,
+				E180F2F4BA34584A2F930734 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				63C7CAF3D4092955F4F9F76C /* PBXTargetDependency */,
+			);
+			name = HaloUITests;
+			productName = HaloUITests;
+			productReference = 67D626412F39854842AE0A36 /* HaloUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		C3CA09CF7C61D778EC3A4F3E /* HaloTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 143965939039C2E9029617DC /* Build configuration list for PBXNativeTarget "HaloTests" */;
+			buildPhases = (
+				2532AC636FA86105529BA334 /* Sources */,
+				FE01D268A054C5BF7D1CEDD5 /* Frameworks */,
+				82340A5C9CB2367A93B2B068 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				263E17D36861C6F28ED8E54C /* PBXTargetDependency */,
+			);
+			name = HaloTests;
+			productName = HaloTests;
+			productReference = D1749E8BBBF48CFF49E42B5A /* HaloTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -459,6 +733,8 @@
 				000000000000000000001004 /* Halo */,
 				000000000000000000002009 /* HaloWidget */,
 				000000000000000000003001 /* HaloHelper */,
+				A9F6BED9499AC0DB2CD92F48 /* HaloUITests */,
+				C3CA09CF7C61D778EC3A4F3E /* HaloTests */,
 			);
 		};
 /* End PBXProject section */
@@ -468,13 +744,27 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				000000000000000000001057 /* Halo/Resources/Assets.xcassets in Resources */,
-				000000000000000000001059 /* Halo/Resources/PrivacyInfo.xcprivacy in Resources */,
-				000000000000000000004002 /* Halo/Resources/signatures.json in Resources */,
+				000000000000000000001057 /* Assets.xcassets in Resources */,
+				000000000000000000001059 /* PrivacyInfo.xcprivacy in Resources */,
+				000000000000000000004002 /* signatures.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		000000000000000000002007 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		82340A5C9CB2367A93B2B068 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E180F2F4BA34584A2F930734 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -488,76 +778,101 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				000000000000000000007001 /* Halo/App/BuildToken.swift in Sources */,
-				000000000000000000001017 /* Halo/App/AppState.swift in Sources */,
-				000000000000000000001019 /* Halo/App/ContentView.swift in Sources */,
-				000000000000000000001021 /* Halo/App/HaloApp.swift in Sources */,
-				000000000000000000001023 /* Halo/Core/Models/Models.swift in Sources */,
-				000000000000000000001025 /* Halo/Core/Scanner/FileSystemScanner.swift in Sources */,
-				000000000000000000001027 /* Halo/Core/Scanner/ScanCoordinator.swift in Sources */,
-				000000000000000000001029 /* Halo/Core/Scanner/SystemMonitor.swift in Sources */,
-				000000000000000000001051 /* Halo/Core/Scanner/DuplicateDetector.swift in Sources */,
-				000000000000000000001071 /* Halo/Core/Scanner/ProtectionScanner.swift in Sources */,
-				000000000000000000004004 /* Halo/Core/Scanner/SignatureDatabase.swift in Sources */,
-				000000000000000000004008 /* Halo/Core/Scanner/LoginItemScanner.swift in Sources */,
-				000000000000000000004010 /* Halo/Core/Scanner/AppScanner.swift in Sources */,
-				000000000000000000001073 /* Halo/Core/AlertManager.swift in Sources */,
-				000000000000000000004012 /* Halo/Core/AlertLog.swift in Sources */,
-				000000000000000000004014 /* Halo/Core/ReportGenerator.swift in Sources */,
-				000000000000000000004006 /* Halo/Core/ScanScheduler.swift in Sources */,
-				000000000000000000001075 /* Halo/Core/Scanner/CPUDetailMonitor.swift in Sources */,
-				000000000000000000001077 /* Halo/Core/Scanner/SMCReader.swift in Sources */,
-				000000000000000000001079 /* Halo/Core/Scanner/GPUMonitor.swift in Sources */,
-				000000000000000000001081 /* Halo/Core/Scanner/NetworkDetailMonitor.swift in Sources */,
-				000000000000000000001083 /* Halo/Core/Scanner/SpeedTestService.swift in Sources */,
-				000000000000000000001085 /* Halo/Core/Scanner/DiskHealthMonitor.swift in Sources */,
-				000000000000000000001087 /* Halo/Core/Scanner/ProcessMonitor.swift in Sources */,
-				000000000000000000001031 /* Halo/DesignSystem/DesignSystem.swift in Sources */,
-				000000000000000000001033 /* Halo/Features/Applications/ApplicationsView.swift in Sources */,
-				000000000000000000001035 /* Halo/Features/Cleanup/CleanupView.swift in Sources */,
-				000000000000000000001101 /* Halo/Features/Cleanup/DiskHealthSection.swift in Sources */,
-				000000000000000000001053 /* Halo/Features/Clipboard/ClipboardMonitor.swift in Sources */,
-				000000000000000000001068 /* Halo/Features/Clipboard/ClipboardQuickPickerView.swift in Sources */,
-				000000000000000000001037 /* Halo/Features/Clipboard/ClipboardView.swift in Sources */,
-				000000000000000000001066 /* Halo/Core/HotkeyManager.swift in Sources */,
-				000000000000000000001039 /* Halo/Features/Dashboard/DashboardView.swift in Sources */,
-				000000000000000000001099 /* Halo/Features/Dashboard/NetworkSparklineCard.swift in Sources */,
-				000000000000000000001103 /* Halo/Features/Dashboard/GPUDashboardCard.swift in Sources */,
-				000000000000000000006002 /* Halo/Core/Actions/ActionModels.swift in Sources */,
-				000000000000000000006004 /* Halo/Core/Actions/ActionLibrary.swift in Sources */,
-				000000000000000000006006 /* Halo/Core/Actions/ActionRunner.swift in Sources */,
-				000000000000000000006008 /* Halo/Features/Actions/QuickActionPickerView.swift in Sources */,
-				000000000000000000006010 /* Halo/Features/Actions/ActionsView.swift in Sources */,
-				000000000000000000006012 /* Halo/Features/Actions/CustomActionEditor.swift in Sources */,
-				000000000000000000007101 /* Halo/Core/LocalShare/Models/LocalShareModels.swift in Sources */,
-				000000000000000000007103 /* Halo/Core/LocalShare/Crypto/TLSManager.swift in Sources */,
-				000000000000000000007105 /* Halo/Core/LocalShare/Network/MulticastDiscovery.swift in Sources */,
-				000000000000000000007107 /* Halo/Core/LocalShare/Network/LocalShareServer.swift in Sources */,
-				000000000000000000007109 /* Halo/Core/LocalShare/Network/LocalShareClient.swift in Sources */,
-				000000000000000000007111 /* Halo/Core/LocalShare/Network/TransferPowerAssertion.swift in Sources */,
-				000000000000000000007113 /* Halo/Core/LocalShare/Manager/LocalShareManager.swift in Sources */,
-				000000000000000000007115 /* Halo/Features/LocalShare/LocalShareView.swift in Sources */,
-				000000000000000000007117 /* Halo/Features/LocalShare/ReceiveConsentView.swift in Sources */,
-				000000000000000000007002 /* Halo/Core/Actions/ActionSettingsStore.swift in Sources */,
-				000000000000000000007004 /* Halo/Core/Actions/VoiceSearchController.swift in Sources */,
-				000000000000000000007006 /* Halo/Features/Actions/ActionSettingsTab.swift in Sources */,
-				000000000000000000007008 /* Halo/Core/SystemControls/SystemControlsManager.swift in Sources */,
-				000000000000000000007010 /* Halo/Core/SystemControls/MicCameraControlsView.swift in Sources */,
-				000000000000000000001041 /* Halo/Features/Files/FilesView.swift in Sources */,
-				000000000000000000001043 /* Halo/Features/MenuBar/MenuBarView.swift in Sources */,
-				000000000000000000001045 /* Halo/Features/Onboarding/OnboardingView.swift in Sources */,
-				000000000000000000001047 /* Halo/Features/Performance/PerformanceView.swift in Sources */,
-				000000000000000000001089 /* Halo/Features/Performance/CPUCoresSection.swift in Sources */,
-				000000000000000000001091 /* Halo/Features/Performance/SensorsSection.swift in Sources */,
-				000000000000000000001093 /* Halo/Features/Performance/BatteryDetailSection.swift in Sources */,
-				000000000000000000001095 /* Halo/Features/Performance/NetworkDetailSection.swift in Sources */,
-				000000000000000000001097 /* Halo/Features/Performance/TopProcessesSection.swift in Sources */,
-				000000000000000000001049 /* Halo/Features/Protection/ProtectionView.swift in Sources */,
-				000000000000000000001055 /* Halo/Features/SmartScan/SmartScanView.swift in Sources */,
+				000000000000000000007001 /* BuildToken.swift in Sources */,
+				000000000000000000001017 /* AppState.swift in Sources */,
+				000000000000000000001019 /* ContentView.swift in Sources */,
+				000000000000000000001021 /* HaloApp.swift in Sources */,
+				000000000000000000001023 /* Models.swift in Sources */,
+				000000000000000000001025 /* FileSystemScanner.swift in Sources */,
+				000000000000000000001027 /* ScanCoordinator.swift in Sources */,
+				000000000000000000001029 /* SystemMonitor.swift in Sources */,
+				000000000000000000001051 /* DuplicateDetector.swift in Sources */,
+				000000000000000000001071 /* ProtectionScanner.swift in Sources */,
+				000000000000000000004004 /* SignatureDatabase.swift in Sources */,
+				000000000000000000004008 /* LoginItemScanner.swift in Sources */,
+				000000000000000000004010 /* AppScanner.swift in Sources */,
+				000000000000000000001073 /* AlertManager.swift in Sources */,
+				000000000000000000004012 /* AlertLog.swift in Sources */,
+				000000000000000000004014 /* ReportGenerator.swift in Sources */,
+				000000000000000000004006 /* ScanScheduler.swift in Sources */,
+				000000000000000000001075 /* CPUDetailMonitor.swift in Sources */,
+				000000000000000000001077 /* SMCReader.swift in Sources */,
+				000000000000000000001079 /* GPUMonitor.swift in Sources */,
+				000000000000000000001081 /* NetworkDetailMonitor.swift in Sources */,
+				000000000000000000001083 /* SpeedTestService.swift in Sources */,
+				000000000000000000001085 /* DiskHealthMonitor.swift in Sources */,
+				000000000000000000001087 /* ProcessMonitor.swift in Sources */,
+				000000000000000000001031 /* DesignSystem.swift in Sources */,
+				000000000000000000001033 /* ApplicationsView.swift in Sources */,
+				000000000000000000001035 /* CleanupView.swift in Sources */,
+				000000000000000000001101 /* DiskHealthSection.swift in Sources */,
+				000000000000000000001053 /* ClipboardMonitor.swift in Sources */,
+				000000000000000000001068 /* ClipboardQuickPickerView.swift in Sources */,
+				000000000000000000001037 /* ClipboardView.swift in Sources */,
+				000000000000000000001066 /* HotkeyManager.swift in Sources */,
+				000000000000000000001039 /* DashboardView.swift in Sources */,
+				000000000000000000001099 /* NetworkSparklineCard.swift in Sources */,
+				000000000000000000001103 /* GPUDashboardCard.swift in Sources */,
+				000000000000000000006002 /* ActionModels.swift in Sources */,
+				000000000000000000006004 /* ActionLibrary.swift in Sources */,
+				000000000000000000006006 /* ActionRunner.swift in Sources */,
+				000000000000000000006008 /* QuickActionPickerView.swift in Sources */,
+				000000000000000000006010 /* ActionsView.swift in Sources */,
+				000000000000000000006012 /* CustomActionEditor.swift in Sources */,
+				000000000000000000007101 /* LocalShareModels.swift in Sources */,
+				000000000000000000007103 /* TLSManager.swift in Sources */,
+				000000000000000000007105 /* MulticastDiscovery.swift in Sources */,
+				000000000000000000007107 /* LocalShareServer.swift in Sources */,
+				000000000000000000007109 /* LocalShareClient.swift in Sources */,
+				000000000000000000007111 /* TransferPowerAssertion.swift in Sources */,
+				000000000000000000007113 /* LocalShareManager.swift in Sources */,
+				000000000000000000007115 /* LocalShareView.swift in Sources */,
+				000000000000000000007117 /* ReceiveConsentView.swift in Sources */,
+				000000000000000000008002 /* PortScanner.swift in Sources */,
+				000000000000000000008004 /* PortManagerView.swift in Sources */,
+				000000000000000000008006 /* PortManagerViewModel.swift in Sources */,
+				000000000000000000008008 /* DownloadsView.swift in Sources */,
+				000000000000000000008010 /* DownloadsViewModel.swift in Sources */,
+				000000000000000000008012 /* CelebrationOverlay.swift in Sources */,
+				000000000000000000008014 /* CodeBeautifierView.swift in Sources */,
+				000000000000000000008016 /* CodeTheme.swift in Sources */,
+				000000000000000000008018 /* SyntaxHighlighter.swift in Sources */,
+				000000000000000000008020 /* IdleAppMonitor.swift in Sources */,
+				000000000000000000008022 /* IdleAppsSection.swift in Sources */,
+				000000000000000000008024 /* SnippetManager.swift in Sources */,
+				000000000000000000008026 /* SnippetEditorView.swift in Sources */,
+				000000000000000000008028 /* SnippetListSection.swift in Sources */,
+				000000000000000000008030 /* ActionShareManager.swift in Sources */,
+				000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */,
+				000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */,
+				000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */,
+				000000000000000000009008 /* GetDiskSpaceIntent.swift in Sources */,
+				000000000000000000009010 /* RunSmartScanIntent.swift in Sources */,
+				000000000000000000009012 /* RunActionIntent.swift in Sources */,
+				000000000000000000009014 /* GetClipboardHistoryIntent.swift in Sources */,
+				000000000000000000009016 /* ExportReportIntent.swift in Sources */,
+				000000000000000000009018 /* HaloShortcutsProvider.swift in Sources */,
+				000000000000000000007002 /* ActionSettingsStore.swift in Sources */,
+				000000000000000000007004 /* VoiceSearchController.swift in Sources */,
+				000000000000000000007006 /* ActionSettingsTab.swift in Sources */,
+				000000000000000000007008 /* SystemControlsManager.swift in Sources */,
+				000000000000000000007010 /* MicCameraControlsView.swift in Sources */,
+				000000000000000000001041 /* FilesView.swift in Sources */,
+				000000000000000000001043 /* MenuBarView.swift in Sources */,
+				000000000000000000001045 /* OnboardingView.swift in Sources */,
+				000000000000000000001047 /* PerformanceView.swift in Sources */,
+				000000000000000000001089 /* CPUCoresSection.swift in Sources */,
+				000000000000000000001091 /* SensorsSection.swift in Sources */,
+				000000000000000000001093 /* BatteryDetailSection.swift in Sources */,
+				000000000000000000001095 /* NetworkDetailSection.swift in Sources */,
+				000000000000000000001097 /* TopProcessesSection.swift in Sources */,
+				000000000000000000001049 /* ProtectionView.swift in Sources */,
+				000000000000000000001055 /* SmartScanView.swift in Sources */,
 				000000000000000000002021 /* HaloSharedData.swift in Sources */,
-				/* F-002 */
-				000000000000000000003005 /* HaloHelperProtocol.swift in Sources (Halo) */,
+				000000000000000000003005 /* HaloHelperProtocol.swift in Sources */,
 				000000000000000000003007 /* HelperClient.swift in Sources */,
+				EABEEEF5BBF1D9D3F61FB453 /* DriveSpeedTester.swift in Sources */,
+				1A276975BC00655241248D7B /* DriveSpeedView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -571,49 +886,40 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		/* F-002: HaloHelper XPC target Sources */
-		000000000000000000003020 /* Sources (HaloHelper) */ = {
+		000000000000000000003020 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				000000000000000000003009 /* HaloHelperProtocol.swift in Sources (Helper) */,
-				000000000000000000003011 /* main.swift in Sources (Helper) */,
+				000000000000000000003009 /* HaloHelperProtocol.swift in Sources */,
+				000000000000000000003011 /* main.swift in Sources */,
 				000000000000000000003013 /* HaloHelperDelegate.swift in Sources */,
 				000000000000000000003015 /* HaloHelperImpl.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		000000000000000000003021 /* Frameworks (HaloHelper) */ = {
-			isa = PBXFrameworksBuildPhase;
+		2532AC636FA86105529BA334 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = ();
+			files = (
+				318D18283567FA7F9C3FCD89 /* DriveSpeedTesterTests.swift in Sources */,
+				8A4DFF3A40CA9ADDBF8405AE /* HaloTests.swift in Sources */,
+				D52607DADA626DF2FA479956 /* HelperClientTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		341C6A1C502475A725C5A138 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8A64A32F27E6245BD6EAEB93 /* CleanupUITests.swift in Sources */,
+				97FC4C5E35CB7030A2F01C9C /* HaloSidebar.swift in Sources */,
+				0D95339BD7D85794863633C8 /* HaloUITestCase.swift in Sources */,
+				7FA28EC1DD42807C6EFD8148 /* SidebarReorderUITests.swift in Sources */,
+				428DD9830BBDEBECB1200590 /* SmokeUITests.swift in Sources */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin PBXCopyFilesBuildPhase section */
-		000000000000000000003022 /* Embed XPC Services */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 16;
-			files = (
-				000000000000000000003017 /* HaloHelper.xpc in XPC Services */,
-			);
-			name = "Embed XPC Services";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
-
-/* Begin PBXContainerItemProxy section (F-002) */
-		000000000000000000003023 /* PBXContainerItemProxy (HaloHelper) */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 000000000000000000001011 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 000000000000000000003001;
-			remoteInfo = HaloHelper;
-		};
-/* End PBXContainerItemProxy section */
 
 /* Begin PBXTargetDependency section */
 		000000000000000000002014 /* PBXTargetDependency */ = {
@@ -621,10 +927,22 @@
 			target = 000000000000000000002009 /* HaloWidget */;
 			targetProxy = 000000000000000000002013 /* PBXContainerItemProxy */;
 		};
-		000000000000000000003024 /* PBXTargetDependency (HaloHelper) */ = {
+		000000000000000000003024 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 000000000000000000003001 /* HaloHelper */;
-			targetProxy = 000000000000000000003023 /* PBXContainerItemProxy (HaloHelper) */;
+			targetProxy = 000000000000000000003023 /* PBXContainerItemProxy */;
+		};
+		263E17D36861C6F28ED8E54C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Halo;
+			target = 000000000000000000001004 /* Halo */;
+			targetProxy = 26D25A124256763F35F80B16 /* PBXContainerItemProxy */;
+		};
+		63C7CAF3D4092955F4F9F76C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Halo;
+			target = 000000000000000000001004 /* Halo */;
+			targetProxy = D3BA2CB3FCE39C3C73262CE1 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -745,8 +1063,7 @@
 			};
 			name = Release;
 		};
-		/* F-002: HaloHelper build configs */
-		000000000000000000003027 /* Debug (HaloHelper) */ = {
+		000000000000000000003027 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = HaloHelper/HaloHelper.entitlements;
@@ -763,7 +1080,7 @@
 			};
 			name = Debug;
 		};
-		000000000000000000003028 /* Release (HaloHelper) */ = {
+		000000000000000000003028 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = HaloHelper/HaloHelper.entitlements;
@@ -779,6 +1096,116 @@
 				SWIFT_VERSION = 5.9;
 			};
 			name = Release;
+		};
+		34F01EEA713999157E2A95C9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 210;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 2.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.9;
+				TEST_TARGET_NAME = Halo;
+			};
+			name = Release;
+		};
+		42EB40B5A2347D2273EE9037 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 210;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 2.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.9;
+				TEST_TARGET_NAME = Halo;
+			};
+			name = Debug;
+		};
+		5FD18B60112C8E615E5EFC2D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 210;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 2.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Halo.app/Contents/MacOS/Halo";
+			};
+			name = Release;
+		};
+		960FF1C22530A10270458558 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 210;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 2.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Halo.app/Contents/MacOS/Halo";
+			};
+			name = Release;
+		};
+		ADA8E627E4ACA7EABB920F71 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 210;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 2.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Halo.app/Contents/MacOS/Halo";
+			};
+			name = Debug;
+		};
+		F537A3E14491506708507C63 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 210;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 2.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Halo.app/Contents/MacOS/Halo";
+			};
+			name = Debug;
 		};
 /* End XCBuildConfiguration section */
 
@@ -813,8 +1240,26 @@
 		000000000000000000003025 /* Build configuration list for PBXNativeTarget "HaloHelper" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				000000000000000000003027 /* Debug (HaloHelper) */,
-				000000000000000000003028 /* Release (HaloHelper) */,
+				000000000000000000003027 /* Debug */,
+				000000000000000000003028 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		143965939039C2E9029617DC /* Build configuration list for PBXNativeTarget "HaloTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5FD18B60112C8E615E5EFC2D /* Release */,
+				ADA8E627E4ACA7EABB920F71 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		62C32D39FABB18D42035F9FE /* Build configuration list for PBXNativeTarget "HaloUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				34F01EEA713999157E2A95C9 /* Release */,
+				42EB40B5A2347D2273EE9037 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -827,7 +1272,7 @@
 			repositoryURL = "https://github.com/getsentry/sentry-cocoa";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = "8.0.0";
+				minimumVersion = 8.0.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

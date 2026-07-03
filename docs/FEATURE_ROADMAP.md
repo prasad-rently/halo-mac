@@ -39,11 +39,22 @@
 | [F-023](#f-023--memory-leak--app-bloat-tracker) | Memory Leak & App Bloat Tracker | 💡 Future Idea | ~3 d | ProcessMonitor |
 | [F-024](#f-024--browser-cleaner) | Browser Cleaner | 💡 Future Idea | ~2 d | none |
 | [F-025](#f-025--duplicate-photos-finder-perceptual-hash) | Duplicate Photos Finder (pHash) | 💡 Future Idea | ~5 d | DuplicateDetector |
-| [F-026](#f-026--downloads-folder-organiser) | Downloads Folder Organiser | 💡 Future Idea | ~2 d | AppScanner |
-| [F-027](#f-027--snippet-manager-clipboard-evolution) | Snippet Manager | 💡 Future Idea | ~3 d | Clipboard module |
+| [F-026](#f-026--downloads-folder-organiser--manager) | Downloads Folder Organiser & Manager | ✅ Done | 2.5 d | AppScanner, FileSystemScanner |
+| [F-027](#f-027--snippet-manager--text-expansion-engine-clipboard-evolution) | Snippet Manager & Text Expansion Engine | ✅ Done | 3.5 d | Clipboard module |
 | [F-028](#f-028--focus-session-companion) | Focus Session Companion | 💡 Future Idea | ~3 d | MenuBarDisplayStyle |
 | [F-029](#f-029--scheduled-reports--weekly-digest) | Scheduled Reports & Weekly Digest | 💡 Future Idea | ~2 d | ReportGenerator |
 | [F-030](#f-030--icloud-storage-analyser) | iCloud Storage Analyser | 💡 Future Idea | ~4 d | none |
+| [F-031](#f-031--dock--desktop-tinker-actions) | Dock & Desktop Tinker Actions | ✅ Done | 0.5 d | none |
+| [F-032](#f-032--display--audio-quick-actions) | Display & Audio Quick Actions | ✅ Done | 0.5 d | none |
+| [F-033](#f-033--system-junk--developer-cache-cleaner-actions) | System Junk & Dev Cache Cleaner Actions | ✅ Done | 0.5 d | none |
+| [F-034](#f-034--port-manager) | Port Manager | ✅ Done | 2.5 d | none |
+| [F-036](#f-036--customizable-menu-bar-format-strings) | Customizable Menu Bar Format Strings | ✅ Done | 2 d | MenuBarDisplayStyle |
+| [F-037](#f-037--celebration--delight-moments) | Celebration & Delight Moments | ✅ Done | 1.5 d | none |
+| [F-038](#f-038--code-snippet-beautifier) | Code Snippet Beautifier | ✅ Done | 3 d | Clipboard module |
+| [F-039](#f-039--auto-quit-idle-apps) | Auto-Quit Idle Apps | ✅ Done | 2.5 d | none |
+| [F-041](#f-041--shareable-action-configurations) | Shareable Action Configurations | ✅ Done | 2 d | Actions module |
+| [F-042](#f-042--siri-shortcuts--app-intents) | Siri Shortcuts / App Intents | ✅ Done | 4 d | AppState |
+| [F-043](#f-043--drive-read--write-speed-test-nfeat-121) | Drive Read & Write Speed Test (NFeat-121) | ✅ Done | 2 d | Files module |
 
 ---
 
@@ -1487,40 +1498,101 @@ New **"Similar Photos"** tab in the **Files** module, alongside the existing Dup
 
 ---
 
-## F-026 · Downloads Folder Organiser
+## F-026 · Downloads Folder Organiser & Manager
 
-**Status:** 💡 Future Idea  
-**Effort estimate:** 2 days  
+**Status:** 📋 Queued — #5 (was 💡 Future Idea; promoted and merged with F-035)  
+**Effort estimate:** 2.5 days  
 **Theme:** Cleanup & Storage  
 **Branch naming (when ready):** `feat/f026-downloads-organiser`  
-**Depends on:** AppScanner (for cross-referencing installed apps against .dmg/.pkg files)
+**Depends on:** AppScanner (for cross-referencing installed apps against .dmg/.pkg files), FileSystemScanner
 
 ### Why
 The Downloads folder on most Macs is years of accumulated chaos — old installers, forgotten PDFs, zip files never unzipped. On average it contains 2–8 GB of files that serve no ongoing purpose. The specific insight that sets this apart from a simple large-files view: identifying `.dmg` and `.pkg` installer files whose apps are already installed, making it safe to delete the installer. This is an obvious, practical feature that no basic cleaner currently offers in an intelligent way.
 
+*Merged with F-035 (Downloads Manager, Raycast-inspired) — adds age-based grouping, visual size breakdown, and size threshold alerts from Raycast's `downloads-manager` extension (7 commands).*
+
 ### What it delivers
 - Categorised summary of `~/Downloads` by file type: PDFs, ZIPs/Archives, DMGs, PKGs, Videos, Images, Code files, Other
 - Size and count per category; oldest file date per category
+- **Age-based grouping** *(from F-035)*: Today, This Week, This Month, Older (30–90d), Stale (90d+) — with visual bar chart breakdown
 - **"Installed App Installers"** subsection: `.dmg`/`.pkg` files cross-referenced against the Applications scanner — if the app is installed, the installer is marked "Safe to remove"
 - **"Stale Files"** list: files not opened in 90+ days with total size
+- **One-click "Clean Stale Downloads"** *(from F-035)*: moves 90+ day files to Trash with confirmation review sheet
 - Optional **"Sort into Subfolders"** action: organises files into `Downloads/PDFs/`, `Downloads/Archives/` etc.
+- **Size threshold notification** *(from F-035)*: alert when `~/Downloads` exceeds 5 GB (configurable)
 - All deletions and moves use the standard confirmation + `trashItem` flow
+
+### Files to create
+```
+Halo/Features/Files/DownloadsView.swift         — tab view within Files module
+Halo/Features/Files/DownloadsViewModel.swift     — @MainActor ObservableObject
+```
 
 ### Data sources
 - `FileManager` enumeration of `~/Downloads`
 - UTI type detection via `NSWorkspace.type(ofFile:)` or `UTType`
 - `AppScanner.scanApps()` results for installed-app cross-reference
 - `NSMetadataItem` for last-opened date per file
+- File creation/modification dates for age grouping
+
+### Implementation steps
+
+1. **Create `DownloadsViewModel.swift`**
+   ```swift
+   @MainActor
+   final class DownloadsViewModel: ObservableObject {
+       @Published var files: [DownloadFile] = []
+       @Published var isScanning = false
+       @Published var totalSize: Int64 = 0
+
+       func scan() async
+       func groupedByAge() -> [DownloadAgeGroup: [DownloadFile]]
+       func groupedByType() -> [DownloadFileType: [DownloadFile]]
+       func cleanStale() async -> Int64  // returns bytes freed
+       func organizeIntoSubfolders() async
+       func installersCrossRef(apps: [InstalledApp]) -> [DownloadFile]  // .dmg/.pkg with apps installed
+   }
+   ```
+
+2. **`scan()`** — enumerate `~/Downloads` using `FileManager.contentsOfDirectory(at:includingPropertiesForKeys:[.fileSizeKey, .creationDateKey, .contentModificationDateKey])`. Skip hidden files and `.DS_Store`.
+
+3. **Installer cross-reference** — for `.dmg`/`.pkg` files, extract app name from filename, compare against `AppScanner.scanApps()` results. Mark as "Safe to remove" if app is installed.
+
+4. **Create `DownloadsView.swift`** — tab within FilesView:
+   - Summary header: "X files · Y GB" with breakdown bar (color-coded by age group)
+   - Segmented picker: "By Age" / "By Type"
+   - Collapsible sections per group with file count + total size
+   - "Installed Installers" callout section with green "Safe to remove" badges
+   - Bottom bar: "Clean Stale (X files, Y GB)" + "Organize" buttons
+
+5. **Size threshold alert** — in `AppState.refreshMetrics()`, check Downloads folder size. If > 5 GB and not alerted in 24h, fire `AlertManager` notification.
+
+### Test plan
+- [ ] Open Files → Downloads tab → all files from `~/Downloads` listed
+- [ ] "By Age" view → files grouped correctly (today's downloads in "Today")
+- [ ] "By Type" view → correct categorization (PDF, Archive, Installer, etc.)
+- [ ] Installed installer detection → .dmg for installed app shows "Safe to remove"
+- [ ] "Clean Stale" → confirmation → files move to Trash
+- [ ] "Organize" → subdirectories created → files sorted by type
+- [ ] Downloads > 5 GB → notification fires
+- [ ] Empty ~/Downloads → shows "Downloads folder is empty" state
+
+### Acceptance criteria
+- All ~/Downloads files enumerated with correct sizes and dates
+- Both age-based and type-based grouping work correctly
+- Installer cross-reference correctly identifies safe-to-remove .dmg/.pkg files
+- Stale files (90+ days) correctly identified and trashable
+- No data loss — all deletions via `trashItem`
 
 ### Integration point
 New **"Downloads"** tab in the **Files** module. Also surfaced as a Smart Scan category.
 
 ---
 
-## F-027 · Snippet Manager (Clipboard Evolution)
+## F-027 · Snippet Manager & Text Expansion Engine (Clipboard Evolution)
 
-**Status:** 💡 Future Idea  
-**Effort estimate:** 3 days  
+**Status:** 📋 Queued — #10 (was 💡 Future Idea; promoted and merged with F-040)  
+**Effort estimate:** 3.5 days  
 **Theme:** User Productivity  
 **Branch naming (when ready):** `feat/f027-snippet-manager`  
 **Depends on:** Clipboard module (this is a direct evolution of it)
@@ -1528,17 +1600,97 @@ New **"Downloads"** tab in the **Files** module. Also surfaced as a Smart Scan c
 ### Why
 The Clipboard module is already a strong differentiator. Extending it from a passive recorder into an active snippet manager makes it compete with TextExpander and Raycast's snippet feature — tools that charge $40/year and $49/year respectively. The existing infrastructure (ClipboardMonitor, quick-picker overlay ⌘⇧V, 500-item history, AppState) already provides nearly all the plumbing needed.
 
+*Merged with F-040 (Snippet / Text Expansion Engine, Raycast-inspired) — adds dynamic placeholder expansion (`{date}`, `{clipboard}`, `{uuid}`, `{random:N}`), keyword trigger prefixes, bundled starter packs, and import from CSV / ray.so snippet URLs. Inspired by Raycast Snippets Explorer (ray.so/snippets) and the `clipboard-sequential-paste` extension.*
+
 ### What it delivers
 - Any clipboard history item can be promoted to a permanent **Snippet** with a custom label, category tag (e.g., "Dev", "Email", "Address"), and optional keyword trigger
 - Snippets persist indefinitely across reboots, unlike the rolling history cap
 - Searchable by label, tag, and content
 - Collections: user-created folders of related snippets (e.g., "SQL Queries", "Email Templates", "Addresses")
 - The existing `⌘⇧V` quick-picker overlay gains a **"Snippets"** tab alongside History — identical UX, different data source
+- **Dynamic placeholder expansion** *(from F-040)*:
+  - `{date}` → current date (localized)
+  - `{time}` → current time
+  - `{clipboard}` → current clipboard contents
+  - `{uuid}` → freshly generated UUID
+  - `{random:N}` → random alphanumeric string of length N
+- **Keyword trigger prefixes** *(from F-040)*: snippets can be triggered by typing a keyword (e.g., `//sig` → expands to full email signature)
+- **Bundled starter snippet packs** *(from F-040)*: 20 pre-loaded snippets (Symbols: →←✓✗•, Date/Time templates, Dev shortcuts: `console.log()`, `print()`, Email templates)
+- **Import** *(from F-040)*: from CSV, Raycast snippet format (ray.so URLs), and JSON files
 - Model change: `ClipboardItem` gains optional `snippetLabel: String?`, `snippetCollection: String?`, and `isSnippet: Bool` fields
+
+### Files to create
+```
+Halo/Features/Clipboard/SnippetManager.swift        — @MainActor singleton; CRUD, expansion engine, import
+Halo/Features/Clipboard/SnippetEditorView.swift      — create/edit snippet sheet
+Halo/Features/Clipboard/SnippetListSection.swift     — list section in ClipboardView
+```
+
+### Models (add to `Models.swift`)
+```swift
+struct TextSnippet: Identifiable, Codable, Equatable {
+    var id: UUID = UUID()
+    var name: String                    // "Email Signature"
+    var trigger: String                 // "//sig"
+    var body: String                    // "Best regards,\n{clipboard}"
+    var category: String                // "Email", "Code", "Symbols"
+    var usageCount: Int = 0
+    var createdAt: Date = Date()
+}
+```
 
 ### Data sources
 - Extension of the existing `ClipboardItem` model and `AppState.clipboardItems` store
-- Snippet persistence: separate `UserDefaults` key or a local JSON file for the snippet collection (distinct from rolling history)
+- Snippet persistence: separate `UserDefaults` key (`"haloSnippets"`) as JSON-encoded `[TextSnippet]`
+
+### Implementation steps
+
+1. **Create `SnippetManager.swift`**
+   ```swift
+   @MainActor
+   final class SnippetManager: ObservableObject {
+       static let shared = SnippetManager()
+       @Published var snippets: [TextSnippet] = []
+       private let storageKey = "haloSnippets"
+
+       func add(_ snippet: TextSnippet)
+       func update(_ snippet: TextSnippet)
+       func delete(_ snippet: TextSnippet)
+       func expand(_ snippet: TextSnippet) -> String  // replaces {date}, {clipboard}, {uuid}, {random:N}
+       func search(_ query: String) -> [TextSnippet]
+       func importFromCSV(url: URL) async
+       func importFromRaycast(json: Data) async
+       func loadStarterPack()  // 20 bundled snippets, only on first launch
+   }
+   ```
+
+2. **Create `SnippetEditorView.swift`** — sheet for create/edit:
+   - Name, trigger keyword, body (multi-line with placeholder insertion buttons), category picker
+   - Live preview showing expanded result
+
+3. **Create `SnippetListSection.swift`** — section in ClipboardView:
+   - Filterable list grouped by category; each row shows name, trigger badge, body preview
+   - Click to copy expanded text; context menu: Edit, Duplicate, Delete
+
+4. **Quick Picker integration** — add "Snippets" tab to `ClipboardQuickPickerView` and `QuickActionPickerView`
+
+5. **Starter pack** — load 20 predefined snippets on first launch (`UserDefaults["haloSnippetsLoaded"]` guard)
+
+### Test plan
+- [ ] Create snippet `//sig` → body `"Best regards,\n{clipboard}"` → paste "John" → expand → "Best regards,\nJohn"
+- [ ] `{date}` → expands to today's date; `{uuid}` → valid UUID; `{random:8}` → 8-char string
+- [ ] Search "sig" in `⌘⇧V` Quick Picker → snippet appears → select → expanded text pasted
+- [ ] Import CSV with 10 snippets → all appear in library
+- [ ] Collections: create "Email" collection → assign snippets → filter by collection
+- [ ] Starter pack loads on first launch, not on subsequent launches
+- [ ] Delete snippet → removed → no longer searchable
+
+### Acceptance criteria
+- All 5 placeholder types expand correctly
+- Snippets persist across app restarts
+- Quick Picker integration works alongside clipboard history
+- Starter snippet pack loads on first launch
+- Import from CSV and JSON works
 
 ### Integration point
 **Evolution of the existing Clipboard module.** Three-tab layout: **History** (existing) | **Snippets** (new, permanent) | **Pinned** (existing pin feature promoted to its own tab). No new sidebar module needed.
@@ -1671,4 +1823,1014 @@ New **"iCloud"** tab in the **Files** module, alongside SpaceLens, Exact Duplica
 
 ---
 
-*Last updated: v2.0 · 15 features shipped · 15 future ideas documented (F-016 → F-030)*
+*Last updated: v4.0 · 25 features shipped (F-001–F-015 + F-026, F-027, F-031–F-034, F-036–F-039, F-041–F-042) · 13 future ideas remaining (F-016–F-025, F-028–F-030)*
+
+---
+
+---
+
+# Raycast-Inspired Features — Queued Execution Plans (F-031 → F-042)
+
+> **Source:** Analysis of [raycast/extensions](https://github.com/raycast/extensions) (2,962 extensions) and [raycast/ray-so](https://github.com/raycast/ray-so) (8 web tools). Features are ordered by effort (quick wins first) to maximize velocity.
+
+---
+
+## F-031 · Dock & Desktop Tinker Actions
+
+**Status:** 📋 Queued — #1
+**Effort:** 0.5 day
+**Branch naming:** `feat/f031-dock-tinker-actions`
+**Depends on:** none
+**Inspired by:** Raycast `dock-tinker` extension (12 no-view commands)
+
+### Why
+Raycast's dock-tinker is one of its most beloved utility extensions — 12 simple `defaults write` commands that modify hidden Dock preferences. These are exactly the kind of power-user tweaks that Halo's `ActionCommand.shell` system was built for. Zero new infrastructure needed — just add entries to `ActionLibrary.predefined`.
+
+### What it delivers
+A new **"Dock & Desktop"** action category with 14 shell actions covering spacers, animations, orientation, auto-hide tuning, and resets.
+
+### Implementation steps
+
+1. **`Halo/Core/Actions/ActionModels.swift`** — add new case to `ActionCategory`:
+   ```swift
+   case dock = "Dock & Desktop"
+   ```
+   Add corresponding `icon` (return `"dock.rectangle"`), `color` (return `Color(hex: "#06b6d4")`).
+
+2. **`Halo/Core/Actions/ActionLibrary.swift`** — add 14 entries to `predefined` array:
+
+   | # | Name | Script | Sudo |
+   |---|------|--------|------|
+   | 1 | Add Dock Spacer | `defaults write com.apple.dock persistent-apps -array-add '{"tile-type"="spacer-tile";}' && killall Dock` | No |
+   | 2 | Add Small Dock Spacer | `... "small-spacer-tile" ...` | No |
+   | 3 | Reset Dock to Default | `defaults delete com.apple.dock && killall Dock` | No |
+   | 4 | Toggle Auto-Hide Dock | `osascript -e 'tell app "System Events" to tell dock preferences to set autohide to not autohide of dock preferences'` | No |
+   | 5 | Remove Auto-Hide Delay | `defaults write com.apple.dock autohide-delay -float 0 && defaults write com.apple.dock autohide-time-modifier -float 0.5 && killall Dock` | No |
+   | 6 | Restore Auto-Hide Delay | `defaults delete com.apple.dock autohide-delay && defaults delete com.apple.dock autohide-time-modifier && killall Dock` | No |
+   | 7 | Minimize Effect: Suck | `defaults write com.apple.dock mineffect suck && killall Dock` | No |
+   | 8 | Minimize Effect: Scale | `defaults write com.apple.dock mineffect scale && killall Dock` | No |
+   | 9 | Minimize Effect: Genie | `defaults write com.apple.dock mineffect genie && killall Dock` | No |
+   | 10 | Hide Recent Apps from Dock | `defaults write com.apple.dock show-recents -bool false && killall Dock` | No |
+   | 11 | Show Recent Apps in Dock | `defaults write com.apple.dock show-recents -bool true && killall Dock` | No |
+   | 12 | Dock Position: Left | `defaults write com.apple.dock orientation left && killall Dock` | No |
+   | 13 | Dock Position: Right | `defaults write com.apple.dock orientation right && killall Dock` | No |
+   | 14 | Dock Position: Bottom | `defaults write com.apple.dock orientation bottom && killall Dock` | No |
+
+   Each entry follows the existing `ActionItem(name:subtitle:icon:iconColorHex:category:keywords:command:requiresPrivilege:isBuiltIn:)` pattern.
+
+3. **`project.pbxproj`** — no changes needed (existing files modified, no new files).
+
+4. **`CLAUDE.md`** — update predefined action count from 70 to 84. Add "Dock & Desktop" category description.
+
+### Test plan
+- [ ] Open Actions → "Dock & Desktop" category tile appears with dock icon
+- [ ] Run "Add Dock Spacer" → Dock restarts → spacer tile visible
+- [ ] Run "Minimize Effect: Suck" → minimize a window → suck animation plays
+- [ ] Run "Reset Dock to Default" → all customizations reverted
+- [ ] All 14 actions appear in `⌘⇧A` Quick Picker search
+- [ ] Each action shows in execution history with stdout output
+
+### Acceptance criteria
+- All 14 Dock actions execute successfully and produce visible changes
+- Dock restarts cleanly after each `killall Dock`
+- No sudo required for any action
+
+---
+
+## F-032 · Display & Audio Quick Actions
+
+**Status:** 📋 Queued — #2
+**Effort:** 0.5 day
+**Branch naming:** `feat/f032-display-audio-actions`
+**Depends on:** none
+**Inspired by:** Raycast `display-modes`, `audio-device`, `1-click-confetti`
+
+### Why
+Display and audio switching are among the most-installed Raycast extension categories. These are simple shell/AppleScript actions that Halo's `ActionCommand.shell` handles natively. Two new categories for low effort.
+
+### What it delivers
+Two new action categories: **"Display"** (6 actions) and **"Audio"** (5 actions).
+
+### Implementation steps
+
+1. **`ActionModels.swift`** — add two new cases to `ActionCategory`:
+   ```swift
+   case display = "Display"
+   case audio   = "Audio"
+   ```
+   Icons: `"display"` / `"speaker.wave.3.fill"`. Colors: `"#8b5cf6"` / `"#14b8a6"`.
+
+2. **`ActionLibrary.swift`** — add 11 entries to `predefined`:
+
+   **Display (6):**
+   | # | Name | Script |
+   |---|------|--------|
+   | 1 | Toggle Dark Mode | `osascript -e 'tell app "System Events" to tell appearance preferences to set dark mode to not dark mode'` |
+   | 2 | Screenshot to Clipboard | `screencapture -c && echo "✓ Screenshot copied to clipboard."` |
+   | 3 | Screenshot Region to Clipboard | `screencapture -ic && echo "✓ Region screenshot copied to clipboard."` |
+   | 4 | Screenshot with 5s Timer | `screencapture -T5 ~/Desktop/screenshot-$(date +%Y%m%d-%H%M%S).png && echo "✓ Screenshot saved to Desktop."` |
+   | 5 | Toggle Desktop Icons | Toggle script using `defaults write com.apple.finder CreateDesktop` + `killall Finder` |
+   | 6 | Open Display Settings | `open "x-apple.systempreferences:com.apple.Displays-Settings.extension"` |
+
+   **Audio (5):**
+   | # | Name | Script |
+   |---|------|--------|
+   | 1 | Mute Microphone | `osascript -e 'set volume input volume 0' && echo "✓ Microphone muted."` |
+   | 2 | Unmute Microphone | `osascript -e 'set volume input volume 100' && echo "✓ Microphone unmuted."` |
+   | 3 | Set Volume to 25% | `osascript -e 'set volume output volume 25' && echo "✓ Volume set to 25%."` |
+   | 4 | Set Volume to 75% | `osascript -e 'set volume output volume 75' && echo "✓ Volume set to 75%."` |
+   | 5 | Toggle Do Not Disturb | `shortcuts run "Toggle Do Not Disturb" 2>/dev/null || echo "⚠ Create a 'Toggle Do Not Disturb' shortcut in Shortcuts.app first."` |
+
+3. **`CLAUDE.md`** — update predefined count (84 → 95) and add category descriptions.
+
+### Test plan
+- [ ] "Display" and "Audio" category tiles appear in Actions grid
+- [ ] "Toggle Dark Mode" → system appearance switches
+- [ ] "Screenshot to Clipboard" → paste in Preview works
+- [ ] "Mute Microphone" → System Settings shows input volume at 0
+- [ ] All 11 actions searchable via `⌘⇧A`
+
+### Acceptance criteria
+- All 11 actions execute and produce correct system changes
+- No new files needed — only `ActionModels.swift` and `ActionLibrary.swift` modified
+
+---
+
+## F-033 · System Junk & Developer Cache Cleaner Actions
+
+**Status:** 📋 Queued — #3
+**Effort:** 0.5 day
+**Branch naming:** `feat/f033-junk-cleaner-actions`
+**Depends on:** none
+**Inspired by:** Raycast `dev-cache-cleaner`, `dot-underscore-files-cleaner`, `folder-cleaner`
+
+### Why
+Developer cache cleanup (CocoaPods, Gradle, Docker, pip, Homebrew) and system junk removal (resource forks, font caches, broken symlinks) are highly requested. These are safe shell commands that expand Halo's existing System and Developer categories.
+
+### What it delivers
+12 new actions added to existing categories (7 System, 5 Developer).
+
+### Implementation steps
+
+1. **`ActionLibrary.swift`** — add to `predefined`:
+
+   **System (7 new):**
+   | # | Name | Script | Sudo |
+   |---|------|--------|------|
+   | 1 | Remove ._ Resource Fork Files | `find ~ -name "._*" -type f -delete 2>/dev/null; echo "✓ Resource fork files removed."` | No |
+   | 2 | Clear Font Caches | `atsutil databases -remove 2>/dev/null; atsutil server -shutdown 2>/dev/null; atsutil server -ping 2>/dev/null; echo "✓ Font caches cleared. Restart apps to see effect."` | Yes |
+   | 3 | Clear User Logs | `rm -rf ~/Library/Logs/* 2>/dev/null; echo "✓ User logs cleared."` | No |
+   | 4 | Remove Broken Symlinks | `find ~ -maxdepth 4 -type l ! -exec test -e {} \; -delete 2>/dev/null; echo "✓ Broken symlinks removed."` | No |
+   | 5 | Flush Quicklook Cache | `qlmanage -r cache 2>/dev/null; echo "✓ QuickLook cache flushed."` | No |
+   | 6 | Clear Launch Services Database | `/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user; echo "✓ Launch Services database rebuilt."` | No |
+   | 7 | Kill All Background Apps | `osascript -e 'tell application "System Events" to set quitApps to name of every application process whose visible is false and background only is false' -e 'repeat with a in quitApps' -e 'try' -e 'tell application a to quit' -e 'end try' -e 'end repeat' && echo "✓ Background apps quit."` | No |
+
+   **Developer (5 new):**
+   | # | Name | Script | Sudo |
+   |---|------|--------|------|
+   | 1 | Clear CocoaPods Cache | `pod cache clean --all 2>/dev/null && echo "✓ CocoaPods cache cleared." \|\| echo "⚠ CocoaPods not installed."` | No |
+   | 2 | Clear Gradle Cache | `rm -rf ~/.gradle/caches 2>/dev/null; echo "✓ Gradle cache cleared."` | No |
+   | 3 | Docker System Prune | `docker system prune -f 2>/dev/null && echo "✓ Docker unused images/containers removed." \|\| echo "⚠ Docker not running."` | No |
+   | 4 | Clear pip Cache | `pip cache purge 2>/dev/null && echo "✓ pip cache cleared." \|\| pip3 cache purge 2>/dev/null && echo "✓ pip3 cache cleared." \|\| echo "⚠ pip not installed."` | No |
+   | 5 | Clear Homebrew Cache | `brew cleanup -s 2>/dev/null && rm -rf $(brew --cache 2>/dev/null) 2>/dev/null && echo "✓ Homebrew cache cleared." \|\| echo "⚠ Homebrew not installed."` | No |
+
+2. **`CLAUDE.md`** — update predefined count (95 → 107) and note new actions.
+
+### Test plan
+- [ ] "Remove ._ Resource Fork Files" → runs without error on clean system
+- [ ] "Clear Font Caches" → shows admin password dialog → completes
+- [ ] "Clear Homebrew Cache" → on system with brew → shows freed space
+- [ ] "Docker System Prune" → on system without Docker → shows warning message
+- [ ] All 12 actions in Quick Picker search
+
+### Acceptance criteria
+- All 12 actions execute and handle missing tools gracefully (informative error, not crash)
+- Sudo actions correctly escalate via osascript admin dialog
+
+---
+
+## F-034 · Port Manager
+
+**Status:** 📋 Queued — #4
+**Effort:** 2.5 days
+**Branch naming:** `feat/f034-port-manager`
+**Depends on:** none
+**Inspired by:** Raycast `port-manager` (4 commands, named ports, configurable kill signals) and `kill-process` (604k installs)
+
+### Why
+Kill Process is Raycast's #1 extension with 604,000 installs. Port management is a top developer need. Halo already has "Kill Process on Port" and "Show All Listening Ports" as quick actions, but a dedicated view with named ports, process grouping, and kill confirmation would be a major upgrade and competitive differentiator.
+
+### What it delivers
+- Dedicated port management view showing all listening TCP/UDP ports with process info
+- **Named ports**: user-assigned friendly labels ("React Dev → 3000", "Postgres → 5432")
+- Kill actions with configurable signal (SIGTERM/SIGKILL/ask)
+- Copy commands for debugging (`lsof`, `kill`)
+- Auto-refresh (5s interval)
+- Optional menu bar integration showing open port count
+
+### Files to create
+```
+Halo/Core/Scanner/PortScanner.swift           — actor; parses lsof output
+Halo/Features/Ports/PortManagerView.swift      — main view
+Halo/Features/Ports/PortManagerViewModel.swift  — @MainActor ObservableObject
+```
+
+### Models (add to `Models.swift`)
+```swift
+struct PortEntry: Identifiable, Equatable {
+    let id: UUID = UUID()
+    let pid: Int32
+    let processName: String
+    let processPath: String?
+    let port: Int
+    let protocol_: String           // "TCP" or "UDP"
+    let state: String               // "LISTEN", "ESTABLISHED", etc.
+    var friendlyName: String?       // user-assigned via named ports
+}
+
+struct NamedPort: Codable, Identifiable {
+    var id: Int { port }
+    let port: Int
+    let name: String
+}
+```
+
+### Implementation steps
+
+1. **Create `Halo/Core/Scanner/PortScanner.swift`**
+   ```swift
+   actor PortScanner {
+       func scan() async -> [PortEntry] {
+           // Execute: lsof -iTCP -sTCP:LISTEN -P -n
+           // Parse each line: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+           // Extract: processName, pid, port (from NAME column "hostname:port")
+           // Also: lsof -iUDP -P -n for UDP listeners
+       }
+   }
+   ```
+
+2. **Create `Halo/Features/Ports/PortManagerViewModel.swift`**
+   ```swift
+   @MainActor
+   final class PortManagerViewModel: ObservableObject {
+       @Published var ports: [PortEntry] = []
+       @Published var namedPorts: [NamedPort] = []
+       @Published var searchText: String = ""
+       @Published var isLoading = false
+       @Published var killSignal: KillSignal = .ask  // .ask / .sigterm / .sigkill
+
+       private let scanner = PortScanner()
+       private let namedPortsKey = "haloNamedPorts"
+       private var refreshTimer: Timer?
+
+       func startRefresh()     // 5s timer
+       func stopRefresh()
+       func refresh() async
+       func killPort(_ entry: PortEntry, force: Bool) async
+       func killAllByName(_ processName: String) async
+       func addNamedPort(port: Int, name: String)
+       func removeNamedPort(port: Int)
+
+       var filteredPorts: [PortEntry]  // filtered by searchText + enriched with friendlyName
+   }
+   ```
+
+3. **Create `Halo/Features/Ports/PortManagerView.swift`**
+   - Header: "Open Ports" title + port count badge + refresh button
+   - Search bar
+   - Port list: each row shows process icon + name + port + protocol + state + friendly name tag
+   - Context menu per row: Kill (SIGTERM), Force Kill (SIGKILL), Copy PID, Copy Port, Copy `lsof` command, Copy `kill` command, Show in Finder (process path), Add/Edit Named Port
+   - Named ports section: collapsible list with CRUD
+   - Empty state: "No listening ports found"
+   - Kill confirmation alert: "Kill process <name> (PID <pid>) on port <port>?"
+
+4. **`ContentView.swift`** — add `.ports` to `AppModule` enum and sidebar. Icon: `"network.badge.shield.half.filled"`. Position after Performance.
+
+5. **`AppState.swift`** — add `AppModule.ports` to `moduleOrder` default and `reorderable` list.
+
+6. **`project.pbxproj`** — add 3 new files with UUIDs `6013`/`6014` (PortScanner), `6015`/`6016` (PortManagerView), `6017`/`6018` (PortManagerViewModel).
+
+7. **`CLAUDE.md`** — add Ports module to Modules Status table.
+
+### Test plan
+- [ ] Open Ports module → lists all listening ports (compare with `lsof -iTCP -sTCP:LISTEN -P -n` output)
+- [ ] Run a dev server (`python3 -m http.server 8080`) → port 8080 appears in list within 5s
+- [ ] Kill port 8080 → process terminates → row disappears on next refresh
+- [ ] Add named port "Dev Server → 8080" → label appears as green tag on row
+- [ ] Search "node" → filters to only Node.js processes
+- [ ] Copy `lsof` command → paste in terminal → produces same output
+- [ ] Navigate away → timer stops (no background CPU usage)
+
+### Acceptance criteria
+- All listening TCP ports displayed with correct PID, process name, and port
+- Named ports persist across app restarts
+- Kill action terminates the process (verified by `lsof` showing it gone)
+- No crash on systems with 0 listening ports
+
+---
+
+## ~~F-035~~ · ~~Downloads Manager~~ — MERGED INTO F-026
+
+> **This feature has been merged into [F-026 · Downloads Folder Organiser & Manager](#f-026--downloads-folder-organiser--manager).** Age-based grouping, visual size breakdown, one-click stale cleanup, and size threshold alerts from F-035 have been absorbed into F-026's expanded card. See F-026 for the combined implementation plan.
+
+---
+
+## F-036 · Customizable Menu Bar Format Strings
+
+**Status:** 📋 Queued — #6
+**Effort:** 2 days
+**Branch naming:** `feat/f036-menubar-format-strings`
+**Depends on:** MenuBarDisplayStyle (already built)
+**Inspired by:** Raycast `system-monitor` menu bar (format string tokens, pinnable stats, Free/Used toggle)
+
+### Why
+Raycast's system-monitor menu bar is one of its most praised features — users define custom format templates with tokens like `<PERCENT>`, `<VALUE>`, `<TOTAL>`. Halo's current `MenuBarDisplayStyle` enum offers 4 fixed styles. User-configurable format strings would make Halo's menu bar best-in-class while keeping the existing styles as presets.
+
+### What it delivers
+- User-editable format string for the menu bar text display
+- Token system: `{cpu}`, `{ram}`, `{disk}`, `{battery}`, `{net_down}`, `{net_up}`, `{temp}`, `{health}`
+- Preset templates for common configurations
+- Live preview in Settings while editing
+- Backward-compatible — existing styles become presets
+
+### Implementation steps
+
+1. **`MenuBarView.swift`** — add format string support alongside existing styles:
+   ```swift
+   enum MenuBarDisplayStyle: String, CaseIterable {
+       case icon           // existing
+       case textStats      // existing → becomes preset "CPU {cpu}% · RAM {ram}%"
+       case miniBar        // existing
+       case dot            // existing
+       case custom         // NEW — uses format string
+   }
+   ```
+
+2. **Add `@AppStorage("menuBarFormatString")` to `MenuBarIconView`**
+   - Default: `"CPU {cpu}% · RAM {ram}%"`
+   - Parser: regex replace `{token}` with live values from `AppState`
+
+3. **Token definitions:**
+   | Token | Value | Example |
+   |-------|-------|---------|
+   | `{cpu}` | CPU usage % (integer) | `42` |
+   | `{ram}` | RAM usage % (integer) | `61` |
+   | `{ram_used}` | RAM used in GB | `8.2` |
+   | `{ram_total}` | RAM total in GB | `16.0` |
+   | `{disk}` | Disk usage % | `55` |
+   | `{disk_free}` | Disk free in GB | `120.5` |
+   | `{battery}` | Battery % | `87` |
+   | `{net_down}` | Download speed | `1.2MB/s` |
+   | `{net_up}` | Upload speed | `340KB/s` |
+   | `{temp}` | CPU temp °C | `45` |
+   | `{health}` | Health score | `92` |
+
+4. **Settings UI** — in Menu Bar settings section:
+   - Segmented picker: Icon / Text Stats / Mini Bar / Dot / Custom
+   - When "Custom" selected: text field with format string
+   - Preset buttons: "Minimal", "Standard", "Full", "Network"
+   - Live preview showing rendered text
+   - Help text listing available tokens
+
+5. **`AppState.swift`** — add computed property `menuBarTokenValues: [String: String]` updated every 2s with all token values.
+
+6. **Rendering** — in `MenuBarIconView`, when style is `.custom`:
+   ```swift
+   func renderFormatString(_ format: String, values: [String: String]) -> String {
+       var result = format
+       for (token, value) in values {
+           result = result.replacingOccurrences(of: "{\(token)}", with: value)
+       }
+       return result
+   }
+   ```
+
+### Test plan
+- [ ] Select "Custom" → enter `"{cpu}%"` → menu bar shows "42%"
+- [ ] Enter `"↓{net_down} ↑{net_up}"` → menu bar shows live network speeds
+- [ ] Select "Standard" preset → format string auto-fills → menu bar shows "CPU 42% · RAM 61%"
+- [ ] Invalid token `{foo}` → rendered as literal `{foo}` (no crash)
+- [ ] Switch back to "Icon" → icon-only display restored
+- [ ] Relaunch → custom format persists
+
+### Acceptance criteria
+- Custom format strings render correctly with live data
+- All 11 tokens produce correct values
+- Preset templates work as one-click shortcuts
+- Existing styles (icon/textStats/miniBar/dot) continue working unchanged
+
+---
+
+## F-037 · Celebration & Delight Moments
+
+**Status:** 📋 Queued — #7
+**Effort:** 1.5 days
+**Branch naming:** `feat/f037-celebration-moments`
+**Depends on:** none
+**Inspired by:** Raycast `raycast://confetti`, toast lifecycle pattern, HUD feedback hierarchy
+
+### Why
+Raycast's confetti animation, success toasts, and sound effects create a sense of accomplishment that makes users feel good about maintaining their system. Halo's dark aesthetic is perfect for particle effects and glow animations. This adds emotional resonance to significant completions.
+
+### What it delivers
+- Particle-based celebration overlay triggered on significant events
+- Brief success flash animations for action completions
+- Configurable via Settings (enable/disable celebrations)
+- No impact on app performance — Canvas-based, auto-dismiss after 2s
+
+### Files to create
+```
+Halo/DesignSystem/CelebrationOverlay.swift    — Canvas particle system
+```
+
+### Implementation steps
+
+1. **Create `CelebrationOverlay.swift`**
+   ```swift
+   struct CelebrationOverlay: View {
+       @Binding var isActive: Bool
+       let type: CelebrationType
+
+       var body: some View {
+           if isActive {
+               TimelineView(.animation) { timeline in
+                   Canvas { context, size in
+                       // Draw particles based on type
+                   }
+               }
+               .allowsHitTesting(false)
+               .onAppear {
+                   DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                       withAnimation { isActive = false }
+                   }
+               }
+           }
+       }
+   }
+
+   enum CelebrationType {
+       case healthySystem      // green sparkle burst (health score ≥ 90 after scan)
+       case spaceRecovered     // blue particles floating up (cleanup freed > 1 GB)
+       case scanComplete       // subtle glow pulse (any scan completes)
+       case actionSuccess      // brief green checkmark flash (action completes)
+   }
+   ```
+
+2. **Particle system** — each `CelebrationType` generates different particles:
+   - `healthySystem`: 30 green/cyan circles, random velocity, fade over 2s
+   - `spaceRecovered`: 20 blue/purple circles, upward drift, size counter
+   - `scanComplete`: single expanding ring from center, fade at edges
+   - `actionSuccess`: green checkmark scales up then fades
+
+3. **Trigger points** — add `NotificationCenter` post at key moments:
+   - `SmartScanView` → after scan completes with score ≥ 90 → `.healthySystem`
+   - `CleanupViewModel` → after cleanup frees > 1 GB → `.spaceRecovered`
+   - `ScanCoordinator` → after any scan completes → `.scanComplete`
+   - `ActionRunner` → after action state becomes `.completed` → `.actionSuccess`
+
+4. **`HaloApp.swift` / `ContentView.swift`** — add `CelebrationOverlay` as a ZStack overlay at the root level:
+   ```swift
+   ZStack {
+       NavigationSplitView { ... }
+       CelebrationOverlay(isActive: $showCelebration, type: celebrationType)
+   }
+   ```
+
+5. **Settings toggle** — `@AppStorage("enableCelebrations") var enableCelebrations = true` in Settings → General.
+
+6. **`project.pbxproj`** — add `CelebrationOverlay.swift`.
+
+### Test plan
+- [ ] Run Smart Scan → score ≥ 90 → green sparkle burst plays for 2s
+- [ ] Run Cleanup → free > 1 GB → blue particles animation plays
+- [ ] Run any action → brief green checkmark flash
+- [ ] Disable celebrations in Settings → no animations play
+- [ ] Animation does not block UI interaction (allowsHitTesting false)
+- [ ] Rapid successive triggers → animations don't stack/crash
+
+### Acceptance criteria
+- All 4 celebration types animate correctly
+- Animations auto-dismiss after 2 seconds
+- No UI interaction blocked during animation
+- Celebrations toggleable via Settings
+
+---
+
+## F-038 · Code Snippet Beautifier
+
+**Status:** 📋 Queued — #8
+**Effort:** 3 days
+**Branch naming:** `feat/f038-code-beautifier`
+**Depends on:** Clipboard module
+**Inspired by:** ray.so Code Image Generator (40 themes, 80 languages, PNG/SVG export at 2x/4x/6x)
+
+### Why
+ray.so is Raycast's most visible product — developers share code screenshots daily on social media, Slack, and documentation. A native macOS equivalent eliminates the browser round-trip and leverages the clipboard. This would be a unique feature that no macOS system utility currently offers.
+
+### What it delivers
+- Detect code on clipboard → present in a styled code card
+- Syntax highlighting for 10+ languages (Swift, Python, JavaScript, TypeScript, Go, Rust, Java, Ruby, HTML, CSS, JSON, Bash)
+- 8 themes matching Halo's dark aesthetic
+- Customization: padding, background gradient, window chrome, font, line numbers
+- Export as PNG (2x/4x), copy to clipboard, save to file
+
+### Files to create
+```
+Halo/Features/CodeBeautifier/CodeBeautifierView.swift       — main sheet view
+Halo/Features/CodeBeautifier/CodeTheme.swift                — theme definitions
+Halo/Features/CodeBeautifier/SyntaxHighlighter.swift        — regex-based highlighter
+Halo/Features/CodeBeautifier/CodeCardRenderer.swift         — NSView → PNG export
+```
+
+### Implementation steps
+
+1. **Create `SyntaxHighlighter.swift`**
+   ```swift
+   final class SyntaxHighlighter {
+       enum Language: String, CaseIterable {
+           case swift, python, javascript, typescript, go, rust,
+                java, ruby, html, css, json, bash, sql, plaintext
+       }
+
+       func highlight(code: String, language: Language, theme: CodeTheme) -> NSAttributedString {
+           // Regex-based token matching for: keywords, strings, comments,
+           // numbers, functions, types, operators
+           // Apply NSFont + NSColor from theme
+       }
+
+       static func detectLanguage(from code: String) -> Language {
+           // Heuristics: import/func/let → Swift, def/import → Python, etc.
+       }
+   }
+   ```
+
+2. **Create `CodeTheme.swift`**
+   ```swift
+   struct CodeTheme: Identifiable {
+       let id: String
+       let name: String
+       let background: (Color, Color)      // gradient from/to
+       let keyword: Color
+       let string: Color
+       let comment: Color
+       let function: Color
+       let number: Color
+       let type: Color
+       let foreground: Color
+       let font: String                     // "SF Mono", "JetBrains Mono", etc.
+   }
+
+   extension CodeTheme {
+       static let midnight = CodeTheme(...)   // Halo's dark blue
+       static let noir = CodeTheme(...)       // Pure black
+       static let aurora = CodeTheme(...)     // Green/cyan gradient
+       static let sunset = CodeTheme(...)     // Orange/red gradient
+       static let ocean = CodeTheme(...)      // Blue gradient
+       static let forest = CodeTheme(...)     // Green gradient
+       static let candy = CodeTheme(...)      // Pink/purple gradient
+       static let ice = CodeTheme(...)        // Light blue/white
+   }
+   ```
+
+3. **Create `CodeBeautifierView.swift`** — presented as a sheet:
+   - Live preview: NSViewRepresentable rendering the highlighted code card
+   - Controls sidebar: theme picker, language picker, padding (16/32/64/128), background toggle, line numbers toggle, font picker, window chrome toggle
+   - Export buttons: "Copy Image", "Save PNG (2x)", "Save PNG (4x)"
+   - Code editing: editable text area (user can paste and tweak)
+
+4. **Create `CodeCardRenderer.swift`** — renders the code card to PNG:
+   ```swift
+   final class CodeCardRenderer {
+       func render(code: NSAttributedString, theme: CodeTheme,
+                   padding: CGFloat, showBackground: Bool,
+                   showChrome: Bool, scale: CGFloat) -> NSImage {
+           // Create NSView hierarchy:
+           //   Background gradient (if enabled)
+           //   → Rounded rect card with shadow
+           //     → Window chrome (traffic lights + title)
+           //     → Code text view
+           // Render to NSBitmapImageRep at given scale
+       }
+   }
+   ```
+
+5. **Integration** — add "Beautify Code" action to Clipboard category in `ActionLibrary`:
+   ```swift
+   ActionItem(
+       name: "Beautify Code",
+       subtitle: "Create a beautiful code screenshot from clipboard",
+       command: .builtIn(.beautifyCode), ...)
+   ```
+   Add `.beautifyCode` case to `BuiltInAction` enum. `ActionRunner` presents `CodeBeautifierView` sheet.
+
+6. **`project.pbxproj`** — add 4 new files.
+
+### Test plan
+- [ ] Copy Swift code → run "Beautify Code" → sheet opens with highlighted preview
+- [ ] Auto-detect language: Swift code → "Swift" pre-selected
+- [ ] Switch themes → preview updates in real-time
+- [ ] Toggle background off → transparent card (checkered pattern in preview)
+- [ ] "Copy Image" → paste in Slack/Discord → image renders correctly
+- [ ] "Save PNG (4x)" → 4x resolution file saved
+- [ ] Empty clipboard → sheet shows "No code on clipboard" message
+
+### Acceptance criteria
+- Syntax highlighting works for at least 10 languages
+- All 8 themes render with correct gradient backgrounds
+- PNG export produces clean, high-resolution images
+- Export works at 2x and 4x resolutions
+
+---
+
+## F-039 · Auto-Quit Idle Apps
+
+**Status:** 📋 Queued — #9
+**Effort:** 2.5 days
+**Branch naming:** `feat/f039-auto-quit-idle-apps`
+**Depends on:** none
+**Inspired by:** Raycast `auto-quit-app` extension
+
+### Why
+A unique "smart resource reclamation" feature that no standalone macOS app does well. Monitors running apps for idle state (no visible windows) and suggests quitting them to free RAM. Aligns perfectly with Halo's "system health" identity and directly improves the health score.
+
+### What it delivers
+- Background monitoring of running apps for idle state
+- Configurable timeout (15m / 30m / 1h / 2h)
+- Notification before auto-quitting: "Figma has been idle for 1h — quit to free 850 MB?"
+- Allowlist/blocklist for apps to include/exclude
+- Dashboard integration showing "Apps auto-quit today: N, RAM recovered: X GB"
+- Suggest-only mode (default) vs auto-quit mode
+
+### Files to create
+```
+Halo/Core/Scanner/IdleAppMonitor.swift           — actor; tracks app idle state
+Halo/Features/Performance/IdleAppsSection.swift   — view section in Performance
+```
+
+### Implementation steps
+
+1. **Create `IdleAppMonitor.swift`**
+   ```swift
+   actor IdleAppMonitor {
+       struct IdleApp: Identifiable {
+           let id: String               // bundle ID
+           let name: String
+           let icon: NSImage?
+           let ramMB: Double
+           let idleSince: Date
+           var idleDuration: TimeInterval
+       }
+
+       private var lastActiveTime: [String: Date] = [:]  // bundleID → last active
+       private var excludeList: Set<String> = []
+
+       func startMonitoring()    // observe NSWorkspace notifications
+       func stopMonitoring()
+       func idleApps(timeout: TimeInterval) -> [IdleApp]
+       func quitApp(bundleID: String) async -> (Bool, Double)  // returns (success, ramFreedMB)
+   }
+   ```
+
+2. **Idle detection** — observe `NSWorkspace.didActivateApplicationNotification` to track `lastActiveTime[bundleID] = Date()`. An app is "idle" when:
+   - `Date() - lastActiveTime[bundleID] > timeout`
+   - App has 0 visible windows (check via `AXUIElementCopyAttributeValue(app, kAXWindowsAttribute)`)
+   - App is not in the exclude list
+   - App is not a menu bar-only app (no `activationPolicy == .accessory`)
+
+3. **Notification flow** — when an app becomes idle past threshold:
+   - In suggest-only mode: fire `AlertManager` notification with "Quit" and "Ignore" actions
+   - In auto-quit mode: fire notification, wait 30s, then `NSRunningApplication.terminate()`
+
+4. **Create `IdleAppsSection.swift`** — section in PerformanceView:
+   - List of currently idle apps with: app icon, name, idle duration, RAM usage
+   - "Quit" button per app with confirmation
+   - "Quit All Idle" button
+   - Settings: timeout picker, mode toggle (suggest/auto), exclude list editor
+
+5. **`AppState.swift`** — add `@Published var appsQuitToday: Int = 0` and `@Published var ramRecoveredTodayMB: Double = 0`.
+
+6. **Dashboard integration** — add "Idle Apps" metric card showing quit count and RAM recovered.
+
+7. **Settings** — in Performance settings section:
+   - Enable/disable idle app monitoring
+   - Timeout: 15m / 30m / 1h / 2h picker
+   - Mode: Suggest / Auto-Quit
+   - Exclude list: multi-app picker showing running apps
+
+8. **`project.pbxproj`** — add 2 new files.
+
+### Test plan
+- [ ] Open Figma → close all windows → wait timeout → notification appears
+- [ ] "Quit" from notification → Figma terminates → RAM freed shown
+- [ ] Add Figma to exclude list → no notification for Figma
+- [ ] Menu bar-only apps (1Password, Bartender) → never flagged as idle
+- [ ] Suggest mode → notification only, no auto-quit
+- [ ] Auto-quit mode → app quits 30s after notification
+- [ ] Dashboard shows "Apps quit today: 2, RAM recovered: 1.2 GB"
+
+### Acceptance criteria
+- Idle apps correctly detected based on window count and active time
+- Notifications fire at correct timeout intervals
+- Exclude list prevents monitoring of specified apps
+- No crash when monitored app quits on its own
+
+---
+
+## ~~F-040~~ · ~~Snippet / Text Expansion Engine~~ — MERGED INTO F-027
+
+> **This feature has been merged into [F-027 · Snippet Manager & Text Expansion Engine](#f-027--snippet-manager--text-expansion-engine-clipboard-evolution).** Dynamic placeholder expansion (`{date}`, `{clipboard}`, `{uuid}`, `{random:N}`), keyword trigger prefixes, bundled starter packs, and import from CSV/ray.so have been absorbed into F-027's expanded card. See F-027 for the combined implementation plan.
+
+---
+
+## F-041 · Shareable Action Configurations
+
+**Status:** 📋 Queued — #11
+**Effort:** 2 days
+**Branch naming:** `feat/f041-shareable-actions`
+**Depends on:** Actions module
+**Inspired by:** ray.so URL-encoded state sharing, Raycast `raycast://` deep link import
+
+### Why
+ray.so's killer insight: every configuration is a URL. For Halo, this means custom actions become portable — a developer creates a useful action and shares it with their team via a link or QR code. This creates network effects and community around Halo's action library.
+
+### What it delivers
+- "Share" button on custom actions → generates `halo://action/BASE64` deep link
+- Import flow: clicking the link opens Halo with an import confirmation sheet
+- QR code export for in-person sharing (workshops, team meetings)
+- Batch import/export as JSON file
+
+### Implementation steps
+
+1. **Register `halo://` URL scheme** in `Halo/Resources/Info.plist`:
+   ```xml
+   <key>CFBundleURLTypes</key>
+   <array>
+       <dict>
+           <key>CFBundleURLSchemes</key>
+           <array><string>halo</string></array>
+           <key>CFBundleURLName</key>
+           <string>com.halo.mac</string>
+       </dict>
+   </array>
+   ```
+
+2. **URL format:**
+   ```
+   halo://action/{base64-json}          — single action import
+   halo://actions/{base64-json-array}   — batch import
+   ```
+   JSON is the `ActionItem` struct encoded, then Base64url-encoded.
+
+3. **`HaloApp.swift`** — add `.onOpenURL` handler:
+   ```swift
+   .onOpenURL { url in
+       guard url.scheme == "halo" else { return }
+       switch url.host {
+       case "action":
+           let json = Data(base64Encoded: url.pathComponents[1])
+           let action = try JSONDecoder().decode(ActionItem.self, from: json)
+           appState.pendingActionImport = action
+       case "actions":
+           // batch decode
+       default: break
+       }
+   }
+   ```
+
+4. **Create `ActionImportSheet.swift`** — confirmation sheet:
+   - Shows action preview: name, icon, category, script preview (first 5 lines)
+   - Warning if `requiresPrivilege == true`: "This action requires admin privileges"
+   - "Import" and "Cancel" buttons
+   - On import: `ActionLibrary.shared.add(custom: action)`
+
+5. **Share flow** in `CustomActionEditor.swift` and `ActionsView.swift`:
+   - "Share" button → generates URL → presents `NSSharingServicePicker`
+   - Options: Copy Link, AirDrop, Messages, QR Code
+   - QR code: generate using `CIFilter.qrCodeGenerator()` → display in a sheet
+
+6. **Export/Import as JSON file:**
+   - "Export All Custom Actions" → `NSSavePanel` → writes JSON array
+   - "Import Actions from File" → `NSOpenPanel` → reads JSON → batch import with confirmation
+
+7. **`project.pbxproj`** — add `ActionImportSheet.swift`.
+
+### Test plan
+- [ ] Create custom action → Share → Copy Link → open link in Safari → Halo opens with import sheet
+- [ ] Import sheet shows correct action preview → "Import" → action appears in library
+- [ ] QR code generation → scan with iPhone → opens link → Halo imports
+- [ ] Privileged action → import sheet shows warning badge
+- [ ] Export all → save JSON → delete all custom → import JSON → all restored
+- [ ] Invalid URL → Halo ignores gracefully (no crash)
+
+### Acceptance criteria
+- Deep link import works end-to-end (URL → confirmation → library)
+- QR code generates and scans correctly
+- JSON export/import preserves all action properties
+- Privileged actions show warning before import
+
+---
+
+## F-042 · Siri Shortcuts / App Intents
+
+**Status:** ✅ Done
+**Effort:** 4 days
+**Branch naming:** `feat/f042-app-intents`
+**Depends on:** AppState
+**Inspired by:** Raycast AI-callable tools pattern (typed inputs, JSDoc descriptions, confirmation dialogs)
+
+### Why
+Raycast's newest pattern — AI-callable tools — shows where developer tools are heading. Apple's equivalent is App Intents / Siri Shortcuts. Exposing Halo's capabilities as Shortcuts actions makes it composable with other apps, automatable, and discoverable via Siri. This is the highest-impact strategic investment for long-term platform integration.
+
+### What it delivers
+- 8 App Intents exposing Halo's core capabilities to Shortcuts
+- Discoverable in Shortcuts.app with parameter configuration
+- Siri-invocable: "Hey Siri, what's my Mac's health score?"
+- Composable with other Shortcuts actions for automation
+
+### Files to create
+```
+Halo/Intents/GetHealthScoreIntent.swift
+Halo/Intents/GetCPUUsageIntent.swift
+Halo/Intents/GetBatteryHealthIntent.swift
+Halo/Intents/GetDiskSpaceIntent.swift
+Halo/Intents/RunSmartScanIntent.swift
+Halo/Intents/RunActionIntent.swift
+Halo/Intents/GetClipboardHistoryIntent.swift
+Halo/Intents/ExportReportIntent.swift
+Halo/Intents/HaloShortcutsProvider.swift
+```
+
+### Implementation steps
+
+1. **Create intent structs** — each follows the `AppIntent` protocol:
+   ```swift
+   struct GetHealthScoreIntent: AppIntent {
+       static var title: LocalizedStringResource = "Get Health Score"
+       static var description = IntentDescription("Returns the current Mac health score (0-100)")
+
+       func perform() async throws -> some IntentResult & ReturnsValue<Int> {
+           let score = await MainActor.run { AppState.shared.systemHealthScore }
+           return .result(value: score)
+       }
+
+       static var parameterSummary: some ParameterSummary { Summary("Get Mac health score") }
+   }
+   ```
+
+2. **Intent catalog:**
+   | Intent | Input | Output | Siri phrase |
+   |--------|-------|--------|-------------|
+   | GetHealthScore | — | Int (0–100) | "What's my Mac's health score?" |
+   | GetCPUUsage | — | Double (%) | "What's my CPU usage?" |
+   | GetBatteryHealth | — | String | "How's my battery?" |
+   | GetDiskSpace | — | String | "How much disk space do I have?" |
+   | RunSmartScan | — | String (summary) | "Run a Mac health scan" |
+   | RunAction | actionName: String | String (output) | "Run [action name] in Halo" |
+   | GetClipboardHistory | count: Int (1–10) | [String] | "Show my clipboard history" |
+   | ExportReport | — | IntentFile (PDF) | "Export my Mac health report" |
+
+3. **`RunActionIntent`** — the most complex; needs an `AppEntity` for action discovery:
+   ```swift
+   struct HaloAction: AppEntity {
+       static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Halo Action")
+       static var defaultQuery = HaloActionQuery()
+       var id: String
+       var displayRepresentation: DisplayRepresentation { .init(title: "\(name)") }
+       var name: String
+   }
+
+   struct HaloActionQuery: EntityQuery {
+       func entities(for identifiers: [String]) async throws -> [HaloAction]
+       func suggestedEntities() async throws -> [HaloAction]
+   }
+   ```
+
+4. **Create `HaloShortcutsProvider.swift`**:
+   ```swift
+   struct HaloShortcutsProvider: AppShortcutsProvider {
+       static var appShortcuts: [AppShortcut] {
+           AppShortcut(intent: GetHealthScoreIntent(),
+                       phrases: ["What's my Mac's health score in \(.applicationName)"],
+                       shortTitle: "Health Score",
+                       systemImageName: "heart.fill")
+           // ... repeat for each intent
+       }
+   }
+   ```
+
+5. **`RunSmartScanIntent`** — needs confirmation since it's a longer operation:
+   ```swift
+   func perform() async throws -> some IntentResult & ReturnsValue<String> {
+       let coordinator = ScanCoordinator()
+       let result = await coordinator.runFullScan()
+       return .result(value: "Health score: \(result.score). \(result.issueCount) issues found.")
+   }
+   ```
+
+6. **`ExportReportIntent`** — returns a PDF file via `IntentFile`:
+   ```swift
+   func perform() async throws -> some IntentResult & ReturnsValue<IntentFile> {
+       let snapshot = await MainActor.run { ReportSnapshot.capture(from: AppState.shared) }
+       let pdf = ReportGenerator.shared.generate(snapshot: snapshot)
+       let data = pdf.dataRepresentation()!
+       return .result(value: IntentFile(data: data, filename: "Halo-Report.pdf"))
+   }
+   ```
+
+7. **`project.pbxproj`** — add 9 new files.
+
+8. **`CLAUDE.md`** — add Siri Shortcuts section to documentation.
+
+### Test plan
+- [ ] Open Shortcuts.app → search "Halo" → all 8 intents listed
+- [ ] Create shortcut with "Get Health Score" → run → returns integer
+- [ ] "Hey Siri, what's my Mac's health score?" → Siri responds with number
+- [ ] "Run Smart Scan in Halo" → scan executes → summary returned
+- [ ] "Export my Mac health report" → PDF file returned to Shortcuts
+- [ ] RunAction with "Flush DNS Cache" → action executes → output returned
+- [ ] GetClipboardHistory with count=5 → returns last 5 items
+- [ ] Automation: "When health score < 60, send notification" → works
+
+### Acceptance criteria
+- All 8 intents discoverable in Shortcuts.app
+- Siri voice invocation works for at least 3 intents
+- RunAction correctly discovers and executes any built-in action
+- ExportReport returns a valid PDF file
+
+---
+
+## F-043 — Drive Read & Write Speed Test (NFeat-121)
+
+**Status:** ✅ Done · **Effort:** 2 d · **Depends on:** Files module
+
+### Summary
+A dedicated screen to benchmark **read and write throughput** for internal and
+external drives, reporting both the **average** (sustained real-world) and
+**optimal** (peak/burst) speeds. Lives as a new **"Drive Speed"** tab in the
+Files module. On-demand only — zero background footprint.
+
+### Why it's trustworthy (methodology)
+- **Uncached I/O** — the benchmark file descriptor is flagged `F_NOCACHE`, so
+  reads/writes bypass the unified buffer cache and hit the device. Without this,
+  a read test just measures RAM bandwidth.
+- **Durable writes** — after each write pass, `F_FULLFSYNC` forces the drive to
+  flush its own write-back (DRAM) cache to media, so the write figure is the
+  real device speed.
+- **Incompressible payload** — the write buffer is filled with random bytes
+  (`arc4random_buf`) so dedup/compressing controllers can't inflate results.
+- **Average vs Optimal** — every 8 MB chunk is individually timed.
+  `average = total bytes ÷ total time`; `optimal = fastest single chunk`.
+- **Multi-pass** — 3 passes aggregate all chunk samples for a stable average and
+  the best observed peak.
+
+### Files
+| File | Role |
+|------|------|
+| `Halo/Core/Scanner/DriveSpeedTester.swift` | `actor DriveSpeedTester` — volume enumeration + benchmark engine; models `DriveVolume`, `DriveSpeedResult`, `DriveSpeedProgress`, `DriveTestSize`, `DriveSpeedError` |
+| `Halo/Features/Files/DriveSpeedView.swift` | `DriveSpeedView` + `@MainActor DriveSpeedViewModel` — volume picker, size picker, live progress, read/write result cards |
+| `Halo/Features/Files/FilesView.swift` | Adds `.driveSpeed` tab |
+| `HaloTests/DriveSpeedTesterTests.swift` | Unit tests (size bytes, volume enumeration, positive-speed run, cancellation) |
+
+### API
+```swift
+actor DriveSpeedTester {
+    func availableVolumes() -> [DriveVolume]           // internal-first, local & browsable only
+    func run(volume:size:progress:) async throws -> DriveSpeedResult
+}
+
+enum DriveTestSize { case quick /*128MB*/, standard /*512MB*/, thorough /*1GB*/ }
+
+struct DriveSpeedResult {
+    let writeAverageMBps, writeOptimalMBps: Double
+    let readAverageMBps,  readOptimalMBps:  Double
+    let fileSizeBytes: Int64; let passes, sampleCount: Int; let testedAt: Date
+}
+```
+
+### Scratch-file safety
+- Internal volumes: scratch file lives in `FileManager.temporaryDirectory`
+  (sandbox-safe).
+- External volumes: scratch file lives in `<volume>/.HaloSpeedTest/`.
+- The scratch file is Halo's own temp data (never user files), so it is
+  `unlink`-ed immediately in a `defer` — **not** moved to Trash. This is the one
+  sanctioned exception to the trashItem-only rule, and is commented as such.
+
+### Known constraints
+- **Sandbox (release):** writing to *external* volumes may require user-granted
+  access; failures surface as a friendly `DriveSpeedError.notWritable` banner.
+- Benchmark writes real data (size × 3 passes) — Thorough = ~3 GB of write I/O.
+
+### Test plan
+- [ ] Open Files → Drive Speed → internal volume preselected
+- [ ] Run Quick test → progress animates through write then read, 3 passes
+- [ ] Result shows Write avg/optimal and Read avg/optimal, optimal ≥ average
+- [ ] External drive appears with "External" badge; test writes to it
+- [ ] Cancel mid-run → stops cleanly, scratch file removed
+- [ ] Read-only / permission-denied volume → friendly error banner
+- [ ] Unit tests pass (`-only-testing:HaloTests/DriveSpeedTester`)
+
+### Acceptance criteria
+- Internal and external drives both benchmarkable
+- Reports average AND optimal for both read and write
+- Uncached results (read speed not RAM-inflated)
+- No leftover scratch files after run/cancel/error

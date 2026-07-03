@@ -9,6 +9,9 @@ import UserNotifications
 @MainActor
 final class AppState: ObservableObject {
 
+    /// Shared reference set by HaloApp on launch so App Intents can read live metrics.
+    static var shared: AppState?
+
     // MARK: Navigation
     @Published var selectedModule: AppModule = .dashboard
     @Published var isOnboardingComplete: Bool = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
@@ -403,14 +406,15 @@ enum AppModule: String, CaseIterable, Identifiable {
     case clipboard
     case actions
     case localShare
+    case ports
     case menuBarPreview
 
     var id: String { rawValue }
 
-    /// The 8 modules that appear in the "Modules" sidebar section and can be
+    /// The modules that appear in the "Modules" sidebar section and can be
     /// freely reordered by the user. Dashboard is always pinned to "Overview".
     static var reorderable: [AppModule] {
-        [.cleanup, .protection, .performance, .applications, .files, .clipboard, .actions, .localShare]
+        [.cleanup, .protection, .performance, .applications, .files, .clipboard, .actions, .ports, .localShare]
     }
 
     var title: String {
@@ -424,6 +428,7 @@ enum AppModule: String, CaseIterable, Identifiable {
         case .clipboard:     return "Clipboard"
         case .actions:       return "Actions"
         case .localShare:    return "HaloShare"
+        case .ports:         return "Ports"
         case .menuBarPreview: return "Menu Bar"
         }
     }
@@ -439,6 +444,7 @@ enum AppModule: String, CaseIterable, Identifiable {
         case .clipboard:     return "doc.on.clipboard.fill"
         case .actions:       return "bolt.circle.fill"
         case .localShare:    return "antenna.radiowaves.left.and.right"
+        case .ports:         return "network.badge.shield.half.filled"
         case .menuBarPreview: return "menubar.rectangle"
         }
     }
@@ -454,6 +460,7 @@ enum AppModule: String, CaseIterable, Identifiable {
         case .clipboard:     return [Color(hex: "#3a2010"), Color(hex: "#4a2a08")]
         case .actions:       return [Color(hex: "#2a1a0e"), Color(hex: "#3a1e08")]
         case .localShare:    return [Color(hex: "#0e2a3a"), Color(hex: "#1a3a4a")]
+        case .ports:         return [Color(hex: "#0e3a2a"), Color(hex: "#1a4a3a")]
         case .menuBarPreview: return [Color(hex: "#1a2a3a"), Color(hex: "#0e1f30")]
         }
     }

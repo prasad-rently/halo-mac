@@ -56,6 +56,18 @@
     <array>
         <string>com.halo.smartscan</string>
     </array>
+    <!-- F-041: halo:// URL scheme for shareable action configurations -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.halo.mac</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>halo</string>
+            </array>
+        </dict>
+    </array>
     <!-- HaloShare: local network file transfer -->
     <key>NSLocalNetworkUsageDescription</key>
     <string>Halo uses the local network to discover and transfer files with nearby devices running Halo or LocalSend.</string>
