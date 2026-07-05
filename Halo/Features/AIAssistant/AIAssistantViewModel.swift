@@ -31,9 +31,17 @@ final class AIAssistantViewModel: ObservableObject {
     @Published private(set) var isStreaming = false
     @Published var pendingConfirm: PendingConfirm?
     @Published var selectedModelID: String = AICatalog.defaultModel.id
+    @Published var selectedProvider: AIProviderKind = .claude {
+        didSet {
+            guard selectedProvider != oldValue else { return }
+            selectedModelID = AICatalog.models(for: selectedProvider).first?.id ?? selectedProvider.defaultModelID
+            hasKey = AIKeyStore.shared.hasKey(for: selectedProvider)
+        }
+    }
     @Published private(set) var hasKey: Bool = AIKeyStore.shared.hasKey(for: .claude)
 
-    private let provider: AIProvider = AnthropicProvider()
+    /// Providers with a concrete implementation (D10).
+    let providers = AICatalog.implementedProviders
     private var history: [AIMessage] = []
     private var runTask: Task<Void, Never>?
     private var confirmContinuation: CheckedContinuation<Bool, Never>?
@@ -47,16 +55,16 @@ final class AIAssistantViewModel: ObservableObject {
     before it runs — never claim you ran an action that was declined.
     """
 
-    var claudeModels: [AIModelInfo] { AICatalog.models(for: .claude) }
+    var models: [AIModelInfo] { AICatalog.models(for: selectedProvider) }
 
-    // MARK: Key management
+    // MARK: Key management (per provider)
 
     func saveKey(_ key: String) {
-        AIKeyStore.shared.setKey(key.trimmingCharacters(in: .whitespacesAndNewlines), for: .claude)
-        hasKey = AIKeyStore.shared.hasKey(for: .claude)
+        AIKeyStore.shared.setKey(key.trimmingCharacters(in: .whitespacesAndNewlines), for: selectedProvider)
+        hasKey = AIKeyStore.shared.hasKey(for: selectedProvider)
     }
     func clearKey() {
-        AIKeyStore.shared.clear(.claude)
+        AIKeyStore.shared.clear(selectedProvider)
         hasKey = false
     }
 
@@ -127,8 +135,15 @@ final class AIAssistantViewModel: ObservableObject {
         confirmContinuation = nil
     }
 
+    private func provider(for kind: AIProviderKind) -> AIProvider {
+        switch kind {
+        case .openai: return OpenAIProvider()
+        default:      return AnthropicProvider()   // claude (gemini falls back until built)
+        }
+    }
+
     private func makeRunner() -> AgentRunner {
-        let runner = AgentRunner(provider: provider, registry: .default,
+        let runner = AgentRunner(provider: provider(for: selectedProvider), registry: .default,
                                  model: selectedModelID, system: systemPrompt)
         if let executor = AIToolExecutor.live() {
             runner.execute = executor.asExecute()

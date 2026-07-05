@@ -298,3 +298,75 @@ struct AIToolExecutorTests {
         await #expect(throws: AIToolError.self) { _ = try await exec().run("run_smart_scan", "{}") }
     }
 }
+
+// MARK: - OpenAIProvider (F-046 D10)
+
+@Suite("OpenAIRequestBuilder")
+struct OpenAIRequestBuilderTests {
+    @Test("Body uses max_completion_tokens, no temperature; tools are function-shaped")
+    func bodyShape() {
+        let tool = AITool(name: "get_cpu_usage", description: "cpu",
+                          inputSchema: ["type": "object", "properties": [:]])
+        let body = OpenAIProvider.requestBody(
+            model: "gpt-5", system: "sys", messages: [AIMessage(role: .user, text: "hi")],
+            tools: [tool], maxTokens: 700, stream: true)
+        #expect(body["model"] as? String == "gpt-5")
+        #expect(body["max_completion_tokens"] as? Int == 700)
+        #expect(body["max_tokens"] == nil)
+        #expect(body["temperature"] == nil)
+        let tools = body["tools"] as? [[String: Any]]
+        #expect(tools?.first?["type"] as? String == "function")
+        #expect((tools?.first?["function"] as? [String: Any])?["name"] as? String == "get_cpu_usage")
+    }
+
+    @Test("System prepends; tool-use → assistant.tool_calls; tool-result → role:tool")
+    func messageMapping() {
+        let msgs = [
+            AIMessage(role: .user, text: "cpu?"),
+            AIMessage(role: .assistant, blocks: [
+                .text("checking"), .toolUse(id: "call_1", name: "get_cpu_usage", inputJSON: "{}")]),
+            AIMessage(role: .user, blocks: [.toolResult(toolUseId: "call_1", content: "42%", isError: false)])
+        ]
+        let nodes = OpenAIProvider.messageNodes(system: "You are Halo.", messages: msgs)
+        #expect(nodes.first?["role"] as? String == "system")
+        // assistant turn carries tool_calls
+        let assistant = nodes.first { $0["role"] as? String == "assistant" }
+        let calls = assistant?["tool_calls"] as? [[String: Any]]
+        #expect(calls?.first?["id"] as? String == "call_1")
+        #expect((calls?.first?["function"] as? [String: Any])?["name"] as? String == "get_cpu_usage")
+        // tool result becomes a role:tool message keyed by tool_call_id
+        let toolMsg = nodes.first { $0["role"] as? String == "tool" }
+        #expect(toolMsg?["tool_call_id"] as? String == "call_1")
+        #expect(toolMsg?["content"] as? String == "42%")
+    }
+}
+
+@Suite("OpenAIStreamDecoder")
+struct OpenAIStreamDecoderTests {
+    @Test("Text deltas stream; finish() closes with the stop reason")
+    func text() {
+        let d = OpenAIStreamDecoder()
+        var out: [AIStreamEvent] = []
+        out += d.consume(["choices": [["delta": ["content": "Hel"]]]])
+        out += d.consume(["choices": [["delta": ["content": "lo"], "finish_reason": "stop"]]])
+        out += d.finish()
+        let text = out.compactMap { if case let .textDelta(t) = $0 { return t } else { return nil } }.joined()
+        #expect(text == "Hello")
+        #expect(out.last == .done(stopReason: "stop"))
+    }
+
+    @Test("tool_calls fragments accumulate by index across chunks")
+    func toolCalls() {
+        let d = OpenAIStreamDecoder()
+        _ = d.consume(["choices": [["delta": ["tool_calls": [
+            ["index": 0, "id": "call_9", "function": ["name": "run_smart_scan", "arguments": "{\"de"]]]]]]])
+        _ = d.consume(["choices": [["delta": ["tool_calls": [
+            ["index": 0, "function": ["arguments": "ep\":true}"]]]], "finish_reason": "tool_calls"]]])
+        let out = d.finish()
+        guard case let .toolCall(id, name, inputJSON) = out.first else { Issue.record("no tool call"); return }
+        #expect(id == "call_9")
+        #expect(name == "run_smart_scan")
+        #expect(inputJSON == "{\"deep\":true}")
+        #expect(out.last == .done(stopReason: "tool_calls"))
+    }
+}

@@ -28,11 +28,16 @@ struct AIAssistantView: View {
             Text("AI Assistant").font(HaloFont.display(18)).foregroundColor(.haloText)
             HaloBadge(text: "Agentic", color: .haloPurple)
             Spacer()
+            // Provider picker (D10) — only implemented providers.
+            Picker("", selection: $vm.selectedProvider) {
+                ForEach(vm.providers) { p in Text(p.displayName).tag(p) }
+            }
+            .labelsHidden().frame(width: 150)
             if vm.hasKey {
                 Picker("", selection: $vm.selectedModelID) {
-                    ForEach(vm.claudeModels) { m in Text(m.displayName).tag(m.id) }
+                    ForEach(vm.models) { m in Text(m.displayName).tag(m.id) }
                 }
-                .labelsHidden().frame(width: 170)
+                .labelsHidden().frame(width: 150)
                 Button { vm.clearConversation() } label: { Image(systemName: "square.and.pencil") }
                     .buttonStyle(.plain).foregroundColor(.haloText2).help("New chat")
                 Button { vm.clearKey() } label: { Image(systemName: "key.slash") }
@@ -47,11 +52,12 @@ struct AIAssistantView: View {
     private var keySetup: some View {
         VStack(spacing: 14) {
             Image(systemName: "key.fill").font(.system(size: 34)).foregroundColor(.haloPurple)
-            Text("Connect your Claude API key").font(HaloFont.display(16)).foregroundColor(.haloText)
-            Text("BYO key — it's stored only in your Mac's Keychain and sent only to Anthropic. Get one at console.anthropic.com.")
+            Text("Connect your \(vm.selectedProvider.displayName) API key")
+                .font(HaloFont.display(16)).foregroundColor(.haloText)
+            Text("BYO key — stored only in your Mac's Keychain and sent only to \(vm.selectedProvider.displayName). Each provider has its own key.")
                 .font(HaloFont.body(12)).foregroundColor(.haloText2)
                 .multilineTextAlignment(.center).frame(maxWidth: 420).fixedSize(horizontal: false, vertical: true)
-            SecureField("sk-ant-…", text: $keyDraft)
+            SecureField(vm.selectedProvider == .openai ? "sk-…" : "sk-ant-…", text: $keyDraft)
                 .textFieldStyle(.plain).font(HaloFont.body(12)).foregroundColor(.haloText)
                 .padding(9).frame(width: 320).background(Color.haloSurface2).cornerRadius(8)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.haloBorder, lineWidth: 1))

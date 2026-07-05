@@ -118,6 +118,7 @@
 		000000000000000000009018 /* HaloShortcutsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009017 /* HaloShortcutsProvider.swift */; };
 		0D95339BD7D85794863633C8 /* HaloUITestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */; };
 		1A276975BC00655241248D7B /* DriveSpeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C310900DF7BB88C2E7AFC1B /* DriveSpeedView.swift */; };
+		1C35066F666096D6ACA28957 /* OpenAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78C88E9A3466E70C453D9B42 /* OpenAIProvider.swift */; };
 		318D18283567FA7F9C3FCD89 /* DriveSpeedTesterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629A9D17BDFF863DCB0206F2 /* DriveSpeedTesterTests.swift */; };
 		392C64DDBD96198078804CA3 /* AIToolExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC90BEA4B73BCF5211738E1 /* AIToolExecutor.swift */; };
 		428DD9830BBDEBECB1200590 /* SmokeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74D974CC4B2FB109632BF14A /* SmokeUITests.swift */; };
@@ -318,6 +319,7 @@
 		67D626412F39854842AE0A36 /* HaloUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6D2C02D89C828E5968F14081 /* AIProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIProvider.swift; sourceTree = "<group>"; };
 		74D974CC4B2FB109632BF14A /* SmokeUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SmokeUITests.swift; sourceTree = "<group>"; };
+		78C88E9A3466E70C453D9B42 /* OpenAIProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OpenAIProvider.swift; sourceTree = "<group>"; };
 		7C310900DF7BB88C2E7AFC1B /* DriveSpeedView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedView.swift; sourceTree = "<group>"; };
 		7C5BDF389221BADF1F31152C /* HaloTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloTests.swift; sourceTree = "<group>"; };
 		8908A278C13A1F3B9E21BFE9 /* CleanupUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CleanupUITests.swift; sourceTree = "<group>"; };
@@ -619,6 +621,7 @@
 				4FC90BEA4B73BCF5211738E1 /* AIToolExecutor.swift */,
 				32396161554FB75B93A0B169 /* AIAssistantViewModel.swift */,
 				C410A9DA24CA458075531BA7 /* AIAssistantView.swift */,
+				78C88E9A3466E70C453D9B42 /* OpenAIProvider.swift */,
 			);
 			name = AIAssistant;
 			path = AIAssistant;
@@ -909,6 +912,7 @@
 				392C64DDBD96198078804CA3 /* AIToolExecutor.swift in Sources */,
 				E74653429899D0336A95DF5F /* AIAssistantViewModel.swift in Sources */,
 				F252AFEDEE35CF5C2C183E2C /* AIAssistantView.swift in Sources */,
+				1C35066F666096D6ACA28957 /* OpenAIProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

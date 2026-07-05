@@ -35,10 +35,18 @@
 > chat with tool-activity rows, input bar, **Approve/Decline confirmation sheet**).
 > App builds; 16 F-046 unit tests still pass.
 >
-> **Not yet built:** OpenAI/Gemini concrete providers; conversation persistence across
-> launches (D11); the ⌘ quick-ask overlay (sidebar module shipped; overlay is the
-> second D5 surface). ⚠️ **UI not runtime-verified** — needs a real Claude API key +
-> a display; only the pure cores are unit-tested.
+> **Phase 4 done (2026-07):** `OpenAIProvider` (D10) — native Chat Completions client
+> behind the same `AIProvider` protocol (Bearer auth, `max_completion_tokens`,
+> `function`-shaped tools, tool results as `role:"tool"` messages, `[DONE]`-terminated
+> SSE via `OpenAIStreamDecoder`). VM/UI are now provider-aware: a **provider picker**
+> (Claude/OpenAI) with per-provider Keychain keys + model lists; the agent loop /
+> executor / confirmation are provider-agnostic and reused unchanged. **20 F-046 unit
+> tests pass** (added OpenAI request-mapping + SSE decode). App builds.
+>
+> **Not yet built:** Gemini provider; conversation persistence across launches (D11);
+> the ⌘ quick-ask overlay (second D5 surface). ⚠️ **UI/live streaming not
+> runtime-verified** — needs real provider API keys + a display; only the pure cores
+> are unit-tested.
 
 ---
 
