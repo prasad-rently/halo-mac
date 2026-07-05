@@ -57,7 +57,7 @@ their own Firebase project.
 | D18 | **Namespace messages by `deviceId`** ✅ *required* | Path `sms/{uid}/{deviceId}/messages/{messageId}`. Android `smsId` is device-local, so `{smsId}_{timestamp}` collides across phones — device namespacing fixes it and enables **per-device delete-sync**. |
 | D19 | **Line identity = SIM `subscriptionId` → (own number + carrier)** ✅ *decided* | Each SIM is a "line". Capture the SIM's **own phone number** and **carrier/service provider**. Supports **dual-SIM** (2 lines per phone) and **N devices** → N×lines. |
 | D20 | **Manual SIM/line labeling fallback** ✅ *decided* | `SubscriptionInfo.number` is often empty (carriers don't provision it). During pairing/setup the user **labels each SIM** (own number + friendly name, e.g. "Personal · Airtel"). Auto-read when available, else manual. Needs `READ_PHONE_STATE`/`READ_PHONE_NUMBERS`. |
-| D21 | **Grouping hierarchy: Device → Line → contact thread** ✅ *decided* | Desktop groups by device, then by SIM line (own number + carrier), then the existing by-contact threads. Plus an **"All lines"** merged view. See §7.5. |
+| D21 | **Grouping hierarchy: Device → Line → contact thread; threads are per-line** ✅ *decided* | Desktop groups by device, then SIM line (own number + carrier), then by-contact threads. **Thread identity = (deviceId, subscriptionId, contactNumber)** — a contact texting both SIMs = **two separate threads**, never merged, even in "All lines". See §7.5. |
 | D22 | **Device & line registries in RTDB** ✅ *decided* | `devices/{uid}/{deviceId}` (name/platform/lastSeen) and `sms/{uid}/{deviceId}/lines/{subscriptionId}` (own-number label + carrier) so the desktop can render/filter lines without scanning messages. |
 
 ## 4. User Stories
@@ -87,7 +87,7 @@ their own Firebase project.
 - **FR-7** Read messages for the signed-in `uid` from RTDB, decrypt locally into the cache.
 - **FR-8** Render **Threads** (grouped by contact number, last message + unread count) and a **Messages** pane.
 - **FR-8b** **Categorize** each message via the shared `SmsClassifier` (D17); offer category filters/labels (OTP, Transactional, Promotional, …) in addition to by-contact threading.
-- **FR-8c** **Group by Device → Line → contact thread** (D21): a device/line selector (e.g. "Pixel 8 · Personal · +91 98… · Airtel") scoping the thread list, plus an **"All lines"** merged view. Threads deduped across lines by contact where sensible, but line provenance shown.
+- **FR-8c** **Group by Device → Line → contact thread** (D21): a device/line selector (e.g. "Pixel 8 · Personal · +91 98… · Airtel") scoping the thread list, plus an **"All lines"** view. **Threads are per line** — a contact who texts two SIMs yields **two separate threads** (one per line), each badged with its line; the "All lines" view lists them side by side (never merged).
 - **FR-9** **Search** (full-text over decrypted cache) and **filter** by contact/date/category **and by device/line**.
 - **FR-10** Live updates via RTDB `.observe` (`child_added`/`value`) listener; **polling fallback** if unavailable.
 - **FR-11** Pagination for large histories (lazy-load older messages).
@@ -128,7 +128,7 @@ sms/{uid}/{deviceId}/messages/{messageId}    → message node below  ('messageId
 {
   "addressEnc": "…",        // AES-GCM ciphertext of the CONTACT number (the other party)
   "bodyEnc": "…",           // AES-GCM ciphertext
-  "threadKey": "hash(normalizedContactNumber)",  // groups by conversation (other party)
+  "threadKey": "hash(deviceId | subscriptionId | normalizedContactNumber)",  // per-line thread (D21)
   "threadId": 12,           // native device thread id (D15)
   "subscriptionId": 0,      // which SIM/line on THIS device received/sent it (D19); -1 unknown
   "date": 1720000000000,
@@ -235,11 +235,11 @@ uid (the user)
 **Why each axis exists:**
 - **Device** — namespaces `smsId` (device-local) so two phones never collide (D18); enables per-device delete-sync and "which phone" provenance.
 - **Line (SIM)** — the user's *own* number + carrier for that SIM. Dual-SIM = two lines on one device; the same person can have the *same contact* messaging both lines.
-- **Thread** — the existing by-contact grouping, now scoped within a line.
+- **Thread** — by-contact grouping **scoped within a line**. Thread identity is **(deviceId, subscriptionId, contactNumber)**, so the same contact on two SIMs is two distinct threads (decided: *separate*, not merged).
 
 **Desktop UI grouping styles (D21):**
 - **Sidebar / picker of lines:** each entry shows device + SIM label + own number + carrier, e.g. `Pixel 8 · Personal · +91 98xxx · Airtel`. Selecting one scopes the thread list to that line.
-- **"All lines" merged view:** every line combined; each thread/row badges its source line so provenance is never lost.
+- **"All lines" view:** every line's threads listed together, each row badged with its source line. Threads are **still per-line** — a contact who messaged two SIMs appears as two separate rows, never merged.
 - **Filters:** by device, by line/own-number, by carrier — composable with the category (§7.4) and search filters.
 - **Line management:** rename a line, set/correct its own number (fallback for empty `SubscriptionInfo.number`), hide a line.
 
