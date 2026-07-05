@@ -28,10 +28,17 @@
 > and `ReportSnapshot`/`ReportGenerator` PDF paths. Read formatters are unit-tested
 > against a fake metrics source (no full AppState needed). **16 F-046 unit tests pass.**
 >
-> **Not yet built:** OpenAI/Gemini concrete providers; conversation persistence (D11);
-> and the `AppModule.ai` UI — quick-ask overlay + sidebar module + the confirmation
-> sheet that supplies `AgentRunner.confirm` (D5/D9). Live end-to-end needs a real
-> provider API key.
+> **Phase 3 done (2026-07):** `AppModule.ai` sidebar module wired (enum + ContentView
+> route). `AIAssistantViewModel` (owns provider + AgentRunner + `AIToolExecutor.live()`,
+> streams `AgentEvent`s into a chat, drives the D9 confirmation via a
+> `CheckedContinuation`) + `AIAssistantView` (BYO-key setup, model picker, streaming
+> chat with tool-activity rows, input bar, **Approve/Decline confirmation sheet**).
+> App builds; 16 F-046 unit tests still pass.
+>
+> **Not yet built:** OpenAI/Gemini concrete providers; conversation persistence across
+> launches (D11); the ⌘ quick-ask overlay (sidebar module shipped; overlay is the
+> second D5 surface). ⚠️ **UI not runtime-verified** — needs a real Claude API key +
+> a display; only the pure cores are unit-tested.
 
 ---
 
