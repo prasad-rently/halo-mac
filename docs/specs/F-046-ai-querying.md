@@ -13,10 +13,18 @@
 > `temperature`/`top_p`/`budget_tokens` (removed on Opus 4.8/Sonnet 5 → HTTP 400).
 > Default model `claude-opus-4-8`. **7 unit tests** pass (request-body shape incl. the
 > forbidden-params guard, tool round-trip, SSE text-delta + tool-call accumulation).
-> **Not yet built:** OpenAI/Gemini concrete providers, the `ToolRegistry` over
-> F-042 Intents + `ActionLibrary` (D8), the agent loop + confirmation gate (D9),
-> conversation persistence (D11), and the `AppModule.ai` UI (overlay + sidebar, D5).
-> Live end-to-end needs a real provider API key.
+> **Phase 1 done (2026-07):** `ToolRegistry` (D8/D12) — 7 read tools (auto-run) +
+> 2 safe acts (confirmed); exports Anthropic tool schemas. `AgentRunner` (D7/D9) —
+> the agent loop: stream a turn → collect tool calls → run reads auto / gate acts
+> behind `confirm` → feed `tool_result`s back → repeat to an iteration cap. Fully
+> injectable (provider/executor/confirm), so it's unit-tested with a scripted
+> provider: read round-trip, act approve, act **deny**, and stream-failure paths.
+> **13 F-046 unit tests pass** total.
+>
+> **Not yet built:** OpenAI/Gemini concrete providers; the real tool **executor**
+> wiring `AgentRunner.execute` to `AppState`/App Intents/`ActionLibrary`; conversation
+> persistence (D11); and the `AppModule.ai` UI — overlay + sidebar + confirmation
+> sheet (D5). Live end-to-end needs a real provider API key.
 
 ---
 

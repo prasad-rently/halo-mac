@@ -129,3 +129,121 @@ struct AnthropicStreamDecoderTests {
         #expect(out == [.failed("overloaded")])
     }
 }
+
+// MARK: - ToolRegistry + AgentRunner (F-046 D8/D9)
+
+@Suite("ToolRegistry")
+struct ToolRegistryTests {
+    @Test("Read tools auto-run; act tools are confirmation-gated")
+    func kinds() {
+        let r = ToolRegistry.default
+        #expect(r.spec(for: "get_cpu_usage")?.kind == .read)
+        #expect(r.spec(for: "get_cpu_usage")?.requiresConfirmation == false)
+        #expect(r.spec(for: "run_smart_scan")?.kind == .act)
+        #expect(r.spec(for: "run_smart_scan")?.requiresConfirmation == true)
+        #expect(r.actToolNames.contains("export_health_report"))
+    }
+    @Test("Every tool exports a valid Anthropic tool schema")
+    func schemas() {
+        let tools = ToolRegistry.default.tools()
+        #expect(!tools.isEmpty)
+        for t in tools {
+            #expect(!t.name.isEmpty)
+            #expect(t.inputSchema["type"] as? String == "object")
+        }
+    }
+}
+
+/// Scripted provider: returns a queued list of stream-events per `stream()` call,
+/// letting us drive the agent loop deterministically without a network/key.
+private final class ScriptedProvider: AIProvider, @unchecked Sendable {
+    let kind: AIProviderKind = .claude
+    private var turns: [[AIStreamEvent]]
+    private(set) var callCount = 0
+    init(_ turns: [[AIStreamEvent]]) { self.turns = turns }
+
+    func stream(model: String, system: String?, messages: [AIMessage],
+                tools: [AITool], maxTokens: Int) -> AsyncThrowingStream<AIStreamEvent, Error> {
+        let events = callCount < turns.count ? turns[callCount] : [.done(stopReason: "end_turn")]
+        callCount += 1
+        return AsyncThrowingStream { cont in
+            for e in events { cont.yield(e) }
+            cont.finish()
+        }
+    }
+}
+
+@Suite("AgentRunner")
+@MainActor
+struct AgentRunnerTests {
+
+    private func collect(_ runner: AgentRunner, _ messages: [AIMessage]) async throws -> [AgentEvent] {
+        var out: [AgentEvent] = []
+        for try await ev in runner.run(messages: messages) { out.append(ev) }
+        return out
+    }
+
+    @Test("Read tool: model calls it, loop executes + feeds back, then answers")
+    func readToolRoundTrip() async throws {
+        let provider = ScriptedProvider([
+            // Turn 1: brief text + a read tool call.
+            [.textDelta("Checking…"),
+             .toolCall(id: "t1", name: "get_cpu_usage", inputJSON: "{}"),
+             .done(stopReason: "tool_use")],
+            // Turn 2: final answer.
+            [.textDelta("Your CPU is at 42%."), .done(stopReason: "end_turn")]
+        ])
+        var executed: [String] = []
+        let runner = AgentRunner(provider: provider,
+                                 execute: { name, _ in executed.append(name); return "42%" },
+                                 confirm: { _, _ in true })
+        let out = try await collect(runner, [AIMessage(role: .user, text: "cpu?")])
+
+        #expect(executed == ["get_cpu_usage"])            // auto-ran, no confirm needed
+        #expect(provider.callCount == 2)                  // looped after tool result
+        #expect(out.contains(.toolResult(name: "get_cpu_usage", output: "42%", isError: false)))
+        let text = out.compactMap { if case let .textDelta(t) = $0 { return t } else { return nil } }.joined()
+        #expect(text.contains("Your CPU is at 42%."))
+        #expect(out.last == .finished(stopReason: "end_turn"))
+    }
+
+    @Test("Act tool denied: no execution, error result fed back, loop continues")
+    func actToolDenied() async throws {
+        let provider = ScriptedProvider([
+            [.toolCall(id: "s1", name: "run_smart_scan", inputJSON: "{}"), .done(stopReason: "tool_use")],
+            [.textDelta("Okay, I won't run it."), .done(stopReason: "end_turn")]
+        ])
+        var executed: [String] = []
+        let runner = AgentRunner(provider: provider,
+                                 execute: { name, _ in executed.append(name); return "scanned" },
+                                 confirm: { _, _ in false })   // user declines
+        let out = try await collect(runner, [AIMessage(role: .user, text: "scan")])
+
+        #expect(executed.isEmpty)                          // act tool never ran
+        #expect(out.contains(.toolDenied(name: "run_smart_scan")))
+        #expect(out.last == .finished(stopReason: "end_turn"))
+    }
+
+    @Test("Act tool approved: runs after confirmation")
+    func actToolApproved() async throws {
+        let provider = ScriptedProvider([
+            [.toolCall(id: "s1", name: "run_smart_scan", inputJSON: "{}"), .done(stopReason: "tool_use")],
+            [.textDelta("Done."), .done(stopReason: "end_turn")]
+        ])
+        var confirmedSpec: String?
+        let runner = AgentRunner(provider: provider,
+                                 execute: { _, _ in "3.8 GB found" },
+                                 confirm: { spec, _ in confirmedSpec = spec.name; return true })
+        let out = try await collect(runner, [AIMessage(role: .user, text: "scan")])
+        #expect(confirmedSpec == "run_smart_scan")
+        #expect(out.contains(.toolResult(name: "run_smart_scan", output: "3.8 GB found", isError: false)))
+    }
+
+    @Test("A stream failure surfaces as .failed and stops")
+    func streamFailure() async throws {
+        let provider = ScriptedProvider([[.failed("overloaded")]])
+        let runner = AgentRunner(provider: provider)
+        let out = try await collect(runner, [AIMessage(role: .user, text: "hi")])
+        #expect(out.contains(.failed("overloaded")))
+    }
+}
