@@ -301,6 +301,8 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 
 ## Mobile Platform Expansion
 
+> **Mobile development is driven by [`docs/HALO_MOBILE_ROADMAP.md`](HALO_MOBILE_ROADMAP.md)** — the authoritative feature backlog + governance (feasibility study required before any port; updated whenever desktop gains a feature).
+
 Full research and platform-specific feature mapping documented in **`docs/MOBILE_PLATFORM_FEATURES.md`**.
 
 ### Summary

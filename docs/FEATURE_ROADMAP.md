@@ -7,6 +7,11 @@
 > Each card is complete enough that a developer (or AI agent) with no prior context can implement and test the feature without reading anything else.
 >
 > To **add a new feature**, append it at the bottom of the Queued section. To **reprioritise**, move the card up or down in the queue. Never remove a Done card — it serves as the implementation record.
+>
+> **Definition of Done (mandatory):** a feature is not `✅ Done` until it has a
+> **mobile feasibility study** (iOS + Android) and a row in
+> [`docs/HALO_MOBILE_ROADMAP.md`](HALO_MOBILE_ROADMAP.md). Assess the mobile path
+> before closing desktop work — see that doc's §0 governance.
 
 ---
 
