@@ -206,6 +206,7 @@ filters/labels on top of by-number threads:
 - **Content signals beat the suffix** (a `-S` sender with promo copy → Promotional), except `-P` which is trusted as promo-only.
 - The classifier is **one shared component** used by both the console (label/filter) and F-048 (keep only Transactional) — build once, in whichever layer both can reach (desktop Swift port and/or the mobile app).
 - **DLT sender semantics** (India): `-P` promotional, `-T`/`-S` transactional/service, `-G` government; sender-core (e.g. `INDUSB` from `VM-INDUSB-S`) is reusable for per-bank filtering.
+- Exact keyword lists live in the shared pattern pack [`india-bank-sms.v1.json`](pattern-packs/india-bank-sms.v1.json) (`classifier` section).
 
 ## 8. Acceptance Criteria
 

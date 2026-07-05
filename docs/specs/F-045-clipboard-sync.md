@@ -28,14 +28,20 @@ the clipboard history on every other connected device.
 
 ## 3. Decisions & Assumptions
 
+> **Backend aligned to F-044:** the *SMSArchiver* reference (`~/Github/SMSArchiver`)
+> implements clipboard sync on **Realtime Database** + WorkManager, and F-044 is
+> now RTDB. D1 uses **RTDB** for one consistent backend across cloud features.
+
 | # | Decision | Note |
 |---|----------|------|
-| D1 | **Cloud Firestore** `clipboard/{uid}/items/{itemId}` | Snapshot listeners push new items to all devices. |
+| D1 | **Firebase Realtime Database** `clipboard/{uid}/{itemId}` ✅ *aligned w/ F-044* | `.observe` (`child_added`) pushes new items to all devices. One backend across F-044/F-045. |
 | D2 | **Client-side encryption** of item content | Clipboard often holds secrets; encrypt with the shared passphrase key (per foundations). |
 | D3 | **Per-device identity** (`deviceId`) | To ignore echoes of your own copy and show provenance. |
 | D4 | **Capped, TTL'd** synced history | Mirror the 500-item cap; add a TTL (e.g., 24 h/7 d, configurable) to limit exposure. |
 | D5 | **Sensitive-content guard** | Skip items flagged sensitive (concealed pasteboard type, password-manager hints, matches for tokens) — configurable. |
 | D6 | Text/URL/code first | Images/files behind a toggle later (Cloud Storage). |
+| D7 | **Android capture = AccessibilityService** ✅ *resolved via ref* | Android 10+ blocks background `getPrimaryClip()` (returns null from a foreground service). An **AccessibilityService** retains background clipboard read; user enables it once in Settings → Accessibility. (SMSArchiver proves this; foreground-service path kept only for pre-10.) |
+| D8 | **Content-hash dedup + WorkManager upload** ✅ *adopt from ref* | Skip repeat clip events via a `lastContentHash`; upload via WorkManager with network constraint + backoff (mirrors the SMS worker). Feeds echo suppression (D3). |
 
 ## 4. User Stories
 
@@ -50,7 +56,7 @@ the clipboard history on every other connected device.
 
 **Desktop**
 - **FR-1** On new local clipboard item (via `ClipboardMonitor`), if sync enabled and not sensitive: encrypt + publish to `clipboard/{uid}/items`.
-- **FR-2** Subscribe to Firestore; on remote item from another `deviceId`, decrypt + insert into local history (deduped, respecting the 500 cap).
+- **FR-2** Subscribe to RTDB (`.observe`); on remote item from another `deviceId`, decrypt + insert into local history (deduped, respecting the 500 cap).
 - **FR-3** Do **not** re-publish items received from the cloud (echo suppression via `deviceId`).
 - **FR-4** Mark synced items in the UI with source device + timestamp.
 - **FR-5** Sensitive-content filter (concealed type, regex for secrets) — configurable allow/deny.
@@ -67,7 +73,7 @@ the clipboard history on every other connected device.
 
 ## 6. Non-Functional Requirements
 
-- **Privacy/Security:** encrypt-before-upload (D2); owner-only Firestore rules; secrets excluded by default (D5); TTL limits exposure (D4).
+- **Privacy/Security:** encrypt-before-upload (D2); owner-only RTDB rules (same shape as F-044 §7.2); secrets excluded by default (D5); TTL limits exposure (D4).
 - **Performance:** publish is async/non-blocking on copy; listener merges without UI jank; respects the in-memory 500-item cap.
 - **Battery/network (mobile):** batched writes; sync cadence configurable.
 - **Correctness:** echo suppression prevents loops; last-writer-wins ordering by server timestamp.
@@ -75,12 +81,12 @@ the clipboard history on every other connected device.
 ## 7. Architecture & Data Model
 
 ```
-Device A copy ─► ClipboardMonitor ─► [sensitive? skip] ─► encrypt ─► Firestore
+Device A copy ─► ClipboardMonitor ─► [sensitive? skip] ─► encrypt ─► RTDB
                                                                         │ snapshot
 Device B  ◄──────── insert into history ◄─ decrypt ◄─ (deviceId != self)┘
 ```
 
-**Firestore** `clipboard/{uid}/items/{itemId}`:
+**RTDB** `clipboard/{uid}/{itemId}`:
 ```json
 {
   "uid": "…",
@@ -95,7 +101,7 @@ Device B  ◄──────── insert into history ◄─ decrypt ◄─ 
 }
 ```
 
-**Desktop:** extend `ClipboardMonitor`/`ClipboardViewModel`; add `ClipboardSyncService` (actor: publish + subscribe + echo-suppress + TTL). Reuse `FirebaseClient` from foundations.
+**Desktop:** extend `ClipboardMonitor`/`ClipboardViewModel`; add `ClipboardSyncService` (actor: publish + subscribe + echo-suppress + TTL). Reuse `FirebaseRTDBClient` from foundations.
 
 ## 8. Acceptance Criteria
 
@@ -108,15 +114,18 @@ Device B  ◄──────── insert into history ◄─ decrypt ◄─ 
 ## 9. Open Questions & Risks
 
 - **iOS capture** — `UIPasteboard` has no background change events; realistic UX is foreground/manual "push clipboard". Confirm acceptable.
-- **Android capture** — clipboard access restricted in 10+ (foreground/IME). Determine capture strategy (accessibility service? IME? foreground service?) and its trade-offs.
+- **Android capture — RESOLVED (D7):** AccessibilityService (proven by SMSArchiver). Remaining risk is **Play Store policy**: accessibility services for non-accessibility use are heavily scrutinised and may block store distribution → plan for F-Droid/sideload, and a clear in-app rationale + toggle.
 - Sensitive detection heuristics — false negatives could leak secrets; conservative defaults.
-- Multi-device ordering + rapid-copy bursts — debounce strategy.
-- Shared passphrase across F-044/F-045 — one key for all cloud data vs. per-feature.
+- Multi-device ordering + rapid-copy bursts — debounce strategy (content-hash dedup D8 helps).
+- Shared passphrase across F-044/F-045 — one key for all cloud data vs. per-feature (leaning one shared key via the same pairing).
+
+### Reference (SMSArchiver clipboard)
+`~/Github/SMSArchiver` ships a working Android clipboard sync: `ClipboardAccessibilityService` (background reads via system-trust), `ClipboardMonitorService` (foreground fallback, returns null on 10+ — kept only for pre-10), `lastContentHash` dedup, text+image content types, and a `ClipboardUploadWorker` (WorkManager + backoff) writing to RTDB. F-045's Android half ports this directly; the desktop half is new (built on Halo's existing `ClipboardMonitor`).
 
 ## 10. Execution Plan
 
 ### Phase 0 — Shared with F-044
-- Reuse the Firebase-macOS spike, `FirebaseClient`, crypto util, and Settings **Cloud** pane. No separate spike needed if F-044 Phase 0/1 done.
+- Reuse the Firebase-macOS spike, `FirebaseRTDBClient`, crypto util, and Settings **Cloud** pane. No separate spike needed if F-044 Phase 0/1 done.
 
 ### Phase 1 — Desktop publish/subscribe
 - `ClipboardSyncService` (actor): publish new local items (encrypt), subscribe + merge remote, echo suppression via `deviceId`.

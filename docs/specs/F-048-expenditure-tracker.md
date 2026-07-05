@@ -68,7 +68,7 @@ design, since it infers from SMS rather than bank APIs.
 - **FR-9** Aggregations: month `spent/received/net` (transfers skipped, `en-IN` grouping), **calendar heatmap**, **weekday chart**, **year view** (§11.6).
 - **FR-10** Confidence flag + **source-SMS drill-in** for every figure; list `Unreadable` for review.
 - **FR-11** Optional AI-assisted parse for unmatched formats (F-046 cloud / F-047 local), user-enabled.
-- **FR-12** Data-driven **pattern packs** (verbs/rejects/senders) — add a bank without code changes.
+- **FR-12** Data-driven **pattern packs** (verbs/rejects/senders) — add a bank without code changes. Ships the ported [`india-bank-sms.v1.json`](pattern-packs/india-bank-sms.v1.json) (exact Hamza lists + regexes).
 - **FR-13** Export (CSV) of parsed transactions.
 
 ## 6. Non-Functional Requirements
