@@ -140,8 +140,14 @@ with but keeps a manual OAuth-client step. **This is a decision to revisit (see 
 
 ---
 
-## 7. Open decisions
+## 7. Decisions (resolved) + spike
 
-- **D-auth-revisit:** keep **Google Sign-In** (nicer login, manual OAuth client) or switch to **Email/Password** (uglier login, fully auto-provisionable)? Impacts how automatable setup is.
-- **Provisioning model:** in-app client-side assisted flow (recommended, no Halo infra) vs. a Halo-hosted one-click service (best UX, but Halo runs infra + owns OAuth verification).
-- **Spike:** validate (a) firebase-ios-sdk RTDB+Auth on macOS at runtime, (b) OAuth scope grant + verification for provisioning, (c) Identity Toolkit provider-enable via API.
+- **Auth = Email/Password (auto-provisioned)** ✅ — switched from Google Sign-In to remove the OAuth-client blocker (§4 #3) and make setup fully auto-provisionable. App runtime sign-in uses an email/password user created during provisioning; the *provisioning* step still uses a one-time Google login. (F-044 D12.)
+- **Provisioning model = in-app client-side assisted flow** ✅ — Halo runs the provisioning locally with the user's token; **no Halo-hosted infrastructure**, tokens never leave the user's machine (preserves the "Halo never touches your data" ethos). No one-click hosted service.
+- **Two-secret model** ✅ — auth credential (email + random password) is auto-managed (Keychain + carried in the pairing QR); the **E2E passphrase** (data secret) is user-held and never in the QR. (F-044 D11.)
+
+### Phase 0 spike (must validate before build)
+1. **firebase-ios-sdk on macOS** — RTDB + Email/Password Auth configured at **runtime** (`FirebaseApp.configure(options:)`), under sandbox + network entitlements.
+2. **Provisioning OAuth** — obtaining a `cloud-platform`/`firebase` token from a native app and the **app-verification** requirement (unverified-app cap/warning). Main risk to the assisted flow; fallback = guided wizard + automated rules deploy.
+3. **Identity Toolkit admin API** — enable Email/Password provider + create the auth user programmatically.
+4. **RTDB provisioning + rules PUT** via `firebasedatabase.googleapis.com` + rules REST.

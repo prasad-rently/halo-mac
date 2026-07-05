@@ -31,7 +31,7 @@ their own Firebase project.
 ## 3. Decisions & Assumptions
 
 > **Confirmed 2026-07 (discussion rounds 1–4):** D1–D30 locked.
-> Backend = **Firebase Realtime Database**; auth = **Google Sign-In**; encryption
+> Backend = **Firebase Realtime Database**; auth = **Email/Password (auto-provisioned)**; encryption
 > = client-side E2E, **one shared key** across cloud features, **re-key by
 > wipe+re-sync** (phone is source of truth); **inbox only**, default backfill
 > **90 days**, cloud keeps everything, **mirror phone deletions**; read-only;
@@ -50,8 +50,8 @@ their own Firebase project.
 | D8 | **Cadence: real-time receiver + periodic + on-open** ✅ *confirmed (refined)* | Real-time `SmsReceiver` → immediate worker (per reference), **plus** WorkManager periodic safety net **plus** sync on app open. Desktop updates live via RTDB `.observe` value/child listeners (polling fallback). |
 | D9 | **Text-only (SMS)** in v1 ✅ *confirmed* | MMS/attachments deferred (needs Cloud Storage). |
 | D10 | **Numbers, not contact names** in v1 ✅ *confirmed* | Avoids `READ_CONTACTS`. Optional contact-name resolution later. |
-| D11 | **One passphrase carried via QR pairing** ✅ *confirmed* | The desktop→mobile QR encodes Firebase config; the E2E passphrase is set once and shared through the same pairing step (see §7.1). |
-| D12 | **Stable shared auth = Google Sign-In (OAuth), NOT anonymous** ✅ *confirmed* | Both phone + desktop sign in with the user's Google account → same `uid`. (SMSArchiver's anonymous auth mints a per-install uid and can't be shared.) Needs an OAuth client in the user's Firebase project (documented in setup). |
+| D11 | **Two-secret model; only the E2E passphrase is user-held** ✅ *confirmed (revised)* | **Auth credential** (email + random password) = *connection* secret, auto-generated and carried in the pairing QR. **E2E passphrase** = *data* secret, typed by the user, **never** in the QR. A leaked QR exposes only ciphertext (attacker still lacks the passphrase). See §7.1. |
+| D12 | **App auth = Email/Password (auto-provisioned), NOT anonymous/Google** ✅ *confirmed (revised)* | Both devices sign into the user's Firebase with an email/password credential **auto-created during assisted provisioning** (email = their Google email; password = random, Keychain-stored, moved to the phone via the pairing QR). Chosen over Google Sign-In because it's **fully API-provisionable** (no OAuth-client step — see [firebase-setup.md](firebase-setup.md) §4). Shared `uid` across devices. The one-time *provisioning* still uses a Google login (unavoidable). |
 | D13 | **Local offline queue + flush-first** ✅ *adopt from ref* | Mirror SMSArchiver's Room-queue pattern: on upload failure, queue locally; each sync flushes the queue before uploading new. Resilience against flaky networks. |
 | D14 | **`documentId = smsId_timestamp`, write-overwrite dedup** ✅ *adopt from ref* | Proven idempotent dedup (`setValue`/`setData` overwrites). Preferred over hashing body (survives identical bodies; `id` alone is unsafe since Android reuses SMS ids after deletion). |
 | D15 | **Capture dual-SIM + richer fields** ✅ *adopt from ref* | Add `subscriptionId` (SIM), `threadId`, full `type` enum, `seen`, `serviceCenter`. See §7 schema. |
@@ -178,17 +178,20 @@ config** (which project) and the **E2E passphrase** (how to decrypt). Both are
 established once, on the desktop, and carried to the phone via **QR pairing**.
 
 ```
-1. Desktop → Settings → Cloud (Firebase): user pastes Firebase config + signs in with Google (OAuth).
+1. Desktop → "Set up cloud sync" → one-time Google login (PROVISIONING only). Halo assisted-provisions
+   the user's project: RTDB + rules + an email/password AUTH USER (email = their Google email, password
+   = random). Config + auth credential land in the desktop Keychain. (See firebase-setup.md §5.)
 2. Desktop → sets an E2E passphrase. Key = Argon2id(passphrase, salt).  Salt stored in the user's
    RTDB at meta/{uid} (public-ish; salt is not secret). Passphrase itself never stored anywhere.
-3. Desktop shows a PAIRING QR = { firebaseConfig, salt, checksum }  — NOT the passphrase.
-4. Phone scans QR → gets Firebase config + salt → signs in with the SAME Google account → user TYPES
-   the same passphrase on the phone once → derives the identical key. A test record confirms it matches.
-5. Both devices now hold the same AES-GCM key; neither the QR nor Firebase ever carried the passphrase.
+3. Desktop shows a PAIRING QR = { firebaseConfig, authEmail, authPassword, salt, checksum } — NOT the E2E passphrase.
+4. Phone scans QR → configures Firebase → signs in with authEmail/authPassword (same uid) → user TYPES
+   the E2E passphrase once → derives the identical key. A test record confirms it matches.
+5. Both devices hold the same AES-GCM key; the QR carried the *auth* secret but never the E2E passphrase.
 ```
 
-Key points:
-- **The passphrase is never transmitted or stored** — only the non-secret salt travels in the QR. The user re-types the passphrase on the phone. Zero-knowledge even against someone who films the QR.
+Key points (two-secret model, D11):
+- **The E2E passphrase is never transmitted or stored** — only the non-secret salt (and the separate auth credential) travel in the QR. The user re-types the passphrase on the phone. Zero-knowledge for *data* even against someone who films the QR (they'd get account access → ciphertext only).
+- The **auth credential** (email + random password) is a connection secret, auto-managed (Keychain + QR) so the user never manually handles a Firebase login.
 - **Passphrase loss is recoverable by re-key (D24), because the phone is the source of truth.** Flow: set a new passphrase → **wipe the cloud SMS data** (`sms/{uid}` + device subtrees) → each device **re-syncs from its inbox** under the new key. The original SMS on the phone are never touched — the cloud is just a derived, encrypted extension of them. The desktop still offers optional **macOS Keychain** storage for convenience.
 - **Key rotation** uses the same wipe-and-re-sync path, so there's never mixed-key ciphertext to reconcile.
 

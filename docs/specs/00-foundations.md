@@ -45,7 +45,7 @@ runs against a **Firebase project the user creates and owns**.
 | Choice | Decision | Rationale |
 |--------|----------|-----------|
 | Database | **Firebase Realtime Database** (confirmed for F-044; default for cloud features) | Matches the proven *SMSArchiver* reference; cheaper append-heavy writes; simple `setValue` overwrite-dedup. Desktop keeps a **local decrypted cache** and runs search/filter/pagination over it (RTDB has no rich server-side query). Firestore was considered for its querying but RTDB won on proven fit + cost. Re-validated per-feature. |
-| Auth | **Firebase Auth — Google Sign-In (OAuth)**, NOT anonymous | Both phone + desktop sign in with the user's Google account → same `uid`. (SMSArchiver uses anonymous because it is upload-only; Halo's desktop reader needs a shared identity.) |
+| Auth | **Firebase Auth — Email/Password (auto-provisioned)**, NOT anonymous/Google | Both devices sign in with an email/password credential auto-created during assisted provisioning (moved to the phone via the pairing QR). Chosen over Google Sign-In because it is **fully API-provisionable** (no OAuth-client step). Shared `uid`. See [firebase-setup.md](firebase-setup.md). |
 | Realtime | RTDB **`.observe`** (`child_added` / `value`) listeners | Push updates to clipboard/SMS consoles without polling. |
 | Storage | **Cloud Storage for Firebase** (only if needed, e.g. MMS/attachments) | Deferred unless a feature requires blobs. |
 
