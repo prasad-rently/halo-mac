@@ -54,9 +54,10 @@ desktop system-maintenance tools (mobile OSes block most of those).
 - **FR-3** Shared encryption passphrase setup (matches desktop).
 
 **SMS sync (NFeat-122, Android)**
+- **FR-3b** Register the device (`devices/{uid}/{deviceId}`) and enumerate **SIM lines** via `SubscriptionManager` (`READ_PHONE_STATE`/`READ_PHONE_NUMBERS`) — capture `subscriptionId` + carrier + own number, with **manual per-SIM labeling** when the number is unprovisioned (dual-SIM aware). See F-044 §7.5.
 - **FR-4** Request `READ_SMS` with rationale; read via content resolver.
-- **FR-5** Encrypt + upsert to `sms/{uid}/messages` with dedup + high-water mark.
-- **FR-6** Sync triggers: manual / on-open / periodic (WorkManager); number allow/deny.
+- **FR-5** Encrypt + upsert to `sms/{uid}/{deviceId}/messages` (device-namespaced), tagging each with its `subscriptionId` (SIM line); dedup + high-water mark.
+- **FR-6** Sync triggers: real-time receiver + on-open + periodic (WorkManager); number allow/deny.
 
 **Clipboard sync (NFeat-123)**
 - **FR-7** Capture copy events where allowed (Android strategy; iOS foreground/manual push).

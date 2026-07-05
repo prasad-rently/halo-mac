@@ -115,6 +115,7 @@ F-044 decrypted cache ─► SmsClassifier ─► TransactionParser ─► markS
 - Locale/currency scope for v1 (India-first?).
 - AI-assisted parsing cost/privacy trade-off (cloud F-046 vs local F-047).
 - Handling refunds, transfers, duplicates, and non-transaction promo SMS.
+- **Multi-device/line aggregation (from F-044 §7.5):** reads across **all devices + SIM lines** by default (total spend), with an optional per-device/line filter. Edge case: the *same* bank SMS present on two devices (e.g. a SIM moved between phones) can double-count — the ±120 s dedup (D8) only matches within a device's stream, so **cross-device dedup** may need content-based matching (same amount+direction+near-time regardless of `deviceId`). Flag for the parser when >1 device syncs.
 
 ## 10. Execution Plan
 

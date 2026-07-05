@@ -17,10 +17,10 @@ their own Firebase project.
 ## 2. Goals / Non-Goals
 
 **Goals**
-- Mobile → Firebase one-way sync of SMS, keyed by phone number/thread.
-- Desktop console: threads list, message view, search, per-number filter.
+- Mobile → Firebase one-way sync of SMS, tagged by **device + SIM line + contact thread**.
+- Desktop console grouped by **Device → Line (own number + carrier) → contact thread**, supporting **N devices**, **dual-SIM**, and **any number of carriers**; plus search/filter and "All lines".
 - Fully configurable Firebase on both apps; zero default backend.
-- Incremental, deduplicated, resumable sync.
+- Incremental, deduplicated, resumable, **per-device** sync.
 
 **Non-Goals (v1)**
 - Sending/replying to SMS from desktop (read-only console).
@@ -54,6 +54,11 @@ their own Firebase project.
 | D15 | **Capture dual-SIM + richer fields** ✅ *adopt from ref* | Add `subscriptionId` (SIM), `threadId`, full `type` enum, `seen`, `serviceCenter`. See §7 schema. |
 | D16 | **1200 ms persistence delay after receiver trigger** ✅ *adopt from ref* | Avoids the real race where the SMS_RECEIVED broadcast fires before the row is queryable via ContentResolver. |
 | D17 | **SMS categorization via shared `SmsClassifier`** ✅ *adopt from Hamza* | Beyond by-number threads, label each message into 8 categories (OTP, Personal, Government, Transactional, Service, Promotional, DLT-suffix fallback, Uncategorized). Same classifier F-048 reuses for its transactional filter. See §7.4. |
+| D18 | **Namespace messages by `deviceId`** ✅ *required* | Path `sms/{uid}/{deviceId}/messages/{messageId}`. Android `smsId` is device-local, so `{smsId}_{timestamp}` collides across phones — device namespacing fixes it and enables **per-device delete-sync**. |
+| D19 | **Line identity = SIM `subscriptionId` → (own number + carrier)** ✅ *decided* | Each SIM is a "line". Capture the SIM's **own phone number** and **carrier/service provider**. Supports **dual-SIM** (2 lines per phone) and **N devices** → N×lines. |
+| D20 | **Manual SIM/line labeling fallback** ✅ *decided* | `SubscriptionInfo.number` is often empty (carriers don't provision it). During pairing/setup the user **labels each SIM** (own number + friendly name, e.g. "Personal · Airtel"). Auto-read when available, else manual. Needs `READ_PHONE_STATE`/`READ_PHONE_NUMBERS`. |
+| D21 | **Grouping hierarchy: Device → Line → contact thread** ✅ *decided* | Desktop groups by device, then by SIM line (own number + carrier), then the existing by-contact threads. Plus an **"All lines"** merged view. See §7.5. |
+| D22 | **Device & line registries in RTDB** ✅ *decided* | `devices/{uid}/{deviceId}` (name/platform/lastSeen) and `sms/{uid}/{deviceId}/lines/{subscriptionId}` (own-number label + carrier) so the desktop can render/filter lines without scanning messages. |
 
 ## 4. User Stories
 
@@ -63,12 +68,16 @@ their own Firebase project.
 - **US-4** As a user, my messages are encrypted so even my Firebase stores only ciphertext.
 - **US-5** As a user, re-running sync doesn't create duplicates and resumes where it left off.
 - **US-6** As a user, I can disable/enable the feature and wipe synced data.
+- **US-7** As a **dual-SIM** user, I see my two lines separately (each with its own number + carrier), and I can tell which SIM a message came in on.
+- **US-8** As a user with **multiple phones**, I see each device's messages grouped by device, and an "All lines" view that merges everything with source badges.
+- **US-9** As a user, I can **label each SIM** (own number + name like "Personal/Work") when my carrier doesn't expose the number.
 
 ## 5. Functional Requirements
 
 **Mobile (sync source — detailed in F-049)**
 - **FR-1** Request `READ_SMS` permission (Android) with clear rationale.
-- **FR-2** Read SMS via content resolver; map to the message schema.
+- **FR-0** **Register the device** in `devices/{uid}/{deviceId}` (stable install id + friendly name + platform) and **enumerate SIM lines** via `SubscriptionManager` (`READ_PHONE_STATE`/`READ_PHONE_NUMBERS`): capture `subscriptionId`, carrier, and own number **if provisioned**; otherwise prompt the user to **label each SIM** (own number + name). Write to `sms/{uid}/{deviceId}/lines/{subscriptionId}` (D19/D20/D22).
+- **FR-2** Read SMS via content resolver; map to the schema, tagging each with its `subscriptionId` (SIM/line) and writing under `sms/{uid}/{deviceId}/messages/…` (D18).
 - **FR-3** Encrypt body+address; `setValue` to RTDB at `sms/{uid}/{messageId}` (overwrite dedup).
 - **FR-4** Track a **high-water mark** (last synced date/id) for incremental sync.
 - **FR-5** Configurable sync trigger: manual, on-open, and/or periodic (WorkManager).
@@ -76,9 +85,10 @@ their own Firebase project.
 
 **Desktop (console)**
 - **FR-7** Read messages for the signed-in `uid` from RTDB, decrypt locally into the cache.
-- **FR-8** Render **Threads** (grouped by number, last message + unread count) and a **Messages** pane.
-- **FR-8b** **Categorize** each message via the shared `SmsClassifier` (D17); offer category filters/labels (OTP, Transactional, Promotional, …) in addition to by-number threading.
-- **FR-9** **Search** (full-text over decrypted cache) and **filter** by number/date/category.
+- **FR-8** Render **Threads** (grouped by contact number, last message + unread count) and a **Messages** pane.
+- **FR-8b** **Categorize** each message via the shared `SmsClassifier` (D17); offer category filters/labels (OTP, Transactional, Promotional, …) in addition to by-contact threading.
+- **FR-8c** **Group by Device → Line → contact thread** (D21): a device/line selector (e.g. "Pixel 8 · Personal · +91 98… · Airtel") scoping the thread list, plus an **"All lines"** merged view. Threads deduped across lines by contact where sensible, but line provenance shown.
+- **FR-9** **Search** (full-text over decrypted cache) and **filter** by contact/date/category **and by device/line**.
 - **FR-10** Live updates via RTDB `.observe` (`child_added`/`value`) listener; **polling fallback** if unavailable.
 - **FR-11** Pagination for large histories (lazy-load older messages).
 - **FR-12** "Wipe synced data" action (deletes `sms/{uid}` docs) with confirmation.
@@ -106,23 +116,35 @@ Android device                Firebase RTDB (user-owned)       macOS desktop
 └───────────────┘             └──────────────────────┘         └───────────────┘
 ```
 
-**RTDB node** `sms/{uid}/{messageId}` — `messageId = "{smsId}_{timestamp}"` (D14), written with `setValue` (idempotent overwrite):
+**RTDB layout** (device-namespaced — D18/D22):
+```
+devices/{uid}/{deviceId}                     → { name:"Pixel 8", platform:"android", lastSeen }
+sms/{uid}/{deviceId}/lines/{subscriptionId}  → { label:"Personal", ownNumberEnc, carrier:"Airtel" }   (D19/D20)
+sms/{uid}/{deviceId}/messages/{messageId}    → message node below  ('messageId = {smsId}_{timestamp}', unique within a device)
+```
+
+**Message node** `sms/{uid}/{deviceId}/messages/{messageId}`, `setValue` (idempotent overwrite):
 ```json
 {
-  "addressEnc": "…",        // AES-GCM ciphertext (encrypted at rest)
+  "addressEnc": "…",        // AES-GCM ciphertext of the CONTACT number (the other party)
   "bodyEnc": "…",           // AES-GCM ciphertext
-  "threadKey": "hash(normalizedNumber)",
+  "threadKey": "hash(normalizedContactNumber)",  // groups by conversation (other party)
   "threadId": 12,           // native device thread id (D15)
+  "subscriptionId": 0,      // which SIM/line on THIS device received/sent it (D19); -1 unknown
   "date": 1720000000000,
   "type": 1,                // 1=inbox 2=sent 3=draft 4=outbox 5=failed 6=queued (D15)
   "read": true,
   "seen": true,             // (D15)
-  "subscriptionId": 0,      // SIM slot for dual-SIM; -1 unknown (D15)
   "serviceCenter": null,    // (D15, optional)
   "syncedAt": 1720000001000,
   "schema": 1
 }
 ```
+> **Identity axes.** A message is located by **`deviceId` → `subscriptionId` (line)
+> → `threadKey` (contact)**. `subscriptionId` links to the per-device `lines`
+> registry that carries the SIM's own number + carrier — so the desktop groups by
+> the user's *own* lines, not just by the contact. `ownNumber` is PII → encrypted
+> (or stored only as a user label).
 > Only `addressEnc`/`bodyEnc` are ciphertext; structural fields (ids, timestamps,
 > flags, SIM) stay plaintext so the desktop can thread/sort/paginate over its
 > **local decrypted cache** without decrypting on every scroll. `threadKey` is a
@@ -165,7 +187,15 @@ Ships in the user setup guide; scopes everything to the owner and indexes `date`
       "$uid": {
         ".read":  "auth != null && auth.uid === $uid",
         ".write": "auth != null && auth.uid === $uid",
-        ".indexOn": ["date"]
+        "$deviceId": {
+          "messages": { ".indexOn": ["date"] }
+        }
+      }
+    },
+    "devices": {
+      "$uid": {
+        ".read":  "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
       }
     },
     "meta": {
@@ -177,6 +207,7 @@ Ships in the user setup guide; scopes everything to the owner and indexes `date`
   }
 }
 ```
+(Owner-scoped across `sms/{uid}/{deviceId}/…`, `devices/{uid}`, and `meta/{uid}`; `date` indexed per device for range pulls.)
 (Read-only desktop is enforced app-side; rules stay symmetric so the same account works if two-way is added later. A stricter variant that only allows writes bearing a "phone" custom-claim is noted as a future hardening.)
 
 ### 7.3 Realtime Database cost (user's own account)
@@ -184,6 +215,35 @@ Ships in the user setup guide; scopes everything to the owner and indexes `date`
 - RTDB bills by **data downloaded + stored + simultaneous connections** (not per-doc reads like Firestore). Ciphertext-text payloads are small.
 - The one-time **backfill of a large history** (the reference saw ~40k messages) is the main spike — **warn + estimate** before first full sync, and let the user **cap history depth** (e.g., "last 90 days") and go deeper later.
 - Steady state is cheap: the desktop keeps a local cache and only receives `child_added` deltas via `.observe`. Well within the RTDB free tier for typical users; documented as *their* quota.
+
+### 7.5 Multi-device / multi-SIM grouping model
+
+Users have **N devices**, each with **1–2 SIMs (dual-SIM)**, each SIM on **any
+carrier** — so the console must group by the user's *own* lines, not only by the
+contacts they talk to.
+
+**Identity hierarchy (the grouping key):**
+```
+uid (the user)
+└─ device            (Pixel 8, OnePlus 12, …)            ← deviceId, from devices/{uid}
+   └─ line / SIM     (Personal +91 98… · Airtel,          ← subscriptionId → lines registry
+                      Work +91 90… · Jio)                    (own number + carrier + label)
+      └─ thread      (conversation with a contact number)  ← threadKey (hash of contact)
+         └─ message
+```
+
+**Why each axis exists:**
+- **Device** — namespaces `smsId` (device-local) so two phones never collide (D18); enables per-device delete-sync and "which phone" provenance.
+- **Line (SIM)** — the user's *own* number + carrier for that SIM. Dual-SIM = two lines on one device; the same person can have the *same contact* messaging both lines.
+- **Thread** — the existing by-contact grouping, now scoped within a line.
+
+**Desktop UI grouping styles (D21):**
+- **Sidebar / picker of lines:** each entry shows device + SIM label + own number + carrier, e.g. `Pixel 8 · Personal · +91 98xxx · Airtel`. Selecting one scopes the thread list to that line.
+- **"All lines" merged view:** every line combined; each thread/row badges its source line so provenance is never lost.
+- **Filters:** by device, by line/own-number, by carrier — composable with the category (§7.4) and search filters.
+- **Line management:** rename a line, set/correct its own number (fallback for empty `SubscriptionInfo.number`), hide a line.
+
+**Data sources:** the `devices/{uid}` and `sms/{uid}/{deviceId}/lines/*` registries (D22) let the desktop build the sidebar without scanning messages; message-level `subscriptionId` maps each message to its line.
 
 ### 7.4 SMS categorization (shared `SmsClassifier`, from *Hamza*)
 
