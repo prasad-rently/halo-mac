@@ -1,6 +1,6 @@
 # F-047 — On-Device AI & Custom RAG (NFeat-125)
 
-> **Status:** 🗓 Planned · **Platform:** Desktop (Apple Silicon primary)
+> **Status:** 🗓 Planned · **Platform:** Desktop (Apple Silicon only)
 > **Depends on:** none · **Related:** F-046 (shares the "AI" surface)
 
 ---
@@ -82,7 +82,7 @@ usage**. Runs fully offline. Shares F-046's module + agent loop, so a capable lo
 - **Privacy:** 100% offline for local backend; no telemetry of prompts/files.
 - **Performance:** first-token latency + tokens/sec surfaced; model load cached; RAG retrieval < ~1s for typical corpora.
 - **Resource safety:** memory/GPU guards; warn before loading a model too large for RAM.
-- **Hardware:** Apple Silicon primary; Intel path explicitly scoped (likely limited/unsupported).
+- **Hardware:** Apple Silicon **only** (MLX, D1); Intel unsupported (F-047 disabled, F-046 cloud still works).
 - **Extensibility:** new file parser / new model = additive.
 
 ## 7. Architecture
@@ -109,10 +109,10 @@ RAG:  Files ─► Parser(per-format) ─► Chunker ─► Embedder(local) ─�
 
 ## 9. Open Questions & Risks
 
-- **Runtime:** MLX vs llama.cpp/Metal vs Core ML — confirm via spike (perf, model availability, packaging size).
+- ~~Runtime~~ → **MLX** (D1); spike validates perf/packaging, not the choice.
 - Curated model list + licensing for redistribution/download links.
 - Embedding model choice + vector store (sqlite-vec vs custom) + on-disk index format.
-- Intel Mac support boundary (drop or CPU-only?).
+- ~~Intel support~~ → **dropped** (Apple Silicon only, D1).
 - App size / first-run download UX; where models live (App Group? Application Support?).
 - Sandbox (release) implications for large model files + compute.
 
