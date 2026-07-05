@@ -582,3 +582,32 @@ root/jailbreak or device manufacturer privileges:
 ---
 
 *Last updated: 2026-05-29 | Halo v2.1 baseline*
+
+---
+
+## 8. Halo Mobile App — Planned Feature Set (NFeat-122 / 123 / 127)
+
+> Added 2026-07 alongside the desktop upcoming-features briefing (see
+> `docs/FEATURE_ROADMAP.md` F-044 → F-050). The Halo Mobile app (F-049) is the
+> **device-side half** of several cross-platform features. **Docs only — no
+> implementation yet; each item to be specced after discussion.**
+
+### Guiding principle — Bring Your Own Backend (BYOB)
+All cloud features use the **user's own, configurable Firebase** project, set in
+mobile **and** desktop Settings. No shared/default backend — data stays in the
+user's account. This is the privacy guarantee for an open-source product.
+
+### Planned mobile features
+
+| NFeat | Feature | Mobile role | Desktop pair | Platform feasibility |
+|-------|---------|-------------|--------------|----------------------|
+| 122 | **Shared SMS Console** | Read device SMS (by number), sync to user's Firebase | F-044 (desktop console) | **Android:** feasible (`READ_SMS`, content resolver). **iOS:** ❌ no public SMS-read API → likely **Android-only** |
+| 123 | **Clipboard Sync** | Listen for copy events, publish to user's Firebase; receive remote items | F-045 (desktop clipboard) | **Android:** `ClipboardManager` change events (with foreground/limits post-Android 10). **iOS:** `UIPasteboard` has **no background change notifications** → constrained, likely manual/foreground only |
+| 127 | **HaloShare peer** | LocalSend v2.1 discovery + TLS transfer with desktop & other mobiles | F-050 (protocol extension) | **iOS:** needs Local Network entitlement + mDNS; background limits. **Android:** NSD/mDNS + background transfer limits |
+
+### Cross-platform blockers to resolve (discussion)
+- **SMS on iOS** — not readable; confirm whether F-044 mobile is Android-only or if an alternate ingestion exists.
+- **Clipboard listening** — iOS cannot observe pasteboard in background; Android tightened clipboard access in 10+. Define the realistic UX per platform.
+- **HaloShare discovery** — entitlements (iOS Local Network) and background execution limits on both OSes.
+- **Firebase config sharing** — smooth way to copy the same project credentials to desktop + mobile (e.g., QR pairing).
+- **Stack decision** — native per-platform vs. cross-platform (Flutter / React Native / KMP); see §7.
