@@ -28,11 +28,14 @@ interoperable with the official LocalSend apps.
 
 | # | Decision | Note |
 |---|----------|------|
-| D1 | **Reuse LocalSend v2.1** exactly | Desktop already speaks it (`Core/LocalShare`); mobile implements the same wire protocol. |
-| D2 | Mobile discovery via **mDNS/NSD + UDP multicast** | Matches LocalSend; platform channels on Flutter. |
+| D1 | **Reuse LocalSend v2.1** exactly | Desktop already speaks it (`Core/LocalShare`); mobile implements the same wire protocol natively (iOS may reuse the desktop Swift models). |
+| D2 | Mobile discovery via **mDNS/NSD + UDP multicast** | iOS Bonjour/Network.framework; Android NSD. |
 | D3 | **TLS** with the same handshake/pin model as desktop | Reuse `TLSManager` semantics. |
 | D4 | **Consent screen** on receive (mirror `ReceiveConsentView`) | User must accept incoming transfers. |
-| D5 | Interop with official LocalSend = **acceptance gate** | Protocol fidelity, not a Halo-only dialect. |
+| D5 | **Official LocalSend interop = hard requirement** ✅ *confirmed* | Full protocol fidelity, both directions, with the official app — not a Halo-only dialect. Expands the test matrix. |
+| D6 | **All directions in v1: desktop↔mobile + mobile↔mobile** ✅ *confirmed* | Symmetric protocol → phone↔phone is nearly free once the peer works. |
+| D7 | **OS share-sheet target** ✅ *confirmed* | Android **Sharesheet** target + iOS **Share Extension** — send a file to HaloShare from any app (Photos/Files/etc.), plus the in-app picker. |
+| D8 | **Background receive — Android yes; iOS best-effort** ✅ *confirmed (with caveat)* | Android: **foreground service** + notification keeps discovery/transfer alive. **iOS: best-effort only** — a suspended app can't reliably host a listener; degrades gracefully with a "tap notification to finish" affordance. See §9. |
 
 ## 4. User Stories
 
@@ -51,6 +54,9 @@ interoperable with the official LocalSend apps.
 - **FR-5** Cross-target interop: desktop↔mobile, mobile↔mobile, and Halo↔official LocalSend.
 - **FR-6** Handle transient network drops gracefully (match desktop behavior); clean up partials.
 - **FR-7** Keep device awake during transfer (power assertion equivalent), like desktop `TransferPowerAssertion`.
+- **FR-8** **Share-sheet target** (D7): Android Sharesheet + iOS Share Extension → send selected files to HaloShare from any app.
+- **FR-9** **Background receive** (D8): Android via a **foreground service** + notification; **iOS best-effort** (works while backgrounded, degrades when suspended — "tap to finish" notification).
+- **FR-10** **mobile↔mobile** transfers (D6), in addition to desktop↔mobile.
 
 ## 6. Non-Functional Requirements
 
@@ -79,12 +85,15 @@ as the cross-platform source of truth so mobile mirrors them exactly.
 - Interop verified with the official LocalSend app in both directions.
 - Network-drop mid-transfer cleans up partial files on both ends.
 - iOS Local Network entitlement + Android NSD function on real devices.
+- Send a file to HaloShare from the OS share sheet (Android + iOS).
+- Android receives while backgrounded (foreground service); iOS degrades gracefully when suspended (no crash, resumable/notified).
+- mobile↔mobile transfer works.
 
 ## 9. Open Questions & Risks
 
-- **iOS Local Network** permission/entitlement + Bonjour service declaration; background discovery limits.
+- **iOS background is the hard part (D8):** a suspended iOS app can't reliably host a listening server; plan the best-effort UX (persistent-connection window + local notification to resume). Not a solved guarantee.
 - **Android** NSD reliability across OEMs; background execution/foreground-service needs.
-- Whether to extract a **shared protocol reference** doc from the desktop impl to guarantee parity.
+- Extract a **shared protocol reference** from the desktop impl (Phase 0) to guarantee parity across desktop/iOS/Android and official LocalSend (D5).
 - File-save UX on mobile (scoped storage on Android; Files integration on iOS).
 - Multicast on some mobile networks/APs is blocked — fallback discovery?
 
