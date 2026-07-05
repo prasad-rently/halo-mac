@@ -19,7 +19,7 @@ the clipboard history on every other connected device.
 - Bi-directional sync of clipboard items across the user's devices.
 - Reuse the existing `ClipboardMonitor` + history UI; add a "synced" surface.
 - Configurable, user-owned Firebase (shared config with F-044).
-- Strong privacy: encrypt before upload; sensible exclusion of secrets.
+- Strong privacy: encrypt before upload; easy per-item exclude + one-tap purge (opt-in secret filter).
 
 **Non-Goals (v1)**
 - Syncing large binary/file payloads (text/URL/code first; images optional/deferred).
@@ -76,7 +76,7 @@ the clipboard history on every other connected device.
 
 ## 6. Non-Functional Requirements
 
-- **Privacy/Security:** encrypt-before-upload (D2); owner-only RTDB rules (same shape as F-044 §7.2); secrets excluded by default (D5); TTL limits exposure (D4).
+- **Privacy/Security:** encrypt-before-upload (D2); owner-only RTDB rules (F-044 §7.2). Nothing excluded by default (D5) — privacy leans on E2E encryption + easy per-item exclude & purge (D10). Retention bounded by the 500-item cap (D4).
 - **Performance:** publish is async/non-blocking on copy; listener merges without UI jank; respects the in-memory 500-item cap.
 - **Battery/network (mobile):** batched writes; sync cadence configurable.
 - **Correctness:** echo suppression prevents loops; last-writer-wins ordering by server timestamp.
@@ -99,17 +99,16 @@ Device B  ◄──────── insert into history ◄─ decrypt ◄─ 
   "kind": "text|url|code",
   "contentEnc": "…",          // AES-GCM ciphertext
   "createdAt": 1720000000000,
-  "expiresAt": 1720086400000,
   "schema": 1
 }
 ```
 
-**Desktop:** extend `ClipboardMonitor`/`ClipboardViewModel`; add `ClipboardSyncService` (actor: publish + subscribe + echo-suppress + TTL). Reuse `FirebaseRTDBClient` from foundations.
+**Desktop:** extend `ClipboardMonitor`/`ClipboardViewModel`; add `ClipboardSyncService` (actor: publish + subscribe + echo-suppress + cap-eviction; receive = history-only per D9). Reuse `FirebaseRTDBClient` from foundations.
 
 ## 8. Acceptance Criteria
 
 - Copy on device A appears in device B's history within seconds (listener) or the polling interval.
-- Cloud stores ciphertext only; secrets excluded per filter.
+- Cloud stores ciphertext only; sensitive filter excludes items only when the user enables it (D5).
 - No echo loops; no duplicates; 500-cap eviction (local + cloud).
 - Remote copies enter history only (active clipboard never auto-overwritten, D9).
 - Per-item exclude works; disable+purge clears local + cloud.
