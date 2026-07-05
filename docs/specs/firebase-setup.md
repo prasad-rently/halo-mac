@@ -146,8 +146,18 @@ with but keeps a manual OAuth-client step. **This is a decision to revisit (see 
 - **Provisioning model = in-app client-side assisted flow** ✅ — Halo runs the provisioning locally with the user's token; **no Halo-hosted infrastructure**, tokens never leave the user's machine (preserves the "Halo never touches your data" ethos). No one-click hosted service.
 - **Two-secret model** ✅ — auth credential (email + random password) is auto-managed (Keychain + carried in the pairing QR); the **E2E passphrase** (data secret) is user-held and never in the QR. (F-044 D11.)
 
-### Phase 0 spike (must validate before build)
-1. **firebase-ios-sdk on macOS** — RTDB + Email/Password Auth configured at **runtime** (`FirebaseApp.configure(options:)`), under sandbox + network entitlements.
-2. **Provisioning OAuth** — obtaining a `cloud-platform`/`firebase` token from a native app and the **app-verification** requirement (unverified-app cap/warning). Main risk to the assisted flow; fallback = guided wizard + automated rules deploy.
-3. **Identity Toolkit admin API** — enable Email/Password provider + create the auth user programmatically.
-4. **RTDB provisioning + rules PUT** via `firebasedatabase.googleapis.com` + rules REST.
+### Phase 0 spike (status)
+1. **firebase-ios-sdk on macOS** — ✅ **PASSED (2026-07).** Firebase 11.15.0
+   (`FirebaseDatabase` + `FirebaseAuth`) resolves + builds + links into the Halo
+   macOS app using **runtime** `FirebaseOptions` (no bundled plist). RTDB+Auth
+   chosen over Firestore also builds far lighter (no source gRPC/abseil). Code:
+   `Halo/Core/Cloud/FirebaseRTDBClient.swift`. (Release-sandbox network
+   entitlement still to confirm on the sandboxed build.)
+2. **Provisioning OAuth** — ⏳ pending (needs a Google account + app-verification
+   assessment). Main risk to the assisted flow; fallback = guided wizard.
+3. **Identity Toolkit admin API** — ⏳ pending (enable Email/Password + create auth user).
+4. **RTDB provisioning + rules PUT** — ⏳ pending (`firebasedatabase.googleapis.com` + rules REST).
+
+> **Also delivered in Phase 0:** `CryptoService` (PBKDF2 + AES-GCM, E2E) +
+> `CloudConfigStore` (Keychain) + `CloudModels` (runtime config + QR pairing),
+> all unit-tested — the shared `Halo/Core/Cloud` foundation for F-044/045/048.
