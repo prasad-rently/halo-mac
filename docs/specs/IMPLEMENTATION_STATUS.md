@@ -80,7 +80,13 @@ reused by F-044/045/048.
    - **Contact normalization** — `SMSSyncClient.normalizeContact` (keep leading `+` and digits, drop separators; alphanumeric DLT sender IDs kept verbatim) feeds the per-line `threadKey`, so one contact written in different formats no longer splits into multiple threads. Thread display uses the most-recent contact variant.
    - **"All lines" source badge** — thread rows show a "device · line" SIM badge when `selectedLineID == nil` (`SMSConsoleViewModel.isAllLines`/`sourceLabel`), keeping per-line threads distinguishable (a contact on two SIMs = two badged rows).
    - **Line subtitle polish** — `lineSubtitle` drops `Unknown`/`—` placeholders (undecryptable `ownNumberEnc` shows carrier/SIM slot instead of "Unknown · —") and appends "Sync off" when D29 sync is disabled.
-5. **Release-sandbox network entitlement** check (built Debug only). ← resume here
+5. ~~**Release-sandbox network entitlement** check~~ ✅ DONE:
+   - `com.apple.security.network.client` was **already present** in `Halo/Halo.entitlements` (added for signature-DB updates) — covers Firebase's outbound RTDB/Auth traffic under the App Sandbox. Firebase is client-only, so no `network.server` needed.
+   - **Added `keychain-access-groups`** (`$(AppIdentifierPrefix)com.halo.mac`) to the release entitlements: FirebaseAuth persists auth state to the Keychain and fails sign-in with `errSecMissingEntitlement (-34018)` under sandbox without it. It's also the default group for Halo's own `CloudConfigStore` items, so their unqualified `SecItem` queries keep resolving.
+   - Verified: `plutil -lint` OK; Debug→`Halo-Debug.entitlements` / Release→`Halo.entitlements` mapping correct; **Release configuration builds** with signing off.
+   - ⚠️ **Not runtime-verified** — the sandboxed signed app's actual Firebase sign-in needs App Store provisioning + real Firebase creds; couldn't exercise that here. Confirm on a real signed release build before shipping.
+
+**F-044 desktop is now feature-complete** (items 1–5 done). Remaining F-044 work is the S2 assisted-provisioning OAuth spike; then F-045/F-048/F-049.
 
 **Then:**
 - **S2 spike** — assisted provisioning OAuth + Google app-verification.
