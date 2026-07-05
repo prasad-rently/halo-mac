@@ -340,6 +340,7 @@ struct DetailView: View {
             case .ports:          PortManagerView()
             case .localShare:     LocalShareView()
             case .messages:       SMSConsoleView()
+            case .expenditure:    ExpenditureView()
             case .menuBarPreview: MenuBarPreviewView()
             }
         }

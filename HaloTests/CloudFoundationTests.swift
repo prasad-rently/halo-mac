@@ -261,3 +261,133 @@ struct ClipboardSyncCodecTests {
         else { Issue.record("expected .url content") }
     }
 }
+
+// MARK: - Expenditure parser + pipeline (F-048 — Hamza corpus)
+
+@Suite("TransactionParser")
+struct TransactionParserTests {
+    let pack = PatternPack.indiaDefault
+
+    private func ok(_ sender: String, _ body: String) -> ParsedTransaction? {
+        if case let .ok(t) = TransactionParser.parse(sender: sender, body: body,
+            messageId: "m", date: Date(), pack: pack) { return t }
+        return nil
+    }
+
+    @Test("Debit with UPI; balance without a currency token is ignored")
+    func basicDebit() {
+        let t = ok("CP-INDUSB-S", "A/C *XX3833 debited by Rs 1250.00 via UPI. Avl Bal:8420.10 -IndusInd")
+        #expect(t?.direction == .debit)
+        #expect(t?.amount == 1250.00)
+        #expect(t?.accountHint == "3833")
+    }
+
+    @Test("Balance amount WITH a currency token is dropped (nearest-to-verb wins)")
+    func dropsBalance() {
+        let t = ok("VK-HDFCBK-T", "Rs.1250.00 debited from A/C. Avl Bal Rs.8420.10")
+        #expect(t?.amount == 1250.00)
+    }
+
+    @Test("Nearest-to-verb chooses the transaction amount over an earlier one")
+    func nearestToVerb() {
+        let t = ok("VK-HDFCBK-T", "Rs.8420.10 is your reward. Rs.1250 debited for purchase")
+        #expect(t?.amount == 1250)
+    }
+
+    @Test("Credit is income")
+    func credit() {
+        let t = ok("VK-SBIINB-T", "Rs.5,000.00 credited to A/C XX1234")
+        #expect(t?.direction == .credit)
+        #expect(t?.amount == 5000)
+    }
+
+    @Test("Promotional -P sender is not a transaction")
+    func promoSender() {
+        #expect(ok("VM-AXISBK-P", "Rs.999 debited") == nil)
+    }
+
+    @Test("Non-bank sender is rejected (merchant in body from a bank still counts)")
+    func nonBankSender() {
+        #expect(ok("AMAZON", "Rs.500 debited") == nil)
+        #expect(ok("VK-HDFCBK-T", "Rs.500 spent at AMAZON on card")?.amount == 500)
+    }
+
+    @Test("Future-autopay announcement is excluded; actual execution counts")
+    func autopay() {
+        #expect(ok("VK-HDFCBK-T", "Rs.500 will be debited on 5th for SIP") == nil)
+        #expect(ok("VK-HDFCBK-T", "Rs.500 debited for SIP e-mandate")?.amount == 500)
+    }
+
+    @Test("Bug A: a fraud-report URL does not reject a real UPI debit")
+    func urlNotReject() {
+        let t = ok("VK-KOTAKB-T", "Rs.500 sent via UPI. Report fraud at http://kotak.com/x")
+        #expect(t?.direction == .debit)
+        #expect(t?.amount == 500)
+    }
+
+    @Test("Bug B: TXN RS is a debit verb for verb-less card txns")
+    func txnRsVerb() {
+        let t = ok("VK-HDFCBK-T", "Txn Rs.522 On Card XX11 At paytm")
+        #expect(t?.direction == .debit)
+        #expect(t?.amount == 522)
+    }
+
+    @Test("Verb but no currency amount → Unreadable")
+    func unreadable() {
+        if case .unreadable = TransactionParser.parse(sender: "VK-HDFCBK-T",
+            body: "Your account was debited today", messageId: "m", date: Date(), pack: pack) {} 
+        else { Issue.record("expected .unreadable") }
+    }
+
+    @Test("Category resolves from merchant/keyword")
+    func category() {
+        #expect(pack.category(merchant: "ZOMATO", body: "spent at zomato", direction: .debit) == "Food & Dining")
+        #expect(pack.category(merchant: nil, body: "credited salary", direction: .credit) == "Income")
+    }
+}
+
+@Suite("TransactionPipeline")
+@MainActor
+struct TransactionPipelineTests {
+    let pack = PatternPack.indiaDefault
+
+    private func msg(_ id: String, _ body: String, _ date: Date, sender: String = "VK-HDFCBK-T") -> SMSMessage {
+        SMSMessage(id: id, lineId: "L", contactNumber: sender, body: body, date: date,
+                   category: .transactional, read: true)
+    }
+
+    @Test("Self-transfer: same-day same-amount debit+credit is excluded from totals")
+    func selfTransfer() {
+        let day = Date()
+        let r = TransactionPipeline.run(messages: [
+            msg("a", "Rs.1000 debited via UPI", day),
+            msg("b", "Rs.1000 credited to A/C", day.addingTimeInterval(60))
+        ], pack: pack, overrides: .init())
+        let allTransfers = r.transactions.allSatisfy(\.isTransfer)
+        let noneCount = r.transactions.filter(\.countsTowardTotals).count
+        #expect(allTransfers)
+        #expect(noneCount == 0)
+    }
+
+    @Test("Near-duplicate: same amount+direction within window collapses to one")
+    func dedup() {
+        let day = Date()
+        let r = TransactionPipeline.run(messages: [
+            msg("a", "Rs.750 debited via UPI", day, sender: "VK-HDFCBK-T"),
+            msg("b", "Rs.750 debited via UPI", day.addingTimeInterval(30), sender: "VK-ICICIB-T")
+        ], pack: pack, overrides: .init())
+        let dupCount = r.transactions.filter(\.isDuplicate).count
+        let countable = r.transactions.filter(\.countsTowardTotals).count
+        #expect(dupCount == 1)
+        #expect(countable == 1)
+    }
+
+    @Test("Override: force-exclude removes a transaction")
+    func overrideExclude() {
+        var ov = ExpenditureOverrides(); ov.excludedIds = ["a"]
+        let r = TransactionPipeline.run(messages: [msg("a", "Rs.100 debited", Date())],
+                                        pack: pack, overrides: ov)
+        let isEmpty = r.transactions.isEmpty
+        #expect(isEmpty)
+    }
+}

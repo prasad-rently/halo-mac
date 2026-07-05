@@ -106,7 +106,20 @@ Cross-device clipboard sync reusing the F-044 cloud core (`FirebaseRTDBClient`, 
 - **Mobile:** F-045 rows already in `HALO_MOBILE_ROADMAP.md` (governance satisfied). Android = AccessibilityService (D7), iOS = foreground push — both land with **F-049**.
 - **Not done (deferred):** live 2-device round-trip (needs real Firebase + a phone); concealed-pasteboard-type detection at monitor time; images/Cloud Storage; security review before ship.
 
-Remaining cloud work: **F-048 expenditure** (reuse `Halo/Core/Cloud` + already-synced SMS), then **F-049 mobile** (fills both the SMS console and clipboard for real).
+## 7. F-048 Expenditure Tracker — desktop v1 DONE (2026-07)
+
+Approximate SMS→expenditure tracker over F-044's synced data. Deterministic Hamza pipeline, rules-only (D14). New `Halo/Features/Expenditure/` + `AppModule.expenditure`:
+- **`ExpenditureModels`** — `PatternPack` (Codable; embedded `indiaDefault` = the india-bank-sms.v1 lists/regexes, FR-12) + `ParsedTransaction`/`ParseOutcome`/`TransactionDirection` + category taxonomy (§12).
+- **`TransactionParser`** (pure enum) — §11.3 heuristics: `-P`/non-bank/exclude/promo rejects, earliest-verb direction, amount regex with **balance-drop + nearest-to-verb**, account tail + merchant → Ok/Unreadable/NotTransaction.
+- **`TransactionPipeline`** (pure) — classify(keep transactional)→parse→**self-transfers** (D7)→**dedup ±120s cross-device** (D8/D15)→categorize→overrides. Re-parse on load = delete-sync mirror (D10).
+- **`ExpenditureStore`** — force-include/exclude + re-categorize overrides (D9), persisted to UserDefaults (SQLite TxnStore deferred — re-parse gives the mirror).
+- **`ExpenditureViewModel`** — owns an `SMSSyncClient`, flattens `threads`→messages, runs pipeline, month aggregates (spent/received/net, `en-IN` ₹) + category breakdown + CSV export (FR-13).
+- **`ExpenditureView`** — month nav, "Approximate" label, summary cards, spend-by-category bars (click to filter), txn list with **source-SMS drill-in** + re-categorize/exclude + confidence/dup/transfer badges, unreadable tally.
+- **14 unit tests** (parser corpus incl. every documented Hamza bug fix: URL false-reject, TXN RS verb, balance-drop, nearest-to-verb, autopay; pipeline self-transfer/dedup/override) pass. Builds.
+- **Mobile:** F-048 row in `HALO_MOBILE_ROADMAP.md`; mobile parses device SMS directly (D16), lands with **F-049**.
+- **Deferred:** calendar-heatmap/weekday/year charts (§11.6 — did month summary + category breakdown), SQLite TxnStore, AI-assist (D14), live end-to-end over real F-044 data (needs a phone + real Firebase).
+
+Remaining cloud work: **F-049 mobile** (native Android/iOS — the real SMS + clipboard source that fills the desktop consoles).
 
 **Then:**
 - **S2 spike** — assisted provisioning OAuth + Google app-verification.
