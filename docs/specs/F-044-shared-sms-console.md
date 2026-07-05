@@ -30,17 +30,20 @@ their own Firebase project.
 
 ## 3. Decisions & Assumptions
 
-> **Confirmed 2026-07 (discussion rounds 1–2):** D1–D16 locked.
-> Encryption = client-side E2E with passphrase; scope = configurable, default
-> all; direction = read-only v1; **backend = Firebase Realtime Database**;
-> cadence = real-time receiver + periodic + on-open.
+> **Confirmed 2026-07 (discussion rounds 1–4):** D1–D28 locked.
+> Backend = **Firebase Realtime Database**; auth = **Google Sign-In**; encryption
+> = client-side E2E, **one shared key** across cloud features, **re-key by
+> wipe+re-sync** (phone is source of truth); **inbox only**, default backfill
+> **90 days**, cloud keeps everything, **mirror phone deletions**; read-only;
+> cadence = real-time receiver + periodic + on-open; grouping = **Device → SIM
+> line → per-line contact thread**; wipe = all/per-device/per-line.
 
 | # | Decision | Note |
 |---|----------|------|
 | D1 | **Android-only** SMS sync | iOS has no SMS-read API. Desktop console still works for any user with an Android sync source. |
 | D2 | **Firebase Realtime Database**, path `sms/{uid}/{messageId}` ✅ *confirmed* | Matches the SMSArchiver reference (proven, cheaper write path). `messageId = {smsId}_{timestamp}` (D14). Desktop searches/paginates over its **local decrypted cache** rather than server-side queries. |
 | D3 | **Read-only** desktop console in v1 ✅ *confirmed* | Reply/send is a large scope + carrier/permission concerns. Sync stays one-way. |
-| D4 | **Client-side E2E encryption** of message body + address ✅ *confirmed* | Passphrase-derived key (Argon2/PBKDF2 → AES-GCM). RTDB stores ciphertext only. **Passphrase loss = data unrecoverable** (documented to user; no escrow in v1). |
+| D4 | **Client-side E2E encryption** of message body + address ✅ *confirmed* | Passphrase-derived key (Argon2/PBKDF2 → AES-GCM). RTDB stores ciphertext only. **Passphrase loss is NOT fatal (D24 re-key):** the phone is the source of truth, so the user sets a new key, the cloud data is wiped, and the device re-syncs. No escrow needed. |
 | D5 | Sync is **one-way** (device → cloud → desktop) ✅ *confirmed* | Desktop never writes messages. |
 | D6 | Grouping by **normalized phone number** (E.164 where possible) | Threads keyed by contact number. |
 | D7 | **Sync scope: configurable, default all** ✅ *confirmed* | All SMS sync by default; user allow/deny list by sender/number. Also captures bank SMS for F-048. |
@@ -48,7 +51,7 @@ their own Firebase project.
 | D9 | **Text-only (SMS)** in v1 ✅ *confirmed* | MMS/attachments deferred (needs Cloud Storage). |
 | D10 | **Numbers, not contact names** in v1 ✅ *confirmed* | Avoids `READ_CONTACTS`. Optional contact-name resolution later. |
 | D11 | **One passphrase carried via QR pairing** ✅ *confirmed* | The desktop→mobile QR encodes Firebase config; the E2E passphrase is set once and shared through the same pairing step (see §7.1). |
-| D12 | **Stable shared auth (email/password), NOT anonymous** ✅ *decided* | SMSArchiver uses anonymous auth (per-install uid) because it's upload-only. Halo's desktop must **read the same uid**, so a stable cross-device identity is required. See §11. |
+| D12 | **Stable shared auth = Google Sign-In (OAuth), NOT anonymous** ✅ *confirmed* | Both phone + desktop sign in with the user's Google account → same `uid`. (SMSArchiver's anonymous auth mints a per-install uid and can't be shared.) Needs an OAuth client in the user's Firebase project (documented in setup). |
 | D13 | **Local offline queue + flush-first** ✅ *adopt from ref* | Mirror SMSArchiver's Room-queue pattern: on upload failure, queue locally; each sync flushes the queue before uploading new. Resilience against flaky networks. |
 | D14 | **`documentId = smsId_timestamp`, write-overwrite dedup** ✅ *adopt from ref* | Proven idempotent dedup (`setValue`/`setData` overwrites). Preferred over hashing body (survives identical bodies; `id` alone is unsafe since Android reuses SMS ids after deletion). |
 | D15 | **Capture dual-SIM + richer fields** ✅ *adopt from ref* | Add `subscriptionId` (SIM), `threadId`, full `type` enum, `seen`, `serviceCenter`. See §7 schema. |
@@ -59,6 +62,12 @@ their own Firebase project.
 | D20 | **Manual SIM/line labeling fallback** ✅ *decided* | `SubscriptionInfo.number` is often empty (carriers don't provision it). During pairing/setup the user **labels each SIM** (own number + friendly name, e.g. "Personal · Airtel"). Auto-read when available, else manual. Needs `READ_PHONE_STATE`/`READ_PHONE_NUMBERS`. |
 | D21 | **Grouping hierarchy: Device → Line → contact thread; threads are per-line** ✅ *decided* | Desktop groups by device, then SIM line (own number + carrier), then by-contact threads. **Thread identity = (deviceId, subscriptionId, contactNumber)** — a contact texting both SIMs = **two separate threads**, never merged, even in "All lines". See §7.5. |
 | D22 | **Device & line registries in RTDB** ✅ *decided* | `devices/{uid}/{deviceId}` (name/platform/lastSeen) and `sms/{uid}/{deviceId}/lines/{subscriptionId}` (own-number label + carrier) so the desktop can render/filter lines without scanning messages. |
+| D23 | **Inbox only** in v1 ✅ *confirmed* | Sync received messages only (`type = 1`). Threads show the incoming side; sent-message sync deferred. Also keeps F-048 (bank alerts are inbound) fully covered. |
+| D24 | **Re-key = wipe + re-sync** (not escrow) ✅ *confirmed* | The device SMS store is the **source of truth**; the cloud is a derived, encrypted extension. Forgotten passphrase → set a new key → **wipe `sms/{uid}` (and device subtrees)** → devices re-sync from their inboxes under the new key. Same flow doubles as key-rotation. No recovery key needed. |
+| D25 | **Mirror phone deletions (periodic reconcile)** ✅ *confirmed* | Phone is source of truth: a periodic full reconcile compares the device inbox to `sms/{uid}/{deviceId}` and **removes cloud/desktop entries no longer on the device** (Hamza replaceAll model, scoped per device). Real-time receiver handles adds; reconcile handles deletes. |
+| D26 | **Cloud keeps everything (no TTL)** ✅ *confirmed* | The 90-day figure (D-history) is only the *initial* backfill depth; thereafter the cloud retains all synced (still-on-phone) messages indefinitely — the user's own quota. Deletions still propagate via D25. |
+| D27 | **One shared E2E key across cloud features (F-044 + F-045)** ✅ *confirmed* | A single passphrase/key set once at pairing protects SMS and clipboard alike. Simpler UX; both live in the same user's Firebase. |
+| D28 | **Wipe granularity: all / per-device / per-line** ✅ *confirmed* | Wipe everything, one device's subtree (retire an old phone), or a single SIM line. |
 
 ## 4. User Stories
 
@@ -78,6 +87,8 @@ their own Firebase project.
 - **FR-1** Request `READ_SMS` permission (Android) with clear rationale.
 - **FR-0** **Register the device** in `devices/{uid}/{deviceId}` (stable install id + friendly name + platform) and **enumerate SIM lines** via `SubscriptionManager` (`READ_PHONE_STATE`/`READ_PHONE_NUMBERS`): capture `subscriptionId`, carrier, and own number **if provisioned**; otherwise prompt the user to **label each SIM** (own number + name). Write to `sms/{uid}/{deviceId}/lines/{subscriptionId}` (D19/D20/D22).
 - **FR-2** Read SMS via content resolver; map to the schema, tagging each with its `subscriptionId` (SIM/line) and writing under `sms/{uid}/{deviceId}/messages/…` (D18).
+- **FR-2b** **Inbox only** (`type=1`, D23). Default backfill **last 90 days**, with a control to extend older history on demand.
+- **FR-2c** **Periodic reconcile (D25):** on a schedule, full-compare the device inbox to the cloud subtree and delete cloud entries absent from the device (mirrors phone deletions).
 - **FR-3** Encrypt body+address; `setValue` to RTDB at `sms/{uid}/{messageId}` (overwrite dedup).
 - **FR-4** Track a **high-water mark** (last synced date/id) for incremental sync.
 - **FR-5** Configurable sync trigger: manual, on-open, and/or periodic (WorkManager).
@@ -91,7 +102,8 @@ their own Firebase project.
 - **FR-9** **Search** (full-text over decrypted cache) and **filter** by contact/date/category **and by device/line**.
 - **FR-10** Live updates via RTDB `.observe` (`child_added`/`value`) listener; **polling fallback** if unavailable.
 - **FR-11** Pagination for large histories (lazy-load older messages).
-- **FR-12** "Wipe synced data" action (deletes `sms/{uid}` docs) with confirmation.
+- **FR-12** "Wipe synced data" — **all / per-device / per-line** (D28), with confirmation.
+- **FR-12b** **Re-key** action (D24): set a new passphrase → wipe cloud SMS → trigger re-sync from devices. Doubles as key rotation. No data loss (source is the phone).
 
 **Config (both)**
 - **FR-13** Firebase config + encryption passphrase set in Settings (per foundations).
@@ -132,7 +144,7 @@ sms/{uid}/{deviceId}/messages/{messageId}    → message node below  ('messageId
   "threadId": 12,           // native device thread id (D15)
   "subscriptionId": 0,      // which SIM/line on THIS device received/sent it (D19); -1 unknown
   "date": 1720000000000,
-  "type": 1,                // 1=inbox 2=sent 3=draft 4=outbox 5=failed 6=queued (D15)
+  "type": 1,                // inbox only in v1 (D23); field kept for future sent-sync
   "read": true,
   "seen": true,             // (D15)
   "serviceCenter": null,    // (D15, optional)
@@ -162,19 +174,19 @@ config** (which project) and the **E2E passphrase** (how to decrypt). Both are
 established once, on the desktop, and carried to the phone via **QR pairing**.
 
 ```
-1. Desktop → Settings → Cloud (Firebase): user pastes Firebase config + signs in (Firebase Auth).
+1. Desktop → Settings → Cloud (Firebase): user pastes Firebase config + signs in with Google (OAuth).
 2. Desktop → sets an E2E passphrase. Key = Argon2id(passphrase, salt).  Salt stored in the user's
    RTDB at meta/{uid} (public-ish; salt is not secret). Passphrase itself never stored anywhere.
-3. Desktop shows a PAIRING QR = { firebaseConfig, uid hint, salt, checksum }  — NOT the passphrase.
-4. Phone scans QR → gets Firebase config + salt → signs in → user TYPES the same passphrase on the
-   phone once → derives the identical key. A test record confirms the key matches (decrypt check).
+3. Desktop shows a PAIRING QR = { firebaseConfig, salt, checksum }  — NOT the passphrase.
+4. Phone scans QR → gets Firebase config + salt → signs in with the SAME Google account → user TYPES
+   the same passphrase on the phone once → derives the identical key. A test record confirms it matches.
 5. Both devices now hold the same AES-GCM key; neither the QR nor Firebase ever carried the passphrase.
 ```
 
 Key points:
-- **The passphrase is never transmitted or stored** — only the non-secret salt travels in the QR. The user re-types the passphrase on the phone. This keeps it a true zero-knowledge key even against someone who films the QR.
-- Losing the passphrase = unrecoverable data (D4). The desktop shows this warning at setup and offers to store the passphrase in the **macOS Keychain** for convenience (device-local only).
-- **Key rotation:** changing the passphrase re-encrypts new messages under the new key; old ciphertext stays under the old key (documented; full re-encryption is a later enhancement).
+- **The passphrase is never transmitted or stored** — only the non-secret salt travels in the QR. The user re-types the passphrase on the phone. Zero-knowledge even against someone who films the QR.
+- **Passphrase loss is recoverable by re-key (D24), because the phone is the source of truth.** Flow: set a new passphrase → **wipe the cloud SMS data** (`sms/{uid}` + device subtrees) → each device **re-syncs from its inbox** under the new key. The original SMS on the phone are never touched — the cloud is just a derived, encrypted extension of them. The desktop still offers optional **macOS Keychain** storage for convenience.
+- **Key rotation** uses the same wipe-and-re-sync path, so there's never mixed-key ciphertext to reconcile.
 
 ### 7.2 Realtime Database security rules (deployable)
 
@@ -213,8 +225,8 @@ Ships in the user setup guide; scopes everything to the owner and indexes `date`
 ### 7.3 Realtime Database cost (user's own account)
 
 - RTDB bills by **data downloaded + stored + simultaneous connections** (not per-doc reads like Firestore). Ciphertext-text payloads are small.
-- The one-time **backfill of a large history** (the reference saw ~40k messages) is the main spike — **warn + estimate** before first full sync, and let the user **cap history depth** (e.g., "last 90 days") and go deeper later.
-- Steady state is cheap: the desktop keeps a local cache and only receives `child_added` deltas via `.observe`. Well within the RTDB free tier for typical users; documented as *their* quota.
+- **Default backfill = last 90 days** (D-history), extendable on demand — keeps the first-sync cost small on the user's account. The one-time backfill of a *large* history (the reference saw ~40k messages) is the main spike, so pulling older history warns + estimates first.
+- Steady state is cheap: the desktop keeps a local cache and only receives `child_added` deltas via `.observe`. The cloud **keeps everything** (no TTL, D26) so storage grows over time — the user's own quota; a periodic **reconcile** (D25) also removes anything deleted on the phone.
 
 ### 7.5 Multi-device / multi-SIM grouping model
 

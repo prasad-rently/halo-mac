@@ -117,7 +117,7 @@ Device B  ◄──────── insert into history ◄─ decrypt ◄─ 
 - **Android capture — RESOLVED (D7):** AccessibilityService (proven by SMSArchiver). Remaining risk is **Play Store policy**: accessibility services for non-accessibility use are heavily scrutinised and may block store distribution → plan for F-Droid/sideload, and a clear in-app rationale + toggle.
 - Sensitive detection heuristics — false negatives could leak secrets; conservative defaults.
 - Multi-device ordering + rapid-copy bursts — debounce strategy (content-hash dedup D8 helps).
-- Shared passphrase across F-044/F-045 — one key for all cloud data vs. per-feature (leaning one shared key via the same pairing).
+- Shared passphrase across F-044/F-045 — **decided: one shared key** for all cloud features, set once via the F-044 pairing.
 
 ### Reference (SMSArchiver clipboard)
 `~/Github/SMSArchiver` ships a working Android clipboard sync: `ClipboardAccessibilityService` (background reads via system-trust), `ClipboardMonitorService` (foreground fallback, returns null on 10+ — kept only for pre-10), `lastContentHash` dedup, text+image content types, and a `ClipboardUploadWorker` (WorkManager + backoff) writing to RTDB. F-045's Android half ports this directly; the desktop half is new (built on Halo's existing `ClipboardMonitor`).

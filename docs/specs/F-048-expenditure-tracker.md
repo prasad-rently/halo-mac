@@ -46,6 +46,10 @@ design, since it infers from SMS rather than bank APIs.
 | D9 | **User overrides** (force-include / force-exclude / exclude sender-core) ✅ *adopt* | Precedence: per-message id > sender-pattern > automatic rules. Persisted. |
 | D10 | **On-device SQLite mirror with delete-sync** ✅ *adopt* | `replaceAll` on each load mirrors the current inbox (deleted SMS drop out); fallback to cache if source unreadable. |
 | D11 | "Approximate" clearly labeled; **confidence + source-SMS drill-in** | Every figure traces back to its message. |
+| D12 | **Spend categorization (merchant→category)** ✅ *confirmed* | Beyond expense/income, map merchant/keywords to categories (Food, Shopping, Bills, Travel, Transfers, …) with **user re-categorization** persisted. Adds "spend by category" on top of Hamza. |
+| D13 | **India-first (INR), pack-extensible** ✅ *confirmed* | Ship the proven India/UPI pattern pack as v1; the pack-driven design (FR-12) lets other locales/currencies be added later. |
+| D14 | **Rules-only in v1; AI-assist deferred** ✅ *confirmed* | Deterministic, offline Hamza pipeline only. No F-046/F-047 dependency in v1; AI fallback for unmatched formats is a later enhancement. |
+| D15 | **Cross-device content dedup** ✅ *confirmed* | Dedup by amount+direction+near-time **regardless of `deviceId`**, so the same bank SMS synced from two phones (shared SIM) counts once. Extends the within-device ±120 s rule (D8).
 
 ## 4. User Stories
 
@@ -61,13 +65,14 @@ design, since it infers from SMS rather than bank APIs.
 - **FR-2** Reject non-transactions: `-P`/non-bank senders, exclude/promo words, future-autopay (§11.3). Bare URLs are **not** rejects.
 - **FR-3** Direction via earliest debit/credit verb; **amount** via currency regex with **balance-drop** + **nearest-to-verb** selection; emit `Ok/Unreadable/NotTransaction` (§11.3, D5/D6).
 - **FR-4** Extract account tail + best-effort merchant.
+- **FR-4b** **Categorize spend** (D12): merchant/keyword → category (Food/Shopping/Bills/Travel/…); user can re-categorize, persisted; drives the category breakdown.
 - **FR-5** **markSelfTransfers** (same-day, same-amount debit+credit) → excluded from totals, shown as ⇄ Transfer (D7).
-- **FR-6** **Near-duplicate dedup** (same amount+direction ≤120 s) (D8).
+- **FR-6** **Near-duplicate dedup** — within-device (≤120 s, D8) **and cross-device** (same amount+direction+near-time regardless of deviceId, D15).
 - **FR-7** **User overrides**: force-include / force-exclude / exclude sender-core, precedence id > sender > auto, persisted, badged (D9).
 - **FR-8** **TxnStore** SQLite mirror: `replaceAll` on load (delete-sync), fallback to cache if source unreadable (D10).
 - **FR-9** Aggregations: month `spent/received/net` (transfers skipped, `en-IN` grouping), **calendar heatmap**, **weekday chart**, **year view** (§11.6).
 - **FR-10** Confidence flag + **source-SMS drill-in** for every figure; list `Unreadable` for review.
-- **FR-11** Optional AI-assisted parse for unmatched formats (F-046 cloud / F-047 local), user-enabled.
+- **FR-11** *(Deferred, D14)* AI-assisted parse for unmatched formats (F-046/F-047) — post-v1 enhancement, not shipped in v1.
 - **FR-12** Data-driven **pattern packs** (verbs/rejects/senders) — add a bank without code changes. Ships the ported [`india-bank-sms.v1.json`](pattern-packs/india-bank-sms.v1.json) (exact Hamza lists + regexes).
 - **FR-13** Export (CSV) of parsed transactions.
 
@@ -111,9 +116,9 @@ F-044 decrypted cache ─► SmsClassifier ─► TransactionParser ─► markS
 ## 9. Open Questions & Risks
 
 - Hard dependency on F-044 — the tracker is empty without it. Acceptable ordering.
-- Parsing accuracy varies wildly by bank/format; how much *Hamza* pattern set to adopt/port.
-- Locale/currency scope for v1 (India-first?).
-- AI-assisted parsing cost/privacy trade-off (cloud F-046 vs local F-047).
+- ~~How much Hamza pattern set to adopt~~ → **all of it, India-first** (D13).
+- ~~Locale/currency scope~~ → **India-first (INR), pack-extensible** (D13).
+- ~~AI-assisted parsing~~ → **rules-only in v1** (D14); AI deferred.
 - Handling refunds, transfers, duplicates, and non-transaction promo SMS.
 - **Multi-device/line aggregation (from F-044 §7.5):** reads across **all devices + SIM lines** by default (total spend), with an optional per-device/line filter. Edge case: the *same* bank SMS present on two devices (e.g. a SIM moved between phones) can double-count — the ±120 s dedup (D8) only matches within a device's stream, so **cross-device dedup** may need content-based matching (same amount+direction+near-time regardless of `deviceId`). Flag for the parser when >1 device syncs.
 
