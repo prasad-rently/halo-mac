@@ -407,6 +407,7 @@ enum AppModule: String, CaseIterable, Identifiable {
     case actions
     case localShare
     case ports
+    case messages
     case menuBarPreview
 
     var id: String { rawValue }
@@ -414,7 +415,7 @@ enum AppModule: String, CaseIterable, Identifiable {
     /// The modules that appear in the "Modules" sidebar section and can be
     /// freely reordered by the user. Dashboard is always pinned to "Overview".
     static var reorderable: [AppModule] {
-        [.cleanup, .protection, .performance, .applications, .files, .clipboard, .actions, .ports, .localShare]
+        [.cleanup, .protection, .performance, .applications, .files, .clipboard, .actions, .ports, .localShare, .messages]
     }
 
     var title: String {
@@ -429,6 +430,7 @@ enum AppModule: String, CaseIterable, Identifiable {
         case .actions:       return "Actions"
         case .localShare:    return "HaloShare"
         case .ports:         return "Ports"
+        case .messages:      return "Messages"
         case .menuBarPreview: return "Menu Bar"
         }
     }
@@ -445,6 +447,7 @@ enum AppModule: String, CaseIterable, Identifiable {
         case .actions:       return "bolt.circle.fill"
         case .localShare:    return "antenna.radiowaves.left.and.right"
         case .ports:         return "network.badge.shield.half.filled"
+        case .messages:      return "message.fill"
         case .menuBarPreview: return "menubar.rectangle"
         }
     }
@@ -461,6 +464,7 @@ enum AppModule: String, CaseIterable, Identifiable {
         case .actions:       return [Color(hex: "#2a1a0e"), Color(hex: "#3a1e08")]
         case .localShare:    return [Color(hex: "#0e2a3a"), Color(hex: "#1a3a4a")]
         case .ports:         return [Color(hex: "#0e3a2a"), Color(hex: "#1a4a3a")]
+        case .messages:      return [Color(hex: "#0e2440"), Color(hex: "#14315e")]
         case .menuBarPreview: return [Color(hex: "#1a2a3a"), Color(hex: "#0e1f30")]
         }
     }
