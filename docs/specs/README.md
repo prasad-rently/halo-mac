@@ -16,6 +16,7 @@ it opens with a Requirements Specification and closes with an Execution Plan.
 |-----|----|-------|---------|----------|
 | [00-foundations.md](00-foundations.md) | — | — | Cross-cutting architecture (BYOB Firebase, security, mobile stack, AI) | — |
 | [firebase-setup.md](firebase-setup.md) | — | — | Runtime config (no rebuild) + backend-provisioning automation feasibility | — |
+| [BUILD_PLAN.md](BUILD_PLAN.md) | — | — | Cross-feature execution sequence, spikes, milestones, critical path | — |
 | [F-044-shared-sms-console.md](F-044-shared-sms-console.md) | F-044 | 122 | Shared SMS Console | Desktop + Mobile |
 | [F-045-clipboard-sync.md](F-045-clipboard-sync.md) | F-045 | 123 | Cross-Device Clipboard Sync | Desktop + Mobile |
 | [F-046-ai-querying.md](F-046-ai-querying.md) | F-046 | 124 | AI Querying — Cloud Providers | Desktop |
