@@ -400,3 +400,80 @@ reader**, which forces three upgrades:
 - **FR-16** Mobile: apply a **≥1200 ms delay** after a `SMS_RECEIVED` trigger before querying the provider (D16).
 - **FR-17** Mobile: capture **`subscriptionId` (SIM)**, `threadId`, full `type`, `seen`, `serviceCenter` (D15).
 - **FR-18** Mobile: real-time `SmsReceiver` → immediate worker, **in addition to** periodic + on-open (proposed cadence refinement).
+
+---
+
+## 13. Desktop implementation blueprint
+
+Concrete component map for the macOS side, following Halo conventions (actors for
+concurrent/IO work; `@MainActor` ViewModels owned by views as `@StateObject`;
+background→main via `MainActor.run`; new module in `AppModule`).
+
+### 13.1 New module + files
+
+```
+AppModule.smsConsole            // new sidebar module (title "Messages", SF Symbol "message.fill")
+
+Halo/Core/Cloud/                 (shared across F-044/F-045/F-048)
+├─ FirebaseRTDBClient.swift      actor — runtime FirebaseApp.configure(options:), auth, .observe, read/remove
+├─ FirebaseProvisioningService.swift  actor — assisted provisioning (REST, §13.4)
+├─ CloudConfigStore.swift        Keychain-backed config + auth credential storage
+├─ CryptoService.swift           Argon2id KDF + AES-GCM encrypt/decrypt (final class, @unchecked Sendable)
+└─ CloudSetupViewModel.swift     @MainActor — wizard state (provision → passphrase → QR)
+
+Halo/Features/SMSConsole/
+├─ SMSSyncClient.swift           actor — subscribe sms/{uid}/*, decrypt, upsert cache, reconcile deletes
+├─ SMSLocalCache.swift           actor — SQLite (decrypted) : messages, lines, devices; search/paginate
+├─ SMSConsoleViewModel.swift     @MainActor ObservableObject — lines, threads, messages, filters
+├─ SMSConsoleView.swift          line sidebar + thread list + message pane (§7.5)
+├─ CloudSetupView.swift          the setup wizard (provision, passphrase, "Test connection")
+└─ PairingQRView.swift           renders the pairing QR (config + auth cred + salt)
+
+Halo/Features/Settings/
+└─ CloudSettingsPane.swift       Firebase status, re-key, wipe (all/device/line), per-line toggles, notif toggle
+```
+
+### 13.2 Responsibilities
+
+| Component | Does | Notes |
+|-----------|------|-------|
+| `FirebaseRTDBClient` | Configure Firebase at runtime; Email/Password sign-in; `.observe(child_added/removed)`; read/remove nodes | One instance, shared. Reused by F-045. |
+| `FirebaseProvisioningService` | Google-OAuth token → create project/RTDB/rules/auth-user → return config + auth cred | §13.4. Fallback: guided wizard. |
+| `CryptoService` | `key = Argon2id(passphrase, salt)`; `AES-GCM` seal/open of address+body | Salt from `meta/{uid}`; key cached in memory + optional Keychain. |
+| `SMSLocalCache` | Decrypted SQLite mirror for fast search/sort/paginate + offline | Indexed by (deviceId, subscriptionId, threadKey, date). |
+| `SMSSyncClient` | Merge remote adds into cache; run periodic **reconcile** to mirror deletes (D25) | Fires `AlertManager` on new msg (D30). |
+| `SMSConsoleViewModel` | Expose lines (from registries), threads (per-line), messages; drive filters/search | Pure `@MainActor`. |
+
+### 13.3 Data flow (desktop, steady state)
+
+```
+FirebaseRTDBClient.observe(sms/{uid})
+   └─ child_added ─► CryptoService.decrypt ─► SMSLocalCache.upsert ─► VM publishes ─► SMSConsoleView
+   └─ (timer) reconcile: diff device subtree vs cache ─► remove deletes (D25)
+   └─ new message ─► AlertManager.notify (if enabled, D30)
+SMSConsoleView: pick line (from devices/{uid} + lines) ─► cache query (per-line threads) ─► messages
+```
+
+### 13.4 Assisted-provisioning call sequence (`FirebaseProvisioningService`)
+
+Runs client-side with the user's OAuth token (never leaves the machine). All calls
+are REST to Google/Firebase Management APIs:
+
+```
+0. OAuth (browser, PKCE) → access token with cloud-platform scope.       [user consent, once]
+1. POST cloudresourcemanager.googleapis.com/v3/projects            → create GCP project
+2. POST firebase.googleapis.com/v1beta1/projects/{p}:addFirebase   → add Firebase
+3. POST firebasedatabase.googleapis.com/v1beta/.../instances       → create RTDB instance → databaseURL
+4. PUT  {databaseURL}/.settings/rules.json                         → deploy security rules (§7.2)
+5. PATCH identitytoolkit.googleapis.com/admin/v2/.../config        → enable Email/Password provider
+6. POST identitytoolkit .../accounts (or Admin)                    → create auth user (email + random pwd)
+7. POST firebase.googleapis.com/.../{platform}Apps + :getConfig    → register app, pull FirebaseOptions
+8. return { firebaseOptions, authEmail, authPassword } → CloudConfigStore (Keychain) → configure live app
+```
+On any failure → surface a clear error and offer the **guided-wizard fallback** (manual steps for the failed resource, automated rules deploy still applies).
+
+### 13.5 Reuse / sequencing
+
+- `Halo/Core/Cloud/*` is built **once** and shared by F-045 (clipboard) and F-048 (reads the cache).
+- Build order within F-044: Cloud core + provisioning (Phase 0/1) → `SMSLocalCache` + `SMSSyncClient` → `SMSConsoleView` + grouping → Settings (re-key/wipe/toggles) → notifications.
+- Existing Halo pieces reused: `AlertManager`/`AlertLog` (D30 notifications), Settings window, `AppModule` sidebar, DesignSystem components.
