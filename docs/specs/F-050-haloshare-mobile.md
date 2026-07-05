@@ -110,3 +110,24 @@ as the cross-platform source of truth so mobile mirrors them exactly.
 
 ### Rough effort
 Protocol reference ~1.5 d · Discovery ~3 d · Transfer ~4 d · Interop/hardening ~3 d. **~11.5 d** (within the F-049 mobile program; depends on the app shell existing).
+
+---
+
+## 11. Implementation blueprint
+
+Reuse the desktop `Core/LocalShare` **protocol contract** (LocalSend v2.1) as the
+shared spec; implement the mobile peer in Flutter + platform channels. No Firebase
+(LAN/peer only). Details settled at build.
+
+```
+lib/features/haloshare/
+├─ discovery.dart          platform channel → mDNS/NSD announce + browse (iOS Bonjour + Local Network entitlement; Android NSD)
+├─ transfer_client.dart    TLS send: pick files/peer, progress, cancel
+├─ transfer_server.dart    TLS receive: consent screen → save, progress, cancel
+├─ protocol.dart           LocalSend v2.1 messages — parity with desktop LocalShareModels
+├─ consent_view.dart       mirrors desktop ReceiveConsentView
+└─ keepalive.dart          foreground/power keep-alive during transfer
+```
+- **Interop gate:** verify desktop↔mobile, mobile↔mobile, and official-LocalSend both ways (protocol fidelity, not a Halo dialect).
+- iOS needs the **Local Network** entitlement + Bonjour usage strings; Android NSD + foreground-service for background transfers.
+- Build order: extract shared protocol reference → discovery → TLS transfer (send/receive + consent) → interop matrix + hardening.

@@ -264,3 +264,33 @@ assigned by merchant/keyword rules over the parsed transaction; unmatched → *O
 - Rules live in the **pattern pack** (data-driven, per-locale) so categories extend without code.
 - A transaction keeps its raw merchant; the category is a derived, overridable label.
 - Self-transfers (D7) are excluded from spend regardless of category.
+
+---
+
+## 13. Desktop + mobile implementation blueprint
+
+Follows Halo conventions; **reuses `Halo/Core/Cloud/*` and the F-044 decrypted
+cache** (no new backend). Details (exact category rules, chart widgets) settled at
+build time.
+
+### Desktop (`AppModule.expenditure`)
+```
+Halo/Features/Expenditure/
+├─ SmsClassifier.swift          shared with F-044 (§7.4) — keep TRANSACTIONAL
+├─ TransactionParser.swift      actor — reject lists + direction + amount heuristics → Ok/Unreadable/NotTransaction (§11.3)
+├─ TransactionPipeline.swift    actor — classify→parse→markSelfTransfers→dedup(±120s + cross-device D15)→overrides
+├─ Categorizer.swift            merchant/keyword → category (§12) + user overrides
+├─ TxnStore.swift               actor — SQLite mirror (replaceAll delete-sync, D10) over the F-044 cache
+├─ PatternPackLoader.swift      loads pattern-packs/india-bank-sms.v1.json (FR-12)
+├─ ExpenditureViewModel.swift   @MainActor — month/day/weekday/year aggregation
+└─ ExpenditureView.swift        summary cards + calendar heatmap + weekday + year + txn list + source-SMS drill-in
+```
+- **Input:** reads F-044's `SMSLocalCache` (already decrypted, per-device) — no direct RTDB access.
+- **Aggregation:** transfers skipped; `en-IN` grouping; category breakdown from `Categorizer`.
+
+### Mobile (D16 — Flutter, parses device SMS directly)
+- Reuses the **same pattern pack**; a Dart port of the pipeline reads the device inbox directly (Hamza-style), no F-044 dependency on mobile.
+- Shared taxonomy (§12) + pack keeps desktop/mobile results consistent.
+
+### Reuse / build order
+Pattern pack + parser (unit-tested vs a labeled corpus) → pipeline (transfers/dedup) → `Categorizer` → `TxnStore` over F-044 cache → `ExpenditureView`. Charts reuse the DesignSystem.

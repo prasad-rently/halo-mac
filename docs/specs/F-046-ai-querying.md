@@ -123,3 +123,28 @@ Keychain ◄─ API keys       Context: ClipboardMonitor / selection
 
 ### Rough effort
 Provider layer ~3 d · Query UI ~2 d · Context/quick-ask ~1.5 d · Hardening ~1.5 d. **~8 d.** (Can ship provider-by-provider.)
+
+---
+
+## 11. Implementation blueprint
+
+Shared **AI module** with F-047 (backend toggle: cloud provider ↔ local model).
+Details (provider list order, prompt templates) decided at build.
+
+```
+Halo/Features/AI/
+├─ AIProvider.swift            protocol — stream(messages, model) -> AsyncThrowingStream<String, Error>
+├─ Providers/
+│  ├─ AnthropicProvider.swift  Claude (default), Messages API streaming
+│  ├─ OpenAIProvider.swift
+│  └─ GeminiProvider.swift
+├─ AIKeyStore.swift            Keychain — per-provider API keys
+├─ AIContextProvider.swift     assemble clipboard/selection as context
+├─ AIViewModel.swift           @MainActor — owns request Task, appends stream, backend selector
+└─ AIView.swift                prompt + streamed answer + stop/copy/insert; quick-ask entry
+AppModule.ai                   new sidebar module (shared with F-047)
+```
+- Keys in **Keychain** (never logged/Sentry). Requests go only to the chosen provider (TLS).
+- **Claude first:** verify current model IDs against the Claude API reference at build (don't hardcode stale names).
+- Quick-ask entry reuses the existing picker pattern (⌘ shortcut / menu bar).
+- Build order: `AIProvider` + `AnthropicProvider` → `AIView` → context + quick-ask → OpenAI/Gemini → hardening.

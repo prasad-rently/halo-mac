@@ -82,9 +82,9 @@ Flutter app
 ├─ SMS module (Android)  ── platform channel ─► ContentResolver reader
 ├─ Clipboard module      ── platform channel ─► clipboard listener (OS-limited)
 ├─ HaloShare module      ── platform channel ─► NSD/mDNS + TLS (LocalSend v2.1)
-└─ FirebaseService (firestore + auth) + CryptoService (AES-GCM/Argon2)
+└─ FirebaseService (RTDB + Email/Password auth) + CryptoService (AES-GCM/Argon2)
 ```
-Uses the **same Firestore schemas** as F-044/F-045 (single source of truth in those specs).
+Uses the **same RTDB schemas + Email/Password auth** as F-044/F-045 (single source of truth in those specs).
 
 ## 8. Acceptance Criteria
 
@@ -128,3 +128,32 @@ Uses the **same Firestore schemas** as F-044/F-045 (single source of truth in th
 
 ### Rough effort
 Foundation ~5 d · SMS ~4 d · Clipboard ~4 d · HaloShare ~5 d · Hardening/release ~5 d. **~23 d** (new app; largest program item; parallelizes with desktop halves).
+
+---
+
+## 11. Implementation blueprint (Flutter)
+
+Single Dart codebase; platform channels for OS-specific bits. Mirrors the desktop
+schema/crypto exactly (shared contract in F-044/F-045). Details settled at build.
+
+```
+lib/
+├─ core/
+│  ├─ firebase_service.dart      runtime Firebase.initializeApp(options) + RTDB + Email/Password auth
+│  ├─ provisioning_service.dart  (optional) the mobile side usually inherits config via QR scan
+│  ├─ crypto_service.dart        Argon2id + AES-GCM — byte-identical to desktop CryptoService
+│  ├─ config_store.dart          secure storage (Keychain/Keystore)
+│  └─ pairing.dart               scan QR { config, authEmail, authPassword, salt } → sign in
+├─ features/
+│  ├─ settings/                  Firebase status, passphrase, per-line toggles
+│  ├─ sms/                       (Android) SubscriptionManager lines + SMS reader + reconcile (F-044)
+│  ├─ clipboard/                 capture (Android AccessibilityService / iOS foreground) + sync (F-045)
+│  ├─ expenditure/               Dart port of the parser over device SMS (F-048 D16, shared pattern pack)
+│  └─ haloshare/                 LocalSend v2.1 peer (F-050)
+└─ platform channels:
+   ├─ android: ContentResolver (SMS), SubscriptionManager, ClipboardAccessibilityService, NSD/mDNS
+   └─ ios:     Bonjour/Local Network, UIPasteboard (foreground)
+```
+- **Crypto parity is critical:** the Dart `crypto_service` must produce the same AES-GCM output as Swift so either app decrypts the other's data (shared key, F-044 D27). Cross-language test vectors required.
+- **Android-first** (SMS); iOS ships clipboard(limited) + HaloShare + SMS-viewer only.
+- Build order: app shell + firebase_service + pairing → SMS sync (validates F-044 e2e) → clipboard → HaloShare → expenditure → store-policy review.

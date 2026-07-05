@@ -137,3 +137,27 @@ RAG:  Files ─► Parser(per-format) ─► Chunker ─► Embedder(local) ─�
 
 ### Rough effort
 Spike ~3 d · Inference MVP ~5 d · Task helpers ~2 d · RAG ~5 d · Hardening ~3 d. **~18 d** (largest of the set; phase-gated on the spike).
+
+---
+
+## 11. Implementation blueprint
+
+Shares the **AI module** with F-046 (one UI, backend toggle). Gated on the MLX
+spike (§10 Phase 0). Details (curated model list, embedding model, vector store)
+decided at build.
+
+```
+Halo/Features/AI/            (shared module with F-046)
+├─ LocalInferenceEngine.swift  actor — wraps MLX: load/unload, stream generate, cancel, compute settings
+├─ ModelManager.swift          actor — curated models: download (progress), disk usage, delete, integrity
+├─ rag/
+│  ├─ RAGService.swift         actor — ingest→chunk→embed→retrieve→grounded prompt→answer+citations
+│  ├─ FileParsers.swift        per-format: PDF (PDFKit), DOCX, TXT/MD, code, CSV
+│  ├─ Embedder.swift           local embedding model
+│  └─ VectorStore.swift        SQLite (sqlite-vec) or on-disk index
+└─ (AIView/AIViewModel from F-046 gain: model picker, GPU/compute control, context-set mgmt)
+```
+- **Apple Silicon primary;** Intel path explicitly limited/unsupported (clear messaging).
+- Generation-only: generated scripts route to **Actions** with confirmation (never auto-run, D7).
+- Models stored in Application Support (not the sandbox container if size demands); guard RAM before load.
+- Build order: MLX spike → `ModelManager` + `LocalInferenceEngine` (chat) → task helpers → RAG pipeline → hardening.

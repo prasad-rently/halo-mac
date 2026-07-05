@@ -149,3 +149,28 @@ Device B  ◄──────── insert into history ◄─ decrypt ◄─ 
 
 ### Rough effort
 Desktop pub/sub ~3 d · Safety/TTL ~2 d · Mobile ~3 d (within F-049) · Hardening/review ~2 d. **~10 d** (assumes F-044 foundation exists).
+
+---
+
+## 11. Implementation blueprint
+
+**Reuses `Halo/Core/Cloud/*`** (FirebaseRTDBClient, CryptoService, CloudConfigStore,
+provisioning) built in F-044 §13 — F-045 adds only the clipboard glue. **One shared
+E2E key** (F-044 D27); **Email/Password auth**; **RTDB** backend.
+
+### Desktop
+```
+Halo/Features/ClipboardSync/
+├─ ClipboardSyncService.swift   actor — publish local items (encrypt) + observe remote + echo-suppress (deviceId) + TTL sweep
+└─ (extends existing ClipboardMonitor / ClipboardViewModel to mark synced items + source device)
+```
+- Publish: on new local item (not sensitive, D5) → `CryptoService.encrypt` → RTDB `clipboard/{uid}/{itemId}`.
+- Receive: `.observe(child_added)` → skip own `deviceId` (echo) → decrypt → insert into existing history (500 cap).
+- Settings: reuse the F-044 **Cloud** pane (config/pairing/key already shared); add sync toggle, TTL, image toggle, sensitive rules.
+
+### Mobile (Flutter)
+- **Android capture = AccessibilityService** (D7) + `lastContentHash` dedup (D8) → encrypt → RTDB; receive via `.observe`.
+- **iOS** = foreground/manual push + receive (platform limit).
+
+### Build order
+Cloud core (from F-044) → `ClipboardSyncService` publish/subscribe → sensitive filter + TTL → mobile capture. Security review before ship.
