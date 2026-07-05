@@ -126,6 +126,8 @@ F-049 is a native Android(Kotlin)+iOS(Swift) program (~23 d) that **can't be bui
 - **`HaloTests/CryptoParityTests.verify`** — the authority: re-checks the committed JSON against the real `CryptoService` (KDF re-derive == , ciphertext decrypts). Passes.
 - **`docs/specs/crypto-parity.md`** — the contract + Kotlin landmines (PBKDF2 UTF-8 via BouncyCastle not JCE `char[]`; NFC-first; GCM `nonce12‖ct‖tag16` layout, 128-bit tag, no AAD). iOS reuses the Swift core → parity-free.
 
+**Security review:** `docs/specs/security-review-cloud.md` — no HIGH/MEDIUM findings at ≥8 confidence; crypto/storage/paths sound. Two sub-threshold notes: optional CSV cell-prefix guard in `exportCSV()`; and (real-world) automate RTDB-rules deployment so users don't leave their DB in test mode — fold into F-049 assisted provisioning.
+
 **Remaining F-049 (native, next session / needs mobile tooling):** Phase 0 scaffold `android/`+`ios/` in the monorepo + extract `Halo/Core/Cloud` into a SwiftPM package iOS links; Kotlin `CryptoService`/`FirebaseService` (validate vs the vectors); QR pairing; Phase 1 Android SMS sync (validates F-044 e2e); Phase 2 clipboard; Phase 3 HaloShare (F-050). None buildable/verifiable in this macOS env.
 
 **Then:**
