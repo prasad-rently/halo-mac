@@ -18,12 +18,24 @@ runs against a **Firebase project the user creates and owns**.
 
 ### Configuration model
 
-- Desktop: **Settings → Cloud (Firebase)** pane. User pastes their Firebase
-  Web/Admin config (apiKey, projectId, appId, etc.) or uploads the
-  `google-services` / config JSON.
+> **Runtime config — no rebuild (hard requirement).** Halo ships **no** bundled
+> `GoogleService-Info.plist` / `google-services.json`. The released desktop and
+> mobile binaries are generic; the user's Firebase config is injected **at
+> runtime** via `FirebaseApp.configure(options:)` (desktop) /
+> `Firebase.initializeApp(options:)` (mobile). Open-source users **never
+> recompile Halo** to use their own backend. See [firebase-setup.md](firebase-setup.md).
+
+- Desktop: **Settings → Cloud (Firebase)** pane. User provides their Firebase
+  config (apiKey, projectId, appId, databaseURL, …) or uploads the config file —
+  and Halo configures the **live app** with it.
 - Mobile: same config in the mobile app's Settings.
-- **Pairing helper:** desktop can render a **QR code** encoding the config so the
+- **Pairing helper:** desktop renders a **QR code** encoding the config so the
   mobile app can scan it (and vice-versa), avoiding manual re-entry.
+- **Setup friction:** provisioning the backend (create project, RTDB, rules, auth)
+  is offered as an **in-app assisted flow** ("log in once → auto-provision"); a
+  guided wizard is the fallback. Full zero-interaction automation is **not**
+  possible (auth/billing/OAuth-client blockers) — see
+  [firebase-setup.md](firebase-setup.md) for the feasibility study.
 - Config stored in the **macOS Keychain** (desktop) / platform secure storage
   (mobile). Never written to plaintext prefs, never committed, never logged.
 - A **"Test connection"** action validates credentials + read/write before save.
