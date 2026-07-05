@@ -120,6 +120,7 @@
 		1A276975BC00655241248D7B /* DriveSpeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C310900DF7BB88C2E7AFC1B /* DriveSpeedView.swift */; };
 		3082B42695CF0998AA583106 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = D265B9320EDA1875C19961AD /* FirebaseDatabase */; };
 		428DD9830BBDEBECB1200590 /* SmokeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74D974CC4B2FB109632BF14A /* SmokeUITests.swift */; };
+		5953F30D7CA49FFA4883B414 /* SMSSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3086393C229A0E132307B6C /* SMSSyncClient.swift */; };
 		74CF1681EA0B483294AE1DE3 /* SMSConsoleViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABADB8F162C8E503F371B945 /* SMSConsoleViewModel.swift */; };
 		7FA28EC1DD42807C6EFD8148 /* SidebarReorderUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED172401B83B65197881BFC /* SidebarReorderUITests.swift */; };
 		879BABFA5A95F861A51AD596 /* FirebaseRTDBClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74790111414AABF80E296E4C /* FirebaseRTDBClient.swift */; };
@@ -134,8 +135,8 @@
 		AE6FACECB50C6D438440D382 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
 		B3BA45306DB919FF17FF62AC /* SMSConsoleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 949EBE6DE7B0C70F9518684A /* SMSConsoleView.swift */; };
 		BD934A0D464689E1FA0EC1F4 /* CryptoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEE2BFAEB9BE01F472B48AED /* CryptoService.swift */; };
-		BE72A6B11920079B794737AD /* MockSMSData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B63B7DC9D2CDFA71023BC48F /* MockSMSData.swift */; };
 		C3321CD3FE963BFE6E079AA0 /* CloudModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F726C8A8193AD0153FD18FF9 /* CloudModels.swift */; };
+		C5D7A353E701AF9A6A6A0ADF /* CloudSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBB30C8FE643DD82A09C9248 /* CloudSetupView.swift */; };
 		E661F24279DA76E6A603FD0B /* HaloTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0EE44FE16CD9C3F543F4CC0 /* HaloTests.swift */; };
 		EABEEEF5BBF1D9D3F61FB453 /* DriveSpeedTester.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4555BA206584E6C688FD51F1 /* DriveSpeedTester.swift */; };
 		FE2AA15AC1E4036EB9FD80EF /* DriveSpeedTesterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 626E37DCEBF96711B499810F /* DriveSpeedTesterTests.swift */; };
@@ -322,10 +323,11 @@
 		949EBE6DE7B0C70F9518684A /* SMSConsoleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSConsoleView.swift; sourceTree = "<group>"; };
 		94E717DB998E0BBF1AE83F94 /* HaloTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		ABADB8F162C8E503F371B945 /* SMSConsoleViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSConsoleViewModel.swift; sourceTree = "<group>"; };
-		B63B7DC9D2CDFA71023BC48F /* MockSMSData.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MockSMSData.swift; sourceTree = "<group>"; };
+		B3086393C229A0E132307B6C /* SMSSyncClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSSyncClient.swift; sourceTree = "<group>"; };
 		BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloSidebar.swift; sourceTree = "<group>"; };
 		D1749E8BBBF48CFF49E42B5A /* HaloTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D3824F98C3251B8B75207CE9 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
+		DBB30C8FE643DD82A09C9248 /* CloudSetupView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudSetupView.swift; sourceTree = "<group>"; };
 		DEE2BFAEB9BE01F472B48AED /* CryptoService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CryptoService.swift; sourceTree = "<group>"; };
 		E0191600A2A39E962DFBAF63 /* HelperClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HelperClientTests.swift; sourceTree = "<group>"; };
 		E0EE44FE16CD9C3F543F4CC0 /* HaloTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloTests.swift; sourceTree = "<group>"; };
@@ -620,9 +622,10 @@
 			isa = PBXGroup;
 			children = (
 				11E2E096AE5F0161298B622A /* SMSModels.swift */,
-				B63B7DC9D2CDFA71023BC48F /* MockSMSData.swift */,
 				ABADB8F162C8E503F371B945 /* SMSConsoleViewModel.swift */,
 				949EBE6DE7B0C70F9518684A /* SMSConsoleView.swift */,
+				B3086393C229A0E132307B6C /* SMSSyncClient.swift */,
+				DBB30C8FE643DD82A09C9248 /* CloudSetupView.swift */,
 			);
 			name = SMSConsole;
 			path = SMSConsole;
@@ -920,9 +923,10 @@
 				9B9F762E501E9A043923E03B /* CloudConfigStore.swift in Sources */,
 				879BABFA5A95F861A51AD596 /* FirebaseRTDBClient.swift in Sources */,
 				A1CCF4B6053B2C709D866F96 /* SMSModels.swift in Sources */,
-				BE72A6B11920079B794737AD /* MockSMSData.swift in Sources */,
 				74CF1681EA0B483294AE1DE3 /* SMSConsoleViewModel.swift in Sources */,
 				B3BA45306DB919FF17FF62AC /* SMSConsoleView.swift in Sources */,
+				5953F30D7CA49FFA4883B414 /* SMSSyncClient.swift in Sources */,
+				C5D7A353E701AF9A6A6A0ADF /* CloudSetupView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

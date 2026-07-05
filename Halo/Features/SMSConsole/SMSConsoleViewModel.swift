@@ -1,30 +1,47 @@
 import SwiftUI
+import Combine
 
 // MARK: - SMSConsoleViewModel  (F-044)
 //
-// Drives the desktop SMS console. In this preview it loads mock data; the real
-// implementation will read F-044's decrypted local cache (Halo/Core/Cloud).
+// Filter/selection state over the real cloud source (SMSSyncClient). No mock —
+// data comes from the user's own Firebase, decrypted locally.
 
 @MainActor
 final class SMSConsoleViewModel: ObservableObject {
-    @Published var devices: [SMSDevice]
-    @Published var lines: [SMSLine]
-    @Published private(set) var allThreads: [SMSThread]
+    let client = SMSSyncClient()
 
     @Published var selectedLineID: String?          // nil = "All lines"
     @Published var selectedThreadID: String?
     @Published var search = ""
-    @Published var categoryFilter: SMSCategory?      // nil = all categories
+    @Published var categoryFilter: SMSCategory?
 
-    /// Whether this is showing mock preview data (no cloud connected yet).
-    let isPreview: Bool
+    private var bag = Set<AnyCancellable>()
 
-    init(preview: Bool = true) {
-        self.isPreview = preview
-        self.devices = MockSMSData.devices
-        self.lines = MockSMSData.lines
-        self.allThreads = MockSMSData.threads()
-        self.selectedThreadID = allThreads.first?.id
+    init() {
+        // Re-publish the client's changes so the view updates on new cloud data.
+        client.objectWillChange
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+                self?.ensureSelection()
+            }
+            .store(in: &bag)
+    }
+
+    // MARK: Pass-through cloud state
+
+    var state: SMSSyncClient.State { client.state }
+    var isConfigured: Bool { client.isConfigured }
+    var devices: [SMSDevice] { client.devices }
+    var lines: [SMSLine] { client.lines }
+    var allThreads: [SMSThread] { client.threads }
+
+    func connect(passphrase: String) async { await client.connect(passphrase: passphrase) }
+    func refresh() async { await client.refresh() }
+
+    private func ensureSelection() {
+        if selectedThreadID == nil || !allThreads.contains(where: { $0.id == selectedThreadID }) {
+            selectedThreadID = filteredThreads.first?.id
+        }
     }
 
     // MARK: Derived
@@ -44,9 +61,7 @@ final class SMSConsoleViewModel: ObservableObject {
         .sorted { $0.lastDate > $1.lastDate }
     }
 
-    var selectedThread: SMSThread? {
-        allThreads.first { $0.id == selectedThreadID }
-    }
+    var selectedThread: SMSThread? { allThreads.first { $0.id == selectedThreadID } }
 
     func line(_ id: String) -> SMSLine? { lines.first { $0.id == id } }
     func device(_ id: String) -> SMSDevice? { devices.first { $0.id == id } }
@@ -56,29 +71,15 @@ final class SMSConsoleViewModel: ObservableObject {
     }
     var totalUnread: Int { allThreads.reduce(0) { $0 + $1.unreadCount } }
 
-    /// "Pixel 8 · Personal · +91 98765 43210 · Airtel"
     func lineTitle(_ line: SMSLine) -> String {
-        let dev = device(line.deviceId)?.name ?? "Device"
-        return "\(dev) · \(line.label)"
+        "\(device(line.deviceId)?.name ?? "Device") · \(line.label)"
     }
-    func lineSubtitle(_ line: SMSLine) -> String {
-        "\(line.ownNumber) · \(line.carrier)"
-    }
+    func lineSubtitle(_ line: SMSLine) -> String { "\(line.ownNumber) · \(line.carrier)" }
 
-    /// Categories present, for the filter chips.
     var presentCategories: [SMSCategory] {
-        let set = Set(filteredThreadsIgnoringCategory.map { $0.category })
+        let scoped = allThreads.filter { selectedLineID == nil || $0.lineId == selectedLineID }
+        let set = Set(scoped.map { $0.category })
         return SMSCategory.allCases.filter { set.contains($0) }
-    }
-    private var filteredThreadsIgnoringCategory: [SMSThread] {
-        allThreads.filter { selectedLineID == nil || $0.lineId == selectedLineID }
-    }
-
-    func markThreadRead(_ id: String) {
-        guard let idx = allThreads.firstIndex(where: { $0.id == id }) else { return }
-        allThreads[idx].messages = allThreads[idx].messages.map {
-            var m = $0; m.read = true; return m
-        }
     }
 }
 

@@ -7,11 +7,24 @@ import SwiftUI
 
 struct SMSConsoleView: View {
     @StateObject private var vm = SMSConsoleViewModel()
+    @State private var showSetup = false
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider().background(Color.haloBorder)
+            content
+        }
+        .background(Color.haloSurface)
+        .sheet(isPresented: $showSetup) { CloudSetupView(client: vm.client) }
+    }
+
+    @ViewBuilder private var content: some View {
+        if !vm.isConfigured {
+            connectEmptyState
+        } else if vm.allThreads.isEmpty {
+            noMessagesState
+        } else {
             HStack(spacing: 0) {
                 linesColumn.frame(width: 240)
                 Divider().background(Color.haloBorder)
@@ -20,7 +33,6 @@ struct SMSConsoleView: View {
                 messagesColumn.frame(maxWidth: .infinity)
             }
         }
-        .background(Color.haloSurface)
     }
 
     // MARK: Header
@@ -30,11 +42,54 @@ struct SMSConsoleView: View {
             Image(systemName: "message.fill").foregroundColor(.haloAccent)
             Text("Messages").font(HaloFont.display(18)).foregroundColor(.haloText)
             if vm.totalUnread > 0 { HaloBadge(text: "\(vm.totalUnread) unread", color: .haloAccent) }
-            if vm.isPreview { HaloBadge(text: "Preview · mock data", color: .haloAmber) }
+            statusBadge
             Spacer()
-            searchField.frame(width: 240)
+            if case .connected = vm.state {
+                Button { Task { await vm.refresh() } } label: { Image(systemName: "arrow.clockwise") }
+                    .buttonStyle(.plain).foregroundColor(.haloText2)
+            }
+            Button { showSetup = true } label: { Image(systemName: "gearshape.fill") }
+                .buttonStyle(.plain).foregroundColor(.haloText2)
+            if vm.isConfigured { searchField.frame(width: 220) }
         }
         .padding(.horizontal, 20).padding(.vertical, 14)
+    }
+
+    @ViewBuilder private var statusBadge: some View {
+        switch vm.state {
+        case .connected: HaloBadge(text: "Connected", color: .haloGreen)
+        case .connecting: HaloBadge(text: "Connecting…", color: .haloAmber)
+        case .error: HaloBadge(text: "Error", color: .haloRed)
+        case .unconfigured: HaloBadge(text: "Not connected", color: .haloText2)
+        }
+    }
+
+    // MARK: Empty states
+
+    private var connectEmptyState: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "externaldrive.badge.icloud").font(.system(size: 40)).foregroundColor(.haloAccent)
+            Text("Connect your Firebase").font(HaloFont.display(18)).foregroundColor(.haloText)
+            Text("Halo uses your own Firebase (BYOB) — your SMS are end-to-end encrypted and stored only in your account. Connect once, then sync from your phone.")
+                .font(HaloFont.body(12)).foregroundColor(.haloText2)
+                .multilineTextAlignment(.center).frame(maxWidth: 420).fixedSize(horizontal: false, vertical: true)
+            HaloPrimaryButton("Connect Firebase", icon: "link") { showSetup = true }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var noMessagesState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "tray").font(.system(size: 36)).foregroundColor(.haloText2)
+            Text("No messages synced yet").font(HaloFont.body(14, weight: .semibold)).foregroundColor(.haloText)
+            Text("Sync SMS from the Halo mobile app, or seed sample data to see the round-trip.")
+                .font(HaloFont.body(12)).foregroundColor(.haloText2).multilineTextAlignment(.center)
+            HStack(spacing: 10) {
+                HaloGhostButton("Refresh", icon: "arrow.clockwise") { Task { await vm.refresh() } }
+                HaloGhostButton("Setup / Seed", icon: "gearshape") { showSetup = true }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var searchField: some View {
@@ -149,7 +204,6 @@ struct SMSConsoleView: View {
         let selected = vm.selectedThreadID == thread.id
         return Button {
             vm.selectedThreadID = thread.id
-            vm.markThreadRead(thread.id)
         } label: {
             HStack(spacing: 10) {
                 ZStack {
