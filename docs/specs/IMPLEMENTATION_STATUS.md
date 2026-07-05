@@ -86,7 +86,15 @@ reused by F-044/045/048.
    - Verified: `plutil -lint` OK; Debug→`Halo-Debug.entitlements` / Release→`Halo.entitlements` mapping correct; **Release configuration builds** with signing off.
    - ⚠️ **Not runtime-verified** — the sandboxed signed app's actual Firebase sign-in needs App Store provisioning + real Firebase creds; couldn't exercise that here. Confirm on a real signed release build before shipping.
 
-**F-044 desktop is now feature-complete** (items 1–5 done). Remaining F-044 work is the S2 assisted-provisioning OAuth spike; then F-045/F-048/F-049.
+**F-044 desktop is now feature-complete** (items 1–5 done).
+
+**S2 assisted-provisioning spike — ✅ DONE (2026-07):**
+- Verified against Google docs: **device/limited-input OAuth flow can't request `cloud-platform`** (fixed scope allowlist) → the only viable native flow is **loopback-IP + PKCE authorization code**. Built + RFC-7636-vector-tested: `Halo/Core/Cloud/Provisioning/GoogleOAuthPKCE.swift` (+ `GoogleOAuthPKCETests`, 4 tests). NOT UI-wired.
+- Full REST provisioning sequence (R1–R5) mapped in `firebase-setup.md §7` (addFirebase / RTDB instances.create / rules PUT / identitytoolkit config + accounts:signUp / webApps config).
+- **Blocker = Google restricted-scope app verification** (policy, not tech). **v1 recommendation: keep the guided wizard** (= existing manual `CloudSetupView`); assisted provisioning is a fast-follow once a verified or per-user OAuth client exists.
+- ⚠️ Live provisioning not exercised (no Google consent in the build env).
+
+Remaining cloud work: **F-045 clipboard** / **F-048 expenditure** (reuse `Halo/Core/Cloud`), then **F-049 mobile**.
 
 **Then:**
 - **S2 spike** — assisted provisioning OAuth + Google app-verification.

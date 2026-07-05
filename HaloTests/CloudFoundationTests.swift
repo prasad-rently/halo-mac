@@ -135,3 +135,61 @@ struct CloudConfigStoreTests {
         #expect(try mobile.decrypt(ct) == "shared")
     }
 }
+
+// MARK: - GoogleOAuthPKCE (F-044 S2 spike — loopback + PKCE provisioning flow)
+
+@Suite("GoogleOAuthPKCE")
+struct GoogleOAuthPKCETests {
+
+    // RFC 7636 Appendix B known-answer vector for the S256 challenge.
+    @Test("PKCE S256 challenge matches the RFC 7636 test vector")
+    func rfcVector() {
+        let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+        #expect(PKCE.challenge(for: verifier) == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
+    }
+
+    @Test("Generated verifier is url-safe and correctly sized; challenge is derived")
+    func generation() {
+        let p = PKCE.generate()
+        #expect((43...128).contains(p.verifier.count))
+        let allowed = CharacterSet(charactersIn:
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        #expect(p.verifier.unicodeScalars.allSatisfy { allowed.contains($0) })
+        #expect(p.challenge == PKCE.challenge(for: p.verifier))
+        #expect(!p.challenge.contains("=") && !p.challenge.contains("+") && !p.challenge.contains("/"))
+    }
+
+    @Test("Authorization URL carries the PKCE + native-flow query params")
+    func authURL() {
+        let pkce = PKCE(verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
+        let url = GoogleOAuth.authorizationURL(
+            clientID: "cid.apps.googleusercontent.com",
+            redirectURI: "http://127.0.0.1:53127/callback",
+            scopes: [GoogleOAuth.cloudPlatformScope],
+            pkce: pkce, state: "xyz")
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems ?? []
+        func val(_ n: String) -> String? { items.first { $0.name == n }?.value }
+        #expect(url.host == "accounts.google.com")
+        #expect(val("response_type") == "code")
+        #expect(val("code_challenge") == pkce.challenge)
+        #expect(val("code_challenge_method") == "S256")
+        #expect(val("scope") == GoogleOAuth.cloudPlatformScope)
+        #expect(val("client_id") == "cid.apps.googleusercontent.com")
+        #expect(val("state") == "xyz")
+    }
+
+    @Test("Token exchange request is a form POST with the verifier")
+    func tokenRequest() {
+        let pkce = PKCE(verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
+        let req = GoogleOAuth.tokenExchangeRequest(
+            clientID: "cid", clientSecret: nil, code: "abc",
+            redirectURI: "http://127.0.0.1:53127/callback", pkce: pkce)
+        #expect(req.httpMethod == "POST")
+        #expect(req.value(forHTTPHeaderField: "Content-Type") == "application/x-www-form-urlencoded")
+        let body = String(data: req.httpBody ?? Data(), encoding: .utf8) ?? ""
+        #expect(body.contains("grant_type=authorization_code"))
+        #expect(body.contains("code_verifier=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"))
+        #expect(body.contains("code=abc"))
+        #expect(!body.contains("client_secret"))   // omitted when nil
+    }
+}

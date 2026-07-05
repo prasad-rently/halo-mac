@@ -128,6 +128,7 @@
 		8A64A32F27E6245BD6EAEB93 /* CleanupUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8908A278C13A1F3B9E21BFE9 /* CleanupUITests.swift */; };
 		8B6D9AFD2032338DE0CD903D /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
 		8FB6B64C9DD98FE7C893AC62 /* HelperClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0191600A2A39E962DFBAF63 /* HelperClientTests.swift */; };
+		9253BD0988C4DAAAF3E2BEAF /* GoogleOAuthPKCE.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5632845E3812F9942AB83AED /* GoogleOAuthPKCE.swift */; };
 		97FC4C5E35CB7030A2F01C9C /* HaloSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */; };
 		9B9F762E501E9A043923E03B /* CloudConfigStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FF3FF59B6A687B1342CA5E0 /* CloudConfigStore.swift */; };
 		9D149B17EB2EB41DFC3C5024 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = E7BC409524EB1ACD0235E81B /* FirebaseAuth */; };
@@ -314,6 +315,7 @@
 		3ED172401B83B65197881BFC /* SidebarReorderUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SidebarReorderUITests.swift; sourceTree = "<group>"; };
 		4555BA206584E6C688FD51F1 /* DriveSpeedTester.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedTester.swift; sourceTree = "<group>"; };
 		4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloUITestCase.swift; sourceTree = "<group>"; };
+		5632845E3812F9942AB83AED /* GoogleOAuthPKCE.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleOAuthPKCE.swift; sourceTree = "<group>"; };
 		626E37DCEBF96711B499810F /* DriveSpeedTesterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedTesterTests.swift; sourceTree = "<group>"; };
 		67D626412F39854842AE0A36 /* HaloUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		74790111414AABF80E296E4C /* FirebaseRTDBClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FirebaseRTDBClient.swift; sourceTree = "<group>"; };
@@ -551,6 +553,7 @@
 				F726C8A8193AD0153FD18FF9 /* CloudModels.swift */,
 				8FF3FF59B6A687B1342CA5E0 /* CloudConfigStore.swift */,
 				74790111414AABF80E296E4C /* FirebaseRTDBClient.swift */,
+				62D397A166B98B3C3FF256AD /* Provisioning */,
 			);
 			name = Cloud;
 			path = Cloud;
@@ -567,6 +570,15 @@
 			);
 			name = HaloUITests;
 			path = HaloUITests;
+			sourceTree = "<group>";
+		};
+		62D397A166B98B3C3FF256AD /* Provisioning */ = {
+			isa = PBXGroup;
+			children = (
+				5632845E3812F9942AB83AED /* GoogleOAuthPKCE.swift */,
+			);
+			name = Provisioning;
+			path = Provisioning;
 			sourceTree = "<group>";
 		};
 		831E06F76773A70833D4AD12 /* Features */ = {
@@ -931,6 +943,7 @@
 				5953F30D7CA49FFA4883B414 /* SMSSyncClient.swift in Sources */,
 				C5D7A353E701AF9A6A6A0ADF /* CloudSetupView.swift in Sources */,
 				33C03FAAB6033DB109DE9EA0 /* CloudSettingsPane.swift in Sources */,
+				9253BD0988C4DAAAF3E2BEAF /* GoogleOAuthPKCE.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
