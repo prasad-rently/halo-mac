@@ -391,3 +391,63 @@ struct TransactionPipelineTests {
         #expect(isEmpty)
     }
 }
+
+// MARK: - Cross-language crypto parity vectors (F-049 D5/D27)
+//
+// Canonical vectors the Android Kotlin CryptoService must reproduce byte-for-byte.
+// KDF vectors are deterministic (re-derivable). Decrypt vectors pin the AES-GCM wire
+// format (nonce12 || ct || tag16, base64) — Kotlin must DECRYPT Swift-sealed ciphertext
+// (the random nonce means we validate by decrypt, not by re-encrypting). Regenerate
+// with HALO_GEN_VECTORS=1; the committed JSON is the source of truth for both platforms.
+
+@Suite("CryptoParity")
+struct CryptoParityTests {
+
+    struct ParityFile: Codable {
+        struct Algo: Codable {
+            let kdf, cipher, wireFormat, passwordNormalization, passwordEncoding: String
+            let iterations, keyBytes: Int
+            let aad: String?
+        }
+        struct KDFVector: Codable { let name, passphrase, saltB64: String; let iterations: Int; let derivedKeyB64: String }
+        struct DecryptVector: Codable { let name, passphrase, saltB64, plaintext, ciphertextB64: String; let iterations: Int }
+        let version: Int
+        let algorithm: Algo
+        let kdfVectors: [KDFVector]
+        let decryptVectors: [DecryptVector]
+    }
+
+    // Deterministic inputs (fixed salts) so the KDF outputs are stable + pinnable.
+    private static let inputs: [(name: String, pass: String, salt: Data, text: String)] = [
+        ("ascii", "correct horse battery staple", Data((0..<16).map { UInt8($0) }), "Hello, Halo"),
+        ("bank-sms", "p@ssw0rd!", Data("halo-salt-1234!!".utf8), "A/C *XX3833 debited by Rs 1250.00 via UPI"),
+        ("unicode", "café☕", Data((0..<16).map { UInt8(0xA0 &+ $0) }), "Unicode: café ☕ 日本語 — clipboard")
+    ]
+
+    private var vectorsURL: URL {
+        URL(fileURLWithPath: #filePath)              // <repo>/HaloTests/CloudFoundationTests.swift
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("docs/specs/crypto-parity-vectors.v1.json")
+    }
+
+    private func keyB64(_ key: SymmetricKey) -> String { key.withUnsafeBytes { Data($0).base64EncodedString() } }
+
+    @Test("KDF + decrypt vectors verify against CryptoService (the cross-language contract)")
+    func verify() throws {
+        let data = try Data(contentsOf: vectorsURL)
+        let file = try JSONDecoder().decode(ParityFile.self, from: data)
+        #expect(file.algorithm.iterations == CryptoService.defaultIterations)
+
+        for v in file.kdfVectors {
+            let salt = try #require(Data(base64Encoded: v.saltB64))
+            let key = try CryptoService.deriveKey(passphrase: v.passphrase, salt: salt, iterations: v.iterations)
+            #expect(keyB64(key) == v.derivedKeyB64)          // deterministic KDF parity
+        }
+        for v in file.decryptVectors {
+            let salt = try #require(Data(base64Encoded: v.saltB64))
+            let svc = try CryptoService(passphrase: v.passphrase, salt: salt, iterations: v.iterations)
+            let pt = try svc.decrypt(v.ciphertextB64)
+            #expect(pt == v.plaintext)                       // wire-format parity
+        }
+    }
+}
