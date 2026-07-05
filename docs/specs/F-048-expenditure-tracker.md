@@ -1,7 +1,7 @@
 # F-048 — Personal Expenditure Tracker (NFeat-126)
 
-> **Status:** 🗓 Planned · **Platform:** Desktop
-> **Depends on:** F-044 (SMS data in Firebase) · **Optional:** F-046/F-047 (AI-assisted parsing)
+> **Status:** 🗓 Planned · **Platform:** Desktop + Mobile
+> **Depends on:** F-044 (desktop data source) · mobile parses device SMS directly · **Optional (deferred):** F-046/F-047
 > **Reference:** *Hamza* project
 
 ---
@@ -50,6 +50,8 @@ design, since it infers from SMS rather than bank APIs.
 | D13 | **India-first (INR), pack-extensible** ✅ *confirmed* | Ship the proven India/UPI pattern pack as v1; the pack-driven design (FR-12) lets other locales/currencies be added later. |
 | D14 | **Rules-only in v1; AI-assist deferred** ✅ *confirmed* | Deterministic, offline Hamza pipeline only. No F-046/F-047 dependency in v1; AI fallback for unmatched formats is a later enhancement. |
 | D15 | **Cross-device content dedup** ✅ *confirmed* | Dedup by amount+direction+near-time **regardless of `deviceId`**, so the same bank SMS synced from two phones (shared SIM) counts once. Extends the within-device ±120 s rule (D8).
+| D16 | **Runs on desktop AND mobile** ✅ *confirmed* | Desktop parses over F-044's synced cache; the **mobile app parses the device's own SMS directly** (Hamza-style, no F-044 dependency on mobile). Both share the same pattern pack + pipeline to stay consistent. |
+| D17 | **Default spend-category taxonomy (user-editable)** ✅ *confirmed* | Ships a starter taxonomy (see §12); merchant/keyword → category; users re-categorize and add categories. |
 
 ## 4. User Stories
 
@@ -236,3 +238,29 @@ Indian-format tuned; merchant is the fuzziest field (often null); self-transfer 
 - **Data source:** Halo reads F-044's **decrypted cache** (cross-device, encrypted at rest), not the raw device inbox — so the tracker works on the **desktop**, which Hamza has no equivalent of.
 - **Pattern packs as data:** externalize Hamza's hardcoded word lists into data-driven, user-extensible packs (add a bank without code).
 - **AI fallback (optional):** route `Unreadable`/unknown-format messages through F-046/F-047 for extraction, user-enabled.
+
+
+---
+
+## 12. Default spend-category taxonomy (D17)
+
+Starter set, **user-editable** (rename, add, remap merchants). Categories are
+assigned by merchant/keyword rules over the parsed transaction; unmatched → *Other*.
+
+| Category | Example triggers (merchant/keyword) |
+|----------|--------------------------------------|
+| Food & Dining | ZOMATO, SWIGGY, restaurant, cafe, EATCLUB |
+| Groceries | BIGBASKET, BLINKIT, ZEPTO, DMART, supermarket |
+| Shopping | AMAZON, FLIPKART, MYNTRA, AJIO, retail |
+| Bills & Utilities | electricity, gas (INDANE/HPGAS), water, broadband, mobile recharge, DTH |
+| Transport | UBER, OLA, RAPIDO, IRCTC, fuel, INDIAN OIL, metro, FASTAG |
+| Entertainment | NETFLIX, SPOTIFY, PRIME, HOTSTAR, BOOKMYSHOW |
+| Health | PHARMEASY, APOLLO, hospital, pharmacy, 1MG |
+| Financial | EMI, LIC, insurance, mutual fund, SIP, CRED |
+| Transfers | UPI P2P, self-transfer (also flagged ⇄ by D7/self-transfer) |
+| Income | salary, CREDITED, REFUNDED, interest |
+| Other | anything unmatched |
+
+- Rules live in the **pattern pack** (data-driven, per-locale) so categories extend without code.
+- A transaction keeps its raw merchant; the category is a derived, overridable label.
+- Self-transfers (D7) are excluded from spend regardless of category.

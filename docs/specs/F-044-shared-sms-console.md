@@ -30,13 +30,13 @@ their own Firebase project.
 
 ## 3. Decisions & Assumptions
 
-> **Confirmed 2026-07 (discussion rounds 1–4):** D1–D28 locked.
+> **Confirmed 2026-07 (discussion rounds 1–4):** D1–D30 locked.
 > Backend = **Firebase Realtime Database**; auth = **Google Sign-In**; encryption
 > = client-side E2E, **one shared key** across cloud features, **re-key by
 > wipe+re-sync** (phone is source of truth); **inbox only**, default backfill
 > **90 days**, cloud keeps everything, **mirror phone deletions**; read-only;
 > cadence = real-time receiver + periodic + on-open; grouping = **Device → SIM
-> line → per-line contact thread**; wipe = all/per-device/per-line.
+> line → per-line contact thread**; wipe = all/per-device/per-line; per-line sync toggle; new-SMS notification (disableable).
 
 | # | Decision | Note |
 |---|----------|------|
@@ -68,6 +68,8 @@ their own Firebase project.
 | D26 | **Cloud keeps everything (no TTL)** ✅ *confirmed* | The 90-day figure (D-history) is only the *initial* backfill depth; thereafter the cloud retains all synced (still-on-phone) messages indefinitely — the user's own quota. Deletions still propagate via D25. |
 | D27 | **One shared E2E key across cloud features (F-044 + F-045)** ✅ *confirmed* | A single passphrase/key set once at pairing protects SMS and clipboard alike. Simpler UX; both live in the same user's Firebase. |
 | D28 | **Wipe granularity: all / per-device / per-line** ✅ *confirmed* | Wipe everything, one device's subtree (retire an old phone), or a single SIM line. |
+| D29 | **Per-line sync toggle** ✅ *confirmed* | Sync can be enabled/disabled **per SIM line** (e.g. sync Personal, exclude Work). Stored in the line registry; the excluded line's messages are never read/uploaded. |
+| D30 | **New-SMS desktop notification (on by default, disableable)** ✅ *confirmed* | Desktop fires a Halo notification for each new synced SMS (reuses existing `AlertManager`/`AlertLog`). A **Settings toggle disables** it. (Category-level muting — e.g. skip OTP/Promotional — is a possible refinement.) |
 
 ## 4. User Stories
 
@@ -85,6 +87,7 @@ their own Firebase project.
 
 **Mobile (sync source — detailed in F-049)**
 - **FR-1** Request `READ_SMS` permission (Android) with clear rationale.
+- **FR-0a** **Per-line sync toggle (D29):** each line in the registry has an enabled flag; disabled lines are skipped by the reader/uploader.
 - **FR-0** **Register the device** in `devices/{uid}/{deviceId}` (stable install id + friendly name + platform) and **enumerate SIM lines** via `SubscriptionManager` (`READ_PHONE_STATE`/`READ_PHONE_NUMBERS`): capture `subscriptionId`, carrier, and own number **if provisioned**; otherwise prompt the user to **label each SIM** (own number + name). Write to `sms/{uid}/{deviceId}/lines/{subscriptionId}` (D19/D20/D22).
 - **FR-2** Read SMS via content resolver; map to the schema, tagging each with its `subscriptionId` (SIM/line) and writing under `sms/{uid}/{deviceId}/messages/…` (D18).
 - **FR-2b** **Inbox only** (`type=1`, D23). Default backfill **last 90 days**, with a control to extend older history on demand.
@@ -103,6 +106,7 @@ their own Firebase project.
 - **FR-10** Live updates via RTDB `.observe` (`child_added`/`value`) listener; **polling fallback** if unavailable.
 - **FR-11** Pagination for large histories (lazy-load older messages).
 - **FR-12** "Wipe synced data" — **all / per-device / per-line** (D28), with confirmation.
+- **FR-13** **New-SMS notification (D30):** fire a Halo alert (via `AlertManager`) on each newly-synced message; **on by default**, disableable in Settings.
 - **FR-12b** **Re-key** action (D24): set a new passphrase → wipe cloud SMS → trigger re-sync from devices. Doubles as key rotation. No data loss (source is the phone).
 
 **Config (both)**
