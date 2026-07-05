@@ -21,10 +21,17 @@
 > provider: read round-trip, act approve, act **deny**, and stream-failure paths.
 > **13 F-046 unit tests pass** total.
 >
-> **Not yet built:** OpenAI/Gemini concrete providers; the real tool **executor**
-> wiring `AgentRunner.execute` to `AppState`/App Intents/`ActionLibrary`; conversation
-> persistence (D11); and the `AppModule.ai` UI — overlay + sidebar + confirmation
-> sheet (D5). Live end-to-end needs a real provider API key.
+> **Phase 2 done (2026-07):** `AIToolExecutor` (D8) — the real tool bridge backing
+> `AgentRunner.execute`. Reads (health/CPU/RAM/disk/battery/clipboard) format live
+> metrics via an `AIMetricsSource` protocol that `AppState` satisfies for free;
+> `get_top_processes` shells `ps`; the two acts run the existing `AppState.runSmartScan()`
+> and `ReportSnapshot`/`ReportGenerator` PDF paths. Read formatters are unit-tested
+> against a fake metrics source (no full AppState needed). **16 F-046 unit tests pass.**
+>
+> **Not yet built:** OpenAI/Gemini concrete providers; conversation persistence (D11);
+> and the `AppModule.ai` UI — quick-ask overlay + sidebar module + the confirmation
+> sheet that supplies `AgentRunner.confirm` (D5/D9). Live end-to-end needs a real
+> provider API key.
 
 ---
 

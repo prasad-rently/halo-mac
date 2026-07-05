@@ -247,3 +247,54 @@ struct AgentRunnerTests {
         #expect(out.contains(.failed("overloaded")))
     }
 }
+
+// MARK: - AIToolExecutor read tools (F-046 D8)
+
+@MainActor
+private final class FakeMetrics: AIMetricsSource {
+    var systemHealthScore = 87
+    var cpuUsage = 0.42
+    var ramUsage = 0.61
+    var ramUsedGB = 9.8
+    var ramTotalGB = 16.0
+    var diskFreeGB = 120.5
+    var diskTotalGB = 500.0
+    var batteryPercent = 76
+    var batteryIsCharging = true
+    var batteryHealth = 0.94
+    var batteryCycles = 128
+    var clipboardItems: [ClipboardItem] = [
+        ClipboardItem(content: .text("hello world")),
+        ClipboardItem(content: .url(URL(string: "https://halo.mac")!))
+    ]
+}
+
+@Suite("AIToolExecutor")
+@MainActor
+struct AIToolExecutorTests {
+    private func exec() -> AIToolExecutor { AIToolExecutor(metrics: FakeMetrics(), appState: nil) }
+
+    @Test("Read tools format live metrics")
+    func reads() async throws {
+        let e = exec()
+        #expect(try await e.run("get_health_score", "{}") == "Mac health score: 87/100.")
+        #expect(try await e.run("get_cpu_usage", "{}") == "CPU usage: 42%.")
+        #expect(try await e.run("get_ram_usage", "{}").contains("61% used"))
+        #expect(try await e.run("get_disk_space", "{}").contains("120.5 GB free"))
+        let battery = try await e.run("get_battery", "{}")
+        #expect(battery.contains("76%") && battery.contains("charging") && battery.contains("128 cycles"))
+    }
+
+    @Test("Clipboard tool honors the count parameter")
+    func clipboard() async throws {
+        let out = try await exec().run("get_clipboard_history", "{\"count\":1}")
+        #expect(out.contains("hello world"))
+        #expect(!out.contains("https://halo.mac"))   // capped at 1
+    }
+
+    @Test("Unknown tool throws; acts unavailable without AppState")
+    func errors() async throws {
+        await #expect(throws: AIToolError.self) { _ = try await exec().run("nope", "{}") }
+        await #expect(throws: AIToolError.self) { _ = try await exec().run("run_smart_scan", "{}") }
+    }
+}

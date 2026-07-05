@@ -119,6 +119,7 @@
 		0D95339BD7D85794863633C8 /* HaloUITestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */; };
 		1A276975BC00655241248D7B /* DriveSpeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C310900DF7BB88C2E7AFC1B /* DriveSpeedView.swift */; };
 		318D18283567FA7F9C3FCD89 /* DriveSpeedTesterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629A9D17BDFF863DCB0206F2 /* DriveSpeedTesterTests.swift */; };
+		392C64DDBD96198078804CA3 /* AIToolExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC90BEA4B73BCF5211738E1 /* AIToolExecutor.swift */; };
 		428DD9830BBDEBECB1200590 /* SmokeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74D974CC4B2FB109632BF14A /* SmokeUITests.swift */; };
 		5A7C4F83C5BA326CB63F0C5A /* AIKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4A92E8D0819BCF034A05DF2 /* AIKeyStore.swift */; };
 		728D4049D66F293C501E1419 /* AgentRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0878FD8BEBE06A3351E53E45 /* AgentRunner.swift */; };
@@ -309,6 +310,7 @@
 		3ED172401B83B65197881BFC /* SidebarReorderUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SidebarReorderUITests.swift; sourceTree = "<group>"; };
 		4555BA206584E6C688FD51F1 /* DriveSpeedTester.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedTester.swift; sourceTree = "<group>"; };
 		4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloUITestCase.swift; sourceTree = "<group>"; };
+		4FC90BEA4B73BCF5211738E1 /* AIToolExecutor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIToolExecutor.swift; sourceTree = "<group>"; };
 		629A9D17BDFF863DCB0206F2 /* DriveSpeedTesterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedTesterTests.swift; sourceTree = "<group>"; };
 		67D626412F39854842AE0A36 /* HaloUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6D2C02D89C828E5968F14081 /* AIProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIProvider.swift; sourceTree = "<group>"; };
@@ -610,6 +612,7 @@
 				DF513D5DDD7399B797BE21F2 /* AnthropicProvider.swift */,
 				CCB7849370C86E175D74B077 /* ToolRegistry.swift */,
 				0878FD8BEBE06A3351E53E45 /* AgentRunner.swift */,
+				4FC90BEA4B73BCF5211738E1 /* AIToolExecutor.swift */,
 			);
 			name = AIAssistant;
 			path = AIAssistant;
@@ -897,6 +900,7 @@
 				A3253DC631055540204F574D /* AnthropicProvider.swift in Sources */,
 				A159238AFAAA0D1EF722C664 /* ToolRegistry.swift in Sources */,
 				728D4049D66F293C501E1419 /* AgentRunner.swift in Sources */,
+				392C64DDBD96198078804CA3 /* AIToolExecutor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
