@@ -92,12 +92,12 @@ Cloud features follow existing Halo patterns (see `CLAUDE.md`):
 
 | Option | Verdict |
 |--------|---------|
-| **Flutter** | **Default choice.** Single Dart codebase for iOS+Android, first-class `firebase_flutter` plugins, mature. Good for the SMS console UI, clipboard, settings. Platform channels cover native bits (SMS read, clipboard listener, mDNS). |
-| Kotlin Multiplatform | Strong for shared logic + native UI, but more setup; keep as alternative. |
-| Native (Swift + Kotlin) | Maximum fidelity but 2× UI work; only if platform depth demands it. |
+| **Native — Kotlin (Android) + Swift (iOS)** | **Chosen (F-049 D1).** Max platform fidelity for SMS/clipboard/mDNS. Crucially, **iOS Swift reuses the desktop `Halo/Core/Cloud`** (crypto, RTDB client, models) — only Android needs a Kotlin port. Lives in the **same monorepo** (F-049 D6). |
+| Flutter | Considered (single Dart codebase) but **not chosen** — would duplicate the crypto/RTDB core in Dart instead of reusing Swift. |
+| Kotlin Multiplatform | Alternative; more setup. |
 
-Default: **Flutter**, with platform-channel plugins for the OS-specific pieces
-(Android SMS content resolver, clipboard listeners, NSD/mDNS for HaloShare).
+Chosen: **native Kotlin + Swift**, monorepo, **no store publishing in v1**
+(direct/sideload — F-049 D7).
 
 ### Hard platform constraints (drive scope)
 

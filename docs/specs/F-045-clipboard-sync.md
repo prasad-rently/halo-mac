@@ -171,7 +171,7 @@ Halo/Features/ClipboardSync/
 - Receive: `.observe(child_added)` → skip own `deviceId` (echo) → decrypt → insert into existing history (500 cap).
 - Settings: reuse the F-044 **Cloud** pane (config/pairing/key already shared); add sync toggle, TTL, image toggle, sensitive rules.
 
-### Mobile (Flutter)
+### Mobile (native — Kotlin/Swift, F-049 D1)
 - **Android capture = AccessibilityService** (D7) + `lastContentHash` dedup (D8) → encrypt → RTDB; receive via `.observe`.
 - **iOS** = foreground/manual push + receive (platform limit).
 

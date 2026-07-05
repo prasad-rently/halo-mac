@@ -289,7 +289,7 @@ Halo/Features/Expenditure/
 - **Aggregation:** transfers skipped; `en-IN` grouping; category breakdown from `Categorizer`.
 
 ### Mobile (D16 — Flutter, parses device SMS directly)
-- Reuses the **same pattern pack**; a Dart port of the pipeline reads the device inbox directly (Hamza-style), no F-044 dependency on mobile.
+- Reuses the **same pattern pack**; a **Kotlin (Android) / Swift (iOS)** port of the pipeline reads the device inbox directly (Hamza-style), no F-044 dependency on mobile.
 - Shared taxonomy (§12) + pack keeps desktop/mobile results consistent.
 
 ### Reuse / build order

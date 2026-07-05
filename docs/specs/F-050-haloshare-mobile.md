@@ -62,7 +62,7 @@ interoperable with the official LocalSend apps.
 ## 7. Architecture
 
 ```
-Desktop (existing)                         Mobile (new — Flutter + platform channels)
+Desktop (existing)                         Mobile (new — native Kotlin/Swift)
 Core/LocalShare/                           HaloShareModule
 ├─ MulticastDiscovery  ◄── LAN mDNS/UDP ──► NSD/mDNS discovery
 ├─ LocalShareServer/Client ◄── TLS ──────► TLS transfer client/server
@@ -113,20 +113,20 @@ Protocol reference ~1.5 d · Discovery ~3 d · Transfer ~4 d · Interop/hardenin
 
 ---
 
-## 11. Implementation blueprint
+## 11. Implementation blueprint (native)
 
 Reuse the desktop `Core/LocalShare` **protocol contract** (LocalSend v2.1) as the
-shared spec; implement the mobile peer in Flutter + platform channels. No Firebase
+shared spec; implement the mobile peer **natively** (F-049 D1) — iOS may reuse the
+desktop Swift `LocalShare` models directly; Android is a Kotlin port. No Firebase
 (LAN/peer only). Details settled at build.
 
 ```
-lib/features/haloshare/
-├─ discovery.dart          platform channel → mDNS/NSD announce + browse (iOS Bonjour + Local Network entitlement; Android NSD)
-├─ transfer_client.dart    TLS send: pick files/peer, progress, cancel
-├─ transfer_server.dart    TLS receive: consent screen → save, progress, cancel
-├─ protocol.dart           LocalSend v2.1 messages — parity with desktop LocalShareModels
-├─ consent_view.dart       mirrors desktop ReceiveConsentView
-└─ keepalive.dart          foreground/power keep-alive during transfer
+iOS (Swift — reuses desktop LocalShare models)   Android (Kotlin)
+├─ Discovery: Bonjour / Network.framework        ├─ Discovery: NSD / jmDNS
+├─ TransferClient: TLS send (progress/cancel)     ├─ TransferClient: TLS send
+├─ TransferServer: TLS receive + consent          ├─ TransferServer: TLS receive + consent
+├─ Consent view (mirrors ReceiveConsentView)      ├─ Consent screen
+└─ Keep-alive during transfer                      └─ Foreground service during transfer
 ```
 - **Interop gate:** verify desktop↔mobile, mobile↔mobile, and official-LocalSend both ways (protocol fidelity, not a Halo dialect).
 - iOS needs the **Local Network** entitlement + Bonjour usage strings; Android NSD + foreground-service for background transfers.

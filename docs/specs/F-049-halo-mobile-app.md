@@ -31,12 +31,13 @@ desktop system-maintenance tools (mobile OSes block most of those).
 
 | # | Decision | Note |
 |---|----------|------|
-| D1 | **Flutter** (Dart) single codebase | `firebase_*` plugins; platform channels for native bits. (KMP/native = alternatives.) |
-| D2 | **Android-first** for SMS (F-044) | iOS cannot read SMS. iOS ships SMS-console-viewer parity only if desired, but no sync. |
-| D3 | Clipboard capture is **platform-limited** | Android: foreground/IME/accessibility strategy TBD. iOS: foreground/manual push. |
-| D4 | Firebase config via **paste or QR pairing** with desktop | Secure storage on device. |
-| D5 | Client-side encryption shared with desktop | Same passphrase-derived key scheme (foundations). |
-| D6 | Repo: **decide** same-repo vs separate `halo-mobile` | Leaning separate repo; shared protocol/schema docs. |
+| D1 | **Native — Kotlin (Android) + Swift (iOS)** ✅ *confirmed* | No Flutter. **iOS Swift reuses the desktop `Halo/Core/Cloud` Swift** (crypto, RTDB client, models) — only Android needs a Kotlin port. Max platform fidelity for SMS/clipboard/mDNS. |
+| D2 | **Android + iOS together in v1** ✅ *confirmed* | Android does the full set (SMS sync + clipboard + HaloShare). iOS v1 = SMS **viewer** (no read API) + limited clipboard + HaloShare. |
+| D3 | Clipboard capture is **platform-limited** | Android: **AccessibilityService** (F-045 D7). iOS: foreground/manual push. |
+| D4 | Firebase config via **QR pairing** with desktop (+ Email/Password auth carried in QR) | Secure storage (Keystore/Keychain). See F-044 §7.1. |
+| D5 | Client-side encryption **byte-parity** with desktop | Android Kotlin crypto must match Swift AES-GCM/Argon2; iOS shares the Swift impl. Cross-language test vectors. |
+| D6 | **Same monorepo** (halo-mac) ✅ *confirmed* | Android (Kotlin/Gradle) + iOS (Swift) live in the halo-mac repo alongside macOS; mixed tooling/CI accepted. |
+| D7 | **No store publishing (v1)** ✅ *confirmed* | Direct/sideload distribution — APK for Android, direct install for iOS. Sidesteps Play Store `READ_SMS` policy AND App Store review. Store submission is a later decision. |
 
 ## 4. User Stories
 
@@ -71,20 +72,22 @@ desktop system-maintenance tools (mobile OSes block most of those).
 
 - **Privacy/Security:** BYOB Firebase; client-side encryption; secure credential storage; least-privilege permissions with clear rationale.
 - **Battery/network:** batched, cadence-configurable sync; respect Doze/background limits.
-- **Platform compliance:** Play Store `READ_SMS` policy is strict — the SMS use-case must qualify or ship via sideload/F-Droid; App Store review for Local Network + clipboard.
+- **Distribution (v1):** **no store publishing** (D7) — direct APK (Android) + direct install (iOS). Sidesteps Play Store `READ_SMS` policy + App Store review. Store submission is a later decision.
 - **Maintainability:** shared schema/protocol with desktop documented in `docs/specs`.
 
 ## 7. Architecture
 
 ```
-Flutter app
-├─ Settings (Firebase config + QR pair + passphrase + secure storage)
-├─ SMS module (Android)  ── platform channel ─► ContentResolver reader
-├─ Clipboard module      ── platform channel ─► clipboard listener (OS-limited)
-├─ HaloShare module      ── platform channel ─► NSD/mDNS + TLS (LocalSend v2.1)
-└─ FirebaseService (RTDB + Email/Password auth) + CryptoService (AES-GCM/Argon2)
+Android app (Kotlin)                         iOS app (Swift)
+├─ Settings + QR pairing                     ├─ Settings + QR pairing
+├─ SMS: ContentResolver + SubscriptionMgr    ├─ SMS: viewer only (no read API)
+├─ Clipboard: AccessibilityService           ├─ Clipboard: foreground/manual
+├─ HaloShare: NSD/mDNS + TLS                  ├─ HaloShare: Bonjour/Network.framework + TLS
+├─ FirebaseService (RTDB + Email/Pwd)        ├─ REUSES desktop Halo/Core/Cloud (Swift):
+└─ CryptoService (Kotlin AES-GCM/Argon2)     └─   FirebaseRTDBClient + CryptoService + models
 ```
-Uses the **same RTDB schemas + Email/Password auth** as F-044/F-045 (single source of truth in those specs).
+- **iOS reuses the desktop Swift `Halo/Core/Cloud`** (crypto, RTDB client, schema models) — shared as an internal Swift package in the monorepo. Only **Android** needs a Kotlin port of crypto + RTDB glue.
+- Both use the **same RTDB schemas + Email/Password auth** as F-044/F-045 (single source of truth in those specs).
 
 ## 8. Acceptance Criteria
 
@@ -96,18 +99,18 @@ Uses the **same RTDB schemas + Email/Password auth** as F-044/F-045 (single sour
 
 ## 9. Open Questions & Risks
 
-- **Stack:** Flutter vs KMP vs native — confirm (Flutter default).
-- **Play Store `READ_SMS` policy** — may block store distribution; plan for F-Droid/sideload if so.
-- **iOS scope** — no SMS; limited clipboard; mainly HaloShare + SMS-viewer. Is an iOS build worth v1?
-- **Repo structure** — same repo vs `halo-mobile`.
+- ~~Stack~~ → **native Kotlin + Swift** (D1); iOS reuses desktop Swift core.
+- ~~Store distribution~~ → **no stores in v1** (D7); direct/sideload.
+- **iOS scope** — confirmed in v1 (D2) but limited: SMS **viewer** only, limited clipboard, full HaloShare.
+- ~~Repo structure~~ → **same monorepo** (D6).
 - Clipboard capture mechanism on Android (accessibility/IME/foreground) + its UX/permission cost.
 - QR-pairing security (Firebase config is sensitive) — short-lived display, encrypt payload?
 
 ## 10. Execution Plan
 
 ### Phase 0 — Foundation & decisions
-- Confirm **stack (Flutter)** + **repo structure**; scaffold app; CI for iOS/Android.
-- `FirebaseService` + `CryptoService` (match desktop schema/keys); Settings + **QR pairing**.
+- Scaffold **native** apps in the monorepo: Android (Kotlin/Gradle) + iOS (Swift). Extract desktop `Halo/Core/Cloud` into a Swift package the iOS app links; CI for both.
+- Android `FirebaseService` + Kotlin `CryptoService` (byte-parity w/ Swift); Settings + **QR pairing** on both.
 
 ### Phase 1 — SMS sync (Android)
 - `READ_SMS` flow, content-resolver reader, encrypt + upsert, high-water mark, periodic sync, allow/deny list. → validates F-044 end-to-end.
@@ -116,13 +119,13 @@ Uses the **same RTDB schemas + Email/Password auth** as F-044/F-045 (single sour
 - Android capture strategy + publish/subscribe; iOS foreground/manual push + receive; sensitive filter.
 
 ### Phase 3 — HaloShare peer (F-050)
-- NSD/mDNS discovery + TLS transfer (LocalSend v2.1) via platform channels; interop with desktop.
+- NSD/mDNS discovery + TLS transfer (LocalSend v2.1) — native (Android NSD, iOS Network.framework/Bonjour); interop with desktop.
 
 ### Phase 4 — Hardening & release
-- Permission rationale screens, background/battery tuning, store-policy review (esp. `READ_SMS`), **security review**, docs, beta.
+- Permission rationale screens, background/battery tuning, **security review**, docs, direct-distribution builds (APK/IPA). No store review (D7).
 
 ### Test plan
-- Unit (Dart): crypto round-trip, dedup/high-water, sensitive filter, schema mapping.
+- Unit: crypto round-trip (Kotlin↔Swift test vectors), dedup/high-water, sensitive filter, schema mapping.
 - Integration: Android→Firebase→desktop (SMS + clipboard); phone↔Mac HaloShare.
 - Manual: QR pairing, permission flows, background sync, iOS limitations, store-build validation.
 
@@ -131,13 +134,27 @@ Foundation ~5 d · SMS ~4 d · Clipboard ~4 d · HaloShare ~5 d · Hardening/rel
 
 ---
 
-## 11. Implementation blueprint (Flutter)
+## 11. Implementation blueprint (native)
 
-Single Dart codebase; platform channels for OS-specific bits. Mirrors the desktop
-schema/crypto exactly (shared contract in F-044/F-045). Details settled at build.
+Native per platform (D1). iOS shares the desktop Swift core; Android is a Kotlin
+port. Both mirror the RTDB schema/crypto exactly (shared contract in F-044/F-045).
+Details settled at build.
 
 ```
-lib/
+halo-mac/ (monorepo, D6)
+├─ Halo/               macOS desktop (existing) + Halo/Core/Cloud (Swift, shared with iOS)
+├─ ios/               iOS app (Swift) — reuses Halo/Core/Cloud via an internal Swift package
+│  ├─ Settings + QR pairing (scan config + auth cred + salt)
+│  ├─ ClipboardSync (foreground) · HaloShare (Network.framework) · SMS viewer
+└─ android/           Android app (Kotlin/Gradle)
+   ├─ core/ FirebaseService (RTDB + Email/Pwd) + CryptoService (Kotlin, byte-parity w/ Swift)
+   ├─ sms/ ContentResolver + SubscriptionManager (device/line registry, F-044)
+   ├─ clipboard/ AccessibilityService capture (F-045 D7)
+   └─ haloshare/ NSD/mDNS + TLS (LocalSend v2.1, F-050)
+```
+Legacy Flutter note (superseded by D1):
+```
+lib/  (NOT USED — native chosen)
 ├─ core/
 │  ├─ firebase_service.dart      runtime Firebase.initializeApp(options) + RTDB + Email/Password auth
 │  ├─ provisioning_service.dart  (optional) the mobile side usually inherits config via QR scan
@@ -154,6 +171,6 @@ lib/
    ├─ android: ContentResolver (SMS), SubscriptionManager, ClipboardAccessibilityService, NSD/mDNS
    └─ ios:     Bonjour/Local Network, UIPasteboard (foreground)
 ```
-- **Crypto parity is critical:** the Dart `crypto_service` must produce the same AES-GCM output as Swift so either app decrypts the other's data (shared key, F-044 D27). Cross-language test vectors required.
+- **Crypto parity is critical:** the **Kotlin** `CryptoService` (Android) must produce the same AES-GCM/Argon2 output as Swift; iOS shares the Swift impl directly. Cross-language test vectors required (F-044 D27).
 - **Android-first** (SMS); iOS ships clipboard(limited) + HaloShare + SMS-viewer only.
 - Build order: app shell + firebase_service + pairing → SMS sync (validates F-044 e2e) → clipboard → HaloShare → expenditure → store-policy review.
