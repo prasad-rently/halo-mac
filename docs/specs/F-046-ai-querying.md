@@ -1,8 +1,22 @@
 # F-046 — AI Assistant (Agentic, Cloud Providers) (NFeat-124)
 
-> **Status:** 🗓 Planned · **Platform:** Desktop
+> **Status:** 🛠 Phase 0 built (backend foundation) · **Platform:** Desktop
 > **Depends on:** none (independent). Reuses F-042 App Intents + Actions module as its tool registry.
 > **Related:** F-047 (on-device AI) — shares the "AI" surface + agent loop
+>
+> **Phase 0 done (2026-07, branch `feature/f-046-ai-assistant` off `feature/upcoming-features`):**
+> `Halo/Features/AIAssistant/` — `AIModels` (provider/model catalog, message + tool
+> + stream-event types; Claude default), `AIKeyStore` (Keychain per-provider keys, D2),
+> `AIProvider` protocol (streaming, D4), `AnthropicProvider` (native URLSession client
+> for the Messages API — request builder + SSE `AnthropicStreamDecoder`). Native Swift
+> against the REST contract (no official Swift SDK). Deliberately never sends
+> `temperature`/`top_p`/`budget_tokens` (removed on Opus 4.8/Sonnet 5 → HTTP 400).
+> Default model `claude-opus-4-8`. **7 unit tests** pass (request-body shape incl. the
+> forbidden-params guard, tool round-trip, SSE text-delta + tool-call accumulation).
+> **Not yet built:** OpenAI/Gemini concrete providers, the `ToolRegistry` over
+> F-042 Intents + `ActionLibrary` (D8), the agent loop + confirmation gate (D9),
+> conversation persistence (D11), and the `AppModule.ai` UI (overlay + sidebar, D5).
+> Live end-to-end needs a real provider API key.
 
 ---
 
