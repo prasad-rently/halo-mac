@@ -103,7 +103,7 @@ as the cross-platform source of truth so mobile mirrors them exactly.
 - Extract/confirm the LocalSend v2.1 details from desktop `Core/LocalShare` into a shared reference (models, handshake, endpoints) so mobile matches exactly.
 
 ### Phase 1 — Discovery (mobile)
-- mDNS/NSD announce + browse via platform channels (iOS Bonjour + Local Network entitlement; Android NSD). Show discovered peers.
+- mDNS/NSD announce + browse natively (iOS Bonjour/Network.framework + Local Network entitlement; Android NSD). Show discovered peers.
 
 ### Phase 2 — Transfer (mobile)
 - TLS session; send flow (pick files/peer, progress, cancel); receive flow (**consent**, save, progress, cancel); keep-alive during transfer.
@@ -115,10 +115,10 @@ as the cross-platform source of truth so mobile mirrors them exactly.
 ### Test plan
 - Interop matrix: {desktop, iOS, Android, official LocalSend} × {send, receive}.
 - Manual: consent accept/decline, cancel mid-transfer, network drop, large files, multicast-blocked network.
-- Unit (Dart): protocol message encode/decode parity with desktop models.
+- Unit: protocol message encode/decode parity with desktop models (iOS Swift shares them; Android Kotlin port tested against vectors).
 
 ### Rough effort
-Protocol reference ~1.5 d · Discovery ~3 d · Transfer ~4 d · Interop/hardening ~3 d. **~11.5 d** (within the F-049 mobile program; depends on the app shell existing).
+Protocol reference ~1.5 d · Discovery ~3 d · Transfer ~4 d · Share-sheet + background (Android FG service; iOS best-effort) ~2.5 d · Interop/hardening ~3 d. **~14 d** (within the F-049 mobile program; depends on the app shell existing).
 
 ---
 
