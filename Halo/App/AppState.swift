@@ -103,6 +103,7 @@ final class AppState: ObservableObject {
     private var metricsTimer: AnyCancellable?
     private var widgetReloadTimer: AnyCancellable?
     private var clipboardMonitor: ClipboardMonitor?
+    let clipboardSync = ClipboardSyncService()   // F-045 cross-device clipboard
     private let hotkeyManager = HotkeyManager()
     private let quickPickerController  = ClipboardQuickPickerController()
     private let actionPickerController = QuickActionPickerController()
@@ -119,6 +120,7 @@ final class AppState: ObservableObject {
         loadStoredActivity()
         loadClipboardHistory()
         startClipboardMonitoring()
+        startClipboardSync()
         setupHotkeys()
         startNetworkMonitoring()
         AlertManager.requestPermission()
@@ -266,10 +268,35 @@ final class AppState: ObservableObject {
 
     private func startClipboardMonitoring() {
         let monitor = ClipboardMonitor { [weak self] item in
-            self?.addClipboardItem(item)
+            guard let self else { return }
+            self.addClipboardItem(item)
+            self.clipboardSync.publishLocal(item)   // F-045: mirror local copies to cloud
         }
         clipboardMonitor = monitor
         monitor.start()
+    }
+
+    // MARK: - Clipboard Sync (F-045)
+
+    private func startClipboardSync() {
+        clipboardSync.onRemoteItem = { [weak self] item in self?.receiveSyncedClipboardItem(item) }
+        clipboardSync.onPurge = { [weak self] in
+            self?.clipboardItems.removeAll { $0.syncedFrom != nil }
+        }
+        // Auto-connect only if the user enabled sync AND cached the passphrase for
+        // convenience — otherwise sync waits until they connect from the sync sheet.
+        if clipboardSync.syncEnabled, clipboardSync.isConfigured,
+           let pass = CloudConfigStore.shared.cachedPassphrase {
+            Task { await clipboardSync.connect(passphrase: pass) }
+        }
+    }
+
+    /// Insert a synced remote item into history only (D9 — never touch the live
+    /// pasteboard), deduped by id, respecting the 500 cap.
+    func receiveSyncedClipboardItem(_ item: ClipboardItem) {
+        guard !clipboardItems.contains(where: { $0.id == item.id }) else { return }
+        clipboardItems.insert(item, at: 0)
+        if clipboardItems.count > 500 { clipboardItems.removeLast() }
     }
 
     private func setupHotkeys() {

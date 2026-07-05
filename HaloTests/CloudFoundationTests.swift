@@ -193,3 +193,71 @@ struct GoogleOAuthPKCETests {
         #expect(!body.contains("client_secret"))   // omitted when nil
     }
 }
+
+// MARK: - Clipboard sync (F-045)
+
+@Suite("ClipboardSensitiveFilter")
+struct ClipboardSensitiveFilterTests {
+    @Test("Flags likely secrets")
+    func flagsSecrets() {
+        #expect(ClipboardSensitiveFilter.isSensitive("password: hunter2"))
+        #expect(ClipboardSensitiveFilter.isSensitive("ghp_1234567890abcdefghij12345"))
+        #expect(ClipboardSensitiveFilter.isSensitive("AKIAIOSFODNN7EXAMPLE"))
+        #expect(ClipboardSensitiveFilter.isSensitive("-----BEGIN RSA PRIVATE KEY-----"))
+    }
+    @Test("Passes ordinary content")
+    func passesNormal() {
+        #expect(!ClipboardSensitiveFilter.isSensitive("Hello, world"))
+        #expect(!ClipboardSensitiveFilter.isSensitive("https://example.com/page"))
+        #expect(!ClipboardSensitiveFilter.isSensitive(""))
+    }
+}
+
+@Suite("ClipboardSyncEnvelope")
+struct ClipboardSyncEnvelopeTests {
+    @Test("node() → from() round-trips")
+    func nodeRoundTrip() {
+        let env = ClipboardSyncEnvelope(itemId: "id1", deviceId: "devA", deviceName: "Phone",
+                                        kind: "code", contentEnc: "CIPHER", language: "swift",
+                                        createdAt: 1_720_000_000_000)
+        #expect(ClipboardSyncEnvelope.from(env.node()) == env)
+    }
+    @Test("Rejects malformed nodes")
+    func rejectsBad() {
+        #expect(ClipboardSyncEnvelope.from(["itemId": "x"]) == nil)
+        #expect(ClipboardSyncEnvelope.from("nope") == nil)
+    }
+}
+
+@Suite("ClipboardSync serialize/deserialize")
+@MainActor
+struct ClipboardSyncCodecTests {
+    @Test("Encrypt → envelope → decrypt reproduces a code item with provenance")
+    func encryptRoundTrip() throws {
+        let crypto = try CryptoService(passphrase: "pw", salt: CryptoService.generateSalt())
+        let original = ClipboardItem(content: .code("let x = 1", language: "swift"))
+        let s = try #require(ClipboardSyncService.serialize(original.content))
+        let env = ClipboardSyncEnvelope(
+            itemId: original.id.uuidString, deviceId: "devA", deviceName: "Phone",
+            kind: s.kind, contentEnc: try crypto.encrypt(s.text), language: s.lang,
+            createdAt: original.copiedDate.timeIntervalSince1970 * 1000)
+        let parsed = try #require(ClipboardSyncEnvelope.from(env.node()))
+        let item = ClipboardSyncService.makeItem(parsed, text: try crypto.decrypt(parsed.contentEnc))
+        #expect(item.syncedFrom == "Phone")
+        if case let .code(c, lang) = item.content { #expect(c == "let x = 1"); #expect(lang == "swift") }
+        else { Issue.record("expected .code content") }
+    }
+    @Test("Images and colors are not syncable (v1)")
+    func nonSyncable() {
+        #expect(ClipboardSyncService.serialize(.image(Data(), metadata: nil)) == nil)
+        #expect(ClipboardSyncService.serialize(.color(hex: "#ffffff")) == nil)
+    }
+    @Test("URL kind reconstructs a .url item")
+    func urlKind() {
+        let env = ClipboardSyncEnvelope(itemId: UUID().uuidString, deviceId: "d", deviceName: "Mac",
+                                        kind: "url", contentEnc: "x", language: nil, createdAt: 0)
+        let item = ClipboardSyncService.makeItem(env, text: "https://halo.mac")
+        if case let .url(u) = item.content { #expect(u.absoluteString == "https://halo.mac") }
+        else { Issue.record("expected .url content") }
+    }
+}

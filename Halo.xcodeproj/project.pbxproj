@@ -127,6 +127,7 @@
 		879BABFA5A95F861A51AD596 /* FirebaseRTDBClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74790111414AABF80E296E4C /* FirebaseRTDBClient.swift */; };
 		8A64A32F27E6245BD6EAEB93 /* CleanupUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8908A278C13A1F3B9E21BFE9 /* CleanupUITests.swift */; };
 		8B6D9AFD2032338DE0CD903D /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
+		8C501654E50047EBD413205C /* ClipboardSyncModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D6E25B04E36EFC7304F6650 /* ClipboardSyncModels.swift */; };
 		8FB6B64C9DD98FE7C893AC62 /* HelperClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0191600A2A39E962DFBAF63 /* HelperClientTests.swift */; };
 		9253BD0988C4DAAAF3E2BEAF /* GoogleOAuthPKCE.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5632845E3812F9942AB83AED /* GoogleOAuthPKCE.swift */; };
 		97FC4C5E35CB7030A2F01C9C /* HaloSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */; };
@@ -136,6 +137,8 @@
 		A1CCF4B6053B2C709D866F96 /* SMSModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11E2E096AE5F0161298B622A /* SMSModels.swift */; };
 		AE6FACECB50C6D438440D382 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
 		B3BA45306DB919FF17FF62AC /* SMSConsoleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 949EBE6DE7B0C70F9518684A /* SMSConsoleView.swift */; };
+		B8A1F62E5165929BFEBB8F4E /* ClipboardSyncSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C2FE2AC5EC3D78F0A9E555A /* ClipboardSyncSettingsView.swift */; };
+		B9222883A1BBADB2D9A163F4 /* ClipboardSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE2B07841BC8A4CCE2FEB37A /* ClipboardSyncService.swift */; };
 		BD934A0D464689E1FA0EC1F4 /* CryptoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEE2BFAEB9BE01F472B48AED /* CryptoService.swift */; };
 		C3321CD3FE963BFE6E079AA0 /* CloudModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F726C8A8193AD0153FD18FF9 /* CloudModels.swift */; };
 		C5D7A353E701AF9A6A6A0ADF /* CloudSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBB30C8FE643DD82A09C9248 /* CloudSetupView.swift */; };
@@ -315,9 +318,11 @@
 		3ED172401B83B65197881BFC /* SidebarReorderUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SidebarReorderUITests.swift; sourceTree = "<group>"; };
 		4555BA206584E6C688FD51F1 /* DriveSpeedTester.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedTester.swift; sourceTree = "<group>"; };
 		4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloUITestCase.swift; sourceTree = "<group>"; };
+		4D6E25B04E36EFC7304F6650 /* ClipboardSyncModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClipboardSyncModels.swift; sourceTree = "<group>"; };
 		5632845E3812F9942AB83AED /* GoogleOAuthPKCE.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleOAuthPKCE.swift; sourceTree = "<group>"; };
 		626E37DCEBF96711B499810F /* DriveSpeedTesterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedTesterTests.swift; sourceTree = "<group>"; };
 		67D626412F39854842AE0A36 /* HaloUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6C2FE2AC5EC3D78F0A9E555A /* ClipboardSyncSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClipboardSyncSettingsView.swift; sourceTree = "<group>"; };
 		74790111414AABF80E296E4C /* FirebaseRTDBClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FirebaseRTDBClient.swift; sourceTree = "<group>"; };
 		74D974CC4B2FB109632BF14A /* SmokeUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SmokeUITests.swift; sourceTree = "<group>"; };
 		7C310900DF7BB88C2E7AFC1B /* DriveSpeedView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedView.swift; sourceTree = "<group>"; };
@@ -328,6 +333,7 @@
 		ABADB8F162C8E503F371B945 /* SMSConsoleViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSConsoleViewModel.swift; sourceTree = "<group>"; };
 		B3086393C229A0E132307B6C /* SMSSyncClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSSyncClient.swift; sourceTree = "<group>"; };
 		BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloSidebar.swift; sourceTree = "<group>"; };
+		BE2B07841BC8A4CCE2FEB37A /* ClipboardSyncService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClipboardSyncService.swift; sourceTree = "<group>"; };
 		C4E45F5700BC461EFD2F89C6 /* CloudSettingsPane.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudSettingsPane.swift; sourceTree = "<group>"; };
 		D1749E8BBBF48CFF49E42B5A /* HaloTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D3824F98C3251B8B75207CE9 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
@@ -586,6 +592,7 @@
 			children = (
 				D2B9FF24DEEB6AD1B681E7B7 /* Files */,
 				E67656630473DA23411EB0DF /* SMSConsole */,
+				9A24D840575FA1270B2F7F11 /* ClipboardSync */,
 			);
 			name = Features;
 			path = Features;
@@ -599,6 +606,17 @@
 			);
 			name = Core;
 			path = Core;
+			sourceTree = "<group>";
+		};
+		9A24D840575FA1270B2F7F11 /* ClipboardSync */ = {
+			isa = PBXGroup;
+			children = (
+				4D6E25B04E36EFC7304F6650 /* ClipboardSyncModels.swift */,
+				BE2B07841BC8A4CCE2FEB37A /* ClipboardSyncService.swift */,
+				6C2FE2AC5EC3D78F0A9E555A /* ClipboardSyncSettingsView.swift */,
+			);
+			name = ClipboardSync;
+			path = ClipboardSync;
 			sourceTree = "<group>";
 		};
 		B4EB165306B84AC114EFDB9A /* HaloTests */ = {
@@ -944,6 +962,9 @@
 				C5D7A353E701AF9A6A6A0ADF /* CloudSetupView.swift in Sources */,
 				33C03FAAB6033DB109DE9EA0 /* CloudSettingsPane.swift in Sources */,
 				9253BD0988C4DAAAF3E2BEAF /* GoogleOAuthPKCE.swift in Sources */,
+				8C501654E50047EBD413205C /* ClipboardSyncModels.swift in Sources */,
+				B9222883A1BBADB2D9A163F4 /* ClipboardSyncService.swift in Sources */,
+				B8A1F62E5165929BFEBB8F4E /* ClipboardSyncSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

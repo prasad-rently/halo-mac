@@ -94,7 +94,19 @@ reused by F-044/045/048.
 - **Blocker = Google restricted-scope app verification** (policy, not tech). **v1 recommendation: keep the guided wizard** (= existing manual `CloudSetupView`); assisted provisioning is a fast-follow once a verified or per-user OAuth client exists.
 - ⚠️ Live provisioning not exercised (no Google consent in the build env).
 
-Remaining cloud work: **F-045 clipboard** / **F-048 expenditure** (reuse `Halo/Core/Cloud`), then **F-049 mobile**.
+## 6. F-045 Clipboard Sync — desktop Phase 1+2 DONE (2026-07)
+
+Cross-device clipboard sync reusing the F-044 cloud core (`FirebaseRTDBClient`, `CryptoService`, `CloudConfigStore`). New `Halo/Features/ClipboardSync/`:
+- **`ClipboardSyncService`** (`@MainActor`) — publish local copies (encrypt → `clipboard/{uid}/items/{itemId}`) + `observeChildAdded` remote items → decrypt → **history-only** insert (D9, never overwrites the live pasteboard). Echo suppression by `deviceId` (D3) + `seenItemIds` dedup (D8). Cloud rolling-cap eviction to 500 (D4, opportunistic sweep). Stable persisted `deviceId` + `deviceName`.
+- **`ClipboardSyncModels`** — `ClipboardSyncEnvelope` (RTDB node ⇄ struct) + `ClipboardSensitiveFilter` (opt-in secret detection: keywords + AWS/GitHub/Slack/JWT/OpenAI/hex patterns; **off by default**, D5).
+- **`ClipboardSyncSettingsView`** — sheet from the Clipboard tab bar: status, enable toggle (+ passphrase → connect, cached for auto-reconnect), opt-in sensitive filter, **purge** (cloud + local, D10). Points to Messages module when cloud unconfigured.
+- **Model:** `ClipboardItem.syncedFrom` (source device) drives the synced badge in `ClipboardItemRow`.
+- **AppState wiring:** local copies publish; remote items land in history via `receiveSyncedClipboardItem`; `clipboardSync` auto-connects on launch iff enabled + configured + passphrase cached.
+- **Only text/url/code sync in v1** (D6; image/color skipped). 7 unit tests (filter, envelope round-trip, encrypt→decrypt codec) pass. Builds.
+- **Mobile:** F-045 rows already in `HALO_MOBILE_ROADMAP.md` (governance satisfied). Android = AccessibilityService (D7), iOS = foreground push — both land with **F-049**.
+- **Not done (deferred):** live 2-device round-trip (needs real Firebase + a phone); concealed-pasteboard-type detection at monitor time; images/Cloud Storage; security review before ship.
+
+Remaining cloud work: **F-048 expenditure** (reuse `Halo/Core/Cloud` + already-synced SMS), then **F-049 mobile** (fills both the SMS console and clipboard for real).
 
 **Then:**
 - **S2 spike** — assisted provisioning OAuth + Google app-verification.
