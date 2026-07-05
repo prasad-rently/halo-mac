@@ -23,10 +23,19 @@ struct CloudSetupView: View {
     // E2E
     @State private var passphrase = ""
 
-    private var canConnect: Bool {
+    /// Connection fields only — the E2E passphrase is a local key, not part of the
+    /// connection, so "Test connection" does not require it.
+    private var canTest: Bool {
         !apiKey.isEmpty && !projectID.isEmpty && !googleAppID.isEmpty
             && !gcmSenderID.isEmpty && !databaseURL.isEmpty
-            && !email.isEmpty && !password.isEmpty && !passphrase.isEmpty
+            && !email.isEmpty && !password.isEmpty
+    }
+
+    private var canConnect: Bool { canTest && !passphrase.isEmpty }
+
+    private var isTesting: Bool {
+        if case .testing = client.testResult { return true }
+        return false
     }
 
     var body: some View {
@@ -34,6 +43,7 @@ struct CloudSetupView: View {
             VStack(alignment: .leading, spacing: 18) {
                 header
                 statusBanner
+                testResultBanner
                 section("1 · Firebase project", "From Firebase Console → Project settings → your app config. Halo stores this in the Keychain and configures the live app — no rebuild.") {
                     field("API key", $apiKey)
                     field("Project ID", $projectID)
@@ -80,6 +90,19 @@ struct CloudSetupView: View {
         }
     }
 
+    @ViewBuilder private var testResultBanner: some View {
+        switch client.testResult {
+        case .testing:
+            banner("Testing connection…", .haloAmber, "arrow.triangle.2.circlepath")
+        case .success(let msg):
+            banner(msg, .haloGreen, "checkmark.circle.fill")
+        case .failure(let msg):
+            banner(msg, .haloRed, "xmark.octagon.fill")
+        case .none:
+            EmptyView()
+        }
+    }
+
     private func banner(_ text: String, _ color: Color, _ icon: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon).foregroundColor(color)
@@ -91,8 +114,10 @@ struct CloudSetupView: View {
 
     private var controls: some View {
         HStack(spacing: 12) {
+            HaloGhostButton("Test connection", icon: "bolt.badge.checkmark") { test() }
+                .disabled(!canTest || isTesting)
             HaloPrimaryButton("Connect", icon: "link") { connect() }
-                .disabled(!canConnect)
+                .disabled(!canConnect || isTesting)
             if case .connected = client.state {
                 HaloGhostButton("Seed sample data", icon: "sparkles") {
                     Task { await client.seedSampleData(); dismiss() }
@@ -140,9 +165,19 @@ struct CloudSetupView: View {
         }
     }
 
+    private func currentConfig() -> FirebaseConfig {
+        FirebaseConfig(apiKey: apiKey, projectID: projectID, googleAppID: googleAppID,
+                       gcmSenderID: gcmSenderID, databaseURL: databaseURL, storageBucket: nil)
+    }
+
+    private func test() {
+        let config = currentConfig()
+        let auth = CloudAuthCredential(email: email, password: password)
+        Task { await client.testConnection(config: config, auth: auth) }
+    }
+
     private func connect() {
-        let config = FirebaseConfig(apiKey: apiKey, projectID: projectID, googleAppID: googleAppID,
-                                    gcmSenderID: gcmSenderID, databaseURL: databaseURL, storageBucket: nil)
+        let config = currentConfig()
         let auth = CloudAuthCredential(email: email, password: password)
         let salt = CloudConfigStore.shared.salt ?? CryptoService.generateSalt()
         Task { await client.configureAndConnect(config: config, auth: auth, salt: salt, passphrase: passphrase) }

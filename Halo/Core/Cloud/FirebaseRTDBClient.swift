@@ -59,6 +59,77 @@ actor FirebaseRTDBClient {
         root = Database.database(app: configured, url: config.databaseURL).reference()
     }
 
+    // MARK: Test connection (F-044 — validate before saving config)
+
+    /// End-to-end validation of a config + credential **without** touching the live
+    /// app or the Keychain: configures a throwaway named app, signs in, then writes
+    /// and reads back a `meta/{uid}` token to prove the database URL + rules allow
+    /// the account to read/write its own subtree. Tears the throwaway app down on
+    /// every exit so it can be retried after the user corrects the config.
+    ///
+    /// Throws a descriptive `RTDBError`/auth error on the first failing step
+    /// (bad config → configureFailed, bad credentials → auth error, rules/URL
+    /// problem → operationFailed on the round-trip).
+    func testConnection(_ config: FirebaseConfig, email: String, password: String) async throws {
+        let testName = "HaloCloudTest"
+        // A prior aborted test may have left the throwaway app around.
+        if let leftover = FirebaseApp.app(name: testName) { await deleteApp(leftover) }
+
+        let options = FirebaseOptions(googleAppID: config.googleAppID,
+                                      gcmSenderID: config.gcmSenderID)
+        options.apiKey = config.apiKey
+        options.projectID = config.projectID
+        options.databaseURL = config.databaseURL
+        if let bucket = config.storageBucket { options.storageBucket = bucket }
+
+        FirebaseApp.configure(name: testName, options: options)
+        guard let testApp = FirebaseApp.app(name: testName) else {
+            throw RTDBError.configureFailed
+        }
+
+        do {
+            let testAuth = Auth.auth(app: testApp)
+            let result = try await testAuth.signIn(withEmail: email, password: password)
+            let uid = result.user.uid
+
+            let ref = Database.database(app: testApp, url: config.databaseURL)
+                .reference().child("meta/\(uid)/_haloTest")
+            let token = UUID().uuidString
+
+            // write
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                ref.setValue(token) { error, _ in
+                    if let error { cont.resume(throwing: RTDBError.operationFailed(error.localizedDescription)) }
+                    else { cont.resume() }
+                }
+            }
+            // read back
+            let readBack = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Any?, Error>) in
+                ref.getData { error, snapshot in
+                    if let error { cont.resume(throwing: RTDBError.operationFailed(error.localizedDescription)) }
+                    else { cont.resume(returning: snapshot?.value) }
+                }
+            }
+            guard (readBack as? String) == token else {
+                throw RTDBError.operationFailed("Round-trip mismatch — check your database rules allow the signed-in account to read/write meta/$uid.")
+            }
+            // best-effort cleanup of the probe node
+            try? await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                ref.removeValue { _, _ in cont.resume() }
+            }
+        } catch {
+            await deleteApp(testApp)
+            throw error
+        }
+        await deleteApp(testApp)
+    }
+
+    private func deleteApp(_ app: FirebaseApp) async {
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            app.delete { _ in cont.resume() }
+        }
+    }
+
     // MARK: Auth (Email/Password — F-044 D12)
 
     @discardableResult

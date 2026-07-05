@@ -119,6 +119,7 @@
 		0D95339BD7D85794863633C8 /* HaloUITestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */; };
 		1A276975BC00655241248D7B /* DriveSpeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C310900DF7BB88C2E7AFC1B /* DriveSpeedView.swift */; };
 		3082B42695CF0998AA583106 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = D265B9320EDA1875C19961AD /* FirebaseDatabase */; };
+		33C03FAAB6033DB109DE9EA0 /* CloudSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4E45F5700BC461EFD2F89C6 /* CloudSettingsPane.swift */; };
 		428DD9830BBDEBECB1200590 /* SmokeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74D974CC4B2FB109632BF14A /* SmokeUITests.swift */; };
 		5953F30D7CA49FFA4883B414 /* SMSSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3086393C229A0E132307B6C /* SMSSyncClient.swift */; };
 		74CF1681EA0B483294AE1DE3 /* SMSConsoleViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABADB8F162C8E503F371B945 /* SMSConsoleViewModel.swift */; };
@@ -325,6 +326,7 @@
 		ABADB8F162C8E503F371B945 /* SMSConsoleViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSConsoleViewModel.swift; sourceTree = "<group>"; };
 		B3086393C229A0E132307B6C /* SMSSyncClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSSyncClient.swift; sourceTree = "<group>"; };
 		BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloSidebar.swift; sourceTree = "<group>"; };
+		C4E45F5700BC461EFD2F89C6 /* CloudSettingsPane.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudSettingsPane.swift; sourceTree = "<group>"; };
 		D1749E8BBBF48CFF49E42B5A /* HaloTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D3824F98C3251B8B75207CE9 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		DBB30C8FE643DD82A09C9248 /* CloudSetupView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudSetupView.swift; sourceTree = "<group>"; };
@@ -626,6 +628,7 @@
 				949EBE6DE7B0C70F9518684A /* SMSConsoleView.swift */,
 				B3086393C229A0E132307B6C /* SMSSyncClient.swift */,
 				DBB30C8FE643DD82A09C9248 /* CloudSetupView.swift */,
+				C4E45F5700BC461EFD2F89C6 /* CloudSettingsPane.swift */,
 			);
 			name = SMSConsole;
 			path = SMSConsole;
@@ -927,6 +930,7 @@
 				B3BA45306DB919FF17FF62AC /* SMSConsoleView.swift in Sources */,
 				5953F30D7CA49FFA4883B414 /* SMSSyncClient.swift in Sources */,
 				C5D7A353E701AF9A6A6A0ADF /* CloudSetupView.swift in Sources */,
+				33C03FAAB6033DB109DE9EA0 /* CloudSettingsPane.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -8,6 +8,7 @@ import SwiftUI
 struct SMSConsoleView: View {
     @StateObject private var vm = SMSConsoleViewModel()
     @State private var showSetup = false
+    @State private var showSettings = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,6 +18,12 @@ struct SMSConsoleView: View {
         }
         .background(Color.haloSurface)
         .sheet(isPresented: $showSetup) { CloudSetupView(client: vm.client) }
+        .sheet(isPresented: $showSettings) { CloudSettingsPane(client: vm.client) }
+    }
+
+    /// The gear opens management when connected, otherwise the connect/setup flow.
+    private func openGear() {
+        if case .connected = vm.state { showSettings = true } else { showSetup = true }
     }
 
     @ViewBuilder private var content: some View {
@@ -48,7 +55,7 @@ struct SMSConsoleView: View {
                 Button { Task { await vm.refresh() } } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.plain).foregroundColor(.haloText2)
             }
-            Button { showSetup = true } label: { Image(systemName: "gearshape.fill") }
+            Button { openGear() } label: { Image(systemName: "gearshape.fill") }
                 .buttonStyle(.plain).foregroundColor(.haloText2)
             if vm.isConfigured { searchField.frame(width: 220) }
         }
@@ -221,6 +228,14 @@ struct SMSConsoleView: View {
                         Text(thread.lastMessage?.body ?? "").font(HaloFont.body(11)).foregroundColor(.haloText2).lineLimit(1)
                         Spacer(minLength: 4)
                         if thread.unreadCount > 0 { Circle().fill(Color.haloAccent).frame(width: 7, height: 7) }
+                    }
+                    // "All lines" view: badge each row with its source SIM so per-line
+                    // threads stay distinguishable (a contact on two SIMs = two rows).
+                    if vm.isAllLines, let source = vm.sourceLabel(for: thread) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "simcard").font(.system(size: 8)).foregroundColor(.haloText2)
+                            Text(source).font(HaloFont.body(9)).foregroundColor(.haloText2).lineLimit(1)
+                        }
                     }
                 }
             }

@@ -68,11 +68,19 @@ reused by F-044/045/048.
 ## 4. Next steps (resume here)
 
 **Finish F-044 desktop:**
-1. **"Test connection"** — validate write/read `meta/{uid}` before saving config.
-2. **Live updates** — `observeChildAdded` streaming into the console (currently load-on-connect + Refresh).
-3. **Re-key / wipe UI** (D24/D28) + per-line sync toggle + new-SMS notification (D30).
-4. **Device/line registry** decryption polish (own-number, carrier) + "All lines" vs per-line correctness.
-5. **Release-sandbox network entitlement** check (built Debug only).
+1. ~~**"Test connection"**~~ ✅ DONE — `FirebaseRTDBClient.testConnection(_:email:password:)` configures a throwaway `HaloCloudTest` app, signs in, writes+reads a `meta/{uid}` token, tears the app down on every exit (retryable). Surfaced in `CloudSetupView` as a "Test connection" button (no passphrase needed) + result banner; `SMSSyncClient.TestResult`/`testResult`.
+2. ~~**Live updates**~~ ✅ DONE — `SMSSyncClient` now attaches `child_added` observers (`sms/{uid}` → per-device `lines`/`messages`, `devices/{uid}`) that stream in live and dedup by id into `devicesById`/`linesById`/`messagesById`; message ids are `deviceId/msgId` (collision-safe). `disconnect()` is now async and tears observers down; Refresh = one-shot `reconcile` fallback.
+3. ~~**Re-key / wipe UI** (D24/D28) + per-line sync toggle (D29) + new-SMS notification (D30)~~ ✅ DONE:
+   - **New `CloudSettingsPane.swift`** (registered via `add_source_files.rb`) — opened from the console gear when connected (CloudSetupView remains for the unconfigured/connect flow). Notification toggle, per-line sync toggles + per-line wipe, per-device wipe, wipe-all, re-key, disconnect; all destructive actions gated behind a `confirmationDialog`.
+   - **D30 notification** — `AlertManager.fireExternal(kindRaw:title:body:)` reuses the UNNotification + AlertLog pipeline. `SMSSyncClient.mergeMessage` fires only for genuinely-new messages whose `date >= connectedAt` (skips `child_added` backfill) and only when `notificationsEnabled` (`UserDefaults["smsNotificationsEnabled"]`, default on).
+   - **D29 per-line toggle** — `SMSLine.syncEnabled` (reads `syncEnabled` from the line registry); `SMSSyncClient.setLineSync(_:enabled:)` writes it back so the phone's uploader obeys.
+   - **D28 wipe** — `wipeAll` / `wipeDevice` / `wipeLine` (per-line reads the messages node and removes rows by `subscriptionId`, so undecryptable rows go too). Observers are torn down/restarted correctly (`removeDeviceObservers`, full restart on wipe-all/re-key) to avoid dupes and the "won't re-attach" bug.
+   - **D24 re-key** — `rekey(newPassphrase:)`: rotate salt, wipe `sms/{uid}`+`devices/{uid}`, rebuild crypto, refresh Keychain passphrase cache; devices re-sync under the new key. ← resume here
+4. ~~**Device/line registry** decryption polish (own-number, carrier) + "All lines" vs per-line correctness~~ ✅ DONE:
+   - **Contact normalization** — `SMSSyncClient.normalizeContact` (keep leading `+` and digits, drop separators; alphanumeric DLT sender IDs kept verbatim) feeds the per-line `threadKey`, so one contact written in different formats no longer splits into multiple threads. Thread display uses the most-recent contact variant.
+   - **"All lines" source badge** — thread rows show a "device · line" SIM badge when `selectedLineID == nil` (`SMSConsoleViewModel.isAllLines`/`sourceLabel`), keeping per-line threads distinguishable (a contact on two SIMs = two badged rows).
+   - **Line subtitle polish** — `lineSubtitle` drops `Unknown`/`—` placeholders (undecryptable `ownNumberEnc` shows carrier/SIM slot instead of "Unknown · —") and appends "Sync off" when D29 sync is disabled.
+5. **Release-sandbox network entitlement** check (built Debug only). ← resume here
 
 **Then:**
 - **S2 spike** — assisted provisioning OAuth + Google app-verification.

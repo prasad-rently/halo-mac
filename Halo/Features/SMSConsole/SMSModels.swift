@@ -63,6 +63,9 @@ struct SMSLine: Identifiable, Hashable, Sendable {
     let ownNumber: String   // "+91 98765 43210"
     let carrier: String     // "Airtel"
     let subscriptionId: Int
+    /// Per-line sync toggle (D29). Stored in the line registry as `syncEnabled`;
+    /// a disabled line is skipped by the phone's reader/uploader. Default on.
+    var syncEnabled: Bool = true
 }
 
 /// A single message (already decrypted for the console).

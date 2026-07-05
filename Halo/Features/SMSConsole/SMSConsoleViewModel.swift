@@ -66,6 +66,17 @@ final class SMSConsoleViewModel: ObservableObject {
     func line(_ id: String) -> SMSLine? { lines.first { $0.id == id } }
     func device(_ id: String) -> SMSDevice? { devices.first { $0.id == id } }
 
+    /// True when the console is showing every line together ("All lines"), where
+    /// per-line thread rows need a source badge to stay distinguishable (D21/§8.4).
+    var isAllLines: Bool { selectedLineID == nil }
+
+    /// Compact "device · line" source label for a thread's line, for the All-lines badge.
+    func sourceLabel(for thread: SMSThread) -> String? {
+        guard let l = line(thread.lineId) else { return nil }
+        let dev = device(l.deviceId)?.name ?? "Device"
+        return "\(dev) · \(l.label)"
+    }
+
     func unread(forLine id: String) -> Int {
         allThreads.filter { $0.lineId == id }.reduce(0) { $0 + $1.unreadCount }
     }
@@ -74,7 +85,16 @@ final class SMSConsoleViewModel: ObservableObject {
     func lineTitle(_ line: SMSLine) -> String {
         "\(device(line.deviceId)?.name ?? "Device") · \(line.label)"
     }
-    func lineSubtitle(_ line: SMSLine) -> String { "\(line.ownNumber) · \(line.carrier)" }
+
+    /// Own-number + carrier, dropping unknown placeholders (a line whose `ownNumberEnc`
+    /// failed to decrypt shows just the carrier / SIM slot rather than "Unknown · —"),
+    /// and flagging a disabled per-line sync toggle (D29).
+    func lineSubtitle(_ line: SMSLine) -> String {
+        var parts = [line.ownNumber, line.carrier].filter { !$0.isEmpty && $0 != "Unknown" && $0 != "—" }
+        if parts.isEmpty { parts.append("SIM \(line.subscriptionId)") }
+        if !line.syncEnabled { parts.append("Sync off") }
+        return parts.joined(separator: " · ")
+    }
 
     var presentCategories: [SMSCategory] {
         let scoped = allThreads.filter { selectedLineID == nil || $0.lineId == selectedLineID }
