@@ -19,6 +19,11 @@ final class HotkeyManager {
     private(set) var actionKeyCode:   UInt16                = 0                 // A (default)
     private(set) var actionModifiers: NSEvent.ModifierFlags = [.command, .shift] // ⌘⇧
 
+    // AI quick-ask shortcut — default ⌘⇧I (F-046 quick-ask overlay)
+    var onAIShortcut: (() -> Void)?
+    private(set) var aiKeyCode:   UInt16                = 34                    // I (default)
+    private(set) var aiModifiers: NSEvent.ModifierFlags = [.command, .shift]    // ⌘⇧
+
     // MARK: - Public API
 
     func start(keyCode: UInt16 = 9, modifiers: NSEvent.ModifierFlags = [.command, .shift]) {
@@ -35,6 +40,10 @@ final class HotkeyManager {
             }
             if flags == self.actionModifiers && event.keyCode == self.actionKeyCode {
                 DispatchQueue.main.async { self.onActionShortcut?() }
+                return nil
+            }
+            if flags == self.aiModifiers && event.keyCode == self.aiKeyCode {
+                DispatchQueue.main.async { self.onAIShortcut?() }
                 return nil
             }
             return event
@@ -54,8 +63,18 @@ final class HotkeyManager {
                 DispatchQueue.main.async { self.onClipboardShortcut?() }
             } else if flags == self.actionModifiers && event.keyCode == self.actionKeyCode {
                 DispatchQueue.main.async { self.onActionShortcut?() }
+            } else if flags == self.aiModifiers && event.keyCode == self.aiKeyCode {
+                DispatchQueue.main.async { self.onAIShortcut?() }
             }
         }
+    }
+
+    /// Called when the user records a new AI quick-ask shortcut.
+    /// Re-registers monitors with the new key combination.
+    func updateAIShortcut(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) {
+        aiKeyCode   = keyCode
+        aiModifiers = modifiers
+        start(keyCode: self.keyCode, modifiers: self.modifiers)
     }
 
     /// Called when the user records a new action-picker shortcut in Settings.

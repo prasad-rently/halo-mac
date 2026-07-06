@@ -1,6 +1,6 @@
 # F-046 — AI Assistant (Agentic, Cloud Providers) (NFeat-124)
 
-> **Status:** 🛠 Phase 0 built (backend foundation) · **Platform:** Desktop
+> **Status:** ✅ Feature-complete (Phases 0–7) · **Platform:** Desktop
 > **Depends on:** none (independent). Reuses F-042 App Intents + Actions module as its tool registry.
 > **Related:** F-047 (on-device AI) — shares the "AI" surface + agent loop
 >
@@ -58,9 +58,21 @@
 > UI: a history sheet (load / delete / clear-all — the privacy surface). **28 F-046
 > unit tests pass** (store round-trip, upsert-replace/order, delete/clear, title).
 >
-> **Not yet built:** the ⌘ quick-ask overlay (second D5 surface). ⚠️ **UI/live
-> streaming not runtime-verified** — needs real provider API keys + a display; only
-> the pure cores are unit-tested.
+> **Phase 7 done (2026-07):** the **⌘⇧I quick-ask overlay** (second D5 surface) —
+> `AIQuickAskView.swift`: a non-activating floating `NSPanel` (same DNA as the
+> ⌘⇧V clipboard / ⌘⇧A action pickers) that hosts its own long-lived
+> `AIAssistantViewModel`, so the full agent loop, live read-tools, streaming and
+> per-turn persistence all work from the overlay. The D9 confirmation renders
+> **inline** (not a sheet — a sheet would steal key focus and dismiss the panel);
+> click-away is suppressed while a confirm is pending. Inline BYO-key setup makes
+> it self-sufficient, plus a "New" and an "Open full AI module" affordance. Wired
+> via `HotkeyManager.onAIShortcut` (default ⌘⇧I, keyCode 34) + toggle in
+> `AppState.setupHotkeys`. Registered in the Halo target; **app builds, all 54
+> HaloTests pass.** **F-046 is now feature-complete.**
+>
+> ⚠️ **UI/live streaming not runtime-verified** — needs real provider API keys +
+> a display; only the pure cores are unit-tested (the overlay is a UI surface,
+> untested like the other pickers).
 
 ---
 

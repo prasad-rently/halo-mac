@@ -106,6 +106,7 @@ final class AppState: ObservableObject {
     private let hotkeyManager = HotkeyManager()
     private let quickPickerController  = ClipboardQuickPickerController()
     private let actionPickerController = QuickActionPickerController()
+    private let aiQuickAskController   = AIQuickAskController()
     private var wasAxTrusted = false
 
     // Phase 3
@@ -292,6 +293,10 @@ final class AppState: ObservableObject {
             } else {
                 self.actionPickerController.show()
             }
+        }
+        // ⌘⇧I → AI quick-ask overlay (F-046 second surface)
+        hotkeyManager.onAIShortcut = { [weak self] in
+            self?.aiQuickAskController.toggle()
         }
         wasAxTrusted = AXIsProcessTrusted()
         // Restore persisted action-picker shortcut from ActionSettingsStore

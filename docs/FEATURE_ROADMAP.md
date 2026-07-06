@@ -62,7 +62,7 @@
 | [F-043](#f-043--drive-read--write-speed-test-nfeat-121) | Drive Read & Write Speed Test (NFeat-121) | ✅ Done | 2 d | Files module |
 | [F-044](#f-044--shared-sms-console-nfeat-122) | Shared SMS Console (NFeat-122) | 🗓 Planned | TBD | Firebase, Halo Mobile |
 | [F-045](#f-045--cross-device-clipboard-sync-nfeat-123) | Cross-Device Clipboard Sync (NFeat-123) | 🗓 Planned | TBD | Firebase, Clipboard module |
-| [F-046](#f-046--ai-querying--cloud-providers-nfeat-124) | AI Querying — Cloud Providers (NFeat-124) | 🗓 Planned | TBD | none |
+| [F-046](#f-046--ai-querying--cloud-providers-nfeat-124) | AI Querying — Cloud Providers (NFeat-124) | ✅ Done | Desktop | none |
 | [F-047](#f-047--on-device-ai--custom-rag-nfeat-125) | On-Device AI & Custom RAG (NFeat-125) | 🗓 Planned | TBD | none |
 | [F-048](#f-048--personal-expenditure-tracker-nfeat-126) | Personal Expenditure Tracker (NFeat-126) | 🗓 Planned | TBD | F-044 |
 | [F-049](#f-049--halo-mobile-app-product-line) | Halo Mobile App (product line) | 🗓 Planned | TBD | F-044, F-045, F-050 |
