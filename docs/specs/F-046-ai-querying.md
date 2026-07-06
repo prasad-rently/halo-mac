@@ -284,3 +284,52 @@ user prompt ─► AgentOrchestrator ─► provider.stream(messages, tools)
 
 ### 12.4 Provider tool-use notes
 - Anthropic **tool use**, OpenAI **function calling**, Gemini **function calling** — the `AIProvider` protocol normalizes tool definitions + tool-call/tool-result turns across all three. Verify current model IDs + tool schemas against each provider's API at build.
+
+---
+
+## 13. Testing with free accounts (manual QA)
+
+The provider *client* is the only per-vendor code; the agent loop, `ToolRegistry`,
+`AIToolExecutor`, and the D9 confirmation are **provider-agnostic and shared**.
+So a full functional pass on **one** provider validates the whole feature — do it
+on **Gemini** (the only genuinely free tier) and only fund a second provider if
+you specifically want to smoke-test its HTTP mapping.
+
+### 13.1 Getting keys
+
+| Provider | Where | Free? | Key format | Cheapest model to select |
+|----------|-------|-------|------------|--------------------------|
+| **Gemini** ✅ | [aistudio.google.com](https://aistudio.google.com) → "Get API key" | **Yes** — free tier, no card, rate-limited (generous on Flash) | `AIza…` | **Gemini 2.5 Flash** |
+| **OpenAI** | [platform.openai.com](https://platform.openai.com) → API keys | No real free tier; needs billing (min ~$5) | `sk-…` | **GPT-5 mini** |
+| **Claude** | [console.anthropic.com](https://console.anthropic.com) → API keys | Occasional small trial credit; usually buy credits | `sk-ant-…` | **Claude Haiku 4.5** |
+
+### 13.2 Running the app
+- Keys live in **Keychain** and the global ⌘⇧I hotkey needs **Accessibility**, so
+  run a real build: open `Halo.xcodeproj` in Xcode → **Run (⌘R)** (Debug =
+  sandbox off), or build+sign per `CLAUDE.md` "Build & Sign" and grant
+  Accessibility in System Settings → Privacy.
+- **Build note:** there is **no `Halo` scheme** — use `-scheme HaloTests` (it
+  builds the app), or the Xcode app scheme.
+
+### 13.3 What to test
+
+**Sidebar module (AI Assistant):**
+1. Pick provider → paste key → **Save key** (Keychain, per-provider) → pick the cheap model.
+2. Ask *"How much disk space is left?"* → expect **streamed** text **plus** a green
+   tool row (`get_disk_space` ✓) — the read tool auto-ran against live Mac data.
+3. Ask *"Run a smart scan"* → an **Approve/Decline sheet** appears (D9). Approve
+   runs `AppState.runSmartScan()`; Decline feeds a "declined" result back to the model.
+
+**⌘⇧I quick-ask overlay (Phase 7):**
+1. Press **⌘⇧I** from anywhere → floating panel, cursor focused.
+2. Ask *"Why is my Mac slow right now?"* → auto-runs read tools (CPU/RAM/processes)
+   and streams an explanation from real metrics.
+3. Ask *"Run a smart scan"* → confirmation renders **inline** (amber bar, not a
+   sheet); the panel does **not** dismiss while the confirm is pending.
+4. **Esc** / click-away dismisses; reopening keeps the thread (New = fresh chat).
+
+### 13.4 Pass / fail signals
+- ✅ **Working:** streamed text + ≥1 green tool row on a data question; an act tool
+  only runs after Approve.
+- ❌ **Bad key / no billing / rate limit:** a friendly error bubble (FR-7). OpenAI/
+  Claude without credit → 401 / insufficient-quota; Gemini free-tier over-use → 429.
