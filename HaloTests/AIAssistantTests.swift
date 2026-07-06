@@ -433,3 +433,60 @@ struct GeminiStreamDecoderTests {
         #expect(inputJSON.contains("\"deep\"") && inputJSON.contains("true"))
     }
 }
+
+// MARK: - ConversationStore (F-046 D11)
+
+@Suite("ConversationStore")
+@MainActor
+struct ConversationStoreTests {
+    private func tempURL() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("halo-ai-\(UUID().uuidString).json")
+    }
+
+    @Test("Upsert persists and reloads across instances")
+    func persistRoundTrip() {
+        let url = tempURL(); defer { try? FileManager.default.removeItem(at: url) }
+        let store = ConversationStore(fileURL: url)
+        let c = SavedConversation(title: "cpu?", turns: [
+            .init(role: "user", text: "cpu?"), .init(role: "assistant", text: "42%")])
+        store.upsert(c)
+        // Fresh instance reads the same file.
+        let reopened = ConversationStore(fileURL: url)
+        #expect(reopened.conversations.count == 1)
+        #expect(reopened.conversations.first?.turns.count == 2)
+        #expect(reopened.conversations.first?.title == "cpu?")
+    }
+
+    @Test("Upsert replaces by id; list is most-recent-first")
+    func upsertReplaceAndOrder() {
+        let url = tempURL(); defer { try? FileManager.default.removeItem(at: url) }
+        let store = ConversationStore(fileURL: url)
+        let id = UUID()
+        store.upsert(SavedConversation(id: id, title: "a", updatedAt: Date(timeIntervalSince1970: 1), turns: [.init(role: "user", text: "a")]))
+        store.upsert(SavedConversation(title: "b", updatedAt: Date(timeIntervalSince1970: 2), turns: [.init(role: "user", text: "b")]))
+        store.upsert(SavedConversation(id: id, title: "a2", updatedAt: Date(timeIntervalSince1970: 3), turns: [.init(role: "user", text: "a2")]))
+        #expect(store.conversations.count == 2)          // replaced, not duplicated
+        #expect(store.conversations.first?.title == "a2") // newest updatedAt first
+    }
+
+    @Test("Delete + clearAll")
+    func deleteAndClear() {
+        let url = tempURL(); defer { try? FileManager.default.removeItem(at: url) }
+        let store = ConversationStore(fileURL: url)
+        let id = UUID()
+        store.upsert(SavedConversation(id: id, title: "x", turns: [.init(role: "user", text: "x")]))
+        store.delete(id: id)
+        #expect(store.conversations.isEmpty)
+        store.upsert(SavedConversation(title: "y", turns: [.init(role: "user", text: "y")]))
+        store.clearAll()
+        #expect(store.conversations.isEmpty)
+    }
+
+    @Test("Title truncates long first messages")
+    func titleTruncation() {
+        #expect(ConversationStore.title(from: "short") == "short")
+        let long = String(repeating: "x", count: 80)
+        #expect(ConversationStore.title(from: long).count == 49)   // 48 + ellipsis
+        #expect(ConversationStore.title(from: "   ") == "New conversation")
+    }
+}

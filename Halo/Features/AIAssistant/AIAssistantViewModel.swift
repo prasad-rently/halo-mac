@@ -42,6 +42,9 @@ final class AIAssistantViewModel: ObservableObject {
 
     /// Providers with a concrete implementation (D10).
     let providers = AICatalog.implementedProviders
+    let store = ConversationStore.shared          // saved conversations (D11)
+    private var currentID: UUID?
+    private var currentCreatedAt = Date()
     private var history: [AIMessage] = []
     private var runTask: Task<Void, Never>?
     private var confirmContinuation: CheckedContinuation<Bool, Never>?
@@ -74,6 +77,7 @@ final class AIAssistantViewModel: ObservableObject {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isStreaming, hasKey else { return }
         input = ""
+        if currentID == nil { currentID = UUID(); currentCreatedAt = Date() }
         items.append(ChatItem(kind: .user, text: text))
         history.append(AIMessage(role: .user, text: text))
 
@@ -114,7 +118,40 @@ final class AIAssistantViewModel: ObservableObject {
                items[idx].text.isEmpty { items.remove(at: idx) }
             currentAssistantID = nil
             isStreaming = false
+            persist()
         }
+    }
+
+    /// Save the current conversation's text turns (D11).
+    private func persist() {
+        guard let id = currentID else { return }
+        let turns: [SavedTurn] = history.compactMap { m in
+            guard m.role == .user || m.role == .assistant, !m.text.isEmpty else { return nil }
+            return SavedTurn(role: m.role == .assistant ? "assistant" : "user", text: m.text)
+        }
+        guard !turns.isEmpty else { return }
+        let title = ConversationStore.title(from: turns.first?.text ?? "")
+        store.upsert(SavedConversation(id: id, title: title, createdAt: currentCreatedAt,
+                                       updatedAt: Date(), turns: turns))
+    }
+
+    /// Load a saved conversation into the chat.
+    func load(_ c: SavedConversation) {
+        stop()
+        currentID = c.id
+        currentCreatedAt = c.createdAt
+        history = c.turns.map { AIMessage(role: $0.role == "assistant" ? .assistant : .user, text: $0.text) }
+        items = c.turns.map { ChatItem(kind: $0.role == "assistant" ? .assistant : .user, text: $0.text) }
+    }
+
+    func newChat() {
+        clearConversation()
+        currentID = nil
+    }
+
+    func deleteSaved(id: UUID) {
+        store.delete(id: id)
+        if currentID == id { newChat() }
     }
 
     func stop() {

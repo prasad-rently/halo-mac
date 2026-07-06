@@ -51,9 +51,16 @@
 > provider picker + per-provider keys cover Claude/OpenAI/Gemini. **24 F-046 unit
 > tests pass.** App builds.
 >
-> **Not yet built:** conversation persistence across launches (D11); the ⌘ quick-ask
-> overlay (second D5 surface). ⚠️ **UI/live streaming not runtime-verified** — needs
-> real provider API keys + a display; only the pure cores are unit-tested.
+> **Phase 6 done (2026-07):** conversation persistence (D11). `ConversationStore` —
+> saved chat sessions as JSON in Application Support (text turns only), upsert/delete/
+> clear-all, most-recent-first. VM auto-saves each completed turn under a stable id
+> (title from the first message); loads a saved conversation back into the chat.
+> UI: a history sheet (load / delete / clear-all — the privacy surface). **28 F-046
+> unit tests pass** (store round-trip, upsert-replace/order, delete/clear, title).
+>
+> **Not yet built:** the ⌘ quick-ask overlay (second D5 surface). ⚠️ **UI/live
+> streaming not runtime-verified** — needs real provider API keys + a display; only
+> the pure cores are unit-tested.
 
 ---
 

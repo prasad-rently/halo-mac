@@ -134,6 +134,7 @@
 		AE6FACECB50C6D438440D382 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
 		AE9EC9A5F91D3B847ACC8455 /* AIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF3FA79DA36A45E06CF7D667 /* AIModels.swift */; };
 		BC6CC8DD60AB3F804E646D2B /* AIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D2C02D89C828E5968F14081 /* AIProvider.swift */; };
+		C5FB28DC66873BB366B72244 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76EB7D00744BA3399A508E64 /* ConversationStore.swift */; };
 		D52607DADA626DF2FA479956 /* HelperClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00C37BFCA463AB410245B802 /* HelperClientTests.swift */; };
 		D6C27E0D2D06F494CFF23FBF /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
 		E74653429899D0336A95DF5F /* AIAssistantViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32396161554FB75B93A0B169 /* AIAssistantViewModel.swift */; };
@@ -321,6 +322,7 @@
 		6B3A7C9D128380339D5BBD79 /* GeminiProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GeminiProvider.swift; sourceTree = "<group>"; };
 		6D2C02D89C828E5968F14081 /* AIProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIProvider.swift; sourceTree = "<group>"; };
 		74D974CC4B2FB109632BF14A /* SmokeUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SmokeUITests.swift; sourceTree = "<group>"; };
+		76EB7D00744BA3399A508E64 /* ConversationStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
 		78C88E9A3466E70C453D9B42 /* OpenAIProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OpenAIProvider.swift; sourceTree = "<group>"; };
 		7C310900DF7BB88C2E7AFC1B /* DriveSpeedView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedView.swift; sourceTree = "<group>"; };
 		7C5BDF389221BADF1F31152C /* HaloTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloTests.swift; sourceTree = "<group>"; };
@@ -625,6 +627,7 @@
 				C410A9DA24CA458075531BA7 /* AIAssistantView.swift */,
 				78C88E9A3466E70C453D9B42 /* OpenAIProvider.swift */,
 				6B3A7C9D128380339D5BBD79 /* GeminiProvider.swift */,
+				76EB7D00744BA3399A508E64 /* ConversationStore.swift */,
 			);
 			name = AIAssistant;
 			path = AIAssistant;
@@ -917,6 +920,7 @@
 				F252AFEDEE35CF5C2C183E2C /* AIAssistantView.swift in Sources */,
 				1C35066F666096D6ACA28957 /* OpenAIProvider.swift in Sources */,
 				3A50F36FA9B03FBD00BA4A57 /* GeminiProvider.swift in Sources */,
+				C5FB28DC66873BB366B72244 /* ConversationStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

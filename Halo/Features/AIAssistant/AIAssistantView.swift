@@ -8,7 +8,9 @@ import SwiftUI
 
 struct AIAssistantView: View {
     @StateObject private var vm = AIAssistantViewModel()
+    @ObservedObject private var store = ConversationStore.shared
     @State private var keyDraft = ""
+    @State private var showHistory = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,6 +20,7 @@ struct AIAssistantView: View {
         }
         .background(Color.haloSurface)
         .sheet(item: $vm.pendingConfirm) { confirmSheet($0) }
+        .sheet(isPresented: $showHistory) { historySheet }
     }
 
     // MARK: Header
@@ -38,7 +41,9 @@ struct AIAssistantView: View {
                     ForEach(vm.models) { m in Text(m.displayName).tag(m.id) }
                 }
                 .labelsHidden().frame(width: 150)
-                Button { vm.clearConversation() } label: { Image(systemName: "square.and.pencil") }
+                Button { showHistory = true } label: { Image(systemName: "clock.arrow.circlepath") }
+                    .buttonStyle(.plain).foregroundColor(.haloText2).help("Conversation history")
+                Button { vm.newChat() } label: { Image(systemName: "square.and.pencil") }
                     .buttonStyle(.plain).foregroundColor(.haloText2).help("New chat")
                 Button { vm.clearKey() } label: { Image(systemName: "key.slash") }
                     .buttonStyle(.plain).foregroundColor(.haloText2).help("Remove API key")
@@ -178,6 +183,59 @@ struct AIAssistantView: View {
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
+    }
+
+    // MARK: History (D11 — saved conversations, privacy surface)
+
+    private static func relativeDate(_ d: Date) -> String {
+        let f = RelativeDateTimeFormatter(); f.unitsStyle = .abbreviated
+        return f.localizedString(for: d, relativeTo: Date())
+    }
+
+    private var historySheet: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Conversations").font(HaloFont.display(16)).foregroundColor(.haloText)
+                Spacer()
+                if !store.conversations.isEmpty {
+                    Button("Clear all", role: .destructive) { store.clearAll() }
+                        .buttonStyle(.plain).font(HaloFont.body(11)).foregroundColor(.haloRed)
+                }
+                Button { showHistory = false } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.plain).foregroundColor(.haloText3)
+            }
+            .padding(16)
+            Divider().background(Color.haloBorder)
+            if store.conversations.isEmpty {
+                Text("No saved conversations yet.")
+                    .font(HaloFont.body(12)).foregroundColor(.haloText2)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(store.conversations) { c in
+                            HStack(spacing: 10) {
+                                Button { vm.load(c); showHistory = false } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(c.title).font(HaloFont.body(12, weight: .semibold))
+                                            .foregroundColor(.haloText).lineLimit(1)
+                                        Text("\(c.turns.count) messages · \(Self.relativeDate(c.updatedAt))")
+                                            .font(HaloFont.body(10)).foregroundColor(.haloText3)
+                                    }
+                                    Spacer()
+                                }.buttonStyle(.plain)
+                                Button { vm.deleteSaved(id: c.id) } label: {
+                                    Image(systemName: "trash").foregroundColor(.haloRed)
+                                }.buttonStyle(.plain)
+                            }
+                            .padding(.vertical, 8).padding(.horizontal, 12)
+                        }
+                    }
+                    .padding(.vertical, 6)
+                }
+            }
+        }
+        .frame(width: 440, height: 380).background(Color.haloSurface)
     }
 
     // MARK: Confirmation sheet (D9)
