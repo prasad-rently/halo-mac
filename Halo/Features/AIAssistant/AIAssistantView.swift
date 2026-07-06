@@ -49,6 +49,14 @@ struct AIAssistantView: View {
 
     // MARK: Key setup (BYO key, D2)
 
+    private var keyPlaceholder: String {
+        switch vm.selectedProvider {
+        case .openai: return "sk-…"
+        case .gemini: return "AIza…"
+        case .claude: return "sk-ant-…"
+        }
+    }
+
     private var keySetup: some View {
         VStack(spacing: 14) {
             Image(systemName: "key.fill").font(.system(size: 34)).foregroundColor(.haloPurple)
@@ -57,7 +65,7 @@ struct AIAssistantView: View {
             Text("BYO key — stored only in your Mac's Keychain and sent only to \(vm.selectedProvider.displayName). Each provider has its own key.")
                 .font(HaloFont.body(12)).foregroundColor(.haloText2)
                 .multilineTextAlignment(.center).frame(maxWidth: 420).fixedSize(horizontal: false, vertical: true)
-            SecureField(vm.selectedProvider == .openai ? "sk-…" : "sk-ant-…", text: $keyDraft)
+            SecureField(keyPlaceholder, text: $keyDraft)
                 .textFieldStyle(.plain).font(HaloFont.body(12)).foregroundColor(.haloText)
                 .padding(9).frame(width: 320).background(Color.haloSurface2).cornerRadius(8)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.haloBorder, lineWidth: 1))

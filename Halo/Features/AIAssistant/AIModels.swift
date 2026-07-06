@@ -47,12 +47,13 @@ enum AICatalog {
         // OpenAI (D10)
         .init(id: "gpt-5", displayName: "GPT-5", provider: .openai, supportsTools: true),
         .init(id: "gpt-5-mini", displayName: "GPT-5 mini", provider: .openai, supportsTools: true),
-        // Gemini — wired when its provider lands.
-        .init(id: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro", provider: .gemini, supportsTools: true)
+        // Gemini (D10)
+        .init(id: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro", provider: .gemini, supportsTools: true),
+        .init(id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash", provider: .gemini, supportsTools: true)
     ]
 
     /// Providers that currently have a concrete `AIProvider` implementation.
-    static let implementedProviders: [AIProviderKind] = [.claude, .openai]
+    static let implementedProviders: [AIProviderKind] = [.claude, .openai, .gemini]
 
     static let defaultModel = models[0]   // claude-opus-4-8
 

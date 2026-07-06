@@ -43,10 +43,17 @@
 > executor / confirmation are provider-agnostic and reused unchanged. **20 F-046 unit
 > tests pass** (added OpenAI request-mapping + SSE decode). App builds.
 >
-> **Not yet built:** Gemini provider; conversation persistence across launches (D11);
-> the ⌘ quick-ask overlay (second D5 surface). ⚠️ **UI/live streaming not
-> runtime-verified** — needs real provider API keys + a display; only the pure cores
-> are unit-tested.
+> **Phase 5 done (2026-07):** `GeminiProvider` (D10) — native `streamGenerateContent`
+> client (x-goog-api-key header, `contents`/`parts` with `user`/`model` roles,
+> `systemInstruction`, `functionDeclarations`, SSE with no `[DONE]`). Gemini pairs
+> tool calls/results by **function name** (no id), handled by using the name as the
+> tool-call id within a Gemini run. **All 3 providers now shipped** (D10 complete);
+> provider picker + per-provider keys cover Claude/OpenAI/Gemini. **24 F-046 unit
+> tests pass.** App builds.
+>
+> **Not yet built:** conversation persistence across launches (D11); the ⌘ quick-ask
+> overlay (second D5 surface). ⚠️ **UI/live streaming not runtime-verified** — needs
+> real provider API keys + a display; only the pure cores are unit-tested.
 
 ---
 

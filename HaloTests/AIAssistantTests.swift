@@ -370,3 +370,66 @@ struct OpenAIStreamDecoderTests {
         #expect(out.last == .done(stopReason: "tool_calls"))
     }
 }
+
+// MARK: - GeminiProvider (F-046 D10)
+
+@Suite("GeminiRequestBuilder")
+struct GeminiRequestBuilderTests {
+    @Test("systemInstruction, generationConfig.maxOutputTokens, functionDeclarations")
+    func bodyShape() {
+        let tool = AITool(name: "get_cpu_usage", description: "cpu",
+                          inputSchema: ["type": "object", "properties": [:]])
+        let body = GeminiProvider.requestBody(
+            system: "sys", messages: [AIMessage(role: .user, text: "hi")], tools: [tool], maxTokens: 900)
+        #expect((body["systemInstruction"] as? [String: Any]) != nil)
+        #expect((body["generationConfig"] as? [String: Any])?["maxOutputTokens"] as? Int == 900)
+        let toolsArr = body["tools"] as? [[String: Any]]
+        let decls = toolsArr?.first?["functionDeclarations"] as? [[String: Any]]
+        #expect(decls?.first?["name"] as? String == "get_cpu_usage")
+        #expect(body["max_tokens"] == nil)
+    }
+
+    @Test("assistant→model role; toolUse→functionCall; toolResult→functionResponse (by name)")
+    func mapping() {
+        let msgs = [
+            AIMessage(role: .assistant, blocks: [
+                .toolUse(id: "get_cpu_usage", name: "get_cpu_usage", inputJSON: "{}")]),
+            AIMessage(role: .user, blocks: [
+                .toolResult(toolUseId: "get_cpu_usage", content: "42%", isError: false)])
+        ]
+        let nodes = GeminiProvider.contentNodes(msgs)
+        #expect(nodes[0]["role"] as? String == "model")
+        let modelParts = nodes[0]["parts"] as? [[String: Any]]
+        #expect((modelParts?.first?["functionCall"] as? [String: Any])?["name"] as? String == "get_cpu_usage")
+        // functionResponse keyed by name (== id for Gemini)
+        let userParts = nodes[1]["parts"] as? [[String: Any]]
+        let fr = userParts?.first?["functionResponse"] as? [String: Any]
+        #expect(fr?["name"] as? String == "get_cpu_usage")
+    }
+}
+
+@Suite("GeminiStreamDecoder")
+struct GeminiStreamDecoderTests {
+    @Test("Text parts stream; finish() closes with the finishReason")
+    func text() {
+        let d = GeminiStreamDecoder()
+        var out: [AIStreamEvent] = []
+        out += d.consume(["candidates": [["content": ["parts": [["text": "Hi "]]]]]])
+        out += d.consume(["candidates": [["content": ["parts": [["text": "there"]]], "finishReason": "STOP"]]])
+        out += d.finish()
+        let text = out.compactMap { if case let .textDelta(t) = $0 { return t } else { return nil } }.joined()
+        #expect(text == "Hi there")
+        #expect(out.last == .done(stopReason: "STOP"))
+    }
+
+    @Test("A whole functionCall part becomes a tool call (id == name)")
+    func functionCall() {
+        let d = GeminiStreamDecoder()
+        let out = d.consume(["candidates": [["content": ["parts": [
+            ["functionCall": ["name": "run_smart_scan", "args": ["deep": true]]]]]]]])
+        guard case let .toolCall(id, name, inputJSON) = out.first else { Issue.record("no tool call"); return }
+        #expect(id == "run_smart_scan")
+        #expect(name == "run_smart_scan")
+        #expect(inputJSON.contains("\"deep\"") && inputJSON.contains("true"))
+    }
+}

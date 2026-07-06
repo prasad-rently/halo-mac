@@ -138,7 +138,8 @@ final class AIAssistantViewModel: ObservableObject {
     private func provider(for kind: AIProviderKind) -> AIProvider {
         switch kind {
         case .openai: return OpenAIProvider()
-        default:      return AnthropicProvider()   // claude (gemini falls back until built)
+        case .gemini: return GeminiProvider()
+        case .claude: return AnthropicProvider()
         }
     }
 
