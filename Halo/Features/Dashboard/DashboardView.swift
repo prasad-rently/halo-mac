@@ -29,20 +29,21 @@ struct DashHeader: View {
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
-        case 0..<12: return "Good morning"
+        case 5..<12:  return "Good morning"
         case 12..<17: return "Good afternoon"
-        default: return "Good evening"
+        default:      return "Good evening"   // incl. late night
         }
     }
 
-    /// Emoji that matches the time of day (was a fixed ☀️ even at night).
+    /// Emoji that matches the time of day, using the same ranges as `greeting`
+    /// so the two never contradict (was a fixed ☀️ even at night).
     private var greetingEmoji: String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
-        case 6..<12:  return "☀️"
+        case 5..<12:  return "☀️"
         case 12..<17: return "🌤️"
-        case 17..<21: return "🌆"
-        default:      return "🌙"
+        case 17..<22: return "🌆"
+        default:      return "🌙"   // late night
         }
     }
 
