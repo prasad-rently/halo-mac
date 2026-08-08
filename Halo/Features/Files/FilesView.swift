@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct FilesView: View {
     @State private var activeTab: FilesTab = .spaceLens
@@ -316,10 +317,11 @@ struct DuplicateFinderView: View {
                     }
                 }
                 Spacer()
-                HaloGhostButton("Choose Folder", icon: "folder") { Task { await viewModel.scan() } }
+                HaloGhostButton("Choose Folder", icon: "folder") { viewModel.chooseFolderAndScan() }
+                    .disabled(viewModel.isScanning)
                 HaloPrimaryButton(viewModel.isScanning ? "Scanning…" : "Scan Home",
                                   icon: "doc.on.doc", isLoading: viewModel.isScanning) {
-                    Task { await viewModel.scan() }
+                    viewModel.scanDefaultLocations()
                 }
             }
             .padding(20)
@@ -346,14 +348,88 @@ struct DuplicateFinderView: View {
 final class DuplicateFinderViewModel: ObservableObject {
     @Published var groups: [DuplicateGroup] = []
     @Published var isScanning = false
+    @Published var progress: Double = 0
+    @Published var scanError: String?
+    @Published var scannedLocation: String?
+
+    private let detector = DuplicateDetector()
+    private var scanTask: Task<Void, Never>?
 
     var totalWastedBytes: Int64 { groups.reduce(0) { $0 + $1.wastedBytes } }
 
-    func scan() async {
+    /// Scan the curated set of user folders where duplicates accumulate.
+    func scanDefaultLocations() {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let dirs = ["Downloads", "Desktop", "Documents", "Pictures", "Movies"]
+            .map { home.appendingPathComponent($0, isDirectory: true) }
+        start(scanning: dirs, label: "Downloads, Desktop, Documents, Pictures, Movies")
+    }
+
+    /// Prompt the user for a folder (powerbox-granted, even when sandboxed),
+    /// then scan it recursively.
+    func chooseFolderAndScan() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Scan"
+        panel.message = "Choose a folder to scan for duplicate files"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        start(scanning: [url], label: url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+    }
+
+    private func start(scanning dirs: [URL], label: String) {
+        scanTask?.cancel()
         isScanning = true
-        try? await Task.sleep(nanoseconds: 2_000_000_000)
-        groups = DuplicateGroup.samples
-        isScanning = false
+        progress = 0
+        scanError = nil
+        groups = []
+        scannedLocation = label
+        let detector = self.detector
+        scanTask = Task { [weak self] in
+            let files = Self.enumerateFiles(in: dirs)
+            do {
+                let found = try await detector.detect(in: files) { p in
+                    Task { @MainActor in self?.progress = p }
+                }
+                await MainActor.run {
+                    guard let self, !Task.isCancelled else { return }
+                    self.groups = found
+                    self.isScanning = false
+                }
+            } catch is CancellationError {
+                await MainActor.run { self?.isScanning = false }
+            } catch {
+                await MainActor.run {
+                    self?.scanError = error.localizedDescription
+                    self?.isScanning = false
+                }
+            }
+        }
+    }
+
+    /// Enumerate regular files under the given directories, bounded so an
+    /// accidental huge scan can't run away.
+    private static func enumerateFiles(in dirs: [URL], cap: Int = 50_000) -> [URL] {
+        let fm = FileManager.default
+        var out: [URL] = []
+        for dir in dirs {
+            guard fm.fileExists(atPath: dir.path),
+                  let en = fm.enumerator(at: dir,
+                                         includingPropertiesForKeys: [.isRegularFileKey],
+                                         options: [.skipsHiddenFiles, .skipsPackageDescendants])
+            else { continue }
+            // `nextObject()` loop (not for-in) — NSEnumerator's iterator is
+            // unavailable from async contexts and `start(scanning:)` runs this
+            // inside a Task.
+            while let url = en.nextObject() as? URL {
+                if (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true {
+                    out.append(url)
+                    if out.count >= cap { return out }
+                }
+            }
+        }
+        return out
     }
 
     /// Toggle whether a specific copy is marked for deletion.
@@ -374,21 +450,6 @@ final class DuplicateFinderViewModel: ObservableObject {
         // A group with ≤1 copy left is no longer a duplicate set.
         if groups[gi].items.count <= 1 { groups.remove(at: gi) }
     }
-}
-
-extension DuplicateGroup {
-    static let samples: [DuplicateGroup] = [
-        DuplicateGroup(items: [
-            DuplicateItem(url: URL(fileURLWithPath: "~/Downloads/report.pdf"), sizeBytes: 4_200_000,
-                          modifiedDate: Date().addingTimeInterval(-86400), isMarkedForDeletion: false),
-            DuplicateItem(url: URL(fileURLWithPath: "~/Desktop/report.pdf"), sizeBytes: 4_200_000,
-                          modifiedDate: Date(), isMarkedForDeletion: true),
-        ]),
-        DuplicateGroup(items: [
-            DuplicateItem(url: URL(fileURLWithPath: "~/Pictures/IMG_001.jpg"), sizeBytes: 8_100_000, modifiedDate: Date(), isMarkedForDeletion: false),
-            DuplicateItem(url: URL(fileURLWithPath: "~/Downloads/IMG_001.jpg"), sizeBytes: 8_100_000, modifiedDate: Date().addingTimeInterval(-604800), isMarkedForDeletion: true),
-        ]),
-    ]
 }
 
 struct DuplicateGroupCard: View {
