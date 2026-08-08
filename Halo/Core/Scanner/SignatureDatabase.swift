@@ -35,6 +35,7 @@ actor SignatureDatabase {
     /// Flat dictionary for O(1) keyword lookup: keyword → (kind, risk)
     private var table: [String: (kind: ThreatKind, risk: ThreatRisk)] = [:]
     private var loadedVersion: Int = 0
+    private(set) var updatedString: String = ""
     private(set) var isLoaded = false
 
     // Remote endpoint for delta updates (responds with the same JSON schema)
@@ -135,7 +136,20 @@ actor SignatureDatabase {
         }
         // Merge: new entries win; existing entries kept if not overwritten
         for (k, v) in newTable { table[k] = v }
+        if file.version >= loadedVersion { updatedString = file.updated }
         loadedVersion = max(loadedVersion, file.version)
+    }
+
+    /// The `updated` field ("yyyy-MM-dd") from the active signature file, parsed
+    /// to a Date. `nil` until a file is loaded. Lets the UI show the real
+    /// definitions date instead of a hardcoded value.
+    var lastUpdatedDate: Date? {
+        guard !updatedString.isEmpty else { return nil }
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.date(from: updatedString)
     }
 }
 

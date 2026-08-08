@@ -114,34 +114,39 @@ struct HaloApp: App {
 
 // MARK: - App Delegate (UI-test window hook)
 
-/// Only does anything when the app is launched with `-uiTesting` (set by
-/// `HaloUITestCase`). Halo is a `WindowGroup` + `MenuBarExtra` app; on a headless
-/// XCUITest launch the main window may not open or come forward on its own, which
-/// leaves the sidebar unreachable. Under the test flag this forces a normal,
-/// activated app with a visible main window. In normal use it is a no-op.
+/// Halo is a `WindowGroup` + `MenuBarExtra` app. Because a `MenuBarExtra` is
+/// present, macOS can leave the app running with no main window on screen after
+/// launch (or after window-state restoration returns "no windows"), so the user
+/// sees only the menu-bar item and the sidebar is unreachable. This delegate
+/// guarantees the main window is opened and brought forward on launch and on
+/// re-open (Dock click / reactivation). Safe in normal use; also fixes headless
+/// XCUITest launches.
 final class HaloAppDelegate: NSObject, NSApplicationDelegate {
-    private var isUITesting: Bool {
-        ProcessInfo.processInfo.arguments.contains("-uiTesting")
-    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        guard isUITesting else { return }
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
-        // Bring a window forward once the run loop settles; if the WindowGroup
-        // hasn't produced one, ask AppKit to open a fresh document/window.
+        surfaceMainWindow()
+    }
+
+    /// Reopen (Dock click, `open` again) should always reveal the main window.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows { surfaceMainWindow() }
+        return true
+    }
+
+    /// Bring an existing content window forward, or ask AppKit to open one if
+    /// the WindowGroup produced none.
+    private func surfaceMainWindow() {
         DispatchQueue.main.async {
-            if let window = NSApp.windows.first(where: { $0.canBecomeMain }) {
+            NSApp.setActivationPolicy(.regular)
+            if let window = NSApp.windows.first(where: { $0.canBecomeMain && $0.contentView != nil }) {
                 window.makeKeyAndOrderFront(nil)
             } else {
+                // No WindowGroup window exists — trigger the standard "new window".
                 NSApp.sendAction(Selector(("newWindowForTab:")), to: nil, from: nil)
             }
             NSApp.activate(ignoringOtherApps: true)
         }
-    }
-
-    // Clicking the Dock / reopening should always surface the main window.
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        true
     }
 }

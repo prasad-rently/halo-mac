@@ -75,16 +75,35 @@ struct SpaceLensView: View {
                 }
                 Spacer()
                 HaloGhostButton("Choose Folder", icon: "folder") {
-                    // NSOpenPanel in production
+                    viewModel.chooseFolderAndScan()
                 }
+                .disabled(viewModel.isScanning)
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 14)
 
-            // Treemap
+            // Treemap / scanning / empty prompt
             GeometryReader { geo in
-                TreemapView(nodes: viewModel.currentNodes, size: geo.size) { node in
-                    viewModel.drillInto(node)
+                Group {
+                    if viewModel.isScanning {
+                        VStack(spacing: 10) {
+                            ProgressView()
+                            Text("Analyzing…").font(HaloFont.body(12)).foregroundColor(.haloText2)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if viewModel.currentNodes.isEmpty {
+                        VStack(spacing: 8) {
+                            Image(systemName: "chart.pie")
+                                .font(.system(size: 30)).foregroundColor(.haloText3)
+                            Text("Choose a folder to analyze storage usage")
+                                .font(HaloFont.body(12)).foregroundColor(.haloText2)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        TreemapView(nodes: viewModel.currentNodes, size: geo.size) { node in
+                            viewModel.drillInto(node)
+                        }
+                    }
                 }
                 .padding(16)
             }
@@ -121,9 +140,10 @@ struct SpaceLensView: View {
 
 @MainActor
 final class SpaceLensViewModel: ObservableObject {
-    @Published var currentNodes: [TreeNode] = SpaceLensViewModel.sampleRoot
-    @Published var breadcrumb: [String] = ["Macintosh HD", "Users", "gokul"]
+    @Published var currentNodes: [TreeNode] = []
+    @Published var breadcrumb: [String] = []
     @Published var navigationStack: [[TreeNode]] = []
+    @Published var isScanning = false
 
     struct TreeNode: Identifiable {
         let id = UUID()
@@ -172,15 +192,82 @@ final class SpaceLensViewModel: ObservableObject {
         }
     }
 
-    static let sampleRoot: [TreeNode] = [
-        TreeNode(name: "Applications", sizeBytes: 48_000_000_000, category: .applications),
-        TreeNode(name: "Developer", sizeBytes: 38_000_000_000, category: .developer),
-        TreeNode(name: "Movies", sizeBytes: 22_000_000_000, category: .media),
-        TreeNode(name: "Music", sizeBytes: 8_500_000_000, category: .media),
-        TreeNode(name: "Photos Library", sizeBytes: 12_000_000_000, category: .media),
-        TreeNode(name: "Documents", sizeBytes: 4_200_000_000, category: .documents),
-        TreeNode(name: "Downloads", sizeBytes: 2_800_000_000, category: .downloads),
-    ]
+    // MARK: - Real scan (replaces the former hardcoded sample data)
+
+    /// Prompt for a folder, then analyze its top-level contents by real size.
+    func chooseFolderAndScan() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Analyze"
+        panel.message = "Choose a folder to analyze storage usage"
+        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        scan(url: url)
+    }
+
+    func scan(url: URL) {
+        isScanning = true
+        currentNodes = []
+        navigationStack = []
+        breadcrumb = [url.lastPathComponent]
+        Task { [weak self] in
+            let nodes = Self.scanTopLevel(of: url)
+            await MainActor.run {
+                self?.currentNodes = nodes
+                self?.isScanning = false
+            }
+        }
+    }
+
+    /// Top-level children of `dir` with real byte sizes (directories summed,
+    /// bounded so a huge tree can't hang the scan).
+    private static func scanTopLevel(of dir: URL) -> [TreeNode] {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]) else { return [] }
+        var nodes: [TreeNode] = []
+        for entry in entries {
+            let isDir = (try? entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+            let size = isDir
+                ? directorySize(entry)
+                : Int64((try? entry.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+            guard size > 0 else { continue }
+            nodes.append(TreeNode(name: entry.lastPathComponent, sizeBytes: size,
+                                  category: category(for: entry, isDir: isDir)))
+        }
+        return nodes.sorted { $0.sizeBytes > $1.sizeBytes }
+    }
+
+    private static func directorySize(_ url: URL, cap: Int = 20_000) -> Int64 {
+        let fm = FileManager.default
+        guard let en = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
+                                     options: [.skipsHiddenFiles]) else { return 0 }
+        var total: Int64 = 0, count = 0
+        while let u = en.nextObject() as? URL {
+            if let vals = try? u.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
+               vals.isRegularFile == true, let s = vals.fileSize {
+                total += Int64(s); count += 1
+                if count >= cap { break }
+            }
+        }
+        return total
+    }
+
+    private static func category(for url: URL, isDir: Bool) -> FileCategory {
+        let name = url.lastPathComponent.lowercased()
+        let ext = url.pathExtension.lowercased()
+        if ext == "app" || name == "applications" { return .applications }
+        if ["developer", "node_modules", "xcode", "derived_data"].contains(name)
+            || ["swift", "js", "ts", "py", "o", "a", "framework"].contains(ext) { return .developer }
+        if ["movies", "music", "pictures"].contains(name) || name.contains("photos library")
+            || ["mov", "mp4", "m4v", "mp3", "wav", "aac", "m4a", "jpg", "jpeg", "png", "heic", "gif"].contains(ext) { return .media }
+        if name == "documents" || ["pdf", "doc", "docx", "pages", "txt", "key", "numbers", "xlsx", "csv"].contains(ext) { return .documents }
+        if name == "downloads" { return .downloads }
+        return .other
+    }
 }
 
 // Squarified Treemap Renderer

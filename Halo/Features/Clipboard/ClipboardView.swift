@@ -469,12 +469,7 @@ struct ClipboardActionStrip: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Divider().background(Color.haloBorder).frame(height: 1)
-        }
-        .padding(0)
-        .overlay(alignment: .top) { Divider().background(Color.haloBorder) }
-        HStack(spacing: 8) {
-            ForEach(["Paste", "Pin", "Preview", "Delete"], id: \.self) { action in
+            ForEach(["Paste", "Pin", "Delete"], id: \.self) { action in
                 Button(action) {
                     switch action {
                     case "Paste":

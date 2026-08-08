@@ -53,10 +53,10 @@ struct SmartScanView: View {
                     )
                 } else if phase == .reviewing, let result = appState.smartScanResult {
                     ScanResultView(result: result, onClean: {
-                        Task {
-                            // Execute cleanup from result
-                            phase = .done
-                        }
+                        // Route to the real Cleanup module (which reviews + confirms
+                        // before trashing) rather than faking a "cleaned" state here.
+                        appState.selectedModule = .cleanup
+                        isPresented = false
                     }, onDismiss: { isPresented = false })
                 } else if phase == .done {
                     ScanDoneView(onDismiss: { isPresented = false })
@@ -223,8 +223,8 @@ struct ScanResultView: View {
             .frame(maxWidth: 380)
 
             HStack(spacing: 12) {
-                HaloGhostButton("Review", action: onDismiss)
-                HaloPrimaryButton("Clean Now", icon: "sparkles", action: onClean)
+                HaloGhostButton("Later", action: onDismiss)
+                HaloPrimaryButton("Open Cleanup", icon: "sparkles", action: onClean)
             }
         }
     }

@@ -152,13 +152,16 @@ struct HealthAndMetrics: View {
                 VStack(spacing: 12) {
                     HaloHealthRing(score: appState.systemHealthScore, size: 120)
                     HStack(spacing: 4) {
+                        // 3-tier color that matches HaloHealthRing (green ≥75, amber ≥50, red below).
+                        let healthColor: Color = appState.systemHealthScore >= 75 ? .haloGreen
+                            : appState.systemHealthScore >= 50 ? .haloAmber : .haloRed
                         Circle()
-                            .fill(appState.systemHealthScore >= 75 ? Color.haloGreen : Color.haloAmber)
+                            .fill(healthColor)
                             .frame(width: 6, height: 6)
                         Text(appState.systemHealthScore >= 75 ? "Good Shape"
                              : appState.systemHealthScore >= 50 ? "Needs Attention" : "Issues Found")
                             .font(HaloFont.body(12, weight: .medium))
-                            .foregroundColor(appState.systemHealthScore >= 75 ? .haloGreen : .haloAmber)
+                            .foregroundColor(healthColor)
                     }
                 }
                 .padding(20)
@@ -235,8 +238,6 @@ struct MetricCard: View {
     let color: Color
     let icon: String
 
-    @State private var sparkData: [Double] = (0..<6).map { _ in Double.random(in: 0.2...0.9) }
-
     var body: some View {
         HaloCard(accentTop: color) {
             VStack(alignment: .leading, spacing: 8) {
@@ -263,10 +264,9 @@ struct MetricCard: View {
                         .font(HaloFont.body(11))
                         .foregroundColor(.haloText2)
                 }
-                HaloSparkline(values: sparkData + [ratio], color: color, height: 30)
-                    .onAppear {
-                        sparkData = (0..<6).map { _ in Double.random(in: 0.2...0.9) }
-                    }
+                // Real current-value bar (was a random, fake sparkline).
+                HaloMiniBar(value: ratio, color: color)
+                    .padding(.top, 2)
             }
             .padding(14)
         }
@@ -399,7 +399,9 @@ struct RecentActivityList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HaloSectionHeader(title: "Recent Activity", action: {}, actionLabel: "Clear")
+            HaloSectionHeader(title: "Recent Activity",
+                              action: { appState.recentActivities.removeAll() },
+                              actionLabel: "Clear")
             VStack(spacing: 6) {
                 ForEach(appState.recentActivities.prefix(5)) { event in
                     ActivityRow(event: event)
@@ -456,40 +458,48 @@ struct AlertHistorySection: View {
     var body: some View {
         HaloCard {
             VStack(spacing: 0) {
-                // Header
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
-                } label: {
-                    HStack {
-                        Image(systemName: "bell.badge.fill")
-                            .font(.system(size: 13))
-                            .foregroundColor(.haloAmber)
-                        Text("Alert History")
-                            .font(HaloFont.body(13, weight: .semibold))
-                            .foregroundColor(.haloText)
-                        if alertLog.unreadCount > 0 {
-                            Text("\(alertLog.unreadCount)")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.haloRed)
-                                .clipShape(Capsule())
+                // Header — the title/chevron toggle and the "Clear" button are
+                // siblings (not nested), so each gets its own clean hit target.
+                HStack {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+                    } label: {
+                        HStack {
+                            Image(systemName: "bell.badge.fill")
+                                .font(.system(size: 13))
+                                .foregroundColor(.haloAmber)
+                            Text("Alert History")
+                                .font(HaloFont.body(13, weight: .semibold))
+                                .foregroundColor(.haloText)
+                            if alertLog.unreadCount > 0 {
+                                Text("\(alertLog.unreadCount)")
+                                    .font(HaloFont.body(10, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.haloRed)
+                                    .clipShape(Capsule())
+                            }
                         }
-                        Spacer()
-                        if !alertLog.entries.isEmpty {
-                            Button("Clear") { alertLog.clearAll() }
-                                .font(HaloFont.body(11))
-                                .foregroundColor(.haloText2)
-                                .buttonStyle(.plain)
-                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("dashboard.alertHistory")
+                    Spacer()
+                    if !alertLog.entries.isEmpty {
+                        Button("Clear") { alertLog.clearAll() }
+                            .font(HaloFont.body(11))
+                            .foregroundColor(.haloText2)
+                            .buttonStyle(.plain)
+                    }
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+                    } label: {
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 10))
+                            .font(HaloFont.body(10))
                             .foregroundColor(.haloText2)
                     }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("dashboard.alertHistory")
                 .padding(.bottom, isExpanded && !alertLog.entries.isEmpty ? 10 : 0)
 
                 if isExpanded {

@@ -26,7 +26,7 @@ final class ProtectionViewModel: ObservableObject {
     @Published var scanState: ScanState = .idle
     @Published var threatsFound: [MalwareThreat] = []
     @Published var lastScanDate: Date? = nil
-    @Published var signatureDBDate: Date? = Date().addingTimeInterval(-86400 * 3)
+    @Published var signatureDBDate: Date? = nil   // real date loaded from SignatureDatabase
 
     // Privacy Cleaner
     @Published var installedBrowsers: [DetectedBrowser] = []
@@ -69,6 +69,8 @@ final class ProtectionViewModel: ObservableObject {
     }
 
     func loadAll() async {
+        // Real signature-definitions date from the loaded database.
+        signatureDBDate = await SignatureDatabase.shared.lastUpdatedDate
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.loadPermissions() }
             group.addTask { await self.loadInstalledBrowsers() }
@@ -128,22 +130,11 @@ final class ProtectionViewModel: ObservableObject {
     // MARK: Permissions
 
     func loadPermissions() async {
-        permissions = PermissionKind.allCases.map { kind in
-            AppPermission(kind: kind, grantedApps: sampleApps(for: kind))
-        }
-    }
-
-    private func sampleApps(for kind: PermissionKind) -> [String] {
-        switch kind {
-        case .camera:          return ["Zoom", "FaceTime", "Slack"]
-        case .microphone:      return ["Zoom", "Spotify", "Discord", "FaceTime"]
-        case .location:        return ["Maps", "Weather"]
-        case .contacts:        return ["Mimestream", "Cardhop", "Zoom"]
-        case .calendar:        return ["Fantastical", "Zoom"]
-        case .fullDisk:        return ["Halo"]
-        case .screenRecording: return ["Zoom", "CleanShot X", "Loom"]
-        case .accessibility:   return ["Raycast", "BetterTouchTool"]
-        }
+        // Per-app TCC grants live in a SIP-protected database that requires Full
+        // Disk Access to read, so Halo does not fabricate an audit. Instead each
+        // category links straight to its System Settings privacy pane, where the
+        // real, authoritative list lives.
+        permissions = PermissionKind.allCases.map { AppPermission(kind: $0, grantedApps: []) }
     }
 
     // MARK: Launch Agents (real scan)
@@ -191,7 +182,7 @@ struct ScannerCardsRow: View {
     @ObservedObject var viewModel: ProtectionViewModel
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(alignment: .top, spacing: 16) {
             MalwareScanCard(viewModel: viewModel)
             PrivacyCleanerCard(viewModel: viewModel)
         }
@@ -554,8 +545,8 @@ struct PermissionsAuditSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HaloSectionHeader(title: "App Permissions Audit",
-                              subtitle: "Review which apps have access to sensitive data")
+            HaloSectionHeader(title: "App Permissions",
+                              subtitle: "Open a category to review which apps have access, in System Settings")
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
                 ForEach(viewModel.permissions) { permission in
                     PermissionCard(permission: permission)
@@ -568,35 +559,51 @@ struct PermissionsAuditSection: View {
 struct PermissionCard: View {
     let permission: AppPermission
 
-    private var severityColor: Color {
-        if permission.count == 0 { return .haloGreen }
-        if permission.count >= 5 { return .haloRed }
-        if permission.count >= 3 { return .haloAmber }
-        return .haloAccent
+    /// System Settings privacy-pane anchor for this permission kind.
+    private var settingsURL: URL? {
+        let anchor: String
+        switch permission.kind {
+        case .camera:          anchor = "Privacy_Camera"
+        case .microphone:      anchor = "Privacy_Microphone"
+        case .location:        anchor = "Privacy_LocationServices"
+        case .contacts:        anchor = "Privacy_Contacts"
+        case .calendar:        anchor = "Privacy_Calendars"
+        case .fullDisk:        anchor = "Privacy_AllFiles"
+        case .screenRecording: anchor = "Privacy_ScreenCapture"
+        case .accessibility:   anchor = "Privacy_Accessibility"
+        }
+        return URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)")
     }
 
     var body: some View {
-        HaloCard {
-            VStack(alignment: .leading, spacing: 10) {
-                Image(systemName: permission.kind.icon)
-                    .font(.system(size: 20))
-                    .foregroundColor(severityColor)
-                Text(permission.kind.rawValue)
-                    .font(HaloFont.body(12, weight: .semibold))
-                    .foregroundColor(.haloText)
-                Text("\(permission.count) app\(permission.count == 1 ? "" : "s")")
-                    .font(HaloFont.body(11))
-                    .foregroundColor(.haloText2)
-                HaloMiniBar(value: min(Double(permission.count) / 8.0, 1.0), color: severityColor)
-                if !permission.grantedApps.isEmpty {
-                    Text(permission.grantedApps.prefix(3).joined(separator: ", "))
-                        .font(HaloFont.body(10))
-                        .foregroundColor(.haloText3)
+        Button {
+            if let url = settingsURL { NSWorkspace.shared.open(url) }
+        } label: {
+            HaloCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Image(systemName: permission.kind.icon)
+                        .font(.system(size: 20))
+                        .foregroundColor(.haloAccent)
+                    Text(permission.kind.rawValue)
+                        .font(HaloFont.body(12, weight: .semibold))
+                        .foregroundColor(.haloText)
                         .lineLimit(1)
+                    Spacer(minLength: 0)
+                    HStack(spacing: 4) {
+                        Text("Open in Settings")
+                            .font(HaloFont.body(10))
+                            .foregroundColor(.haloText2)
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundColor(.haloText3)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: 96, alignment: .topLeading)
+                .padding(14)
             }
-            .padding(14)
         }
+        .buttonStyle(.plain)
     }
 }
 
