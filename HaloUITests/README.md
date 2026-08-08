@@ -17,10 +17,41 @@ cases in [`docs/MANUAL_TEST_PLAN.md`](../docs/MANUAL_TEST_PLAN.md).
 | File | Covers |
 |------|--------|
 | `HaloUITestCase.swift` | Base class: launch, tolerant element lookup, assertions |
-| `HaloSidebar.swift` | Page object for the 11 sidebar modules + edit mode |
+| `HaloUITestCase+Confirmation.swift` | Shared cancel-at-confirmation helpers (TC-SAFE gate) |
+| `HaloTestFixtures.swift` | **Dummy-file safety harness** — sandbox fixtures + canary/Trash assertions |
+| `HaloSidebar.swift` | Page object for the sidebar modules + edit mode |
 | `SmokeUITests.swift` | §0 Smoke + §1 Navigation (TC-SMOKE, TC-SHELL) |
 | `SidebarReorderUITests.swift` | §1.1 Reorderable sidebar (TC-SIDEBAR) |
-| `CleanupUITests.swift` | §3 Cleanup (TC-CLEAN) |
+| `DashboardUITests.swift` | §2 Dashboard (TC-DASH) |
+| `CleanupUITests.swift` | §3 Cleanup (TC-CLEAN + TC-SAFE) |
+| `ProtectionUITests.swift` | §4 Protection (TC-PROT) |
+| `PerformanceUITests.swift` | §5 Performance — processes/battery/network/speed/login/idle (TC-PERF) |
+| `ApplicationsUITests.swift` | §6 Deep uninstaller (TC-APP + TC-SAFE) |
+| `FilesUITests.swift` | §7 SpaceLens/Duplicates/Downloads/Large Files/Drive Speed (TC-FILE) |
+| `ClipboardSnippetsUITests.swift` | §8 Clipboard + Snippets (TC-CLIP, TC-SNIP) |
+| `ActionsUITests.swift` | §9 Actions library/search/execution/custom (TC-ACT) |
+| `PortsUITests.swift` | §10 Ports Manager — kill safety via own canary (TC-PORT) |
+| `CodeBeautifierUITests.swift` | §11 Code Beautifier (TC-BEAUT) |
+| `MenuBarUITests.swift` | §13 Menu Bar styles + format strings (TC-MENU) |
+| `SmartScanUITests.swift` | §14 Smart Scan + scheduler (TC-SCAN) |
+| `AlertsReportUITests.swift` | §15/16 Alerts, PDF export, App Intents (TC-ALERT, TC-RPT, TC-SIRI) |
+| `AIAssistantUITests.swift` | F-046 AI Assistant — BYO-key, no-network (TC-AI) |
+
+### The dummy-file safety harness (`HaloTestFixtures`)
+
+Every destructive flow follows the **"test-only, cancel-at-confirmation"** pattern
+and NEVER touches a real user or system file:
+
+1. Seed dummy "canary" files in a throwaway sandbox under the OS temp dir.
+2. Snapshot any real path that must not change + the current Trash item count.
+3. Drive the destructive action **only up to its confirmation review**, then **Cancel**.
+4. Assert: every dummy survives, guarded real paths are byte-for-byte unchanged,
+   and the Trash gained nothing — proving the confirmation gate (TC-SAFE-02)
+   without ever deleting anything.
+
+`PortsUITests` extends this with a **live canary**: it spawns its own
+`python3 -m http.server` listener, drives Kill → Cancel, and asserts the process
+is still running (then terminates it itself in teardown).
 
 ## Running
 

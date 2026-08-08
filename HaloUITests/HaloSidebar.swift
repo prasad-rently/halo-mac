@@ -8,9 +8,8 @@
 
 import XCTest
 
-/// The 11 sidebar modules, keyed by their visible title (see
-/// `AppModule.title` in the app). Dashboard is pinned; the rest are
-/// reorderable.
+/// The sidebar modules, keyed by their visible title (see `AppModule.title`
+/// in the app). Dashboard is pinned; the rest are reorderable.
 enum HaloModule: String, CaseIterable {
     case dashboard     = "Dashboard"
     case cleanup       = "Cleanup"
@@ -22,6 +21,7 @@ enum HaloModule: String, CaseIterable {
     case actions       = "Actions"
     case haloShare     = "HaloShare"
     case ports         = "Ports"
+    case ai            = "AI Assistant"
     case menuBar       = "Menu Bar"
 }
 

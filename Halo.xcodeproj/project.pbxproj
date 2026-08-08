@@ -128,6 +128,21 @@
 		7FA28EC1DD42807C6EFD8148 /* SidebarReorderUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED172401B83B65197881BFC /* SidebarReorderUITests.swift */; };
 		8A4DFF3A40CA9ADDBF8405AE /* HaloTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C5BDF389221BADF1F31152C /* HaloTests.swift */; };
 		8A64A32F27E6245BD6EAEB93 /* CleanupUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8908A278C13A1F3B9E21BFE9 /* CleanupUITests.swift */; };
+		0CBA4BAFF23A6F3013A747F9 /* HaloTestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04C24FA6FA6BE8B3F119901F /* HaloTestFixtures.swift */; };
+		981EFFCB9E6F049507FD211A /* HaloUITestCase+Confirmation.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD490E2DBBC937F29595E8B2 /* HaloUITestCase+Confirmation.swift */; };
+		46B5441596DEA5CFB12C4729 /* DashboardUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A64A6695EDCF890E4944D1A /* DashboardUITests.swift */; };
+		ECA9A6AD93A5CFD402DE392B /* ProtectionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CEA7F5090B5F253E0E23587 /* ProtectionUITests.swift */; };
+		DA81E23B26EDEEB31AA3CBE8 /* PerformanceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB8CF496ED5F2B47F5909F7 /* PerformanceUITests.swift */; };
+		A99CE881593D83C11462AD71 /* ApplicationsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7048D8E34CBF35D4C92C051A /* ApplicationsUITests.swift */; };
+		B235974CEB652C09272B4499 /* FilesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB75AC7A8DBC58FFF8D8070B /* FilesUITests.swift */; };
+		91CF4EEDA9256C217C6F0CC6 /* ClipboardSnippetsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0873B3D75E60E12E6EF40F8A /* ClipboardSnippetsUITests.swift */; };
+		66B4DA7D72433AB2318CE2CD /* ActionsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F44C9D0695A26A2333D149 /* ActionsUITests.swift */; };
+		3E2B00D4AFFC4E4F14368B69 /* PortsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA43DB5704F0BA89A52E04E3 /* PortsUITests.swift */; };
+		DC0A5C9506A4B026CBD8E1B1 /* MenuBarUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 945DE4D093874E6954B85774 /* MenuBarUITests.swift */; };
+		0FD40DC13D3BACC88E9F5526 /* SmartScanUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 544F38735C12837D57FD1DA7 /* SmartScanUITests.swift */; };
+		E1840428A8042147E382FE52 /* CodeBeautifierUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 447CC440994885DF5CCA7A6A /* CodeBeautifierUITests.swift */; };
+		211137AACE082EA316D20732 /* AIAssistantUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CDCAD725F3EDB1AA147464F /* AIAssistantUITests.swift */; };
+		48D9F268088D85186495AD71 /* AlertsReportUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 256C0A5343A473D0D89FAB57 /* AlertsReportUITests.swift */; };
 		97FC4C5E35CB7030A2F01C9C /* HaloSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */; };
 		A159238AFAAA0D1EF722C664 /* ToolRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB7849370C86E175D74B077 /* ToolRegistry.swift */; };
 		A3253DC631055540204F574D /* AnthropicProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF513D5DDD7399B797BE21F2 /* AnthropicProvider.swift */; };
@@ -328,6 +343,21 @@
 		7C310900DF7BB88C2E7AFC1B /* DriveSpeedView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedView.swift; sourceTree = "<group>"; };
 		7C5BDF389221BADF1F31152C /* HaloTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloTests.swift; sourceTree = "<group>"; };
 		8908A278C13A1F3B9E21BFE9 /* CleanupUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CleanupUITests.swift; sourceTree = "<group>"; };
+		04C24FA6FA6BE8B3F119901F /* HaloTestFixtures.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloTestFixtures.swift; sourceTree = "<group>"; };
+		FD490E2DBBC937F29595E8B2 /* HaloUITestCase+Confirmation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "HaloUITestCase+Confirmation.swift"; sourceTree = "<group>"; };
+		6A64A6695EDCF890E4944D1A /* DashboardUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DashboardUITests.swift; sourceTree = "<group>"; };
+		5CEA7F5090B5F253E0E23587 /* ProtectionUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProtectionUITests.swift; sourceTree = "<group>"; };
+		CFB8CF496ED5F2B47F5909F7 /* PerformanceUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PerformanceUITests.swift; sourceTree = "<group>"; };
+		7048D8E34CBF35D4C92C051A /* ApplicationsUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ApplicationsUITests.swift; sourceTree = "<group>"; };
+		DB75AC7A8DBC58FFF8D8070B /* FilesUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FilesUITests.swift; sourceTree = "<group>"; };
+		0873B3D75E60E12E6EF40F8A /* ClipboardSnippetsUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClipboardSnippetsUITests.swift; sourceTree = "<group>"; };
+		E1F44C9D0695A26A2333D149 /* ActionsUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ActionsUITests.swift; sourceTree = "<group>"; };
+		DA43DB5704F0BA89A52E04E3 /* PortsUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PortsUITests.swift; sourceTree = "<group>"; };
+		945DE4D093874E6954B85774 /* MenuBarUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MenuBarUITests.swift; sourceTree = "<group>"; };
+		544F38735C12837D57FD1DA7 /* SmartScanUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SmartScanUITests.swift; sourceTree = "<group>"; };
+		447CC440994885DF5CCA7A6A /* CodeBeautifierUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CodeBeautifierUITests.swift; sourceTree = "<group>"; };
+		0CDCAD725F3EDB1AA147464F /* AIAssistantUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAssistantUITests.swift; sourceTree = "<group>"; };
+		256C0A5343A473D0D89FAB57 /* AlertsReportUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AlertsReportUITests.swift; sourceTree = "<group>"; };
 		94E717DB998E0BBF1AE83F94 /* HaloTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B4A92E8D0819BCF034A05DF2 /* AIKeyStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIKeyStore.swift; sourceTree = "<group>"; };
 		BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloSidebar.swift; sourceTree = "<group>"; };
@@ -548,6 +578,21 @@
 			isa = PBXGroup;
 			children = (
 				8908A278C13A1F3B9E21BFE9 /* CleanupUITests.swift */,
+				04C24FA6FA6BE8B3F119901F /* HaloTestFixtures.swift */,
+				FD490E2DBBC937F29595E8B2 /* HaloUITestCase+Confirmation.swift */,
+				6A64A6695EDCF890E4944D1A /* DashboardUITests.swift */,
+				5CEA7F5090B5F253E0E23587 /* ProtectionUITests.swift */,
+				CFB8CF496ED5F2B47F5909F7 /* PerformanceUITests.swift */,
+				7048D8E34CBF35D4C92C051A /* ApplicationsUITests.swift */,
+				DB75AC7A8DBC58FFF8D8070B /* FilesUITests.swift */,
+				0873B3D75E60E12E6EF40F8A /* ClipboardSnippetsUITests.swift */,
+				E1F44C9D0695A26A2333D149 /* ActionsUITests.swift */,
+				DA43DB5704F0BA89A52E04E3 /* PortsUITests.swift */,
+				945DE4D093874E6954B85774 /* MenuBarUITests.swift */,
+				544F38735C12837D57FD1DA7 /* SmartScanUITests.swift */,
+				447CC440994885DF5CCA7A6A /* CodeBeautifierUITests.swift */,
+				0CDCAD725F3EDB1AA147464F /* AIAssistantUITests.swift */,
+				256C0A5343A473D0D89FAB57 /* AlertsReportUITests.swift */,
 				BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */,
 				4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */,
 				3ED172401B83B65197881BFC /* SidebarReorderUITests.swift */,
@@ -965,6 +1010,21 @@
 			buildActionMask = 2147483647;
 			files = (
 				8A64A32F27E6245BD6EAEB93 /* CleanupUITests.swift in Sources */,
+				0CBA4BAFF23A6F3013A747F9 /* HaloTestFixtures.swift in Sources */,
+				981EFFCB9E6F049507FD211A /* HaloUITestCase+Confirmation.swift in Sources */,
+				46B5441596DEA5CFB12C4729 /* DashboardUITests.swift in Sources */,
+				ECA9A6AD93A5CFD402DE392B /* ProtectionUITests.swift in Sources */,
+				DA81E23B26EDEEB31AA3CBE8 /* PerformanceUITests.swift in Sources */,
+				A99CE881593D83C11462AD71 /* ApplicationsUITests.swift in Sources */,
+				B235974CEB652C09272B4499 /* FilesUITests.swift in Sources */,
+				91CF4EEDA9256C217C6F0CC6 /* ClipboardSnippetsUITests.swift in Sources */,
+				66B4DA7D72433AB2318CE2CD /* ActionsUITests.swift in Sources */,
+				3E2B00D4AFFC4E4F14368B69 /* PortsUITests.swift in Sources */,
+				DC0A5C9506A4B026CBD8E1B1 /* MenuBarUITests.swift in Sources */,
+				0FD40DC13D3BACC88E9F5526 /* SmartScanUITests.swift in Sources */,
+				E1840428A8042147E382FE52 /* CodeBeautifierUITests.swift in Sources */,
+				211137AACE082EA316D20732 /* AIAssistantUITests.swift in Sources */,
+				48D9F268088D85186495AD71 /* AlertsReportUITests.swift in Sources */,
 				97FC4C5E35CB7030A2F01C9C /* HaloSidebar.swift in Sources */,
 				0D95339BD7D85794863633C8 /* HaloUITestCase.swift in Sources */,
 				7FA28EC1DD42807C6EFD8148 /* SidebarReorderUITests.swift in Sources */,

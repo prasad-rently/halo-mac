@@ -554,6 +554,26 @@
 
 ---
 
+## 16.1 AI Assistant (F-046 — cloud providers)
+
+**Files:** `Halo/Features/AIAssistant/*` · **E2E:** `HaloUITests/AIAssistantUITests.swift`
+
+> BYO-key contract (US-5): with **no** API key configured, the assistant must
+> surface guidance and make **no** network call. Never store or log keys outside
+> the Keychain.
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-AI-01 | P1 | Module renders | Open AI Assistant | Composer + provider/model selector appear |
+| TC-AI-02 | P1 | Provider picker | Open picker | Claude / OpenAI / Gemini selectable |
+| TC-AI-03 | P0 | No key → no call | With no key set, send a prompt | "No API key set…" guidance; **no** request sent |
+| TC-AI-04 | P2 | Quick-ask overlay | Press ⌘⇧I | Floating quick-ask panel toggles (manual — global hotkey) |
+| TC-AI-05 | P0 | Tool safety classes | Model calls tools | `.read` tools auto-run; `.act` tools (run_smart_scan, export_health_report) confirm first |
+| TC-AI-06 | P1 | Key stored in Keychain | Add a key in AI settings | Persisted to Keychain (`com.halo.mac.ai`), never plaintext on disk |
+| **Unit** | — | Agent loop | — | Covered by `HaloTests/AIAssistantTests.swift` (provider parsing, loop, confirmation gate) |
+
+---
+
 ## 17. Widget
 
 **Files:** `HaloWidget.swift`, `HaloWidgetBundle.swift`, `HaloSharedData.swift`, `AppState.writeWidgetData()`
@@ -667,6 +687,14 @@
 | TC-SAFE-01 | P0 | Never removeItem | Audit: every deletion path uses `trashItem` |
 | TC-SAFE-02 | P0 | Confirmation everywhere | Every destructive action shows a review sheet first |
 | TC-SAFE-03 | P0 | Recoverable deletes | Deleted items appear in Trash, restorable |
+| TC-SAFE-04 | P0 | Cancel deletes nothing | Cancelling any confirmation leaves all files + Trash unchanged (automated via `HaloTestFixtures` canaries) |
+| TC-SAFE-05 | P0 | Tests never touch real files | E2E destructive flows act only on dummy fixtures in a temp sandbox; a guarded real path (e.g. Calculator.app) is asserted byte-for-byte untouched |
+
+> **Automation note.** `TC-SAFE-02/04/05` are enforced end-to-end by the XCUITest
+> suite in [`HaloUITests/`](../HaloUITests/README.md): the `HaloTestFixtures`
+> harness seeds dummy canary files, snapshots real paths + the Trash, drives each
+> destructive flow to its confirmation, cancels, and asserts nothing was deleted.
+> `PortsUITests` spawns its own listener process as a live kill-canary.
 
 ---
 

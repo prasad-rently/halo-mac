@@ -32,14 +32,38 @@ final class CleanupUITests: HaloUITestCase {
                       "Cleanup results (fileListView) should appear after scanning")
     }
 
-    /// TC-CLEAN-03 / TC-SAFE-02 — destructive cleanup must present a
-    /// confirmation review before deleting anything.
+    /// TC-CLEAN-03 / TC-SAFE-02 / TC-SAFE-03 — destructive cleanup must present
+    /// a confirmation review before deleting anything, and cancelling it must
+    /// delete NOTHING.
     ///
-    /// NOTE: kept as a documented expectation rather than an automatic delete
-    /// so the suite never trashes real user files. Enable once a seeded
-    /// fixture directory is wired via launch arguments.
-    func test_cleanup_requires_confirmation_before_delete() throws {
-        throw XCTSkip("Enable with a seeded fixture dir to avoid trashing real files. " +
-                      "Expectation: clicking Clean shows a review sheet before any deletion.")
+    /// Safe by construction: we seed dummy canary files in a temp sandbox and
+    /// snapshot the Trash, run a scan, then drive the "Clean" action only up to
+    /// its confirmation sheet and cancel. Afterwards we assert the dummies are
+    /// intact and the Trash is unchanged — proving the confirmation gate without
+    /// ever trashing a real file.
+    func test_cleanup_requires_confirmation_and_cancel_deletes_nothing() throws {
+        let fx = HaloTestFixtures(self)
+        _ = fx.makeFiles(count: 3)          // canaries
+        fx.captureTrashBaseline()
+
+        let sidebar = HaloSidebar(test: self)
+        XCTAssertTrue(sidebar.navigate(to: .cleanup))
+        _ = clickAny(of: ["Scan", "Scan Now", "Start Scan"], timeout: 5)
+        _ = app.descendants(matching: .any)["fileListView"].waitForExistence(timeout: 30)
+
+        guard firstButton(labeledAnyOf: ["Clean", "Clean Up", "Delete", "Remove"], timeout: 10) != nil else {
+            fx.tearDown()
+            throw XCTSkip("No Clean affordance became addressable (empty scan or missing " +
+                          "identifiers). Expectation: clicking Clean shows a review sheet " +
+                          "before any deletion (TC-SAFE-02).")
+        }
+        firstButton(labeledAnyOf: ["Clean", "Clean Up", "Delete", "Remove"])?.click()
+
+        XCTAssertTrue(confirmationSurfaceAppeared(),
+                      "Cleanup must present a review sheet before deleting (TC-SAFE-02)")
+        cancelConfirmation()
+
+        fx.assertNothingDeleted()           // dummies intact + Trash unchanged
+        fx.tearDown()
     }
 }
