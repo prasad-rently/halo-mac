@@ -54,7 +54,7 @@ private struct PortHeader: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Port Manager")
-                    .font(HaloFont.display(28, weight: .bold))
+                    .font(HaloFont.display(22, weight: .bold))
                     .foregroundColor(.haloText)
                 Text("Monitor and manage listening network ports")
                     .font(HaloFont.body(13))

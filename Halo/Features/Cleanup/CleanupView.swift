@@ -108,7 +108,7 @@ struct CleanupSidebar: View {
             VStack(spacing: 12) {
                 HStack {
                     Text("Cleanup")
-                        .font(HaloFont.display(17, weight: .bold))
+                        .font(HaloFont.display(22, weight: .bold))
                         .foregroundColor(.haloText)
                     Spacer()
                     if viewModel.isScanning {

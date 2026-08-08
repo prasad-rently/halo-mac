@@ -54,8 +54,8 @@ struct SensorsSection: View {
                         }
                     }
                     .background(Color.haloSurface2)
-                    .cornerRadius(12)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.haloBorder, lineWidth: 1))
+                    .cornerRadius(14)
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.haloBorder, lineWidth: 1))
 
                     // Unit toggle — only meaningful when there are readings.
                     HStack {

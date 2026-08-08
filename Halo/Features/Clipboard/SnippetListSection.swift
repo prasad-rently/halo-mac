@@ -133,7 +133,7 @@ struct SnippetListSection: View {
                             .font(HaloFont.body(13, weight: .medium))
                             .foregroundColor(.haloText2)
                         if searchText.isEmpty {
-                            Text("Tap + New to create your first snippet")
+                            Text("Click + New to create your first snippet")
                                 .font(HaloFont.body(11))
                                 .foregroundColor(.haloText3)
                         }

@@ -124,7 +124,7 @@ struct DriveSpeedView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Drive Speed Test")
-                .font(HaloFont.display(20))
+                .font(HaloFont.display(18, weight: .bold))
                 .foregroundColor(.haloText)
             Text("Benchmark read & write throughput for internal and external drives. Uncached I/O with a full device flush — reports sustained average and peak (optimal) speeds.")
                 .font(HaloFont.body(12))

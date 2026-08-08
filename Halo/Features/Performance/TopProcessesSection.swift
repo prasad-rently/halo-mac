@@ -51,7 +51,7 @@ struct TopProcessesSection: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(14)
                         .background(Color.haloSurface2)
-                        .cornerRadius(12)
+                        .cornerRadius(14)
                 } else {
                     VStack(spacing: 0) {
                         ForEach(Array(processes.enumerated()), id: \.element.id) { idx, proc in
@@ -64,8 +64,8 @@ struct TopProcessesSection: View {
                         }
                     }
                     .background(Color.haloSurface2)
-                    .cornerRadius(12)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.haloBorder, lineWidth: 1))
+                    .cornerRadius(14)
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.haloBorder, lineWidth: 1))
                 }
             }
         }

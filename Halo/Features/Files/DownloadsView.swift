@@ -80,7 +80,7 @@ private struct DownloadsHeader: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Downloads")
-                        .font(HaloFont.display(24, weight: .bold))
+                        .font(HaloFont.display(18, weight: .bold))
                         .foregroundColor(.haloText)
                     if viewModel.hasScanned {
                         Text("\(viewModel.fileCount) files · \(viewModel.totalSizeFormatted)")

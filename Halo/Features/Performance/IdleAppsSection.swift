@@ -213,9 +213,9 @@ struct IdleAppsSection: View {
                                 IdleAppRow(app: app, viewModel: viewModel)
                             }
                         }
-                        .background(Color.haloSurface2.opacity(0.5))
-                        .cornerRadius(12)
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.haloBorder, lineWidth: 1))
+                        .background(Color.haloSurface2)
+                        .cornerRadius(14)
+                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.haloBorder, lineWidth: 1))
 
                         // Quit all button
                         if viewModel.idleApps.count > 1 {
@@ -362,8 +362,8 @@ private struct IdleAppsDailyStats: View {
         }
         .padding(14)
         .background(Color.haloSurface2)
-        .cornerRadius(12)
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.haloBorder, lineWidth: 1))
+        .cornerRadius(14)
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.haloBorder, lineWidth: 1))
     }
 }
 

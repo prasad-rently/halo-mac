@@ -59,7 +59,7 @@ final class AIQuickAskController: NSObject, NSWindowDelegate {
         p.titleVisibility             = .hidden
         p.titlebarAppearsTransparent  = true
         p.isMovableByWindowBackground = true
-        p.backgroundColor             = NSColor(calibratedRed: 0.031, green: 0.047, blue: 0.078, alpha: 1)
+        p.backgroundColor             = NSColor(Color.haloBackground)   // token, not a hand-converted hex
         p.contentViewController       = hosting
         p.delegate                    = self
         p.onEscape = { [weak self] in self?.hide() }
@@ -138,7 +138,7 @@ struct AIQuickAskView: View {
             Divider().background(Color.haloBorder)
             if vm.hasKey { conversation } else { keySetup }
         }
-        .background(Color(hex: "#080c14"))
+        .background(Color.haloBackground)
         .overlay(
             Button("") { onDismiss() }
                 .keyboardShortcut(.cancelAction)

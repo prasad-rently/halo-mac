@@ -136,7 +136,7 @@ struct ClipboardQuickPickerView: View {
             Divider().background(Color.haloBorder)
             pickerFooter
         }
-        .background(Color(hex: "#080c14"))
+        .background(Color.haloBackground)
         // Escape dismiss via SwiftUI cancelAction (semantic Escape binding)
         .overlay(
             Button("") { onDismiss() }

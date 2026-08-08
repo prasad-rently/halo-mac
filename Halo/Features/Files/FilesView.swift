@@ -398,7 +398,7 @@ struct DuplicateFinderView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Duplicate Finder")
-                        .font(HaloFont.display(16, weight: .bold))
+                        .font(HaloFont.display(18, weight: .bold))
                         .foregroundColor(.haloText)
                     if !viewModel.groups.isEmpty {
                         Text("\(viewModel.groups.count) groups · \(ByteCountFormatter.string(fromByteCount: viewModel.totalWastedBytes, countStyle: .file)) wasted")
@@ -704,7 +704,7 @@ struct LargeFilesView: View {
         VStack(spacing: 0) {
             HStack {
                 Text("Large Files")
-                    .font(HaloFont.display(16, weight: .bold))
+                    .font(HaloFont.display(18, weight: .bold))
                     .foregroundColor(.haloText)
                 HaloBadge(text: "Files > 500 MB", color: .haloAccent)
                 Spacer()

@@ -26,9 +26,6 @@ struct NetworkSparklineCard: View {
         }
     }
 
-    private var peakDown: Double { appState.downloadHistory.max() ?? 0.1 }
-    private var peakUp:   Double { appState.uploadHistory.max() ?? 0.1 }
-
     var body: some View {
         HaloCard {
             VStack(alignment: .leading, spacing: 10) {

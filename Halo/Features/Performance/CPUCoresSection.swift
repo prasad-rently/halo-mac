@@ -48,8 +48,8 @@ struct CPUCoresSection: View {
                     }
                     .padding(14)
                     .background(Color.haloSurface2)
-                    .cornerRadius(12)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.haloBorder, lineWidth: 1))
+                    .cornerRadius(14)
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.haloBorder, lineWidth: 1))
                 }
             }
         }

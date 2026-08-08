@@ -145,7 +145,6 @@ private struct GPURowView: View {
     /// "AMDRadeonRX5600M" → "Radeon RX 5600M"
     private func cleanName(_ raw: String) -> String {
         if raw.hasPrefix("AGX")     { return "Apple GPU" }
-        if raw.hasPrefix("AGXG")    { return "Apple GPU" }
         if raw.hasPrefix("AMD")     { return raw.replacingOccurrences(of: "AMD", with: "AMD ").trimmingCharacters(in: .whitespaces) }
         if raw.hasPrefix("Intel")   { return raw }
         if raw == "GPU"             { return "Integrated GPU" }

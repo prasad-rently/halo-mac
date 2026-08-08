@@ -164,7 +164,7 @@ struct AppListPanel: View {
             VStack(spacing: 10) {
                 HStack {
                     Text("Applications")
-                        .font(HaloFont.display(16, weight: .bold))
+                        .font(HaloFont.display(22, weight: .bold))
                         .foregroundColor(.haloText)
                     Spacer()
                     if viewModel.unusedAppsCount > 0 {

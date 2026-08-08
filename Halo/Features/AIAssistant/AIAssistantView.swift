@@ -28,7 +28,7 @@ struct AIAssistantView: View {
     private var header: some View {
         HStack(spacing: 12) {
             Image(systemName: "sparkle").foregroundColor(.haloPurple)
-            Text("AI Assistant").font(HaloFont.display(18)).foregroundColor(.haloText)
+            Text("AI Assistant").font(HaloFont.display(22, weight: .bold)).foregroundColor(.haloText)
             HaloBadge(text: "Agentic", color: .haloPurple)
             Spacer()
             // Provider picker (D10) — only implemented providers.

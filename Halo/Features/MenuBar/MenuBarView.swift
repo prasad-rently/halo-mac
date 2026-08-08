@@ -323,7 +323,7 @@ struct MenuBarPopoverView: View {
             MenuBarQuickActions()
         }
         .frame(width: 300)
-        .background(Color(hex: "#111827"))
+        .background(Color.haloSurface2)
         .cornerRadius(14)
         .onAppear {
             menuBarManager.update(from: appState)
