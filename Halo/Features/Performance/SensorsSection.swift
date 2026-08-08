@@ -56,17 +56,17 @@ struct SensorsSection: View {
                     .background(Color.haloSurface2)
                     .cornerRadius(12)
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.haloBorder, lineWidth: 1))
-                }
 
-                // Unit toggle
-                HStack {
-                    Spacer()
-                    Picker("", selection: $useFahrenheit) {
-                        Text("°C").tag(false)
-                        Text("°F").tag(true)
+                    // Unit toggle — only meaningful when there are readings.
+                    HStack {
+                        Spacer()
+                        Picker("", selection: $useFahrenheit) {
+                            Text("°C").tag(false)
+                            Text("°F").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 80)
                     }
-                    .pickerStyle(.segmented)
-                    .frame(width: 80)
                 }
             }
         }

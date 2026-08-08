@@ -229,6 +229,7 @@ private struct NetInfoCell: View {
             Text(label).font(HaloFont.body(10)).foregroundColor(.haloText3)
             HStack(spacing: 4) {
                 Text(value).font(HaloFont.mono(12)).foregroundColor(.haloText)
+                    .lineLimit(1).truncationMode(.middle)
                 if canCopy {
                     Button {
                         NSPasteboard.general.clearContents()

@@ -184,7 +184,7 @@ struct AppListPanel: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
-                .background(Color.haloSurface)
+                .background(Color.haloSurface2)
                 .cornerRadius(8)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.haloBorder, lineWidth: 1))
 
@@ -216,6 +216,16 @@ struct AppListPanel: View {
             if viewModel.isLoading {
                 Spacer()
                 ProgressView().tint(.haloAccent)
+                Spacer()
+            } else if viewModel.filteredApps.isEmpty {
+                Spacer()
+                VStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 28)).foregroundColor(.haloText3)
+                    Text("No matching apps")
+                        .font(HaloFont.body(13, weight: .medium)).foregroundColor(.haloText2)
+                }
+                .frame(maxWidth: .infinity)
                 Spacer()
             } else {
                 ScrollView {
@@ -267,6 +277,8 @@ struct AppListRow: View {
                     Text(app.name)
                         .font(HaloFont.body(13, weight: .medium))
                         .foregroundColor(.haloText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                     HStack(spacing: 6) {
                         Text(app.sizeFormatted)
                             .font(HaloFont.body(11))

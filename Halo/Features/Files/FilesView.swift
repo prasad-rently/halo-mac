@@ -361,14 +361,17 @@ struct TreemapListRow: View {
                     Text(node.name)
                         .font(HaloFont.body(13, weight: .medium))
                         .foregroundColor(.haloText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                     Text(node.category.rawValue)
                         .font(HaloFont.body(11))
                         .foregroundColor(.haloText2)
                 }
-                Spacer()
+                Spacer(minLength: 8)
                 Text(node.sizeFormatted)
                     .font(HaloFont.body(12, weight: .semibold))
                     .foregroundColor(.haloText)
+                    .frame(minWidth: 64, alignment: .trailing)
                 if !node.children.isEmpty {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10))
@@ -809,6 +812,8 @@ struct LargeFileRow: View {
                 Text(file.displayPath)
                     .font(HaloFont.body(11))
                     .foregroundColor(.haloText2)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
             Spacer()
             Text(file.sizeFormatted)

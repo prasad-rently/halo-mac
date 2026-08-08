@@ -265,15 +265,15 @@ private struct IdleAppsSettingsRow: View {
         HaloCard {
             VStack(spacing: 12) {
                 HStack {
-                    Toggle("Monitor idle apps", isOn: Binding(
+                    Text("Monitor idle apps")
+                        .font(HaloFont.body(12, weight: .medium))
+                        .foregroundColor(.haloText)
+                    Spacer()
+                    // Shared HaloToggle (matches the Login Items switch style).
+                    HaloToggle(isOn: Binding(
                         get: { viewModel.isEnabled },
                         set: { viewModel.setEnabled($0) }
                     ))
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .font(HaloFont.body(12, weight: .medium))
-                    .foregroundColor(.haloText)
-                    Spacer()
                 }
 
                 if viewModel.isEnabled {
