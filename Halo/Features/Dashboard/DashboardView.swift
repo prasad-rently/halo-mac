@@ -35,6 +35,17 @@ struct DashHeader: View {
         }
     }
 
+    /// Emoji that matches the time of day (was a fixed ☀️ even at night).
+    private var greetingEmoji: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 6..<12:  return "☀️"
+        case 12..<17: return "🌤️"
+        case 17..<21: return "🌆"
+        default:      return "🌙"
+        }
+    }
+
     private var lastScanText: String {
         guard let date = appState.lastSmartScanDate else { return "Never scanned" }
         let formatter = RelativeDateTimeFormatter()
@@ -67,7 +78,7 @@ struct DashHeader: View {
         HStack(alignment: .top, spacing: 16) {
             // Left: greeting + status line
             VStack(alignment: .leading, spacing: 4) {
-                Text("\(greeting) ☀️")
+                Text("\(greeting) \(greetingEmoji)")
                     .font(HaloFont.display(22, weight: .bold))
                     .foregroundColor(.haloText)
                 Text(lastScanText + nextScanText)
