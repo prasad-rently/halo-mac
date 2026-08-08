@@ -118,31 +118,58 @@ menu-bar-only accessory at that moment.
 - The unit suite already covers the underlying logic (agent loop, providers,
   duplicate detection, drive speed, helper client, models) — all green.
 
-### Recommended fix (app-side, small)
+### Fix attempted, and the remaining blocker
 
-Add an `@NSApplicationDelegateAdaptor` (or a launch-argument branch) so that when
-the app is started with `-uiTesting YES` it deterministically opens and activates
-the main window and skips any first-run gating, e.g.:
+An app-side hook **was added** in `Halo/App/HaloApp.swift` — an
+`@NSApplicationDelegateAdaptor` (`HaloAppDelegate`) that, only when launched with
+`-uiTesting`, forces a normal activation policy, activates the app, and brings the
+main window forward:
 
 ```swift
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class HaloAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ n: Notification) {
         guard ProcessInfo.processInfo.arguments.contains("-uiTesting") else { return }
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
-        // ensure a WindowGroup window is on screen (openWindow / newWindow command)
+        DispatchQueue.main.async { NSApp.windows.first(where: { $0.canBecomeMain })?.makeKeyAndOrderFront(nil) }
     }
 }
 ```
 
-Once the window is presented under test, the existing identifier-based flows
-(`sidebar.row.*`, `dashboard.*`, `cleanup.cleanAll.button`, `ai.*`, `ports.*`, the
-Files delete-confirmation flows, etc.) should exercise as written. Re-run with:
+The suite was rebuilt, re-signed, and re-run. **The smoke test still fails** the
+same way (`Main window should appear after launch`), and every element query
+returns empty.
+
+That the *element queries themselves* come back empty — not just the window —
+points to the real blocker being **the execution environment, not the app**:
+
+- XCUITest can only read another app's accessibility tree when the **test runner
+  has macOS Accessibility / Automation (TCC) permission**, and normally when the
+  host + runner are **properly signed** (not ad-hoc).
+- This run uses **ad-hoc signing** and a **headless command-line** `xcodebuild`
+  invocation, where that TCC permission has not been (and cannot be, without a
+  user clicking *Allow*) granted to the runner. So the runner launches the target
+  but cannot inspect its UI.
+- The **unit suite is unaffected** because it never reads UI — it exercises code
+  directly — which is exactly why it passes while the UI suite cannot.
+
+### How to get a green UI run
+
+Run the UI suite from an environment that has UI-automation permission and proper
+signing — i.e. **launched by Xcode**, or on a **CI runner** where the test host is
+signed with a real identity and Accessibility/Automation is pre-authorized:
 
 ```bash
+# From Xcode: open Halo.xcodeproj, select the HaloUITests scheme, ⌘U.
+# Or CI, with a real signing identity + TCC granted to the test runner:
 xcodebuild test -project Halo.xcodeproj -scheme HaloUITests -destination 'platform=macOS' \
-  CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=YES   # or the build-unsigned + ad-hoc-sign flow above
+  DEVELOPMENT_TEAM=R7S39UR27F -allowProvisioningUpdates   # requires the Mac registered in the account
 ```
+
+With the window hook in place and UI inspection allowed, the existing
+identifier-based flows (`sidebar.row.*`, `dashboard.*`, `cleanup.cleanAll.button`,
+`ai.*`, `ports.*`, the Files delete-confirmation flows, etc.) should exercise as
+written.
 
 ---
 
@@ -166,6 +193,9 @@ xcodebuild test-without-building \
 
 - ✅ **Logic is proven:** 54/54 unit + integration tests pass, including the AI
   provider/agent layer, duplicate detector, drive-speed benchmark, and XPC helper.
-- ⏸ **UI E2E is one small app hook away from running:** the suite is complete,
-  compiles, signs, and launches; it needs the app to present its main window under
-  `-uiTesting` before the flows can assert. Tracked as the recommended fix above.
+- ⏸ **UI E2E is complete and compiles/signs/launches, but can't be *driven* in
+  this headless, ad-hoc-signed command-line environment.** A `-uiTesting` window
+  hook was added to the app; the remaining blocker is that XCUITest UI inspection
+  needs the test runner to hold macOS Accessibility/Automation permission (and,
+  ideally, real signing) — grant that by running from Xcode or a properly
+  provisioned CI runner (see "How to get a green UI run" above).

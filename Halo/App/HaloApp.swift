@@ -5,6 +5,10 @@ import Sentry
 struct HaloApp: App {
     @StateObject private var appState = AppState()
     @StateObject private var menuBarManager = MenuBarManager()
+    // Under UI testing, this delegate forces the main window to open + activate
+    // so XCUITest can drive the sidebar (Halo is a WindowGroup + MenuBarExtra app,
+    // and the window doesn't reliably appear on a headless test launch).
+    @NSApplicationDelegateAdaptor(HaloAppDelegate.self) private var appDelegate
 
     init() {
         // F-006: Sentry crash reporting — opt-in only, no PII.
@@ -105,5 +109,39 @@ struct HaloApp: App {
             SettingsView()
                 .environmentObject(appState)
         }
+    }
+}
+
+// MARK: - App Delegate (UI-test window hook)
+
+/// Only does anything when the app is launched with `-uiTesting` (set by
+/// `HaloUITestCase`). Halo is a `WindowGroup` + `MenuBarExtra` app; on a headless
+/// XCUITest launch the main window may not open or come forward on its own, which
+/// leaves the sidebar unreachable. Under the test flag this forces a normal,
+/// activated app with a visible main window. In normal use it is a no-op.
+final class HaloAppDelegate: NSObject, NSApplicationDelegate {
+    private var isUITesting: Bool {
+        ProcessInfo.processInfo.arguments.contains("-uiTesting")
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        guard isUITesting else { return }
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        // Bring a window forward once the run loop settles; if the WindowGroup
+        // hasn't produced one, ask AppKit to open a fresh document/window.
+        DispatchQueue.main.async {
+            if let window = NSApp.windows.first(where: { $0.canBecomeMain }) {
+                window.makeKeyAndOrderFront(nil)
+            } else {
+                NSApp.sendAction(Selector(("newWindowForTab:")), to: nil, from: nil)
+            }
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    // Clicking the Dock / reopening should always surface the main window.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        true
     }
 }
