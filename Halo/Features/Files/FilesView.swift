@@ -332,7 +332,7 @@ struct DuplicateFinderView: View {
                 ScrollView {
                     LazyVStack(spacing: 10) {
                         ForEach(viewModel.groups) { group in
-                            DuplicateGroupCard(group: group)
+                            DuplicateGroupCard(viewModel: viewModel, group: group)
                         }
                     }
                     .padding(16)
@@ -355,6 +355,25 @@ final class DuplicateFinderViewModel: ObservableObject {
         groups = DuplicateGroup.samples
         isScanning = false
     }
+
+    /// Toggle whether a specific copy is marked for deletion.
+    func toggleMark(groupID: DuplicateGroup.ID, itemID: DuplicateItem.ID) {
+        guard let gi = groups.firstIndex(where: { $0.id == groupID }),
+              let ii = groups[gi].items.firstIndex(where: { $0.id == itemID }) else { return }
+        groups[gi].items[ii].isMarkedForDeletion.toggle()
+    }
+
+    /// Trash every marked copy in a group (mandatory: only ever `trashItem`).
+    /// Called only after the confirmation in `DuplicateGroupCard`.
+    func deleteMarked(in groupID: DuplicateGroup.ID) {
+        guard let gi = groups.firstIndex(where: { $0.id == groupID }) else { return }
+        for item in groups[gi].items where item.isMarkedForDeletion {
+            try? FileManager.default.trashItem(at: item.url, resultingItemURL: nil)
+        }
+        groups[gi].items.removeAll { $0.isMarkedForDeletion }
+        // A group with ≤1 copy left is no longer a duplicate set.
+        if groups[gi].items.count <= 1 { groups.remove(at: gi) }
+    }
 }
 
 extension DuplicateGroup {
@@ -373,7 +392,11 @@ extension DuplicateGroup {
 }
 
 struct DuplicateGroupCard: View {
+    @ObservedObject var viewModel: DuplicateFinderViewModel
     let group: DuplicateGroup
+    @State private var showDeleteConfirm = false
+
+    private var markedCount: Int { group.items.filter(\.isMarkedForDeletion).count }
 
     var body: some View {
         HaloCard {
@@ -384,30 +407,50 @@ struct DuplicateGroupCard: View {
                         .font(HaloFont.body(11))
                         .foregroundColor(.haloText2)
                     Spacer()
-                    HaloGhostButton("Delete marked") {}
-                        .accessibilityIdentifier("files.duplicates.deleteMarked.button")
+                    HaloGhostButton("Delete marked\(markedCount > 0 ? " (\(markedCount))" : "")") {
+                        showDeleteConfirm = true            // ask first
+                    }
+                    .disabled(markedCount == 0)
+                    .accessibilityIdentifier("files.duplicates.deleteMarked.button")
                 }
                 ForEach(group.items) { item in
-                    HStack(spacing: 10) {
-                        Image(systemName: item.isMarkedForDeletion ? "trash.fill" : "doc.fill")
-                            .font(.system(size: 13))
-                            .foregroundColor(item.isMarkedForDeletion ? .haloRed : .haloGreen)
-                        Text(item.displayPath)
-                            .font(HaloFont.mono(11))
-                            .foregroundColor(.haloText)
-                            .lineLimit(1)
-                        Spacer()
-                        Text(item.sizeFormatted)
-                            .font(HaloFont.body(11))
-                            .foregroundColor(.haloText2)
+                    // Tap a copy to toggle whether it's marked for deletion.
+                    Button {
+                        viewModel.toggleMark(groupID: group.id, itemID: item.id)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: item.isMarkedForDeletion ? "trash.fill" : "doc.fill")
+                                .font(.system(size: 13))
+                                .foregroundColor(item.isMarkedForDeletion ? .haloRed : .haloGreen)
+                            Text(item.displayPath)
+                                .font(HaloFont.mono(11))
+                                .foregroundColor(.haloText)
+                                .lineLimit(1)
+                            Spacer()
+                            Text(item.sizeFormatted)
+                                .font(HaloFont.body(11))
+                                .foregroundColor(.haloText2)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(item.isMarkedForDeletion ? Color.haloRed.opacity(0.05) : Color.haloSurface)
+                        .cornerRadius(7)
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(item.isMarkedForDeletion ? Color.haloRed.opacity(0.05) : Color.haloSurface)
-                    .cornerRadius(7)
+                    .buttonStyle(.plain)
                 }
             }
             .padding(14)
+        }
+        // Mandatory confirmation before trashing marked copies (TC-SAFE-02).
+        .confirmationDialog(
+            "Move \(markedCount) marked \(markedCount == 1 ? "copy" : "copies") to Trash?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Move to Trash", role: .destructive) {
+                viewModel.deleteMarked(in: group.id)
+            }
+            Button("Cancel", role: .cancel) {}
         }
     }
 }
@@ -500,6 +543,9 @@ final class LargeFilesViewModel: ObservableObject {
 
 struct LargeFilesView: View {
     @StateObject private var viewModel = LargeFilesViewModel()
+    // Pending delete — set when the user taps a row's trash button; the actual
+    // trashItem only runs after the confirmation below (TC-SAFE-02).
+    @State private var pendingDelete: LargeFilesViewModel.LargeFile?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -548,7 +594,7 @@ struct LargeFilesView: View {
                     LazyVStack(spacing: 5) {
                         ForEach(viewModel.files) { file in
                             LargeFileRow(file: file) {
-                                viewModel.trash(file)
+                                pendingDelete = file       // ask first
                             }
                             .accessibilityIdentifier("files.largeFiles.row")
                         }
@@ -556,6 +602,19 @@ struct LargeFilesView: View {
                     .padding(16)
                 }
             }
+        }
+        // Mandatory confirmation before trashing (TC-SAFE-02).
+        .confirmationDialog(
+            pendingDelete.map { "Move \"\($0.name)\" (\($0.sizeFormatted)) to Trash?" } ?? "Move to Trash?",
+            isPresented: Binding(get: { pendingDelete != nil },
+                                 set: { if !$0 { pendingDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Move to Trash", role: .destructive) {
+                if let file = pendingDelete { viewModel.trash(file) }
+                pendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
         }
         .alert("Could not move to Trash", isPresented: Binding(
             get: { viewModel.trashErrorMessage != nil },
@@ -606,6 +665,7 @@ struct LargeFileRow: View {
                 .font(HaloFont.body(13, weight: .semibold))
                 .foregroundColor(.haloText)
             HaloGhostButton("Move to Trash") { onTrash() }
+                .accessibilityIdentifier("files.largeFiles.trash.button")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

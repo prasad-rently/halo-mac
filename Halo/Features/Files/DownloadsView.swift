@@ -54,6 +54,19 @@ struct DownloadsView: View {
         } message: {
             Text("Sort \(viewModel.fileCount) files into subfolders by type (Images, Documents, Archives, etc.)?")
         }
+        // Per-file trash now confirms first (TC-SAFE-02).
+        .alert("Move to Trash", isPresented: Binding(
+            get: { viewModel.pendingTrash != nil },
+            set: { if !$0 { viewModel.pendingTrash = nil } }
+        )) {
+            Button("Cancel", role: .cancel) { viewModel.pendingTrash = nil }
+            Button("Move to Trash", role: .destructive) {
+                if let file = viewModel.pendingTrash { viewModel.trashFile(file) }
+                viewModel.pendingTrash = nil
+            }
+        } message: {
+            Text(viewModel.pendingTrash.map { "Move \"\($0.name)\" to Trash?" } ?? "")
+        }
     }
 }
 
@@ -378,7 +391,7 @@ private struct DownloadFileRow: View {
                 .help("Reveal in Finder")
 
                 Button {
-                    viewModel.trashFile(file)
+                    viewModel.pendingTrash = file       // ask first
                 } label: {
                     Image(systemName: "trash")
                         .font(.system(size: 12))

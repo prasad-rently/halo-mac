@@ -161,6 +161,9 @@ final class DownloadsViewModel: ObservableObject {
     // Cleanup state
     @Published var showCleanConfirm = false
     @Published var showOrganizeConfirm = false
+    /// File pending single-item trash — set on tap, cleared on confirm/cancel.
+    /// Gates `trashFile` behind a confirmation (TC-SAFE-02).
+    @Published var pendingTrash: DownloadFile?
     @Published var statusMessage: String?
 
     // MARK: - Computed

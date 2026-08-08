@@ -105,20 +105,21 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 | `performance.idleApp.quit.button` | Performance → Idle Apps |
 | `applications.row.<bundleId>` · `applications.uninstall.button` · `applications.leftover.<kind>` | Applications |
 | `files.tab.<TabTitle>` | Files tab bar |
-| `files.duplicates.deleteMarked.button` | Files → Duplicates (⚠️ no-op stub) |
+| `files.duplicates.deleteMarked.button` | Files → Duplicates |
 | `files.downloads.row` · `files.downloads.trash.button` · `files.downloads.cleanStale.button` | Files → Downloads |
-| `files.largeFiles.row` | Files → Large Files (⚠️ delete has no confirmation) |
+| `files.largeFiles.row` · `files.largeFiles.trash.button` | Files → Large Files |
 | `ports.row.<port>` · `ports.kill.<port>` · `ports.refresh.button` · `ports.search` | Ports |
 | `actions.newCustom.button` | Actions |
 | `ai.providerPicker` · `ai.modelPicker` · `ai.composer` · `ai.send.button` · `ai.keySetup.title` | AI Assistant |
 
-> ⚠️ **Two delete paths lack a confirmation gate** (found while wiring these
-> tests): **Files → Large Files** per-row delete and **Files → Downloads**
-> per-row trash both call `trashItem` immediately. The suite therefore never
-> clicks them (it would trash a real file with no review) — it tests Downloads
-> via the confirmed bulk *Clean Stale* flow instead, and only renders Large
-> Files. **Files → Duplicates** "Delete marked" is an unimplemented no-op stub.
-> See `MANUAL_TEST_PLAN.md` §7 notes.
+> **Delete-confirmation gaps fixed.** Wiring these tests surfaced three Files
+> delete paths that bypassed the mandatory confirmation rule (TC-SAFE-02):
+> Large Files per-row delete and Downloads per-row trash both trashed
+> immediately, and Duplicates "Delete marked" was a no-op stub. All three now
+> show a confirmation review before trashing (and Duplicates' mark → delete is
+> wired), so their tests drive the real confirm → cancel → assert-nothing-deleted
+> flow. Remaining skips are purely state-dependent (a duplicate group / a
+> download / a >500 MB file / an idle app must exist to act on).
 
 `HaloSidebar.navigate(to:)` clicks `sidebar.row.<module>` (mapping HaloShare →
 `localShare`, Menu Bar → `menuBarPreview`) and only falls back to the title.

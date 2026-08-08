@@ -37,65 +37,75 @@ final class FilesUITests: HaloUITestCase {
                         "SpaceLens should render a treemap or a scan prompt")
     }
 
-    // TC-FILE-10 — the Duplicates tab renders. NOTE: the "Delete marked" control
-    // (`files.duplicates.deleteMarked.button`) is currently a UI stub with an
-    // empty action — it deletes nothing. We verify that invoking it is a safe
-    // no-op (no file trashed), which is the only honest assertion until the
-    // feature is implemented with a confirmation gate.
-    func test_duplicates_delete_is_safe_noop() throws {
+    // TC-FILE-10 / TC-SAFE-02 — marking a duplicate copy and clicking
+    // "Delete marked" shows a confirmation before trashing; cancelling deletes
+    // nothing. (Duplicate scan is sample data, so we drive the mark → confirm →
+    // cancel gate rather than a real deletion.)
+    func test_duplicate_delete_confirms_and_cancel_deletes_nothing() throws {
         let fx = HaloTestFixtures(self)
-        fx.makeDuplicateSet()        // canaries in the sandbox
         fx.captureTrashBaseline()
         openFiles(tab: "Duplicates")
+        _ = clickAny(of: ["Scan Home", "Choose Folder", "Scan"], timeout: 5)
 
-        if tapID("files.duplicates.deleteMarked.button", timeout: 10) {
-            // Stub action → nothing should be deleted anywhere.
-            fx.assertNothingDeleted()
-        } else {
+        guard waitForID("files.duplicates.deleteMarked.button", timeout: 15) != nil else {
             fx.tearDown()
-            throw XCTSkip("No duplicate groups on this machine, so 'Delete marked' isn't shown. " +
-                          "NOTE: that control is currently an unimplemented no-op stub; when it " +
-                          "is wired it MUST show a confirmation before trashing (TC-SAFE-02).")
+            throw XCTSkip("No duplicate groups surfaced to act on.")
         }
-        fx.tearDown()
-    }
-
-    // TC-FILE-20 / TC-SAFE-02 — the Downloads bulk "Clean Stale" flow confirms
-    // before trashing. We drive it to the confirmation and cancel; nothing is
-    // deleted. (The per-row trash button `files.downloads.trash.button` deletes
-    // IMMEDIATELY with no confirmation — a TC-SAFE-02 gap — so the suite never
-    // clicks it against real downloads.)
-    func test_downloads_clean_stale_confirms_and_cancel_deletes_nothing() throws {
-        let fx = HaloTestFixtures(self)
-        fx.captureTrashBaseline()
-        openFiles(tab: "Downloads")
-        guard tapID("files.downloads.cleanStale.button", timeout: 10) else {
-            fx.tearDown()
-            throw XCTSkip("No stale (>90 day) downloads on this machine, so the confirmed " +
-                          "Clean Stale flow isn't offered. Expectation: it asks 'Move N files … " +
-                          "to Trash?' with Cancel before deleting (TC-SAFE-02).")
+        // Ensure at least one copy is marked (sample data marks some by default;
+        // if not, tap the first duplicate path to mark it).
+        if !tapID("files.duplicates.deleteMarked.button", timeout: 3) {
+            app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS %@", "~/")).firstMatch.click()
+            guard tapID("files.duplicates.deleteMarked.button", timeout: 3) else {
+                fx.tearDown()
+                throw XCTSkip("'Delete marked' stayed disabled — nothing could be marked.")
+            }
         }
         XCTAssertTrue(confirmationSurfaceAppeared(),
-                      "Clean Stale Downloads must confirm before trashing (TC-SAFE-02)")
+                      "Deleting marked duplicates must confirm first (TC-SAFE-02)")
         cancelConfirmation()
         fx.assertTrashUnchanged()
         fx.tearDown()
     }
 
-    // TC-FILE-30 — the Large Files list renders. SAFETY: the per-row delete
-    // (`files.largeFiles.row`) calls trashItem IMMEDIATELY with no confirmation
-    // dialog (only an error alert exists). That both violates the mandatory
-    // "all deletions confirm" rule (TC-SAFE-02) and would trash a real file, so
-    // this test asserts the list renders and deliberately does NOT click delete.
-    func test_large_files_list_renders_delete_not_exercised() throws {
+    // TC-FILE-20 / TC-SAFE-02 — deleting a download (per-row) now confirms
+    // first; cancelling deletes nothing.
+    func test_downloads_delete_confirms_and_cancel_deletes_nothing() throws {
+        let fx = HaloTestFixtures(self)
+        fx.captureTrashBaseline()
+        openFiles(tab: "Downloads")
+        guard waitForID("files.downloads.row", timeout: 20) != nil else {
+            fx.tearDown()
+            throw XCTSkip("No files in ~/Downloads to exercise the per-row delete flow.")
+        }
+        element(id: "files.downloads.row").hover()   // reveal the row's trash button
+        guard tapID("files.downloads.trash.button", timeout: 5) else {
+            fx.tearDown()
+            throw XCTSkip("Downloads trash button not hittable.")
+        }
+        XCTAssertTrue(confirmationSurfaceAppeared(),
+                      "Deleting a download must confirm first (TC-SAFE-02)")
+        cancelConfirmation()
+        fx.assertTrashUnchanged()
+        fx.tearDown()
+    }
+
+    // TC-FILE-30 / TC-SAFE-02 — deleting a large file now confirms first;
+    // cancelling deletes nothing (no real file is ever trashed).
+    func test_large_files_delete_confirms_and_cancel_deletes_nothing() throws {
+        let fx = HaloTestFixtures(self)
+        fx.captureTrashBaseline()
         openFiles(tab: "Large Files")
-        let rendered = waitForID("files.largeFiles.row", timeout: 30) != nil ||
-                       element(labeled: "Large Files", timeout: 5) != nil ||
-                       app.windows.firstMatch.exists
-        XCTAssertTrue(rendered, "Large Files tab should render a list or empty state")
-        // Intentionally no delete: the per-row delete lacks a confirmation gate.
-        // Once a confirmation is added, replace this with a drive-to-confirm →
-        // cancel → assertNothingDeleted flow like the other destructive tests.
+        guard waitForID("files.largeFiles.trash.button", timeout: 30) != nil else {
+            fx.tearDown()
+            throw XCTSkip("No large files (>500 MB) found on this machine to exercise delete.")
+        }
+        _ = tapID("files.largeFiles.trash.button", timeout: 5)
+        XCTAssertTrue(confirmationSurfaceAppeared(),
+                      "Deleting a large file must confirm first (TC-SAFE-02)")
+        cancelConfirmation()
+        fx.assertTrashUnchanged()
+        fx.tearDown()
     }
 
     // TC-FILE-40 — Drive Speed benchmark runs and reports read/write numbers.
