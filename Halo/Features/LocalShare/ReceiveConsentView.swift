@@ -114,12 +114,13 @@ struct ReceiveConsentView: View {
                     manager.rejectTransfer()
                 } label: {
                     Text("Reject")
-                        .font(HaloFont.body(13, weight: .medium))
+                        .font(HaloFont.body(13, weight: .semibold))
                         .foregroundColor(.haloRed)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                         .background(Color.haloRed.opacity(0.1))
-                        .cornerRadius(8)
+                        .cornerRadius(11)
+                        .overlay(RoundedRectangle(cornerRadius: 11).stroke(Color.haloRed.opacity(0.3), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
 
@@ -128,12 +129,13 @@ struct ReceiveConsentView: View {
                     manager.acceptTransfer(destDirectory: destDirectory)
                 } label: {
                     Text("Accept")
-                        .font(HaloFont.body(13, weight: .medium))
+                        .font(HaloFont.body(13, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .background(Color.haloAccent)
-                        .cornerRadius(8)
+                        .background(LinearGradient(colors: [.haloAccent, .haloAccent2],
+                                                   startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .cornerRadius(11)
                 }
                 .buttonStyle(.plain)
             }

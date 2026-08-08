@@ -239,10 +239,10 @@ struct AIQuickAskView: View {
             Text(text).font(HaloFont.body(13)).foregroundColor(.haloText)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(10)
+                .padding(11)
                 .background(mine ? Color.haloAccent.opacity(0.18) : Color.haloSurface2)
-                .cornerRadius(11)
-                .overlay(RoundedRectangle(cornerRadius: 11).stroke(Color.haloBorder, lineWidth: mine ? 0 : 1))
+                .cornerRadius(12)
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.haloBorder, lineWidth: mine ? 0 : 1))
             if !mine { Spacer(minLength: 40) }
         }
     }

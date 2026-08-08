@@ -84,7 +84,7 @@ struct OnboardingStep0: View {
             HaloPrimaryButton("Get Started", icon: "arrow.right", action: onNext)
         }
         .padding(48)
-        .frame(maxWidth: 440)
+        .frame(maxWidth: 460)
     }
 }
 
@@ -134,7 +134,7 @@ struct OnboardingStep1: View {
             }
         }
         .padding(48)
-        .frame(maxWidth: 480)
+        .frame(maxWidth: 460)
     }
 }
 
@@ -210,7 +210,7 @@ struct OnboardingStep2Accessibility: View {
             }
         }
         .padding(48)
-        .frame(maxWidth: 480)
+        .frame(maxWidth: 460)
         .onAppear {
             pollTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
                 let trusted = AXIsProcessTrusted()
@@ -246,7 +246,7 @@ struct OnboardingStepDone: View {
             HaloPrimaryButton("Launch Halo", icon: "sparkles", action: onDone)
         }
         .padding(48)
-        .frame(maxWidth: 400)
+        .frame(maxWidth: 460)
     }
 }
 

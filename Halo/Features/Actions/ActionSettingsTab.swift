@@ -234,7 +234,7 @@ struct ActionSettingsTab: View {
             if action.requiresPrivilege {
                 Image(systemName: "lock.shield.fill")
                     .font(.caption)
-                    .foregroundColor(.orange)
+                    .foregroundColor(.haloAmber)   // match the app's amber lock badge
                     .help("Requires administrator privileges")
             }
             // Toggle
