@@ -18,9 +18,8 @@ final class SmartScanUITests: HaloUITestCase {
     // no automatic deletion happens.
     func test_smart_scan_runs_to_summary() throws {
         HaloSidebar(test: self).navigate(to: .dashboard)
-        guard clickAny(of: ["Smart Scan", "Run Smart Scan", "Scan"], timeout: 5) else {
-            throw XCTSkip("Smart Scan trigger not addressable by label; annotate with " +
-                          "`dashboard.smartScan.button`.")
+        guard tapID("dashboard.smartScan.button") else {
+            throw XCTSkip("Smart Scan button (dashboard.smartScan.button) not hittable.")
         }
         // A progress indicator or a completion summary should appear. Because a
         // full scan can take a while, we accept either signal within a window.
@@ -40,7 +39,7 @@ final class SmartScanUITests: HaloUITestCase {
         let fx = HaloTestFixtures(self)
         fx.captureTrashBaseline()
         HaloSidebar(test: self).navigate(to: .dashboard)
-        _ = clickAny(of: ["Smart Scan", "Run Smart Scan", "Scan"], timeout: 5)
+        _ = tapID("dashboard.smartScan.button")
 
         // If a one-click clean is offered after scanning, it must confirm.
         if firstButton(labeledAnyOf: ["Clean", "Clean Up", "Fix All", "Optimize"], timeout: 30) != nil {

@@ -51,13 +51,13 @@ final class CleanupUITests: HaloUITestCase {
         _ = clickAny(of: ["Scan", "Scan Now", "Start Scan"], timeout: 5)
         _ = app.descendants(matching: .any)["fileListView"].waitForExistence(timeout: 30)
 
-        guard firstButton(labeledAnyOf: ["Clean", "Clean Up", "Delete", "Remove"], timeout: 10) != nil else {
+        // The Clean All button appears once a category with items is selected.
+        guard tapID("cleanup.cleanAll.button", timeout: 15) else {
             fx.tearDown()
-            throw XCTSkip("No Clean affordance became addressable (empty scan or missing " +
-                          "identifiers). Expectation: clicking Clean shows a review sheet " +
-                          "before any deletion (TC-SAFE-02).")
+            throw XCTSkip("No Clean All affordance became addressable (the scan may have found " +
+                          "nothing in the selected category). Expectation: clicking Clean All " +
+                          "shows a 'Move to Trash?' review before any deletion (TC-SAFE-02).")
         }
-        firstButton(labeledAnyOf: ["Clean", "Clean Up", "Delete", "Remove"])?.click()
 
         XCTAssertTrue(confirmationSurfaceAppeared(),
                       "Cleanup must present a review sheet before deleting (TC-SAFE-02)")

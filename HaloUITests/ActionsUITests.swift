@@ -93,12 +93,11 @@ final class ActionsUITests: HaloUITestCase {
     // script, sudo toggle). Documented; enable once the editor exposes ids.
     func test_custom_action_editor_opens() throws {
         openActions()
-        guard clickAny(of: ["New Action", "Add Action", "Create Action", "New Custom Action"], timeout: 5) else {
-            throw XCTSkip("Custom-action entry not addressable; annotate with " +
-                          "`actions.newCustom`. Expectation: a sheet with name/icon/keywords/" +
-                          "script/sudo-toggle fields.")
+        guard tapID("actions.newCustom.button", timeout: 5) else {
+            throw XCTSkip("New Action button (actions.newCustom.button) not hittable.")
         }
-        XCTAssertTrue(app.sheets.firstMatch.waitForExistence(timeout: 5) || app.windows.firstMatch.exists)
+        XCTAssertTrue(app.sheets.firstMatch.waitForExistence(timeout: 5) || app.windows.firstMatch.exists,
+                      "New Action should open the custom-action editor sheet")
         cancelConfirmation()
     }
 }

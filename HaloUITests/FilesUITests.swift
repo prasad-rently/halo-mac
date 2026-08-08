@@ -21,7 +21,10 @@ final class FilesUITests: HaloUITestCase {
 
     private func openFiles(tab: String? = nil) {
         XCTAssertTrue(HaloSidebar(test: self).navigate(to: .files))
-        if let tab { _ = clickAny(of: [tab], timeout: 5) }
+        if let tab {
+            // Prefer the stable tab identifier; fall back to the visible title.
+            if !tapID("files.tab.\(tab)", timeout: 5) { _ = clickAny(of: [tab], timeout: 3) }
+        }
     }
 
     // TC-FILE-01 — SpaceLens tab renders (treemap or a scan prompt).

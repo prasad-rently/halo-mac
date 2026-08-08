@@ -6,22 +6,24 @@
 //  destructive flow must reach a review/confirmation surface before deleting;
 //  these helpers find that surface, prove it appeared, and cancel out of it.
 //
+//  Matching is by CONTAINS (case-insensitive) so real button texts are caught:
+//  "Move to Trash", "Kill (SIGTERM)", "Force Kill (SIGKILL)", "Uninstall", …
+//
 
 import XCTest
 
 extension HaloUITestCase {
 
-    /// Button labels Halo uses to trigger a destructive action. Finding one of
-    /// these (alongside a Cancel affordance) is our signal that a confirmation
-    /// surface is present.
-    static let destructiveLabels = [
-        "Delete", "Remove", "Uninstall", "Trash", "Move to Trash",
-        "Clean", "Clean Up", "Erase", "Kill", "Force Quit", "Quit", "Confirm"
+    /// Substrings that identify a destructive confirmation button.
+    static let destructiveKeywords = [
+        "Delete", "Remove", "Uninstall", "Trash", "Erase",
+        "Kill", "Force Quit", "Clean", "Confirm"
     ]
 
-    static let cancelLabels = ["Cancel", "Dismiss", "Keep", "Not Now", "Close"]
+    /// Substrings that identify an escape hatch.
+    static let cancelKeywords = ["Cancel", "Dismiss", "Keep", "Not Now"]
 
-    /// First hittable button whose label is one of `labels`.
+    /// First hittable button whose label EXACTLY equals one of `labels`.
     func firstButton(labeledAnyOf labels: [String], timeout: TimeInterval = 3) -> XCUIElement? {
         let deadline = Date().addingTimeInterval(timeout)
         repeat {
@@ -33,29 +35,47 @@ extension HaloUITestCase {
         return nil
     }
 
-    /// True if a confirmation/review surface (a destructive button plus a way
-    /// out) is on screen. This is the TC-SAFE-02 gate.
+    /// First button whose label CONTAINS any of `substrings` (case-insensitive).
+    func button(containingAnyOf substrings: [String], timeout: TimeInterval = 3) -> XCUIElement? {
+        let deadline = Date().addingTimeInterval(timeout)
+        let format = substrings.map { _ in "label CONTAINS[c] %@" }.joined(separator: " OR ")
+        let predicate = NSPredicate(format: format, argumentArray: substrings)
+        repeat {
+            // Prefer buttons inside a presented dialog/sheet/alert, then anywhere.
+            for scope in [app.dialogs, app.sheets, app.alerts] {
+                let m = scope.buttons.matching(predicate).firstMatch
+                if m.exists && m.isHittable { return m }
+            }
+            let any = app.buttons.matching(predicate).firstMatch
+            if any.exists && any.isHittable { return any }
+        } while Date() < deadline
+        return nil
+    }
+
+    /// True if a modal confirmation surface (alert / dialog / sheet) is present,
+    /// OR a destructive + cancel button pair is on screen. This is the
+    /// TC-SAFE-02 gate.
     @discardableResult
     func confirmationSurfaceAppeared(timeout: TimeInterval = 5) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         repeat {
-            let hasDestructive = firstButton(labeledAnyOf: Self.destructiveLabels, timeout: 0.5) != nil
-            let hasCancel = firstButton(labeledAnyOf: Self.cancelLabels, timeout: 0.5) != nil
-            // A sheet/dialog with both a destructive verb and an escape hatch.
+            if app.dialogs.firstMatch.exists || app.alerts.firstMatch.exists { return true }
+            let hasDestructive = button(containingAnyOf: Self.destructiveKeywords, timeout: 0.4) != nil
+            let hasCancel = button(containingAnyOf: Self.cancelKeywords, timeout: 0.4) != nil
             if hasDestructive && hasCancel { return true }
         } while Date() < deadline
         return false
     }
 
-    /// Cancel out of whatever confirmation surface is showing. Returns true if
-    /// a cancel affordance was found and clicked.
+    /// Cancel out of whatever confirmation surface is showing. Returns true if a
+    /// cancel affordance was found and clicked.
     @discardableResult
     func cancelConfirmation() -> Bool {
-        if let cancel = firstButton(labeledAnyOf: Self.cancelLabels, timeout: 3) {
+        if let cancel = button(containingAnyOf: Self.cancelKeywords, timeout: 3) {
             cancel.click()
             return true
         }
-        // Fall back to pressing Escape, which dismisses SwiftUI sheets.
+        // Fall back to Escape, which dismisses SwiftUI alerts/sheets.
         app.typeKey(.escape, modifierFlags: [])
         return false
     }

@@ -21,56 +21,38 @@ final class AIAssistantUITests: HaloUITestCase {
                       "AI Assistant sidebar module should open")
     }
 
-    // TC-AI-01 — the AI Assistant module renders: a message composer and a
-    // provider/model selector.
+    // TC-AI-01 — the AI Assistant module renders with its provider selector.
+    // (The composer only appears once a key is configured; the provider picker
+    // is always present, so it's the stable render signal.)
     func test_ai_module_renders() {
         openAI()
         XCTAssertTrue(app.windows.firstMatch.exists)
-        let composer = app.textViews.firstMatch.exists ||
-                       app.textFields.firstMatch.exists ||
-                       element(labeled: "Ask", timeout: 5) != nil ||
-                       element(labeled: "Send", timeout: 2) != nil
-        XCTAssertTrue(composer, "AI Assistant should present a message composer")
+        assertID("ai.providerPicker", "AI Assistant should present a provider selector")
     }
 
-    // TC-AI-02 — the provider picker lists the three implemented providers.
-    func test_provider_picker_lists_providers() throws {
+    // TC-AI-02 — the provider picker is present and interactive.
+    func test_provider_picker_present() {
         openAI()
-        let providers = ["Claude", "OpenAI", "Gemini", "Claude (Anthropic)", "Gemini (Google)"]
-        guard providers.contains(where: { element(labeled: $0, timeout: 5) != nil }) else {
-            throw XCTSkip("Provider picker not addressable by label; annotate it with " +
-                          "`ai.providerPicker`. Expectation: Claude / OpenAI / Gemini selectable.")
-        }
+        let picker = assertID("ai.providerPicker")
+        XCTAssertTrue(picker.isHittable, "Provider picker should be interactive")
     }
 
-    // TC-AI-03 — with NO API key configured, submitting a prompt surfaces the
-    // "add a key" guidance and makes no network call. This guards the BYO-key
-    // contract (US-5): no key → no request.
-    func test_missing_key_shows_guidance_and_makes_no_call() throws {
+    // TC-AI-03 — with NO API key configured, the assistant shows the BYO-key
+    // setup guidance ("Connect your … API key") and NO composer — proving the
+    // no-key path makes no network call (US-5). If a key is already configured
+    // on this machine we can't assert the no-key path without a real call, so we
+    // skip rather than hit the network.
+    func test_no_key_shows_setup_guidance_and_no_composer() throws {
         openAI()
-        // Type into whatever composer is present.
-        let composer = app.textViews.firstMatch.exists ? app.textViews.firstMatch
-                     : app.textFields.firstMatch
-        guard composer.exists else {
-            throw XCTSkip("Composer not addressable; annotate with `ai.composer`. " +
-                          "Expectation: sending with no key shows 'No API key set…' and no request.")
+        let keySetup = waitForID("ai.keySetup.title", timeout: 6)
+        guard keySetup != nil else {
+            throw XCTSkip("A provider key appears to be configured in this session (the key " +
+                          "setup screen isn't shown). Run on a machine with no AI key in the " +
+                          "Keychain to assert the no-key/no-network path.")
         }
-        composer.click()
-        composer.typeText("What is my Mac's health score?")
-        _ = clickAny(of: ["Send", "Ask", "Submit"], timeout: 3)
-
-        // Either the missing-key guidance appears, or (if a key happens to be
-        // configured on this machine) we simply do not assert a live response —
-        // we never require the network.
-        let guidance = app.staticTexts.containing(
-            NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@",
-                        "API key", "no key")).firstMatch
-        if !guidance.waitForExistence(timeout: 6) {
-            throw XCTSkip("A provider key appears to be configured in this session, so the " +
-                          "missing-key path can't be asserted safely without making a real " +
-                          "call. Run this on a machine with no AI key set in the Keychain.")
-        }
-        XCTAssertTrue(guidance.exists, "Missing-key guidance should appear (no network call made)")
+        // No composer must be present without a key — nothing can be sent.
+        XCTAssertFalse(element(id: "ai.composer").exists,
+                       "Composer must not appear until a key is configured (no key → no request)")
     }
 
     // TC-AI-04 — the ⌘⇧I quick-ask overlay is documented. Global hotkeys and

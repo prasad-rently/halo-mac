@@ -95,6 +95,7 @@ struct DashHeader: View {
                     Task { await appState.runSmartScan() }
                 }
                 .disabled(appState.isSmartScanRunning)
+                .accessibilityIdentifier("dashboard.smartScan.button")
 
                 // Export Report — off-thread PDF generation so UI never freezes
                 Button {
@@ -133,6 +134,7 @@ struct DashHeader: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isExportingReport)
+                .accessibilityIdentifier("dashboard.exportReport.button")
             }
         }
     }
@@ -487,6 +489,7 @@ struct AlertHistorySection: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("dashboard.alertHistory")
                 .padding(.bottom, isExpanded && !alertLog.entries.isEmpty ? 10 : 0)
 
                 if isExpanded {

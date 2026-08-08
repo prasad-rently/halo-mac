@@ -253,6 +253,7 @@ struct CleanupFileList: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(viewModel.isCleaning)
+                    .accessibilityIdentifier("cleanup.cleanAll.button")
                     .confirmationDialog(
                         "Move all \(cat.items.count) items (\(cat.allFormatted)) to Trash?",
                         isPresented: $showCleanAllConfirm,

@@ -19,6 +19,7 @@ struct FilesView: View {
                     Button(tab.rawValue) {
                         withAnimation(.easeInOut(duration: 0.2)) { activeTab = tab }
                     }
+                    .accessibilityIdentifier("files.tab.\(tab.rawValue)")
                     .font(HaloFont.body(13, weight: activeTab == tab ? .semibold : .regular))
                     .foregroundColor(activeTab == tab ? .haloText : .haloText2)
                     .padding(.horizontal, 16)

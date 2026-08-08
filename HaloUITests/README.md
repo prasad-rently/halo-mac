@@ -90,24 +90,29 @@ xcodebuild test -project Halo.xcodeproj -scheme HaloUITests \
 
 ## Selector strategy — IMPORTANT
 
-SwiftUI exposes controls to the Accessibility tree by their **label text**. The
-app currently has only one stable identifier (`fileListView` in
-`CleanupView.swift`), so most flows query by visible label via
-`element(labeled:)`, which tolerantly searches buttons, static texts, cells, and
-outline rows.
+Flows prefer **stable accessibility identifiers** (`element(id:)`, `assertID`,
+`tapID`, `waitForID` in `HaloUITestCase`) and fall back to visible-label lookup
+(`element(labeled:)`) only where an identifier isn't wired yet.
 
-For a durable suite, add `.accessibilityIdentifier(...)` to key views and switch
-flows to query by identifier. Recommended convention:
+Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 
-```
-<module>.<element>.<role>
-e.g.  cleanup.scanButton.button
-      sidebar.row.performance
-      ports.killButton.button
-```
+| Identifier | Where |
+|------------|-------|
+| `sidebar.row.<AppModule.rawValue>` | every sidebar row (drives all navigation) |
+| `dashboard.smartScan.button` / `dashboard.exportReport.button` / `dashboard.alertHistory` | Dashboard |
+| `cleanup.cleanAll.button` · `fileListView` | Cleanup |
+| `protection.scan.button` | Protection |
+| `files.tab.<TabTitle>` | Files tab bar |
+| `ports.kill.button` · `ports.refresh.button` · `ports.search` | Ports |
+| `actions.newCustom.button` | Actions |
+| `ai.providerPicker` · `ai.modelPicker` · `ai.composer` · `ai.send.button` · `ai.keySetup.title` | AI Assistant |
 
-Each new identifier should be referenced from the matching `TC-` case so manual
-and automated coverage stay aligned.
+`HaloSidebar.navigate(to:)` clicks `sidebar.row.<module>` (mapping HaloShare →
+`localShare`, Menu Bar → `menuBarPreview`) and only falls back to the title.
+
+Remaining `XCTSkip`s are for **state-dependent** rows (a duplicate/large-file to
+delete, an idle app to quit, a live threat) and per-row controls that still need
+identifiers — each skip names the id to add next.
 
 ## Extending the suite
 

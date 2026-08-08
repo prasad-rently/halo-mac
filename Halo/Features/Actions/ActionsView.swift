@@ -112,6 +112,7 @@ struct ActionsView: View {
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.haloAccent.opacity(0.3), lineWidth: 1))
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("actions.newCustom.button")
         }
     }
 

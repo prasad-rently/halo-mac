@@ -92,6 +92,7 @@ private struct PortControls: View {
                 TextField("Search ports, processes…", text: $viewModel.searchText)
                     .textFieldStyle(.plain)
                     .font(HaloFont.body(13))
+                    .accessibilityIdentifier("ports.search")
                 if !viewModel.searchText.isEmpty {
                     Button { viewModel.searchText = "" } label: {
                         Image(systemName: "xmark.circle.fill")
@@ -121,6 +122,7 @@ private struct PortControls: View {
             .buttonStyle(.plain)
             .foregroundColor(.haloText2)
             .help("Refresh port list")
+            .accessibilityIdentifier("ports.refresh.button")
 
             // Kill signal preference
             Menu {
@@ -268,6 +270,7 @@ private struct PortRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Kill (SIGTERM)")
+                .accessibilityIdentifier("ports.kill.button")
 
                 // Context menu
                 Menu {

@@ -275,6 +275,10 @@ struct SidebarItem: View {
             )
         }
         .buttonStyle(.plain)
+        // Stable UI-test hook: `sidebar.row.<AppModule.rawValue>` (e.g.
+        // sidebar.row.performance, sidebar.row.ai). Lets HaloUITests navigate
+        // deterministically instead of matching on localized row titles.
+        .accessibilityIdentifier("sidebar.row.\(module.rawValue)")
         .padding(.horizontal, 8)
         .opacity(isEditing ? 0.80 : 1.0)
         .animation(.easeInOut(duration: 0.15), value: isEditing)

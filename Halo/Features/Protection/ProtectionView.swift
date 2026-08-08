@@ -274,6 +274,7 @@ struct MalwareScanCard: View {
                     icon: "shield.lefthalf.filled",
                     isLoading: { if case .scanning = viewModel.scanState { return true }; return false }()
                 ) { Task { await viewModel.runMalwareScan() } }
+                .accessibilityIdentifier("protection.scan.button")
             }
             .padding(20)
         }

@@ -23,19 +23,40 @@ enum HaloModule: String, CaseIterable {
     case ports         = "Ports"
     case ai            = "AI Assistant"
     case menuBar       = "Menu Bar"
+
+    /// The `AppModule.rawValue` this row maps to — the tail of its
+    /// `sidebar.row.<rawValue>` accessibility identifier. A few visible titles
+    /// differ from the underlying case name, so the mapping is explicit.
+    var appModuleRawValue: String {
+        switch self {
+        case .haloShare: return "localShare"
+        case .menuBar:   return "menuBarPreview"
+        default:         return String(describing: self)
+        }
+    }
+
+    /// The stable identifier of this module's sidebar row.
+    var rowIdentifier: String { "sidebar.row.\(appModuleRawValue)" }
 }
 
 struct HaloSidebar {
     let test: HaloUITestCase
     var app: XCUIApplication { test.app }
 
-    /// Click a sidebar module by title. Returns false if the row was not found.
+    /// Click a sidebar module. Prefers the stable `sidebar.row.<module>`
+    /// identifier and falls back to the visible title for resilience.
     @discardableResult
     func navigate(to module: HaloModule,
                   file: StaticString = #filePath,
                   line: UInt = #line) -> Bool {
+        let byID = app.descendants(matching: .any)[module.rowIdentifier]
+        if byID.waitForExistence(timeout: 5) && byID.isHittable {
+            byID.click()
+            return true
+        }
         guard let row = test.element(labeled: module.rawValue) else {
-            XCTFail("Sidebar row '\(module.rawValue)' not found", file: file, line: line)
+            XCTFail("Sidebar row '\(module.rawValue)' (id \(module.rowIdentifier)) not found",
+                    file: file, line: line)
             return false
         }
         row.click()

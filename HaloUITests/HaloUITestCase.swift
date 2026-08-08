@@ -92,4 +92,43 @@ class HaloUITestCase: XCTestCase {
         }
         el.click()
     }
+
+    // MARK: - Identifier lookup (preferred — durable across title/label changes)
+
+    /// The first element carrying `identifier`, across the common control types.
+    /// Prefer this over `element(labeled:)` now that the app is annotated with
+    /// `.accessibilityIdentifier(...)`.
+    func element(id identifier: String) -> XCUIElement {
+        app.descendants(matching: .any)[identifier]
+    }
+
+    /// Wait for an element with `identifier` to exist, then return it (or nil).
+    @discardableResult
+    func waitForID(_ identifier: String, timeout: TimeInterval? = nil) -> XCUIElement? {
+        let el = element(id: identifier)
+        return el.waitForExistence(timeout: timeout ?? defaultTimeout) ? el : nil
+    }
+
+    /// Assert an element with `identifier` becomes visible.
+    @discardableResult
+    func assertID(_ identifier: String,
+                  _ message: String? = nil,
+                  timeout: TimeInterval? = nil,
+                  file: StaticString = #filePath,
+                  line: UInt = #line) -> XCUIElement {
+        let el = element(id: identifier)
+        XCTAssertTrue(el.waitForExistence(timeout: timeout ?? defaultTimeout),
+                      message ?? "Expected element with identifier '\(identifier)'",
+                      file: file, line: line)
+        return el
+    }
+
+    /// Click the element with `identifier` if present within `timeout`.
+    @discardableResult
+    func tapID(_ identifier: String, timeout: TimeInterval = 5) -> Bool {
+        let el = element(id: identifier)
+        guard el.waitForExistence(timeout: timeout) && el.isHittable else { return false }
+        el.click()
+        return true
+    }
 }

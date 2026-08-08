@@ -37,39 +37,23 @@ final class DashboardUITests: HaloUITestCase {
         }
     }
 
-    // TC-DASH-05 — the Smart Scan trigger is reachable from the Dashboard.
-    // Expected: a "Smart Scan" / "Scan" control is present (its behaviour is
-    // covered by SmartScanUITests).
+    // TC-DASH-05 — the Smart Scan trigger is present on the Dashboard (its
+    // behaviour is covered by SmartScanUITests).
     func test_dashboard_exposes_smart_scan_trigger() {
         HaloSidebar(test: self).navigate(to: .dashboard)
-        XCTAssertTrue(clickAny(of: ["Smart Scan", "Run Smart Scan", "Scan"], timeout: 5) ||
-                      element(labeled: "Smart Scan", timeout: 2) != nil,
-                      "Dashboard should offer a Smart Scan entry point")
-        // Dismiss anything that opened so we leave clean state.
-        app.typeKey(.escape, modifierFlags: [])
+        assertID("dashboard.smartScan.button", "Dashboard should offer a Smart Scan button")
     }
 
     // TC-DASH-07 — Export Report entry point is present. The actual export is
     // covered (safely, save-panel-cancelled) by AlertsReportUITests.
-    func test_dashboard_exposes_export_report() throws {
+    func test_dashboard_exposes_export_report() {
         HaloSidebar(test: self).navigate(to: .dashboard)
-        guard element(labeled: "Export Report", timeout: 5) != nil ||
-              element(labeled: "Export", timeout: 2) != nil else {
-            throw XCTSkip("Export Report control not found by label — add " +
-                          "`.accessibilityIdentifier(\"dashboard.exportReport.button\")` " +
-                          "to the Dashboard export button to make this durable.")
-        }
+        assertID("dashboard.exportReport.button", "Dashboard should offer an Export Report button")
     }
 
-    // TC-DASH-08 — Alert history section renders on the Dashboard.
-    // Expected: an "Alerts"/"Alert History" heading is visible.
-    func test_dashboard_shows_alert_history_section() throws {
+    // TC-DASH-08 — the alert history section renders on the Dashboard.
+    func test_dashboard_shows_alert_history_section() {
         HaloSidebar(test: self).navigate(to: .dashboard)
-        guard element(labeled: "Alert History", timeout: 5) != nil ||
-              element(labeled: "Alerts", timeout: 2) != nil ||
-              element(labeled: "Recent Alerts", timeout: 2) != nil else {
-            throw XCTSkip("Alert history heading not found by label; annotate it " +
-                          "with a stable identifier to enable this assertion.")
-        }
+        assertID("dashboard.alertHistory", "Dashboard should show the Alert History section")
     }
 }

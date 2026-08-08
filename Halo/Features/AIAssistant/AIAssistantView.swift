@@ -36,11 +36,13 @@ struct AIAssistantView: View {
                 ForEach(vm.providers) { p in Text(p.displayName).tag(p) }
             }
             .labelsHidden().frame(width: 150)
+            .accessibilityIdentifier("ai.providerPicker")
             if vm.hasKey {
                 Picker("", selection: $vm.selectedModelID) {
                     ForEach(vm.models) { m in Text(m.displayName).tag(m.id) }
                 }
                 .labelsHidden().frame(width: 150)
+                .accessibilityIdentifier("ai.modelPicker")
                 Button { showHistory = true } label: { Image(systemName: "clock.arrow.circlepath") }
                     .buttonStyle(.plain).foregroundColor(.haloText2).help("Conversation history")
                 Button { vm.newChat() } label: { Image(systemName: "square.and.pencil") }
@@ -67,6 +69,7 @@ struct AIAssistantView: View {
             Image(systemName: "key.fill").font(.system(size: 34)).foregroundColor(.haloPurple)
             Text("Connect your \(vm.selectedProvider.displayName) API key")
                 .font(HaloFont.display(16)).foregroundColor(.haloText)
+                .accessibilityIdentifier("ai.keySetup.title")
             Text("BYO key — stored only in your Mac's Keychain and sent only to \(vm.selectedProvider.displayName). Each provider has its own key.")
                 .font(HaloFont.body(12)).foregroundColor(.haloText2)
                 .multilineTextAlignment(.center).frame(maxWidth: 420).fixedSize(horizontal: false, vertical: true)
@@ -171,15 +174,18 @@ struct AIAssistantView: View {
                 .onSubmit { vm.send() }
                 .padding(10).background(Color.haloSurface2).cornerRadius(10)
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.haloBorder, lineWidth: 1))
+                .accessibilityIdentifier("ai.composer")
             if vm.isStreaming {
                 Button { vm.stop() } label: {
                     Image(systemName: "stop.fill").foregroundColor(.haloRed)
                 }.buttonStyle(.plain)
+                .accessibilityIdentifier("ai.stop.button")
             } else {
                 Button { vm.send() } label: {
                     Image(systemName: "arrow.up.circle.fill").font(.system(size: 22))
                         .foregroundColor(vm.input.isEmpty ? .haloText3 : .haloAccent)
                 }.buttonStyle(.plain).disabled(vm.input.isEmpty)
+                .accessibilityIdentifier("ai.send.button")
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 12)

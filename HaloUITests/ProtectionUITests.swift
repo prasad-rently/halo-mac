@@ -18,7 +18,9 @@ final class ProtectionUITests: HaloUITestCase {
     // scanning indicator or a "no threats"/results summary (never a crash).
     func test_protection_scan_surfaces_result() {
         XCTAssertTrue(HaloSidebar(test: self).navigate(to: .protection))
-        _ = clickAny(of: ["Scan", "Scan Now", "Start Scan", "Run Scan"], timeout: 5)
+        if !tapID("protection.scan.button", timeout: 5) {
+            _ = clickAny(of: ["Run Full Scan", "Scan", "Scan Now"], timeout: 3)
+        }
         // Any of these signals a healthy end state.
         let settled =
             element(labeled: "No threats found", timeout: 60) ??
@@ -34,7 +36,9 @@ final class ProtectionUITests: HaloUITestCase {
     // and, when a removable item exists, drives to the confirmation and cancels.
     func test_protection_remove_requires_confirmation() throws {
         HaloSidebar(test: self).navigate(to: .protection)
-        _ = clickAny(of: ["Scan", "Scan Now", "Start Scan"], timeout: 5)
+        if !tapID("protection.scan.button", timeout: 5) {
+            _ = clickAny(of: ["Run Full Scan", "Scan"], timeout: 3)
+        }
 
         guard firstButton(labeledAnyOf: ["Remove", "Quarantine", "Remove All"], timeout: 20) != nil else {
             throw XCTSkip("No threats detected on this machine, so there is nothing " +
