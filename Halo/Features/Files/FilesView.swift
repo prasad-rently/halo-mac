@@ -227,8 +227,8 @@ struct TreemapView: View {
     func squarify(nodes: [SpaceLensViewModel.TreeNode], total: Int64, rect: CGRect) -> [CGRect] {
         guard total > 0 else { return [] }
         var rects: [CGRect] = []
-        var x = rect.minX
-        var y = rect.minY
+        let x = rect.minX
+        let y = rect.minY
         let width = rect.width
         let height = rect.height
         // Two-row layout based on size ratios
@@ -577,7 +577,9 @@ final class LargeFilesViewModel: ObservableObject {
                 includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
                 options: [.skipsHiddenFiles, .skipsPackageDescendants]
             ) else { continue }
-            for case let url as URL in enumerator {
+            // `nextObject()` loop (not for-in): NSEnumerator's iterator is
+            // unavailable from async contexts (this `scan()` is async).
+            while let url = enumerator.nextObject() as? URL {
                 guard let vals = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
                       vals.isRegularFile == true,
                       let size = vals.fileSize,
