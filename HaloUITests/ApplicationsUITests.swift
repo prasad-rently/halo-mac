@@ -40,21 +40,21 @@ final class ApplicationsUITests: HaloUITestCase {
         fx.captureTrashBaseline()
 
         openApplications()
-        guard app.cells.firstMatch.waitForExistence(timeout: 30) ||
-              app.outlineRows.firstMatch.waitForExistence(timeout: 5) else {
-            fx.tearDown()
-            throw XCTSkip("No app rows became addressable; annotate rows with " +
-                          "`applications.row.<bundleid>` to make selection deterministic.")
-        }
 
-        // Select the first row and invoke uninstall.
-        (app.cells.firstMatch.exists ? app.cells.firstMatch : app.outlineRows.firstMatch).click()
-        guard firstButton(labeledAnyOf: ["Uninstall", "Remove", "Delete"], timeout: 5) != nil else {
+        // Select the first app row (each row is `applications.row.<bundleId>`).
+        let anyRow = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "applications.row.")).firstMatch
+        guard anyRow.waitForExistence(timeout: 30) else {
             fx.tearDown()
-            throw XCTSkip("Uninstall control not addressable by label; annotate with " +
-                          "`applications.uninstall.button`.")
+            throw XCTSkip("No app rows surfaced within the scan window.")
         }
-        firstButton(labeledAnyOf: ["Uninstall", "Remove", "Delete"])?.click()
+        anyRow.click()
+
+        // Invoke uninstall from the detail panel.
+        guard tapID("applications.uninstall.button", timeout: 5) else {
+            fx.tearDown()
+            throw XCTSkip("Uninstall button (applications.uninstall.button) not hittable.")
+        }
 
         // THE GATE: a confirmation/review must appear before anything is trashed.
         XCTAssertTrue(confirmationSurfaceAppeared(),
@@ -69,12 +69,26 @@ final class ApplicationsUITests: HaloUITestCase {
     }
 
     // TC-APP-07 — leftover detection lists standard support paths for a selected
-    // app (preferences, caches, containers, …). Documented; enable once the
-    // leftover list rows carry identifiers.
+    // app. Leftover rows carry `applications.leftover.<kind>`. Which app has
+    // leftovers is machine-dependent, so we select rows until one surfaces
+    // leftovers; if none do, we skip rather than fail.
     func test_leftover_scan_lists_paths() throws {
-        throw XCTSkip("Enable once leftover rows expose identifiers " +
-                      "(`applications.leftover.<kind>`). Expectation: selecting an app lists " +
-                      "its leftovers across the 12 standard ~/Library paths, each individually " +
-                      "toggleable, before any confirmed removal.")
+        openApplications()
+        let rows = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "applications.row."))
+        guard rows.firstMatch.waitForExistence(timeout: 30) else {
+            throw XCTSkip("No app rows surfaced within the scan window.")
+        }
+        let leftoverPredicate = NSPredicate(format: "identifier BEGINSWITH %@", "applications.leftover.")
+        for i in 0..<min(rows.count, 6) {
+            rows.element(boundBy: i).click()
+            if app.descendants(matching: .any).matching(leftoverPredicate)
+                .firstMatch.waitForExistence(timeout: 5) {
+                return  // leftovers listed — assertion satisfied
+            }
+        }
+        throw XCTSkip("None of the first apps reported leftovers on this machine. " +
+                      "Expectation: an app with support files lists them as " +
+                      "`applications.leftover.<kind>` rows, each toggleable before removal.")
     }
 }

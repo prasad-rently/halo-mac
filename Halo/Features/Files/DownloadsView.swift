@@ -386,6 +386,7 @@ private struct DownloadFileRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Move to Trash")
+                .accessibilityIdentifier("files.downloads.trash.button")
             }
             .frame(width: 50)
         }
@@ -393,6 +394,7 @@ private struct DownloadFileRow: View {
         .padding(.vertical, 8)
         .background(isHovered ? Color.haloAccent.opacity(0.04) : Color.clear)
         .onHover { isHovered = $0 }
+        .accessibilityIdentifier("files.downloads.row")
     }
 }
 
@@ -420,6 +422,7 @@ private struct DownloadsActionBar: View {
                     .cornerRadius(10)
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("files.downloads.cleanStale.button")
             }
 
             // Organize

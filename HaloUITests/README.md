@@ -102,10 +102,23 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 | `dashboard.smartScan.button` / `dashboard.exportReport.button` / `dashboard.alertHistory` | Dashboard |
 | `cleanup.cleanAll.button` · `fileListView` | Cleanup |
 | `protection.scan.button` | Protection |
+| `performance.idleApp.quit.button` | Performance → Idle Apps |
+| `applications.row.<bundleId>` · `applications.uninstall.button` · `applications.leftover.<kind>` | Applications |
 | `files.tab.<TabTitle>` | Files tab bar |
-| `ports.kill.button` · `ports.refresh.button` · `ports.search` | Ports |
+| `files.duplicates.deleteMarked.button` | Files → Duplicates (⚠️ no-op stub) |
+| `files.downloads.row` · `files.downloads.trash.button` · `files.downloads.cleanStale.button` | Files → Downloads |
+| `files.largeFiles.row` | Files → Large Files (⚠️ delete has no confirmation) |
+| `ports.row.<port>` · `ports.kill.<port>` · `ports.refresh.button` · `ports.search` | Ports |
 | `actions.newCustom.button` | Actions |
 | `ai.providerPicker` · `ai.modelPicker` · `ai.composer` · `ai.send.button` · `ai.keySetup.title` | AI Assistant |
+
+> ⚠️ **Two delete paths lack a confirmation gate** (found while wiring these
+> tests): **Files → Large Files** per-row delete and **Files → Downloads**
+> per-row trash both call `trashItem` immediately. The suite therefore never
+> clicks them (it would trash a real file with no review) — it tests Downloads
+> via the confirmed bulk *Clean Stale* flow instead, and only renders Large
+> Files. **Files → Duplicates** "Delete marked" is an unimplemented no-op stub.
+> See `MANUAL_TEST_PLAN.md` §7 notes.
 
 `HaloSidebar.navigate(to:)` clicks `sidebar.row.<module>` (mapping HaloShare →
 `localShare`, Menu Bar → `menuBarPreview`) and only falls back to the title.

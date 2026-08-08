@@ -425,6 +425,7 @@ private struct IdleAppRow: View {
                         .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("performance.idleApp.quit.button")
 
                 Menu {
                     Button("Quit \(app.name)") { viewModel.requestQuit(app) }

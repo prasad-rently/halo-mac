@@ -270,7 +270,7 @@ private struct PortRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Kill (SIGTERM)")
-                .accessibilityIdentifier("ports.kill.button")
+                .accessibilityIdentifier("ports.kill.\(entry.port)")
 
                 // Context menu
                 Menu {
@@ -311,6 +311,7 @@ private struct PortRow: View {
         .background(isHovered ? Color.haloAccent.opacity(0.05) : Color.clear)
         .cornerRadius(6)
         .onHover { isHovered = $0 }
+        .accessibilityIdentifier("ports.row.\(entry.port)")
     }
 }
 

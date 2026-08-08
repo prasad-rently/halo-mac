@@ -98,13 +98,13 @@ final class PerformanceUITests: HaloUITestCase {
     // confirmation and cancel.
     func test_idle_app_quit_requires_confirmation() throws {
         openPerformance()
-        guard firstButton(labeledAnyOf: ["Quit", "Quit All", "Auto-Quit"], timeout: 8) != nil else {
-            throw XCTSkip("No idle apps detected, so nothing is quittable. Expectation: " +
-                          "quitting an idle app confirms first and never force-quits silently.")
+        guard tapID("performance.idleApp.quit.button", timeout: 8) else {
+            throw XCTSkip("No idle apps detected (monitor off or nothing idle), so nothing is " +
+                          "quittable. Expectation: quitting an idle app shows a 'Quit App' " +
+                          "confirmation before terminating it (TC-SAFE-02).")
         }
-        firstButton(labeledAnyOf: ["Quit", "Quit All", "Auto-Quit"])?.click()
         XCTAssertTrue(confirmationSurfaceAppeared(),
                       "Quitting an idle app must confirm first (TC-SAFE-02)")
-        cancelConfirmation()
+        cancelConfirmation()   // never actually quit the user's app
     }
 }

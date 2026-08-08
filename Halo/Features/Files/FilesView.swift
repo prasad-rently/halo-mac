@@ -385,6 +385,7 @@ struct DuplicateGroupCard: View {
                         .foregroundColor(.haloText2)
                     Spacer()
                     HaloGhostButton("Delete marked") {}
+                        .accessibilityIdentifier("files.duplicates.deleteMarked.button")
                 }
                 ForEach(group.items) { item in
                     HStack(spacing: 10) {
@@ -549,6 +550,7 @@ struct LargeFilesView: View {
                             LargeFileRow(file: file) {
                                 viewModel.trash(file)
                             }
+                            .accessibilityIdentifier("files.largeFiles.row")
                         }
                     }
                     .padding(16)

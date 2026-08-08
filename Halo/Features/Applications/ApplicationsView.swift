@@ -293,6 +293,7 @@ struct AppListRow: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("applications.row.\(app.bundleIdentifier)")
     }
 }
 
@@ -344,6 +345,7 @@ struct AppDetailPanel: View {
                     HaloPrimaryButton("Uninstall", icon: "trash.fill", isLoading: viewModel.isUninstalling) {
                         showUninstallConfirm = true
                     }
+                    .accessibilityIdentifier("applications.uninstall.button")
                 }
 
                 // Error banner — shown when trashItem failed
@@ -390,6 +392,7 @@ struct AppDetailPanel: View {
                             leftover: leftover,
                             onToggle: { viewModel.toggleLeftover(appId: app.id, leftoverId: leftover.id) }
                         )
+                        .accessibilityIdentifier("applications.leftover.\(String(describing: leftover.kind))")
                     }
 
                     if app.leftovers.isEmpty {

@@ -56,25 +56,17 @@ final class PortsUITests: HaloUITestCase {
         HaloSidebar(test: self).navigate(to: .ports)
         _ = tapID("ports.refresh.button", timeout: 3)
 
-        // Filter the list down to our canary port via the search field, so the
-        // only visible Kill button belongs to the process we own.
-        if let search = waitForID("ports.search", timeout: 5) {
-            search.click()
-            search.typeText("\(canaryPort)")
-        }
-
-        // Confirm the canary row is present (its port number is shown).
-        let portRow = app.staticTexts.containing(
-            NSPredicate(format: "label CONTAINS %@", "\(canaryPort)")).firstMatch
-        guard portRow.waitForExistence(timeout: 15) else {
+        // The canary's row carries `ports.row.<port>`. Wait for the scan to
+        // surface it (the app polls listening ports on a timer).
+        guard waitForID("ports.row.\(canaryPort)", timeout: 20) != nil else {
             throw XCTSkip("Canary port \(canaryPort) did not surface even after a rescan; the " +
                           "port scan may be throttled in this environment.")
         }
-
-        // The kill button carries `ports.kill.button`; with the list filtered to
-        // the canary, firstMatch is the canary's.
-        guard tapID("ports.kill.button", timeout: 5) else {
-            throw XCTSkip("Kill button (ports.kill.button) not hittable for the canary row.")
+        // Hover the row so its per-port Kill button becomes hittable, then click
+        // the button that belongs specifically to our canary (`ports.kill.<port>`).
+        element(id: "ports.row.\(canaryPort)").hover()
+        guard tapID("ports.kill.\(canaryPort)", timeout: 5) else {
+            throw XCTSkip("Kill button (ports.kill.\(canaryPort)) not hittable for the canary row.")
         }
 
         // THE GATE — a "Kill Process" alert with Cancel + Kill (SIGTERM).
