@@ -456,81 +456,86 @@ struct AlertHistorySection: View {
     @State private var isExpanded = true
 
     var body: some View {
-        HaloCard {
-            VStack(spacing: 0) {
-                // Header — the title/chevron toggle and the "Clear" button are
-                // siblings (not nested), so each gets its own clean hit target.
-                HStack {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
-                    } label: {
-                        HStack {
-                            Image(systemName: "bell.badge.fill")
-                                .font(.system(size: 13))
-                                .foregroundColor(.haloAmber)
-                            Text("Alert History")
-                                .font(HaloFont.body(13, weight: .semibold))
-                                .foregroundColor(.haloText)
-                            if alertLog.unreadCount > 0 {
-                                Text("\(alertLog.unreadCount)")
-                                    .font(HaloFont.body(10, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.haloRed)
-                                    .clipShape(Capsule())
-                            }
+        // Same structure as RecentActivityList: a plain section (no card) with a
+        // header and haloSurface2 pill rows, so both dashboard lists match.
+        VStack(alignment: .leading, spacing: 12) {
+            // Header — the title/chevron toggle and the "Clear" button are
+            // siblings (not nested), so each gets its own clean hit target.
+            HStack {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+                } label: {
+                    HStack {
+                        Image(systemName: "bell.badge.fill")
+                            .font(.system(size: 13))
+                            .foregroundColor(.haloAmber)
+                        Text("Alert History")
+                            .font(HaloFont.body(13, weight: .semibold))
+                            .foregroundColor(.haloText)
+                        if alertLog.unreadCount > 0 {
+                            Text("\(alertLog.unreadCount)")
+                                .font(HaloFont.body(10, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.haloRed)
+                                .clipShape(Capsule())
                         }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("dashboard.alertHistory")
-                    Spacer()
-                    if !alertLog.entries.isEmpty {
-                        Button("Clear") { alertLog.clearAll() }
-                            .font(HaloFont.body(11))
-                            .foregroundColor(.haloText2)
-                            .buttonStyle(.plain)
-                    }
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
-                    } label: {
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(HaloFont.body(10))
-                            .foregroundColor(.haloText2)
-                    }
-                    .buttonStyle(.plain)
                 }
-                .padding(.bottom, isExpanded && !alertLog.entries.isEmpty ? 10 : 0)
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("dashboard.alertHistory")
+                Spacer()
+                if !alertLog.entries.isEmpty {
+                    Button("Clear") { alertLog.clearAll() }
+                        .font(HaloFont.body(11))
+                        .foregroundColor(.haloText2)
+                        .buttonStyle(.plain)
+                }
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(HaloFont.body(10))
+                        .foregroundColor(.haloText2)
+                }
+                .buttonStyle(.plain)
+            }
 
-                if isExpanded {
-                    if alertLog.entries.isEmpty {
+            if isExpanded {
+                if alertLog.entries.isEmpty {
+                    HStack {
+                        Image(systemName: "checkmark.circle")
+                            .foregroundColor(.haloText3)
                         Text("No alerts yet — your Mac looks great.")
-                            .font(HaloFont.body(12))
+                            .font(HaloFont.body(13))
                             .foregroundColor(.haloText2)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, 8)
-                    } else {
-                        VStack(spacing: 6) {
-                            ForEach(alertLog.entries.prefix(8)) { entry in
-                                AlertEntryRow(entry: entry)
-                                    .onTapGesture { alertLog.markRead(entry) }
+                        Spacer()
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.haloSurface2)
+                    .cornerRadius(10)
+                } else {
+                    VStack(spacing: 6) {
+                        ForEach(alertLog.entries.prefix(8)) { entry in
+                            AlertEntryRow(entry: entry)
+                                .onTapGesture { alertLog.markRead(entry) }
+                        }
+                        if alertLog.entries.count > 8 {
+                            Button("Mark all as read · \(alertLog.entries.count) total") {
+                                alertLog.markAllRead()
                             }
-                            if alertLog.entries.count > 8 {
-                                Button("Mark all as read · \(alertLog.entries.count) total") {
-                                    alertLog.markAllRead()
-                                }
-                                .font(HaloFont.body(11))
-                                .foregroundColor(.haloAccent)
-                                .buttonStyle(.plain)
-                                .frame(maxWidth: .infinity, alignment: .center)
-                                .padding(.top, 4)
-                            }
+                            .font(HaloFont.body(11))
+                            .foregroundColor(.haloAccent)
+                            .buttonStyle(.plain)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.top, 4)
                         }
                     }
                 }
             }
         }
-        .onAppear { /* Trigger @StateObject creation so unread badge updates */ }
     }
 }
 
@@ -569,7 +574,11 @@ struct AlertEntryRow: View {
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.haloSurface2)
+        .cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.haloBorder, lineWidth: 1))
         .opacity(entry.isRead ? 0.65 : 1.0)
     }
 }
