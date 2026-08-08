@@ -336,7 +336,7 @@ private struct HaloPrimaryButtonStyle: ButtonStyle {
                 LinearGradient(colors: [.haloAccent, .haloAccent2],
                                startPoint: .leading, endPoint: .trailing)
             )
-            .cornerRadius(8)
+            .cornerRadius(11)
             .opacity(configuration.isPressed ? 0.85 : 1)
     }
 }
@@ -348,8 +348,8 @@ private struct HaloSecondaryButtonStyle: ButtonStyle {
             .foregroundColor(.haloText2)
             .padding(.horizontal, 18).padding(.vertical, 8)
             .background(Color.haloSurface2)
-            .cornerRadius(8)
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.haloBorder, lineWidth: 1))
+            .cornerRadius(9)
+            .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.haloBorder, lineWidth: 1))
             .opacity(configuration.isPressed ? 0.75 : 1)
     }
 }

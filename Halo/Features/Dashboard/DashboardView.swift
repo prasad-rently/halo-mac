@@ -126,9 +126,9 @@ struct DashHeader: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(Color.haloSurface2)
-                    .cornerRadius(7)
+                    .cornerRadius(9)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 7)
+                        RoundedRectangle(cornerRadius: 9)
                             .stroke(Color.haloBorder, lineWidth: 1)
                     )
                 }

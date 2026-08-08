@@ -53,7 +53,7 @@ final class ClipboardQuickPickerController: NSObject, NSWindowDelegate {
 
         let hosting = NSHostingController(rootView: rootView)
         let panelH = min(52 * state.items.count + 126, 580)
-        hosting.view.frame = NSRect(x: 0, y: 0, width: 540, height: panelH)
+        hosting.view.frame = NSRect(x: 0, y: 0, width: 560, height: panelH)
 
         let p = QuickPickerPanel(
             contentRect: hosting.view.frame,

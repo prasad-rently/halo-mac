@@ -48,7 +48,7 @@ final class QuickActionPickerController: NSObject, NSWindowDelegate {
         )
         let hosting = NSHostingController(rootView: hostingView)
         let height  = min(52 * max(state.results.count, 1) + 120, 520)
-        hosting.view.frame = NSRect(x: 0, y: 0, width: 580, height: height)
+        hosting.view.frame = NSRect(x: 0, y: 0, width: 560, height: height)
 
         let p = ActionPickerPanel(
             contentRect: hosting.view.frame,

@@ -269,8 +269,9 @@ struct CodeBeautifierView: View {
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .background(Color.haloAccent)
-                        .cornerRadius(8)
+                        .background(LinearGradient(colors: [.haloAccent, .haloAccent2],
+                                                   startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .cornerRadius(11)
                     }
                     .buttonStyle(.plain)
 
@@ -286,8 +287,8 @@ struct CodeBeautifierView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                         .background(Color.haloAccent.opacity(0.1))
-                        .cornerRadius(8)
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.haloAccent.opacity(0.3), lineWidth: 1))
+                        .cornerRadius(9)
+                        .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.haloAccent.opacity(0.3), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                 }
