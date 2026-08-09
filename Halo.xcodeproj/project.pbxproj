@@ -215,6 +215,29 @@
 		};
 /* End PBXCopyFilesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		000000000000000000003029 /* Embed HaloHelper.xpc (workaround) */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(CONFIGURATION_BUILD_DIR)/HaloHelper.xpc",
+			);
+			name = "Embed HaloHelper.xpc (workaround)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/XPCServices/HaloHelper.xpc",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nXPC_SRC=\"${CONFIGURATION_BUILD_DIR}/HaloHelper.xpc\"\nXPC_DST_DIR=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/XPCServices\"\n# The \"Embed XPC Services\" Copy Files phase (dstSubfolderSpec 16) is unreliable\n# under the current build system and can silently no-op, leaving HaloHelper.xpc\n# out of the app bundle entirely (NSXPCConnection then never finds the service).\n# This script guarantees it lands in Contents/XPCServices regardless.\nif [ -d \"$XPC_SRC\" ]; then\n  mkdir -p \"$XPC_DST_DIR\"\n  rm -rf \"$XPC_DST_DIR/HaloHelper.xpc\"\n  ditto \"$XPC_SRC\" \"$XPC_DST_DIR/HaloHelper.xpc\"\n  echo \"Embedded HaloHelper.xpc -> $XPC_DST_DIR\"\nelse\n  echo \"warning: HaloHelper.xpc not found at $XPC_SRC — maintenance tasks will be unavailable\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXFileReference section */
 		000000000000000000001015 /* Halo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Halo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000001016 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/AppState.swift; sourceTree = "<group>"; };
@@ -693,6 +716,7 @@
 				000000000000000000001013 /* Resources */,
 				000000000000000000002015 /* Embed App Extensions */,
 				000000000000000000003022 /* Embed XPC Services */,
+				000000000000000000003029 /* Embed HaloHelper.xpc (workaround) */,
 			);
 			buildRules = (
 			);
@@ -1106,12 +1130,12 @@
 				CODE_SIGN_ENTITLEMENTS = "Halo/Halo-Debug.entitlements";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 210;
+				CURRENT_PROJECT_VERSION = 220;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Halo/Resources/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.1;
+				MARKETING_VERSION = 2.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1128,12 +1152,12 @@
 				CODE_SIGN_ENTITLEMENTS = Halo/Halo.entitlements;
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 210;
+				CURRENT_PROJECT_VERSION = 220;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Halo/Resources/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.1;
+				MARKETING_VERSION = 2.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1147,11 +1171,11 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = HaloWidget/HaloWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 210;
+				CURRENT_PROJECT_VERSION = 220;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HaloWidget/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.1;
+				MARKETING_VERSION = 2.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.widget;
 				PRODUCT_NAME = HaloWidget;
 				SKIP_INSTALL = YES;
@@ -1164,11 +1188,11 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = HaloWidget/HaloWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 210;
+				CURRENT_PROJECT_VERSION = 220;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HaloWidget/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.1;
+				MARKETING_VERSION = 2.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.widget;
 				PRODUCT_NAME = HaloWidget;
 				SKIP_INSTALL = YES;
@@ -1181,11 +1205,11 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = HaloHelper/HaloHelper.entitlements;
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 210;
+				CURRENT_PROJECT_VERSION = 220;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HaloHelper/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.1;
+				MARKETING_VERSION = 2.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.helper;
 				PRODUCT_NAME = HaloHelper;
 				SKIP_INSTALL = YES;
@@ -1198,11 +1222,11 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = HaloHelper/HaloHelper.entitlements;
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 210;
+				CURRENT_PROJECT_VERSION = 220;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HaloHelper/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.1;
+				MARKETING_VERSION = 2.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.helper;
 				PRODUCT_NAME = HaloHelper;
 				SKIP_INSTALL = YES;
@@ -1215,11 +1239,11 @@
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 210;
+				CURRENT_PROJECT_VERSION = 220;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.1;
+				MARKETING_VERSION = 2.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -1234,11 +1258,11 @@
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 210;
+				CURRENT_PROJECT_VERSION = 220;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.1;
+				MARKETING_VERSION = 2.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -1253,11 +1277,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 210;
+				CURRENT_PROJECT_VERSION = 220;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.1;
+				MARKETING_VERSION = 2.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -1271,11 +1295,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 210;
+				CURRENT_PROJECT_VERSION = 220;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.1;
+				MARKETING_VERSION = 2.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;

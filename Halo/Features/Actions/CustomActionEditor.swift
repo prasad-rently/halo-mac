@@ -64,14 +64,22 @@ struct CustomActionEditor: View {
                     Divider().background(Color.haloBorder)
 
                     // ── Category ─────────────────────────────────────────
+                    // .menu, not .segmented — ActionCategory has 13 cases, and a
+                    // segmented control with that many full-text+icon segments is
+                    // far wider than this sheet, which used to blow out the whole
+                    // form's layout (every row rendered shifted, showing only its
+                    // trailing edge).
                     VStack(alignment: .leading, spacing: 6) {
                         label("Category")
-                        Picker("", selection: $category) {
+                        Picker(selection: $category) {
                             ForEach(ActionCategory.allCases) { cat in
                                 Label(cat.rawValue, systemImage: cat.icon).tag(cat)
                             }
+                        } label: {
+                            EmptyView()
                         }
-                        .pickerStyle(.segmented)
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     // ── Keywords ─────────────────────────────────────────

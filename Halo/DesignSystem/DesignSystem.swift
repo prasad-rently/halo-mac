@@ -69,19 +69,20 @@ struct HaloCard<Content: View>: View {
         ZStack(alignment: .top) {
             content
                 .background(Color.haloSurface2)
-                .cornerRadius(14)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(Color.haloBorder, lineWidth: 1)
-                )
             if let accent = accentTop {
                 Rectangle()
-                    .fill(LinearGradient(colors: [accent, .clear],
+                    .fill(LinearGradient(colors: [accent, accent.opacity(0.15)],
                                         startPoint: .leading, endPoint: .trailing))
-                    .frame(height: 2)
-                    .cornerRadius(1)
+                    .frame(height: 3)
             }
         }
+        // Clipping to the card's own rounded shape keeps the accent bar flush with
+        // the curved top corners instead of overhanging them as a straight edge.
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color.haloBorder, lineWidth: 1)
+        )
     }
 }
 

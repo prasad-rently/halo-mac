@@ -297,12 +297,17 @@ struct AppListRow: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(isSelected ? Color.haloAccent.opacity(0.08) : Color.clear)
             .cornerRadius(10)
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
                     .stroke(isSelected ? Color.haloAccent.opacity(0.2) : Color.clear, lineWidth: 1)
             )
+            // Without an explicit hit-testing shape, clicks over the transparent
+            // Spacer/background area pass through instead of selecting the row —
+            // only the opaque icon/text/chevron glyphs registered taps.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("applications.row.\(app.bundleIdentifier)")

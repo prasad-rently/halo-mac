@@ -33,6 +33,7 @@ struct TopProcessesSection: View {
                         Text("CPU").tag(ProcessMonitor.SortKey.cpu)
                         Text("RAM").tag(ProcessMonitor.SortKey.ram)
                     }
+                    .labelsHidden()
                     .pickerStyle(.segmented)
                     .frame(width: 110)
                 }

@@ -118,7 +118,9 @@ final class AppState: ObservableObject {
         startMetricsPolling()
         startWidgetReloadTimer()
         loadStoredActivity()
-        loadClipboardHistory()
+        // Mock/sample clipboard seed data disabled — real history now comes only
+        // from ClipboardMonitor picking up actual pasteboard changes.
+        // loadClipboardHistory()
         startClipboardMonitoring()
         setupHotkeys()
         startNetworkMonitoring()

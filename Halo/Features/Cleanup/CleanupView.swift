@@ -191,6 +191,7 @@ struct CleanupCategoryRow: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(isSelected ? Color.haloAccent.opacity(0.08) : Color.clear)
             .overlay(
                 Rectangle()
@@ -198,6 +199,9 @@ struct CleanupCategoryRow: View {
                     .frame(width: 3)
                 , alignment: .leading
             )
+            // Without an explicit hit-testing shape, taps over the transparent
+            // Spacer/background area pass through instead of selecting the row.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

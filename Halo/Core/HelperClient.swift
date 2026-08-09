@@ -31,21 +31,31 @@ final class HelperClient: ObservableObject {
     // avoiding ObjC completion-handler bridging that deadlocks SPM test runner.
     private let injectedProxy: (any HelperProxying)?
 
+    // True only when this instance was constructed via init(proxy:) — i.e. a test/preview
+    // double. Distinguishes "test explicitly configured with no proxy" (isAvailable must be
+    // false, deterministically, with no XPC attempt) from "production, real NSXPCConnection"
+    // (isAvailable must not be hard-coded false, or the app would never even attempt to talk
+    // to HaloHelper.xpc — the embedded XPC service always launches on demand, its actual
+    // reachability can only be known by trying the connection).
+    private let isMocked: Bool
+
     // MARK: - Init
 
     /// Production init — uses real NSXPCConnection.
     init() {
         self.injectedProxy = nil
+        self.isMocked = false
     }
 
     /// Test / preview init — injects a synchronous mock, bypassing XPC entirely.
     init(proxy: (any HelperProxying)?) {
         self.injectedProxy = proxy
+        self.isMocked = true
     }
 
     // MARK: - Availability
 
-    var isAvailable: Bool { injectedProxy != nil }
+    var isAvailable: Bool { isMocked ? injectedProxy != nil : true }
 
     // MARK: - Public API
     //

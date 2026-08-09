@@ -11,6 +11,10 @@ struct AIAssistantView: View {
     @ObservedObject private var store = ConversationStore.shared
     @State private var keyDraft = ""
     @State private var showHistory = false
+    // Defensive: keep the key field from auto-acquiring first responder on
+    // appear (doesn't hurt, though the sidebar-scroll bug turned out not to
+    // be about focus at all — see the ScrollView note on `keySetup` below).
+    @FocusState private var isKeyFieldFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,6 +25,7 @@ struct AIAssistantView: View {
         .background(Color.haloSurface)
         .sheet(item: $vm.pendingConfirm) { confirmSheet($0) }
         .sheet(isPresented: $showHistory) { historySheet }
+        .onAppear { isKeyFieldFocused = false }
     }
 
     // MARK: Header
@@ -64,24 +69,36 @@ struct AIAssistantView: View {
         }
     }
 
+    // Wrapped in a ScrollView so this pane's root reports the same kind of
+    // bounded/scrollable size every other module's detail view does (Dashboard,
+    // Performance, HaloShare, etc. all root themselves in a ScrollView). This
+    // used to be a bare VStack with a maxHeight:.infinity child — an unboundedly
+    // flexible size NavigationSplitView doesn't see from any other detail view —
+    // and was the actual cause of the sidebar column mis-laying-out (not focus,
+    // not the sidebar's own List/ScrollView code, which is why every fix aimed
+    // at SidebarView itself had no effect).
     private var keySetup: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "key.fill").font(.system(size: 34)).foregroundColor(.haloPurple)
-            Text("Connect your \(vm.selectedProvider.displayName) API key")
-                .font(HaloFont.display(16)).foregroundColor(.haloText)
-                .accessibilityIdentifier("ai.keySetup.title")
-            Text("BYO key — stored only in your Mac's Keychain and sent only to \(vm.selectedProvider.displayName). Each provider has its own key.")
-                .font(HaloFont.body(12)).foregroundColor(.haloText2)
-                .multilineTextAlignment(.center).frame(maxWidth: 420).fixedSize(horizontal: false, vertical: true)
-            SecureField(keyPlaceholder, text: $keyDraft)
-                .textFieldStyle(.plain).font(HaloFont.body(12)).foregroundColor(.haloText)
-                .padding(9).frame(width: 320).background(Color.haloSurface2).cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.haloBorder, lineWidth: 1))
-            HaloPrimaryButton("Save key", icon: "checkmark") {
-                vm.saveKey(keyDraft); keyDraft = ""
-            }.disabled(keyDraft.isEmpty)
+        ScrollView {
+            VStack(spacing: 14) {
+                Image(systemName: "key.fill").font(.system(size: 34)).foregroundColor(.haloPurple)
+                Text("Connect your \(vm.selectedProvider.displayName) API key")
+                    .font(HaloFont.display(16)).foregroundColor(.haloText)
+                    .accessibilityIdentifier("ai.keySetup.title")
+                Text("BYO key — stored only in your Mac's Keychain and sent only to \(vm.selectedProvider.displayName). Each provider has its own key.")
+                    .font(HaloFont.body(12)).foregroundColor(.haloText2)
+                    .multilineTextAlignment(.center).frame(maxWidth: 420).fixedSize(horizontal: false, vertical: true)
+                SecureField(keyPlaceholder, text: $keyDraft)
+                    .textFieldStyle(.plain).font(HaloFont.body(12)).foregroundColor(.haloText)
+                    .padding(9).frame(width: 320).background(Color.haloSurface2).cornerRadius(8)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.haloBorder, lineWidth: 1))
+                    .focused($isKeyFieldFocused)
+                HaloPrimaryButton("Save key", icon: "checkmark") {
+                    vm.saveKey(keyDraft); keyDraft = ""
+                }.disabled(keyDraft.isEmpty)
+            }
+            .frame(maxWidth: .infinity, minHeight: 460)
+            .padding(.top, 100)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: Chat

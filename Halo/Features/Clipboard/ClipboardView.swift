@@ -283,8 +283,12 @@ struct ClipboardFilterRow: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(isSelected ? Color.haloAccent.opacity(0.1) : Color.clear)
             .cornerRadius(9)
+            // Without an explicit hit-testing shape, taps over the transparent
+            // Spacer/background area pass through instead of selecting the row.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -364,14 +368,29 @@ struct ClipboardItemRow: View {
     let onDelete: () -> Void
 
     @State private var isHovered = false
+    @State private var showImagePreview = false
+
+    private var imageData: Data? {
+        if case .image(let data, _) = item.content { return data }
+        return nil
+    }
 
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 10) {
-                Image(systemName: item.kind.icon)
-                    .font(.system(size: 16))
-                    .foregroundColor(item.kind.accentColor)
-                    .frame(width: 24)
+                if let data = imageData, let thumbnail = NSImage(data: data) {
+                    Image(nsImage: thumbnail)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 24, height: 24)
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.haloBorder2, lineWidth: 1))
+                } else {
+                    Image(systemName: item.kind.icon)
+                        .font(.system(size: 16))
+                        .foregroundColor(item.kind.accentColor)
+                        .frame(width: 24)
+                }
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.preview)
@@ -412,6 +431,12 @@ struct ClipboardItemRow: View {
                 // Inline actions (hover)
                 if isHovered {
                     HStack(spacing: 6) {
+                        if let data = imageData {
+                            ClipboardActionButton(icon: "eye", tooltip: "Preview") { showImagePreview = true }
+                                .popover(isPresented: $showImagePreview, arrowEdge: .trailing) {
+                                    ClipboardImagePreviewPopover(data: data, metadata: item.preview)
+                                }
+                        }
                         ClipboardActionButton(icon: "doc.on.clipboard", tooltip: "Paste") { onPaste() }
                         ClipboardActionButton(icon: item.isPinned ? "pin.slash" : "pin", tooltip: "Pin") { onPin() }
                         ClipboardActionButton(icon: "trash", tooltip: "Delete", isDestructive: true) { onDelete() }
@@ -440,6 +465,34 @@ struct ClipboardItemRow: View {
             Divider()
             Button("Delete", role: .destructive, action: onDelete)
         }
+    }
+}
+
+// MARK: - Image Preview Popover
+
+struct ClipboardImagePreviewPopover: View {
+    let data: Data
+    let metadata: String
+
+    var body: some View {
+        VStack(spacing: 10) {
+            if let image = NSImage(data: data) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: 320, maxHeight: 320)
+                    .cornerRadius(10)
+            } else {
+                Text("Unable to load image")
+                    .font(HaloFont.body(12))
+                    .foregroundColor(.haloText2)
+            }
+            Text(metadata)
+                .font(HaloFont.body(11))
+                .foregroundColor(.haloText2)
+        }
+        .padding(14)
+        .background(Color.haloSurface2)
     }
 }
 

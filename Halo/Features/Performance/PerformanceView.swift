@@ -75,10 +75,16 @@ final class PerformanceViewModel: ObservableObject {
     func freeRAM() async {
         isFreingRAM = true
         lastTaskError = nil
-        if helper.isAvailable {
+        // Probe reachability with a live round trip — helper.isAvailable only tells us
+        // whether this client is a test mock, not whether HaloHelper.xpc actually answers.
+        helperAvailable = (await helper.helperVersion()) != nil
+        if helperAvailable {
             // F-002: real XPC call — memory_pressure reclaims inactive pages
             let freed = await helper.purgeRAM()
             ramFreedMB = freed > 0 ? freed : nil
+            if freed <= 0 {
+                lastTaskError = "Memory optimisation reported no data. Please try again."
+            }
         } else {
             // Helper offline — read actual inactive (reclaimable) pages via
             // host_statistics64 so we report honest, real numbers rather than
@@ -120,8 +126,12 @@ final class PerformanceViewModel: ObservableObject {
         maintenanceTasks[idx].isRunning = true
         lastTaskError = nil
 
+        // Probe reachability with a live round trip — helper.isAvailable only tells us
+        // whether this client is a test mock, not whether HaloHelper.xpc actually answers.
+        helperAvailable = (await helper.helperVersion()) != nil
+
         let success: Bool
-        if helper.isAvailable {
+        if helperAvailable {
             // F-002: real XPC calls
             switch task.title {
             case "Flush DNS Cache":
@@ -134,6 +144,9 @@ final class PerformanceViewModel: ObservableObject {
                 // Unknown task — fall through to simulation
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 success = true
+            }
+            if !success {
+                lastTaskError = "\(task.title) failed. The Helper reported an error — please try again."
             }
         } else {
             // Helper not running — brief UI feedback only

@@ -34,7 +34,10 @@ struct DiskHealthSection: View {
                         Text("SMART Disk Health")
                             .font(HaloFont.display(14, weight: .semibold))
                             .foregroundColor(.haloText)
-                        Spacer()
+                        Spacer(minLength: 0)
+                    }
+                    HStack {
+                        Spacer(minLength: 0)
                         if isScanRunning {
                             ProgressView().scaleEffect(0.8)
                         } else {
@@ -43,6 +46,7 @@ struct DiskHealthSection: View {
                                 icon: "magnifyingglass",
                                 isLoading: isScanRunning
                             ) { runScan() }
+                            .fixedSize()
                         }
                     }
 

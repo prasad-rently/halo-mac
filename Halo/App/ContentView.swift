@@ -51,64 +51,34 @@ struct SidebarView: View {
     @State private var isEditing = false
 
     var body: some View {
-        VStack(spacing: 0) {
+        // The module list is the ONLY scrollable region. Header and storage
+        // indicator are attached as safeAreaInsets rather than VStack siblings
+        // around a Spacer — with the old VStack+Spacer+ScrollView layout, some
+        // selections (rows near the bottom of the list) intermittently left the
+        // header and storage indicator unrendered, as if the ScrollView had
+        // stolen their space or the whole column had scrolled past them. Insets
+        // are guaranteed by SwiftUI to stay pinned outside the scrollable content
+        // no matter what happens inside the ScrollView, which removes that whole
+        // failure mode rather than chasing its trigger.
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 2) {
 
-            // ── Logo header ──────────────────────────────────────────────
-            HStack(spacing: 10) {
-                ZStack {
-                    Circle()
-                        .fill(LinearGradient(
-                            colors: [.haloAccent, .haloAccent2],
-                            startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 28, height: 28)
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white)
-                }
-                .shadow(color: Color.haloAccent.opacity(0.5), radius: 6)
-                // App name + build token / version subtitle
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Halo")
-                        .font(HaloFont.display(18, weight: .heavy))
-                        .foregroundColor(.haloText)
-                    Text(Build.displayLabel)
-                        .font(HaloFont.mono(9))
-                        .foregroundColor(.haloText3)
-                        .help(Build.fullLabel)   // tooltip shows full detail on hover
-                }
-                Spacer()
-
-                // Customise / Done button
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { isEditing.toggle() }
-                } label: {
-                    Image(systemName: isEditing ? "checkmark.circle.fill" : "slider.horizontal.3")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(isEditing ? .haloGreen : .haloText3)
-                }
-                .buttonStyle(.plain)
-                .help(isEditing ? "Done customising" : "Customise module order")
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 18)
-
-            Divider().background(Color.haloBorder)
-
-            // ── Module list ──────────────────────────────────────────────
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 2) {
-
-                    // "Overview" section — Dashboard is always pinned here
-                    if !isEditing {
-                        SidebarSection(label: "Overview") {
-                            SidebarItem(module: .dashboard)
-                        }
+                // "Overview" section — Dashboard is always pinned here
+                if !isEditing {
+                    SidebarSection(label: "Overview") {
+                        SidebarItem(module: .dashboard)
                     }
+                }
 
-                    // "Modules" section — user-reorderable
-                    SidebarSection(label: isEditing ? "Drag to reorder" : "Modules") {
-                        // We use a fixed-height List so SwiftUI's .onMove drag
-                        // handles work while the outer ScrollView handles overflow.
+                // "Modules" section — user-reorderable
+                SidebarSection(label: isEditing ? "Drag to reorder" : "Modules") {
+                    if isEditing {
+                        // List is only mounted while actively dragging to reorder —
+                        // its AppKit-backed NSTableView is needed for .onMove, but
+                        // keeping it mounted during normal navigation caused taps on
+                        // rows near the bottom (e.g. AI Assistant) to trigger AppKit's
+                        // "scroll to reveal first responder" behavior on the table,
+                        // snapping the whole sidebar's scroll position to a wrong spot.
                         List {
                             ForEach(appState.moduleOrder, id: \.self) { module in
                                 let info = badgeInfo(for: module)
@@ -133,14 +103,74 @@ struct SidebarView: View {
                         .frame(height: CGFloat(appState.moduleOrder.count) * 46)
                         // Note: on macOS, List + .onMove is always drag-active.
                         // EditMode is an iOS-only concept and is not used here.
+                    } else {
+                        // Plain SwiftUI stack for normal navigation — no NSTableView,
+                        // so tapping a row can't trigger the scroll-to-focus glitch above.
+                        VStack(spacing: 2) {
+                            ForEach(appState.moduleOrder, id: \.self) { module in
+                                let info = badgeInfo(for: module)
+                                SidebarItem(
+                                    module:      module,
+                                    badge:       info.text,
+                                    badgeColor:  info.color,
+                                    isEditing:   false
+                                )
+                            }
+                        }
                     }
                 }
-                .padding(.vertical, 8)
             }
+            .padding(.vertical, 8)
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                // ── Logo header ──────────────────────────────────────────
+                HStack(spacing: 10) {
+                    ZStack {
+                        Circle()
+                            .fill(LinearGradient(
+                                colors: [.haloAccent, .haloAccent2],
+                                startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .frame(width: 28, height: 28)
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+                    .shadow(color: Color.haloAccent.opacity(0.5), radius: 6)
+                    // App name + build token / version subtitle
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Halo")
+                            .font(HaloFont.display(18, weight: .heavy))
+                            .foregroundColor(.haloText)
+                        Text(Build.displayLabel)
+                            .font(HaloFont.mono(9))
+                            .foregroundColor(.haloText3)
+                            .help(Build.fullLabel)   // tooltip shows full detail on hover
+                    }
+                    Spacer()
 
-            Spacer()
+                    // Customise / Done button
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { isEditing.toggle() }
+                    } label: {
+                        Image(systemName: isEditing ? "checkmark.circle.fill" : "slider.horizontal.3")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(isEditing ? .haloGreen : .haloText3)
+                    }
+                    .buttonStyle(.plain)
+                    .help(isEditing ? "Done customising" : "Customise module order")
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 18)
+
+                Divider().background(Color.haloBorder)
+            }
+            .background(Color.haloBackground)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             StorageIndicator()
                 .padding(12)
+                .background(Color.haloBackground)
         }
         .background(Color.haloBackground.opacity(0.8))
         .listStyle(.sidebar)
@@ -219,9 +249,14 @@ struct SidebarItem: View {
         Button {
             // Suppress navigation while the user is in edit/reorder mode
             guard !isEditing else { return }
-            withAnimation(.easeInOut(duration: 0.15)) {
-                appState.selectedModule = module
-            }
+            // Deliberately NOT wrapped in withAnimation: appState.selectedModule is
+            // read by every SidebarItem's `isActive` (and by DetailView's switch), so
+            // an implicit-animation transaction here reflows the whole sidebar tree —
+            // including the ScrollView around the module list — and macOS SwiftUI
+            // resets/re-animates that ScrollView's scroll position as a side effect.
+            // The `.animation(value: isActive)` below scopes the highlight transition
+            // to just this row instead.
+            appState.selectedModule = module
         } label: {
             HStack(spacing: 10) {
                 // Module icon
@@ -257,6 +292,7 @@ struct SidebarItem: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 10)
                     .fill(isActive && !isEditing
@@ -273,8 +309,21 @@ struct SidebarItem: View {
                             : .clear,
                             lineWidth: 1)
             )
+            // Without an explicit hit-testing shape, taps over the transparent
+            // Spacer/background area pass through instead of selecting the row.
+            .contentShape(Rectangle())
+            // Scoped to this row's own highlight — see the note in the Button
+            // action above for why this replaced a tree-wide withAnimation.
+            .animation(.easeInOut(duration: 0.15), value: isActive)
         }
         .buttonStyle(.plain)
+        // Clicking a Button normally makes it the key view, and AppKit
+        // auto-scrolls any enclosing NSScrollView (including one NavigationSplitView
+        // implicitly wraps its sidebar column in) to keep the first responder visible.
+        // For a row near the bottom of the list (e.g. AI Assistant), that snapped the
+        // WHOLE sidebar — header and all — to a wrong scroll position. Not becoming
+        // a focus target at all removes the trigger entirely.
+        .focusable(false)
         // Stable UI-test hook: `sidebar.row.<AppModule.rawValue>` (e.g.
         // sidebar.row.performance, sidebar.row.ai). Lets HaloUITests navigate
         // deterministically instead of matching on localized row titles.

@@ -111,6 +111,7 @@ private struct PortControls: View {
                 Text("Port").tag(true)
                 Text("Process").tag(false)
             }
+            .labelsHidden()
             .pickerStyle(.segmented)
             .frame(width: 140)
 
@@ -118,6 +119,7 @@ private struct PortControls: View {
             Button { Task { await viewModel.refresh() } } label: {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 13, weight: .medium))
+                    .frame(width: 24, height: 24)
             }
             .buttonStyle(.plain)
             .foregroundColor(.haloText2)
@@ -142,8 +144,10 @@ private struct PortControls: View {
                 Image(systemName: "gearshape")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.haloText2)
+                    .frame(width: 24, height: 24)
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .frame(width: 24)
             .help("Kill signal preference")
         }
@@ -267,6 +271,7 @@ private struct PortRow: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 14))
                         .foregroundColor(.haloRed.opacity(isHovered ? 1.0 : 0.6))
+                        .frame(width: 24, height: 24)
                 }
                 .buttonStyle(.plain)
                 .help("Kill (SIGTERM)")
@@ -300,8 +305,10 @@ private struct PortRow: View {
                     Image(systemName: "ellipsis.circle")
                         .font(.system(size: 14))
                         .foregroundColor(.haloText3)
+                        .frame(width: 24, height: 24)
                 }
                 .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
                 .frame(width: 24)
             }
             .frame(width: 100, alignment: .trailing)
