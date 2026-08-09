@@ -340,14 +340,18 @@ struct ClipboardItem: Identifiable, Equatable {
     let copiedDate: Date
     let sourceApp: String?
     var isPinned: Bool
+    /// F-045: name of the device this item was synced *from*, or `nil` if it was
+    /// copied locally. Drives the "synced" badge + echo suppression.
+    let syncedFrom: String?
 
     init(id: UUID = UUID(), content: ClipboardContent, copiedDate: Date = Date(),
-         sourceApp: String? = nil, isPinned: Bool = false) {
+         sourceApp: String? = nil, isPinned: Bool = false, syncedFrom: String? = nil) {
         self.id = id
         self.content = content
         self.copiedDate = copiedDate
         self.sourceApp = sourceApp
         self.isPinned = isPinned
+        self.syncedFrom = syncedFrom
     }
 
     var preview: String {

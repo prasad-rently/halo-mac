@@ -117,20 +117,40 @@
 		000000000000000000009016 /* ExportReportIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009015 /* ExportReportIntent.swift */; };
 		000000000000000000009018 /* HaloShortcutsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009017 /* HaloShortcutsProvider.swift */; };
 		0D95339BD7D85794863633C8 /* HaloUITestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */; };
+		0E1A83AE923038D00F475CB1 /* ExpenditureModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F74A5EE3A63EF789882D66E /* ExpenditureModels.swift */; };
 		1A276975BC00655241248D7B /* DriveSpeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C310900DF7BB88C2E7AFC1B /* DriveSpeedView.swift */; };
-		1AF88E6C0D5612EADBB0766C /* HelperClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A2E8C7296BB40EA82204C70 /* HelperClientTests.swift */; };
-		318D18283567FA7F9C3FCD89 /* DriveSpeedTesterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629A9D17BDFF863DCB0206F2 /* DriveSpeedTesterTests.swift */; };
+		3082B42695CF0998AA583106 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = D265B9320EDA1875C19961AD /* FirebaseDatabase */; };
+		30D4A642EC4929682471BC30 /* ExpenditureViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C8A3DFF585E23093A057862 /* ExpenditureViewModel.swift */; };
+		33C03FAAB6033DB109DE9EA0 /* CloudSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4E45F5700BC461EFD2F89C6 /* CloudSettingsPane.swift */; };
+		4185268AC7829BEDB5D7F55E /* TransactionPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70DA043DB57C1073F413C575 /* TransactionPipeline.swift */; };
 		428DD9830BBDEBECB1200590 /* SmokeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74D974CC4B2FB109632BF14A /* SmokeUITests.swift */; };
-		5AED20F642AB7CB6348B957A /* HaloTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFEE33412198DD09C82F2E15 /* HaloTests.swift */; };
+		5953F30D7CA49FFA4883B414 /* SMSSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3086393C229A0E132307B6C /* SMSSyncClient.swift */; };
+		74CF1681EA0B483294AE1DE3 /* SMSConsoleViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABADB8F162C8E503F371B945 /* SMSConsoleViewModel.swift */; };
 		7FA28EC1DD42807C6EFD8148 /* SidebarReorderUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED172401B83B65197881BFC /* SidebarReorderUITests.swift */; };
-		8A4DFF3A40CA9ADDBF8405AE /* HaloTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C5BDF389221BADF1F31152C /* HaloTests.swift */; };
+		81D57B208A081FECCDB56CB4 /* ExpenditureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E150895C694E83F5E4C63688 /* ExpenditureView.swift */; };
+		879BABFA5A95F861A51AD596 /* FirebaseRTDBClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74790111414AABF80E296E4C /* FirebaseRTDBClient.swift */; };
 		8A64A32F27E6245BD6EAEB93 /* CleanupUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8908A278C13A1F3B9E21BFE9 /* CleanupUITests.swift */; };
+		8B6D9AFD2032338DE0CD903D /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
+		8C501654E50047EBD413205C /* ClipboardSyncModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D6E25B04E36EFC7304F6650 /* ClipboardSyncModels.swift */; };
+		8FB6B64C9DD98FE7C893AC62 /* HelperClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0191600A2A39E962DFBAF63 /* HelperClientTests.swift */; };
+		9253BD0988C4DAAAF3E2BEAF /* GoogleOAuthPKCE.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5632845E3812F9942AB83AED /* GoogleOAuthPKCE.swift */; };
 		97FC4C5E35CB7030A2F01C9C /* HaloSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */; };
+		9B9F762E501E9A043923E03B /* CloudConfigStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FF3FF59B6A687B1342CA5E0 /* CloudConfigStore.swift */; };
+		9D149B17EB2EB41DFC3C5024 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = E7BC409524EB1ACD0235E81B /* FirebaseAuth */; };
+		A1ADD457CAFCC61887AF78D8 /* CloudFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00431072E8D583A50460C948 /* CloudFoundationTests.swift */; };
+		A1CCF4B6053B2C709D866F96 /* SMSModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11E2E096AE5F0161298B622A /* SMSModels.swift */; };
 		AE6FACECB50C6D438440D382 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
-		CFA15D1C5EDA3ED07CCE2326 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
-		D52607DADA626DF2FA479956 /* HelperClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00C37BFCA463AB410245B802 /* HelperClientTests.swift */; };
-		D6C27E0D2D06F494CFF23FBF /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
+		B3BA45306DB919FF17FF62AC /* SMSConsoleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 949EBE6DE7B0C70F9518684A /* SMSConsoleView.swift */; };
+		B8A1F62E5165929BFEBB8F4E /* ClipboardSyncSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C2FE2AC5EC3D78F0A9E555A /* ClipboardSyncSettingsView.swift */; };
+		B9222883A1BBADB2D9A163F4 /* ClipboardSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE2B07841BC8A4CCE2FEB37A /* ClipboardSyncService.swift */; };
+		BD934A0D464689E1FA0EC1F4 /* CryptoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEE2BFAEB9BE01F472B48AED /* CryptoService.swift */; };
+		C3321CD3FE963BFE6E079AA0 /* CloudModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F726C8A8193AD0153FD18FF9 /* CloudModels.swift */; };
+		C5D7A353E701AF9A6A6A0ADF /* CloudSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBB30C8FE643DD82A09C9248 /* CloudSetupView.swift */; };
+		D93824621780040AAF88D37B /* ExpenditureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92AB4D4B17BA6E0702FE8F19 /* ExpenditureStore.swift */; };
+		E661F24279DA76E6A603FD0B /* HaloTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0EE44FE16CD9C3F543F4CC0 /* HaloTests.swift */; };
 		EABEEEF5BBF1D9D3F61FB453 /* DriveSpeedTester.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4555BA206584E6C688FD51F1 /* DriveSpeedTester.swift */; };
+		FA6012ED7ACF7DF9270F2EE3 /* TransactionParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E5A1D2724973588EFFAB551 /* TransactionParser.swift */; };
+		FE2AA15AC1E4036EB9FD80EF /* DriveSpeedTesterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 626E37DCEBF96711B499810F /* DriveSpeedTesterTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -148,14 +168,7 @@
 			remoteGlobalIDString = 000000000000000000003001;
 			remoteInfo = HaloHelper;
 		};
-		26D25A124256763F35F80B16 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 000000000000000000001011 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 000000000000000000001004;
-			remoteInfo = Halo;
-		};
-		2CE7239D8ACBB89A39DF27FF /* PBXContainerItemProxy */ = {
+		A6A584D7C0B83AA98CF55847 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 000000000000000000001011 /* Project object */;
 			proxyType = 1;
@@ -306,22 +319,42 @@
 		000000000000000000009013 /* GetClipboardHistoryIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetClipboardHistoryIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009015 /* ExportReportIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/ExportReportIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009017 /* HaloShortcutsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/HaloShortcutsProvider.swift; sourceTree = "<group>"; };
-		00C37BFCA463AB410245B802 /* HelperClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HelperClientTests.swift; sourceTree = "<group>"; };
+		00431072E8D583A50460C948 /* CloudFoundationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudFoundationTests.swift; sourceTree = "<group>"; };
+		11E2E096AE5F0161298B622A /* SMSModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSModels.swift; sourceTree = "<group>"; };
 		3ED172401B83B65197881BFC /* SidebarReorderUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SidebarReorderUITests.swift; sourceTree = "<group>"; };
 		4555BA206584E6C688FD51F1 /* DriveSpeedTester.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedTester.swift; sourceTree = "<group>"; };
 		4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloUITestCase.swift; sourceTree = "<group>"; };
-		629A9D17BDFF863DCB0206F2 /* DriveSpeedTesterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedTesterTests.swift; sourceTree = "<group>"; };
+		4D6E25B04E36EFC7304F6650 /* ClipboardSyncModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClipboardSyncModels.swift; sourceTree = "<group>"; };
+		5632845E3812F9942AB83AED /* GoogleOAuthPKCE.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleOAuthPKCE.swift; sourceTree = "<group>"; };
+		626E37DCEBF96711B499810F /* DriveSpeedTesterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedTesterTests.swift; sourceTree = "<group>"; };
 		67D626412F39854842AE0A36 /* HaloUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6C2FE2AC5EC3D78F0A9E555A /* ClipboardSyncSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClipboardSyncSettingsView.swift; sourceTree = "<group>"; };
+		6F74A5EE3A63EF789882D66E /* ExpenditureModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExpenditureModels.swift; sourceTree = "<group>"; };
+		70DA043DB57C1073F413C575 /* TransactionPipeline.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TransactionPipeline.swift; sourceTree = "<group>"; };
+		74790111414AABF80E296E4C /* FirebaseRTDBClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FirebaseRTDBClient.swift; sourceTree = "<group>"; };
 		74D974CC4B2FB109632BF14A /* SmokeUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SmokeUITests.swift; sourceTree = "<group>"; };
 		7C310900DF7BB88C2E7AFC1B /* DriveSpeedView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedView.swift; sourceTree = "<group>"; };
-		7C5BDF389221BADF1F31152C /* HaloTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloTests.swift; sourceTree = "<group>"; };
+		7E5A1D2724973588EFFAB551 /* TransactionParser.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TransactionParser.swift; sourceTree = "<group>"; };
 		8908A278C13A1F3B9E21BFE9 /* CleanupUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CleanupUITests.swift; sourceTree = "<group>"; };
+		8FF3FF59B6A687B1342CA5E0 /* CloudConfigStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudConfigStore.swift; sourceTree = "<group>"; };
+		92AB4D4B17BA6E0702FE8F19 /* ExpenditureStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExpenditureStore.swift; sourceTree = "<group>"; };
+		949EBE6DE7B0C70F9518684A /* SMSConsoleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSConsoleView.swift; sourceTree = "<group>"; };
 		94E717DB998E0BBF1AE83F94 /* HaloTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		9A2E8C7296BB40EA82204C70 /* HelperClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HelperClientTests.swift; sourceTree = "<group>"; };
+		9C8A3DFF585E23093A057862 /* ExpenditureViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExpenditureViewModel.swift; sourceTree = "<group>"; };
+		ABADB8F162C8E503F371B945 /* SMSConsoleViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSConsoleViewModel.swift; sourceTree = "<group>"; };
+		B3086393C229A0E132307B6C /* SMSSyncClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSSyncClient.swift; sourceTree = "<group>"; };
 		BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloSidebar.swift; sourceTree = "<group>"; };
+		BE2B07841BC8A4CCE2FEB37A /* ClipboardSyncService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClipboardSyncService.swift; sourceTree = "<group>"; };
+		C4E45F5700BC461EFD2F89C6 /* CloudSettingsPane.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudSettingsPane.swift; sourceTree = "<group>"; };
 		D1749E8BBBF48CFF49E42B5A /* HaloTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D3824F98C3251B8B75207CE9 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
-		EFEE33412198DD09C82F2E15 /* HaloTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloTests.swift; sourceTree = "<group>"; };
+		DBB30C8FE643DD82A09C9248 /* CloudSetupView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudSetupView.swift; sourceTree = "<group>"; };
+		DEE2BFAEB9BE01F472B48AED /* CryptoService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CryptoService.swift; sourceTree = "<group>"; };
+		E0191600A2A39E962DFBAF63 /* HelperClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HelperClientTests.swift; sourceTree = "<group>"; };
+		E0EE44FE16CD9C3F543F4CC0 /* HaloTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloTests.swift; sourceTree = "<group>"; };
+		E150895C694E83F5E4C63688 /* ExpenditureView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExpenditureView.swift; sourceTree = "<group>"; };
+		EE0196FFE192CB375CB157B2 /* HaloTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F726C8A8193AD0153FD18FF9 /* CloudModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudModels.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -333,6 +366,8 @@
 				000000000000000000001063 /* SystemConfiguration.framework in Frameworks */,
 				000000000000000000002018 /* WidgetKit.framework in Frameworks */,
 				000000000000000000005001 /* Sentry in Frameworks */,
+				3082B42695CF0998AA583106 /* FirebaseDatabase in Frameworks */,
+				9D149B17EB2EB41DFC3C5024 /* FirebaseAuth in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -358,11 +393,11 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		FE01D268A054C5BF7D1CEDD5 /* Frameworks */ = {
+		C15C88FA7876FD8C4263D307 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D6C27E0D2D06F494CFF23FBF /* Cocoa.framework in Frameworks */,
+				8B6D9AFD2032338DE0CD903D /* Cocoa.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -380,7 +415,7 @@
 				000000000000000000001003 /* Products */,
 				3FC68D77CD5D51D58443674D /* HaloUITests */,
 				DFBC888F5DBC7A3BBDFF40F0 /* Halo */,
-				78260093923C98A7E00A3FCD /* HaloTests */,
+				B4EB165306B84AC114EFDB9A /* HaloTests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -473,6 +508,7 @@
 				67D626412F39854842AE0A36 /* HaloUITests.xctest */,
 				94E717DB998E0BBF1AE83F94 /* HaloTests.xctest */,
 				D1749E8BBBF48CFF49E42B5A /* HaloTests.xctest */,
+				EE0196FFE192CB375CB157B2 /* HaloTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -528,6 +564,19 @@
 			path = Scanner;
 			sourceTree = "<group>";
 		};
+		3F546D0FB85E1057ECC02F6E /* Cloud */ = {
+			isa = PBXGroup;
+			children = (
+				DEE2BFAEB9BE01F472B48AED /* CryptoService.swift */,
+				F726C8A8193AD0153FD18FF9 /* CloudModels.swift */,
+				8FF3FF59B6A687B1342CA5E0 /* CloudConfigStore.swift */,
+				74790111414AABF80E296E4C /* FirebaseRTDBClient.swift */,
+				62D397A166B98B3C3FF256AD /* Provisioning */,
+			);
+			name = Cloud;
+			path = Cloud;
+			sourceTree = "<group>";
+		};
 		3FC68D77CD5D51D58443674D /* HaloUITests */ = {
 			isa = PBXGroup;
 			children = (
@@ -541,21 +590,22 @@
 			path = HaloUITests;
 			sourceTree = "<group>";
 		};
-		78260093923C98A7E00A3FCD /* HaloTests */ = {
+		62D397A166B98B3C3FF256AD /* Provisioning */ = {
 			isa = PBXGroup;
 			children = (
-				629A9D17BDFF863DCB0206F2 /* DriveSpeedTesterTests.swift */,
-				7C5BDF389221BADF1F31152C /* HaloTests.swift */,
-				00C37BFCA463AB410245B802 /* HelperClientTests.swift */,
+				5632845E3812F9942AB83AED /* GoogleOAuthPKCE.swift */,
 			);
-			name = HaloTests;
-			path = HaloTests;
+			name = Provisioning;
+			path = Provisioning;
 			sourceTree = "<group>";
 		};
 		831E06F76773A70833D4AD12 /* Features */ = {
 			isa = PBXGroup;
 			children = (
 				D2B9FF24DEEB6AD1B681E7B7 /* Files */,
+				E67656630473DA23411EB0DF /* SMSConsole */,
+				9A24D840575FA1270B2F7F11 /* ClipboardSync */,
+				EB49BEAB33EF2CE6BB84CCC9 /* Expenditure */,
 			);
 			name = Features;
 			path = Features;
@@ -565,9 +615,33 @@
 			isa = PBXGroup;
 			children = (
 				0E2AB6F5D2E1B5E920E3EF8E /* Scanner */,
+				3F546D0FB85E1057ECC02F6E /* Cloud */,
 			);
 			name = Core;
 			path = Core;
+			sourceTree = "<group>";
+		};
+		9A24D840575FA1270B2F7F11 /* ClipboardSync */ = {
+			isa = PBXGroup;
+			children = (
+				4D6E25B04E36EFC7304F6650 /* ClipboardSyncModels.swift */,
+				BE2B07841BC8A4CCE2FEB37A /* ClipboardSyncService.swift */,
+				6C2FE2AC5EC3D78F0A9E555A /* ClipboardSyncSettingsView.swift */,
+			);
+			name = ClipboardSync;
+			path = ClipboardSync;
+			sourceTree = "<group>";
+		};
+		B4EB165306B84AC114EFDB9A /* HaloTests */ = {
+			isa = PBXGroup;
+			children = (
+				00431072E8D583A50460C948 /* CloudFoundationTests.swift */,
+				626E37DCEBF96711B499810F /* DriveSpeedTesterTests.swift */,
+				E0EE44FE16CD9C3F543F4CC0 /* HaloTests.swift */,
+				E0191600A2A39E962DFBAF63 /* HelperClientTests.swift */,
+			);
+			name = HaloTests;
+			path = HaloTests;
 			sourceTree = "<group>";
 		};
 		D2B9FF24DEEB6AD1B681E7B7 /* Files */ = {
@@ -587,6 +661,34 @@
 			);
 			name = Halo;
 			path = Halo;
+			sourceTree = "<group>";
+		};
+		E67656630473DA23411EB0DF /* SMSConsole */ = {
+			isa = PBXGroup;
+			children = (
+				11E2E096AE5F0161298B622A /* SMSModels.swift */,
+				ABADB8F162C8E503F371B945 /* SMSConsoleViewModel.swift */,
+				949EBE6DE7B0C70F9518684A /* SMSConsoleView.swift */,
+				B3086393C229A0E132307B6C /* SMSSyncClient.swift */,
+				DBB30C8FE643DD82A09C9248 /* CloudSetupView.swift */,
+				C4E45F5700BC461EFD2F89C6 /* CloudSettingsPane.swift */,
+			);
+			name = SMSConsole;
+			path = SMSConsole;
+			sourceTree = "<group>";
+		};
+		EB49BEAB33EF2CE6BB84CCC9 /* Expenditure */ = {
+			isa = PBXGroup;
+			children = (
+				6F74A5EE3A63EF789882D66E /* ExpenditureModels.swift */,
+				7E5A1D2724973588EFFAB551 /* TransactionParser.swift */,
+				70DA043DB57C1073F413C575 /* TransactionPipeline.swift */,
+				92AB4D4B17BA6E0702FE8F19 /* ExpenditureStore.swift */,
+				9C8A3DFF585E23093A057862 /* ExpenditureViewModel.swift */,
+				E150895C694E83F5E4C63688 /* ExpenditureView.swift */,
+			);
+			name = Expenditure;
+			path = Expenditure;
 			sourceTree = "<group>";
 		};
 		F3C703782CA1E12019C0141D /* OS X */ = {
@@ -619,6 +721,8 @@
 			name = Halo;
 			packageProductDependencies = (
 				000000000000000000005002 /* Sentry */,
+				D265B9320EDA1875C19961AD /* FirebaseDatabase */,
+				E7BC409524EB1ACD0235E81B /* FirebaseAuth */,
 			);
 			productName = Halo;
 			productReference = 000000000000000000001015 /* Halo.app */;
@@ -675,22 +779,22 @@
 			productReference = 67D626412F39854842AE0A36 /* HaloUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
-		C3CA09CF7C61D778EC3A4F3E /* HaloTests */ = {
+		E29CF9B1AC924AA4B3552E39 /* HaloTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 143965939039C2E9029617DC /* Build configuration list for PBXNativeTarget "HaloTests" */;
+			buildConfigurationList = 65155537D33F327383DC6339 /* Build configuration list for PBXNativeTarget "HaloTests" */;
 			buildPhases = (
-				2532AC636FA86105529BA334 /* Sources */,
-				FE01D268A054C5BF7D1CEDD5 /* Frameworks */,
-				82340A5C9CB2367A93B2B068 /* Resources */,
+				9A69DE4C4971B75C401B8F9F /* Sources */,
+				C15C88FA7876FD8C4263D307 /* Frameworks */,
+				F507FFFA256C5ED041821C0C /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				263E17D36861C6F28ED8E54C /* PBXTargetDependency */,
+				CBB9970E041FE5F13B981E6D /* PBXTargetDependency */,
 			);
 			name = HaloTests;
 			productName = HaloTests;
-			productReference = D1749E8BBBF48CFF49E42B5A /* HaloTests.xctest */;
+			productReference = EE0196FFE192CB375CB157B2 /* HaloTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
@@ -725,6 +829,7 @@
 			mainGroup = 000000000000000000001000;
 			packageReferences = (
 				000000000000000000005003 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
+				867BA360C7F9D83BD1DABD59 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			productRefGroup = 000000000000000000001003 /* Products */;
 			projectDirPath = "";
@@ -734,7 +839,7 @@
 				000000000000000000002009 /* HaloWidget */,
 				000000000000000000003001 /* HaloHelper */,
 				A9F6BED9499AC0DB2CD92F48 /* HaloUITests */,
-				C3CA09CF7C61D778EC3A4F3E /* HaloTests */,
+				E29CF9B1AC924AA4B3552E39 /* HaloTests */,
 			);
 		};
 /* End PBXProject section */
@@ -757,14 +862,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		82340A5C9CB2367A93B2B068 /* Resources */ = {
+		E180F2F4BA34584A2F930734 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		E180F2F4BA34584A2F930734 /* Resources */ = {
+		F507FFFA256C5ED041821C0C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -873,6 +978,26 @@
 				000000000000000000003007 /* HelperClient.swift in Sources */,
 				EABEEEF5BBF1D9D3F61FB453 /* DriveSpeedTester.swift in Sources */,
 				1A276975BC00655241248D7B /* DriveSpeedView.swift in Sources */,
+				BD934A0D464689E1FA0EC1F4 /* CryptoService.swift in Sources */,
+				C3321CD3FE963BFE6E079AA0 /* CloudModels.swift in Sources */,
+				9B9F762E501E9A043923E03B /* CloudConfigStore.swift in Sources */,
+				879BABFA5A95F861A51AD596 /* FirebaseRTDBClient.swift in Sources */,
+				A1CCF4B6053B2C709D866F96 /* SMSModels.swift in Sources */,
+				74CF1681EA0B483294AE1DE3 /* SMSConsoleViewModel.swift in Sources */,
+				B3BA45306DB919FF17FF62AC /* SMSConsoleView.swift in Sources */,
+				5953F30D7CA49FFA4883B414 /* SMSSyncClient.swift in Sources */,
+				C5D7A353E701AF9A6A6A0ADF /* CloudSetupView.swift in Sources */,
+				33C03FAAB6033DB109DE9EA0 /* CloudSettingsPane.swift in Sources */,
+				9253BD0988C4DAAAF3E2BEAF /* GoogleOAuthPKCE.swift in Sources */,
+				8C501654E50047EBD413205C /* ClipboardSyncModels.swift in Sources */,
+				B9222883A1BBADB2D9A163F4 /* ClipboardSyncService.swift in Sources */,
+				B8A1F62E5165929BFEBB8F4E /* ClipboardSyncSettingsView.swift in Sources */,
+				0E1A83AE923038D00F475CB1 /* ExpenditureModels.swift in Sources */,
+				FA6012ED7ACF7DF9270F2EE3 /* TransactionParser.swift in Sources */,
+				4185268AC7829BEDB5D7F55E /* TransactionPipeline.swift in Sources */,
+				D93824621780040AAF88D37B /* ExpenditureStore.swift in Sources */,
+				30D4A642EC4929682471BC30 /* ExpenditureViewModel.swift in Sources */,
+				81D57B208A081FECCDB56CB4 /* ExpenditureView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -897,16 +1022,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		2532AC636FA86105529BA334 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				318D18283567FA7F9C3FCD89 /* DriveSpeedTesterTests.swift in Sources */,
-				8A4DFF3A40CA9ADDBF8405AE /* HaloTests.swift in Sources */,
-				D52607DADA626DF2FA479956 /* HelperClientTests.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		341C6A1C502475A725C5A138 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -916,6 +1031,17 @@
 				0D95339BD7D85794863633C8 /* HaloUITestCase.swift in Sources */,
 				7FA28EC1DD42807C6EFD8148 /* SidebarReorderUITests.swift in Sources */,
 				428DD9830BBDEBECB1200590 /* SmokeUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9A69DE4C4971B75C401B8F9F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1ADD457CAFCC61887AF78D8 /* CloudFoundationTests.swift in Sources */,
+				FE2AA15AC1E4036EB9FD80EF /* DriveSpeedTesterTests.swift in Sources */,
+				E661F24279DA76E6A603FD0B /* HaloTests.swift in Sources */,
+				8FB6B64C9DD98FE7C893AC62 /* HelperClientTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -932,17 +1058,17 @@
 			target = 000000000000000000003001 /* HaloHelper */;
 			targetProxy = 000000000000000000003023 /* PBXContainerItemProxy */;
 		};
-		263E17D36861C6F28ED8E54C /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			name = Halo;
-			target = 000000000000000000001004 /* Halo */;
-			targetProxy = 26D25A124256763F35F80B16 /* PBXContainerItemProxy */;
-		};
 		63C7CAF3D4092955F4F9F76C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = Halo;
 			target = 000000000000000000001004 /* Halo */;
 			targetProxy = D3BA2CB3FCE39C3C73262CE1 /* PBXContainerItemProxy */;
+		};
+		CBB9970E041FE5F13B981E6D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Halo;
+			target = 000000000000000000001004 /* Halo */;
+			targetProxy = A6A584D7C0B83AA98CF55847 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1135,43 +1261,7 @@
 			};
 			name = Debug;
 		};
-		5FD18B60112C8E615E5EFC2D /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 210;
-				DEVELOPMENT_TEAM = "";
-				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.tests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx;
-				SWIFT_VERSION = 5.9;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Halo.app/Contents/MacOS/Halo";
-			};
-			name = Release;
-		};
-		960FF1C22530A10270458558 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 210;
-				DEVELOPMENT_TEAM = "";
-				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.halo.mac.tests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx;
-				SWIFT_VERSION = 5.9;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Halo.app/Contents/MacOS/Halo";
-			};
-			name = Release;
-		};
-		ADA8E627E4ACA7EABB920F71 /* Debug */ = {
+		83634EAFDA4F79CC65CA65D2 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -1189,7 +1279,7 @@
 			};
 			name = Debug;
 		};
-		F537A3E14491506708507C63 /* Debug */ = {
+		DBD5F64143CC3424FE3011DC /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -1205,7 +1295,7 @@
 				SWIFT_VERSION = 5.9;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Halo.app/Contents/MacOS/Halo";
 			};
-			name = Debug;
+			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
@@ -1246,20 +1336,20 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		143965939039C2E9029617DC /* Build configuration list for PBXNativeTarget "HaloTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				5FD18B60112C8E615E5EFC2D /* Release */,
-				ADA8E627E4ACA7EABB920F71 /* Debug */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		62C32D39FABB18D42035F9FE /* Build configuration list for PBXNativeTarget "HaloUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				34F01EEA713999157E2A95C9 /* Release */,
 				42EB40B5A2347D2273EE9037 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		65155537D33F327383DC6339 /* Build configuration list for PBXNativeTarget "HaloTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DBD5F64143CC3424FE3011DC /* Release */,
+				83634EAFDA4F79CC65CA65D2 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -1275,6 +1365,14 @@
 				minimumVersion = 8.0.0;
 			};
 		};
+		867BA360C7F9D83BD1DABD59 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 11.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1282,6 +1380,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 000000000000000000005003 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
 			productName = Sentry;
+		};
+		D265B9320EDA1875C19961AD /* FirebaseDatabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 867BA360C7F9D83BD1DABD59 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseDatabase;
+		};
+		E7BC409524EB1ACD0235E81B /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 867BA360C7F9D83BD1DABD59 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
