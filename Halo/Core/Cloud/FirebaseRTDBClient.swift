@@ -35,14 +35,32 @@ actor FirebaseRTDBClient {
     private var app: FirebaseApp?
     private var auth: Auth?
     private var root: DatabaseReference?
+    /// The config the live `app`/`auth`/`root` were built from, so a later
+    /// `configure(_:)` call can tell a genuine reconfigure (different project,
+    /// or a corrected value) apart from a redundant call with the same config —
+    /// SMSSyncClient and ClipboardSyncService each call `configure(_:)`
+    /// independently on connect, and both normally supply the same stored config.
+    private var currentConfig: FirebaseConfig?
 
     var isConfigured: Bool { app != nil }
     var uid: String? { auth?.currentUser?.uid }
 
     // MARK: Configure (runtime — no plist)
 
-    func configure(_ config: FirebaseConfig) throws {
-        guard app == nil else { return }
+    /// Configure the shared app for `config`. Safe to call repeatedly:
+    /// - Same config as the live session → no-op, the existing app/auth/root
+    ///   (and any signed-in session or live observers) are reused as-is.
+    /// - Different config (switching projects, or the user corrected a mistake
+    ///   after `disconnect()` + re-pairing) → the previous named app is deleted
+    ///   and a fresh one configured, so the client actually points at the new
+    ///   project instead of silently continuing to use the old one.
+    func configure(_ config: FirebaseConfig) async throws {
+        if let currentConfig, currentConfig == config, app != nil { return }
+        if let existing = app { await deleteApp(existing) }
+        app = nil
+        auth = nil
+        root = nil
+
         let options = FirebaseOptions(googleAppID: config.googleAppID,
                                       gcmSenderID: config.gcmSenderID)
         options.apiKey = config.apiKey
@@ -57,6 +75,7 @@ actor FirebaseRTDBClient {
         app = configured
         auth = Auth.auth(app: configured)
         root = Database.database(app: configured, url: config.databaseURL).reference()
+        currentConfig = config
     }
 
     // MARK: Test connection (F-044 — validate before saving config)
