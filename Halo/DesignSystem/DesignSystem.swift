@@ -255,9 +255,14 @@ struct HaloHealthRing: View {
             Circle()
                 .trim(from: 0, to: progress)
                 .stroke(
-                    AngularGradient(
+                    // LinearGradient (not AngularGradient): an angular gradient's
+                    // 0°/360° color seam lands exactly on the arc's start point,
+                    // which splits the rounded start cap across two colors so it
+                    // looks flat/unfilled. A linear gradient has no seam, so both
+                    // round caps render as clean, solid-colored tips.
+                    LinearGradient(
                         colors: [scoreColor, .haloAccent],
-                        center: .center
+                        startPoint: .top, endPoint: .bottom
                     ),
                     style: StrokeStyle(lineWidth: 8, lineCap: .round)
                 )

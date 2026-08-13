@@ -123,8 +123,10 @@ struct ScanningAnimation: View {
                 Circle()
                     .trim(from: 0, to: progress)
                     .stroke(
-                        AngularGradient(colors: [.haloAccent, .haloPurple, .haloGreen],
-                                        center: .center),
+                        // LinearGradient avoids the angular 0°/360° seam sitting
+                        // under the arc's rounded start cap (see HaloHealthRing).
+                        LinearGradient(colors: [.haloAccent, .haloPurple, .haloGreen],
+                                       startPoint: .top, endPoint: .bottom),
                         style: StrokeStyle(lineWidth: 10, lineCap: .round)
                     )
                     .frame(width: 130, height: 130)
