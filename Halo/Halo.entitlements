@@ -35,5 +35,11 @@
     <array>
         <string>group.com.halo.mac</string>
     </array>
+
+    <!-- F-025: Similar Photos — optional Photos Library scan for near-duplicates.
+         Entitlement + Info.plist NSPhotoLibraryUsageDescription are wired, but the
+         real permission-grant flow has NOT been runtime-tested this session. -->
+    <key>com.apple.security.personal-information.photos-library</key>
+    <true/>
 </dict>
 </plist>

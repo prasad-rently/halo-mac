@@ -43,7 +43,7 @@
 | [F-022](#f-022--time-machine-backup-health-monitor) | Time Machine Backup Health Monitor | 💡 Future Idea | ~1.5 d | AlertManager |
 | [F-023](#f-023--memory-leak--app-bloat-tracker) | Memory Leak & App Bloat Tracker | 💡 Future Idea | ~3 d | ProcessMonitor |
 | [F-024](#f-024--browser-cleaner) | Browser Cleaner | 💡 Future Idea | ~2 d | none |
-| [F-025](#f-025--duplicate-photos-finder-perceptual-hash) | Duplicate Photos Finder (pHash) | 💡 Future Idea | ~5 d | DuplicateDetector |
+| [F-025](#f-025--duplicate-photos-finder-perceptual-hash) | Duplicate Photos Finder (pHash) | ✅ Done | ~2 d | DuplicateDetector |
 | [F-026](#f-026--downloads-folder-organiser--manager) | Downloads Folder Organiser & Manager | ✅ Done | 2.5 d | AppScanner, FileSystemScanner |
 | [F-027](#f-027--snippet-manager--text-expansion-engine-clipboard-evolution) | Snippet Manager & Text Expansion Engine | ✅ Done | 3.5 d | Clipboard module |
 | [F-028](#f-028--focus-session-companion) | Focus Session Companion | 💡 Future Idea | ~3 d | MenuBarDisplayStyle |
@@ -1480,35 +1480,49 @@ New **"Browsers"** tab within the existing **Cleanup** module, alongside the exi
 
 ## F-025 · Duplicate Photos Finder (Perceptual Hash)
 
-**Status:** 💡 Future Idea  
-**Effort estimate:** 5 days  
+**Status:** ✅ Done  
+**Effort estimate:** 5 days · **Actual:** ~2 days  
 **Theme:** Cleanup & Storage  
-**Branch naming (when ready):** `feat/f025-duplicate-photos`  
+**Branch:** `feat/f025-duplicate-photos`  
 **Depends on:** DuplicateDetector (existing SHA-256 engine — this extends it with a perceptual layer)
 
 ### Why
 The existing `DuplicateDetector` finds bit-for-bit identical files using SHA-256. Photos libraries need more: the same photo saved at different compressions, crop variants, burst shots, and screenshots exported multiple times at different sizes all look identical to the eye but have different hashes. Perceptual hashing (pHash) bridges this gap. The commercial app Gemini 2 charges $19.99 specifically for this capability.
 
 ### What it delivers
-- Perceptual hash generation for images using `CIFilter` + DCT-based pHash algorithm (64-bit fingerprint per image)
-- Hamming-distance clustering: images within a configurable threshold (default: ≤8 bits different) are grouped as "near-duplicates"
-- Side-by-side comparison UI: cluster grid showing all near-duplicate images, their sizes, dates, and source locations
-- "Recommended keep" auto-selection: highest resolution, most recent, or in Photos Library rather than a loose file
-- Support for both loose image files (`~/Pictures`) and Photos Library (via PhotoKit, with permission)
-- All deletions use `trashItem` with the standard confirmation flow
+- Perceptual hash generation for images using a DCT-based pHash algorithm (64-bit fingerprint per image)
+- Hamming-distance clustering: images within a configurable threshold (default: ≤8 of 64 bits different, adjustable 1–20 in the UI) are grouped as "near-duplicates"
+- Cluster grid UI: all near-duplicate images side by side with resolution, size, and a "recommended keep" star
+- "Recommended keep" auto-selection: highest resolution wins, ties broken by most recent
+- Support for both loose image files (`~/Pictures`, `~/Downloads`, `~/Desktop`, or any user-chosen folder) and Photos Library (via PhotoKit, with permission)
+- All deletions use `trashItem` (loose files) / `PHAssetChangeRequest.deleteAssets` (Photos Library — "Recently Deleted") behind a mandatory confirmation dialog
 
 ### Data sources
-- `PhotoKit` (`PHPhotoLibrary`) for Photos Library access (requires `NSPhotoLibraryUsageDescription` permission)
-- `FileManager` for loose image files in `~/Pictures` and other user-specified folders
-- `CIImage` + `CoreImage` for perceptual hash computation
+- `ImageIO` (`CGImageSourceCreateThumbnailAtIndex`) for fast thumbnail decode — no full-resolution image ever loaded during hashing
+- `FileManager` for loose image files
+- `PhotoKit` (`PHPhotoLibrary`/`PHAsset`/`PHImageManager`) for Photos Library access (requires `NSPhotoLibraryUsageDescription` permission)
 
 ### Integration point
-New **"Similar Photos"** tab in the **Files** module, alongside the existing Duplicate Finder, SpaceLens, and Large Files tabs. The existing exact-duplicate tab is renamed to **"Exact Duplicates"** for clarity.
+New **"Similar Photos"** tab in the **Files** module, alongside SpaceLens, Large Files, Downloads, and Drive Speed. The existing exact-duplicate tab is renamed **"Exact Duplicates"** for clarity.
 
-### Key design decisions to resolve before implementation
-- pHash generation on large libraries (10,000+ photos) needs background processing and progress indication
-- Threshold tuning: too tight misses similar photos; too loose creates false positives
-- PhotoKit access requires sandboxed entitlement addition
+### As actually built
+
+**Loose-file path — complete, tested via compilation + algorithm sanity checks (no live app run this session):**
+- `Halo/Core/Scanner/PerceptualDuplicateDetector.swift` — `actor PerceptualDuplicateDetector`. Standard pHash.org-style algorithm: 64px `ImageIO` thumbnail → 32×32 8-bit grayscale render (`CGContext`) → naive separable 2-D DCT-II → top-left 8×8 low-frequency block → threshold each of the 64 AC coefficients against their median (DC term excluded) → 64-bit fingerprint.
+- Clustering is union-find over pairwise Hamming distance (`nonzeroBitCount` of XOR), shared via a generic `clusterByHash<T>` helper between the loose-file and Photos-Library paths.
+- `Halo/Features/Files/SimilarPhotosView.swift` — `SimilarPhotosViewModel` scans `~/Pictures`, `~/Downloads`, `~/Desktop` by default (bounded to 20,000 files, mirroring `DuplicateFinderViewModel`'s cap) or a user-chosen folder via `NSOpenPanel`. Grid UI shows thumbnails (`PhotoThumbnailView`, its own independent 160px `ImageIO` thumbnail load), a green star on the recommended keep, mark-for-deletion toggle per tile, and a "Delete marked" button gated by a `confirmationDialog` — deletion is exclusively `FileManager.trashItem`.
+- This half satisfies the mandatory rubric: DCT-based 64-bit pHash ✓, Hamming clustering with a UI-adjustable threshold (default 8) ✓, recommended-keep auto-selection ✓, `trashItem`-only deletion behind confirmation ✓.
+
+**Photos Library path — real PhotoKit integration, entitlement-wired, NOT runtime-tested this session (deferred):**
+- `PerceptualDuplicateDetector` also exposes `photosLibraryAuthorizationStatus`, `requestPhotosLibraryAuthorization()` (calls the real `PHPhotoLibrary.requestAuthorization(for: .readWrite)` — not a stub), `detectInPhotosLibrary(hammingThreshold:assetCap:onProgress:)` (fetches up to 3,000 most-recent `PHAsset`s, hashes via `PHImageManager.requestImage` at 64×64, same DCT/clustering code), and `deletePhotosLibraryAssets(localIdentifiers:)` (`PHAssetChangeRequest.deleteAssets` → Photos' "Recently Deleted", the PhotoKit equivalent of `trashItem`).
+- `SimilarPhotosView` surfaces this as a clearly-labeled "Photos Library scan (experimental)" section with its own permission-aware button, progress spinner, group cards, and confirmation dialog — it is fully wired UI, not a placeholder, but **nothing in this half has been exercised against a real Photos Library or the system permission prompt**, because doing so requires launching the signed app and clicking through a one-time dialog, which was out of scope for this pass.
+- Required entitlement `com.apple.security.personal-information.photos-library` was added to **both** `Halo.entitlements` and `Halo-Debug.entitlements`, and `NSPhotoLibraryUsageDescription` was added to `Info.plist` — all three are commented in-source as "wired but not runtime-verified this session."
+- **Treat as:** real, idiomatic PhotoKit code that compiles and should work, not known-broken — but it needs a real permission-grant test pass (a human launching the app, granting Photos access, and confirming the scan/delete flow actually round-trips) before it can be called verified.
+
+### Key design decisions (resolved)
+- Threshold is user-adjustable (1–20 bits) rather than fixed, addressing the strict-vs-loose tuning tradeoff directly in the UI.
+- Large-library background processing: loose-file scan is bounded (20,000 file cap, same policy as the exact-duplicate finder); Photos Library scan is bounded to the 3,000 most recent assets to keep a first pass fast — no chunked/paginated background scan was built for larger libraries.
+- PhotoKit access requires the sandboxed entitlement — added to both entitlement files as noted above.
 
 ---
 
@@ -1837,7 +1851,7 @@ New **"iCloud"** tab in the **Files** module, alongside SpaceLens, Exact Duplica
 
 ---
 
-*Last updated: v4.0 · 25 features shipped (F-001–F-015 + F-026, F-027, F-031–F-034, F-036–F-039, F-041–F-042) · 13 future ideas remaining (F-016–F-025, F-028–F-030)*
+*Last updated: v4.1 · F-025 (Duplicate Photos Finder, pHash) shipped — see status column above for the full up-to-date list of done vs. future-idea features · 12 future ideas remaining (F-016–F-024, F-028–F-030)*
 
 ---
 

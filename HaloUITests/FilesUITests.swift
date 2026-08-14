@@ -2,12 +2,15 @@
 //  FilesUITests.swift
 //  HaloUITests
 //
-//  Files module — all five tabs. Maps to MANUAL_TEST_PLAN.md §7:
-//    7.1 SpaceLens     (TC-FILE-01…03)
-//    7.2 Duplicates    (TC-FILE-10…11)
-//    7.3 Downloads     (TC-FILE-20…)
-//    7.4 Large Files   (TC-FILE-30…)
-//    7.5 Drive Speed   (TC-FILE-40… / F-043)
+//  Files module — six tabs. Maps to MANUAL_TEST_PLAN.md §7:
+//    7.1 SpaceLens         (TC-FILE-01…03)
+//    7.2 Exact Duplicates  (TC-FILE-10…11)  — was "Duplicates", renamed for F-025
+//    7.3 Downloads         (TC-FILE-20…)
+//    7.4 Large Files       (TC-FILE-30…)
+//    7.5 Drive Speed       (TC-FILE-40… / F-043)
+//    7.6 Similar Photos    (F-025, perceptual hash — no automated UI test yet;
+//                            loose-file scan tested via compilation + algorithm
+//                            sanity checks, Photos Library path untested)
 //
 //  SAFETY: the duplicate/large-file/downloads flows can delete files, so every
 //  destructive path is driven to its confirmation and cancelled, with dummy
@@ -44,7 +47,7 @@ final class FilesUITests: HaloUITestCase {
     func test_duplicate_delete_confirms_and_cancel_deletes_nothing() throws {
         let fx = HaloTestFixtures(self)
         fx.captureTrashBaseline()
-        openFiles(tab: "Duplicates")
+        openFiles(tab: "Exact Duplicates")
         _ = clickAny(of: ["Scan Home", "Choose Folder", "Scan"], timeout: 5)
 
         guard waitForID("files.duplicates.deleteMarked.button", timeout: 15) != nil else {

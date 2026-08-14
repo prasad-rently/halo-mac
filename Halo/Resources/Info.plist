@@ -47,6 +47,9 @@
     <string>Halo scans your Documents folder for large and duplicate files.</string>
     <key>NSDownloadsFolderUsageDescription</key>
     <string>Halo scans your Downloads folder for files that can be cleaned up.</string>
+    <!-- F-025: Similar Photos (perceptual-hash near-duplicate finder) — optional Photos Library scan -->
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Halo can scan your Photos Library to find near-duplicate photos (similar shots, re-exports, screenshots). This is optional — Halo already finds near-duplicates among loose image files without this permission.</string>
     <!-- Background modes -->
     <key>NSBackgroundModes</key>
     <array>

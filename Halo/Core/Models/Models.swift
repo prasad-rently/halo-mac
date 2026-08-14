@@ -332,6 +332,73 @@ struct DuplicateItem: Identifiable {
     var sizeFormatted: String { ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file) }
 }
 
+// MARK: - Similar Photos Models (F-025, perceptual hash near-duplicates)
+
+/// One image on disk (or, when the PhotoKit path is used, one `PHAsset`) plus
+/// its computed 64-bit perceptual hash and enough metadata to render a card
+/// and to pick a sensible "keep" recommendation.
+struct PhotoHashItem: Identifiable {
+    let id: UUID = UUID()
+    let url: URL
+    let sizeBytes: Int64
+    let modifiedDate: Date?
+    let pixelWidth: Int
+    let pixelHeight: Int
+    let hash: UInt64
+    /// True when this item came from the Photos Library (PHAsset-backed) rather
+    /// than a loose file on disk — used by the "recommended keep" heuristic.
+    var isFromPhotosLibrary: Bool = false
+    var isMarkedForDeletion: Bool = false
+    var isRecommendedKeep: Bool = false
+
+    var displayPath: String { url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~") }
+    var name: String { url.lastPathComponent }
+    var sizeFormatted: String { ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file) }
+    var resolutionFormatted: String { pixelWidth > 0 && pixelHeight > 0 ? "\(pixelWidth)×\(pixelHeight)" : "—" }
+    var megapixels: Int { pixelWidth * pixelHeight }
+}
+
+/// A cluster of near-duplicate photos — items whose perceptual hashes are
+/// within the configured Hamming-distance threshold of each other.
+struct PhotoSimilarGroup: Identifiable {
+    let id: UUID = UUID()
+    var items: [PhotoHashItem]
+
+    /// Bytes reclaimed if every item except the recommended keep is trashed.
+    var wastedBytes: Int64 {
+        items.filter { !$0.isRecommendedKeep }.reduce(0) { $0 + $1.sizeBytes }
+    }
+    var wastedFormatted: String { ByteCountFormatter.string(fromByteCount: wastedBytes, countStyle: .file) }
+}
+
+// MARK: - Similar Photos — Photos Library models (F-025 stretch goal)
+//
+// PhotoKit assets aren't addressable as plain files (no `URL`), so they get
+// their own lightweight item/group types rather than reusing `PhotoHashItem`.
+// Deleting one of these goes through `PHAssetChangeRequest.deleteAssets`
+// (Photos' "Recently Deleted", the PhotoKit equivalent of `trashItem`) —
+// see `PerceptualDuplicateDetector.deletePhotosLibraryAssets(localIdentifiers:)`.
+//
+// NOTE: wired for compilation, not runtime-tested this session — see PR notes.
+struct PhotoAssetHashItem: Identifiable {
+    let id: UUID = UUID()
+    let localIdentifier: String
+    let hash: UInt64
+    let pixelWidth: Int
+    let pixelHeight: Int
+    let creationDate: Date?
+    var isRecommendedKeep: Bool = false
+    var isMarkedForDeletion: Bool = false
+
+    var resolutionFormatted: String { pixelWidth > 0 && pixelHeight > 0 ? "\(pixelWidth)×\(pixelHeight)" : "—" }
+    var megapixels: Int { pixelWidth * pixelHeight }
+}
+
+struct PhotoAssetSimilarGroup: Identifiable {
+    let id: UUID = UUID()
+    var items: [PhotoAssetHashItem]
+}
+
 // MARK: - Clipboard Models
 
 struct ClipboardItem: Identifiable, Equatable {
