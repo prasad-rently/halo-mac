@@ -276,6 +276,8 @@ struct SettingsView: View {
     @AppStorage("enableMenuBar") private var enableMenuBar = true
     @AppStorage("scanFrequency") private var scanFrequency = "weekly"
     @AppStorage("enableAnalytics") private var enableAnalytics = false
+    // F-021: off by default (matches enableAnalytics convention) — privacy-respecting opt-in
+    @AppStorage(AppUsageTracker.enabledDefaultsKey) private var enableAppUsageTracking = false
     @AppStorage("clipboardHistoryLimit") private var clipboardLimit = 200
     // P3-12: thresholds
     @AppStorage("alertCPUThreshold")    private var alertCPUThreshold: Double = 0.85
@@ -354,6 +356,24 @@ struct SettingsView: View {
                 }
                 Section("Privacy") {
                     Toggle("Share anonymous analytics to improve Halo", isOn: $enableAnalytics)
+                    // F-021: off by default, same opt-in convention as enableAnalytics.
+                    // Only tracks foreground time while Halo itself is running — see
+                    // AppUsageTracker.swift for why that's a hard OS limitation, not a choice.
+                    Toggle("Track app usage & screen time insights", isOn: Binding(
+                        get: { enableAppUsageTracking },
+                        set: { newValue in
+                            enableAppUsageTracking = newValue
+                            AppUsageTracker.shared.setTrackingEnabled(newValue)
+                        }
+                    ))
+                    Text("Only counts time Halo itself is running — not a full Screen Time replacement.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    if enableAppUsageTracking {
+                        Button("Clear Usage History", role: .destructive) {
+                            AppUsageTracker.shared.clearHistory()
+                        }
+                    }
                 }
             }
             .tabItem { Label("General", systemImage: "gearshape") }

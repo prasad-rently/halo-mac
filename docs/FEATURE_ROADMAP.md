@@ -39,7 +39,7 @@
 | [F-018](#f-018--privacy-data-exposure-scanner) | Privacy Data Exposure Scanner | 💡 Future Idea | ~3 d | none |
 | [F-019](#f-019--security-posture-dashboard) | Security Posture Dashboard | 💡 Future Idea | ~1.5 d | none |
 | [F-020](#f-020--smart-disk-health-monitor) | S.M.A.R.T. Disk Health Monitor | 💡 Future Idea | ~3 d | none |
-| [F-021](#f-021--app-usage--screen-time-analytics) | App Usage & Screen Time Analytics | 💡 Future Idea | ~3 d | none |
+| [F-021](#f-021--app-usage--screen-time-analytics) | App Usage & Screen Time Analytics | ✅ Done | ~3 d | none |
 | [F-022](#f-022--time-machine-backup-health-monitor) | Time Machine Backup Health Monitor | 💡 Future Idea | ~1.5 d | AlertManager |
 | [F-023](#f-023--memory-leak--app-bloat-tracker) | Memory Leak & App Bloat Tracker | 💡 Future Idea | ~3 d | ProcessMonitor |
 | [F-024](#f-024--browser-cleaner) | Browser Cleaner | 💡 Future Idea | ~2 d | none |
@@ -1368,7 +1368,7 @@ New **"Drive Health"** card on Dashboard (alongside CPU, RAM, battery cards). Ex
 
 ## F-021 · App Usage & Screen Time Analytics
 
-**Status:** 💡 Future Idea  
+**Status:** ✅ Done  
 **Effort estimate:** 3 days  
 **Theme:** Intelligent Insights  
 **Branch naming (when ready):** `feat/f021-app-usage-analytics`  
@@ -1391,6 +1391,24 @@ Users increasingly want to understand their own Mac habits — how long they spe
 
 ### Integration point
 New **"Insights"** sub-section within the existing Dashboard, below the health ring. Expandable card showing the weekly bar chart. Toggle in Settings to enable/disable tracking.
+
+### As actually built
+
+The build deviates from the original card in two deliberate ways, both worth understanding before touching this feature:
+
+**1. No SQLite — UserDefaults + JSON, matching the rest of the codebase.**
+Halo has zero SQLite/CoreData dependency anywhere (verified before writing a line of code). Every other rolling-history store in this app — `AlertLog` (50-item cap), the widget pipeline, custom actions — uses `UserDefaults` + `Codable`/JSON. Introducing SQLite for one feature would mean a new dependency, a new persistence pattern, and a new set of edge cases (schema migration, WAL files inside a sandboxed container) for a dataset that's at most a few hundred small records. `AppUsageTracker` persists `[AppUsageRecord]` (one record per app per day) as JSON to `UserDefaults["haloAppUsageHistory"]`, pruned to a rolling 14-day window — same cap-and-persist pattern as `AlertLog`, just date-windowed instead of count-capped. If usage ever grows enough that this becomes a real bottleneck, that's a good problem to revisit with real numbers; it isn't one today.
+
+**2. "Screen Time" only covers time Halo itself was running — this is a hard OS limitation, not a corner cut.**
+There is no macOS API available to a third-party app that retroactively retrieves system-level Screen Time history. Apple's real Screen Time data lives behind the private `FamilyControls`/`ManagedSettings` frameworks, which require a parental-control entitlement Halo does not have and would not qualify for as a system-utility app. So every number this feature reports is scoped to **time Halo was open and running**:
+- If the Mac was asleep, no time is counted for that period (the sampling timer simply doesn't fire — this is *correct* behavior, not a gap: it prevents a Mac that slept for 5 hours with Slack frontmost from reporting 5 fake hours of usage).
+- If Halo wasn't launched (quit, or not set to launch at login), that window isn't counted either, and is never backfilled or estimated.
+- The bar chart, Background Hogs list, and stats all carry a caption — *"Based on time Halo has been running"* — directly in the UI so this is never presented as a full-day Screen Time replacement.
+- Context-switches-per-hour and week-over-week comparisons return `nil` (shown as "not enough data yet") until there's enough real history (≥1 hour, ≥14 days respectively) to make the number honest rather than a wild extrapolation from a few minutes of data.
+
+This is the same honesty discipline F-019 (Security Posture Dashboard) applies to its unverifiable checks, and the same discipline behind the "isUnused"/`NSMetadataItem` fixes in the Bug Fixes & Polish log — Halo does not show a plausible-looking number it can't actually stand behind.
+
+**Implementation:** `Halo/Core/AppUsageTracker.swift` (`@MainActor final class AppUsageTracker: ObservableObject`, singleton, same style as `AlertLog`) + `Halo/Features/Dashboard/AppUsageInsightsSection.swift` (expandable `HaloCard` below `HealthAndMetrics()` on the Dashboard). Toggle in Settings → General → Privacy, off by default (matches `enableAnalytics`'s opt-in convention). See `CLAUDE.md`'s "AppUsageTracker (F-021)" section for the full API surface.
 
 ---
 

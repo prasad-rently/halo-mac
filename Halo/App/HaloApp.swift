@@ -69,6 +69,8 @@ struct HaloApp: App {
                     AppState.shared = appState
                     // F-005: start background scan scheduler now that AppState is ready
                     ScanScheduler.shared.start(appState: appState)
+                    // F-021: resume app-usage tracking if the user has opted in
+                    AppUsageTracker.shared.startIfEnabled()
                 }
                 // F-041: handle halo:// deep links for action sharing
                 .onOpenURL { url in

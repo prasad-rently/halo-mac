@@ -490,3 +490,88 @@ extension ClipboardItem {
               copiedDate: Date().addingTimeInterval(-100000), sourceApp: "Xcode")
     ]
 }
+
+// MARK: - App Usage Analytics Models (F-021)
+//
+// IMPORTANT — honesty constraint: Halo has no macOS API to retroactively read
+// system-wide Screen Time history. `FamilyControls`/`ManagedSettings` are
+// parental-control frameworks that need a special entitlement Halo does not
+// have. Every second recorded here was observed live, while Halo itself was
+// running, via NSWorkspace activation notifications. If Halo wasn't launched
+// (Mac asleep, app quit, launched-at-login disabled), that time is simply not
+// counted — it is never backfilled or estimated. See `AppUsageTracker`.
+
+/// One rolling-window day's worth of usage for a single app.
+/// Persisted as JSON to `UserDefaults["haloAppUsageHistory"]`, pruned to the
+/// trailing 14 days (7 for the headline chart, 14 so a week-over-week
+/// comparison is possible once Halo has been running that long).
+struct AppUsageRecord: Identifiable, Codable {
+    let id: UUID
+    let bundleID: String
+    var appName: String
+    let day: Date                       // start-of-day (local) this record covers
+    var foregroundSeconds: TimeInterval
+    var observedRunningSeconds: TimeInterval   // wall-clock time Halo saw this app in the running-apps list (fg + bg)
+    var switchCount: Int                // times the user activated this app that day
+    var ramSampleSumMB: Double
+    var ramSampleCount: Int
+
+    init(id: UUID = UUID(), bundleID: String, appName: String, day: Date,
+         foregroundSeconds: TimeInterval = 0, observedRunningSeconds: TimeInterval = 0,
+         switchCount: Int = 0, ramSampleSumMB: Double = 0, ramSampleCount: Int = 0) {
+        self.id = id
+        self.bundleID = bundleID
+        self.appName = appName
+        self.day = day
+        self.foregroundSeconds = foregroundSeconds
+        self.observedRunningSeconds = observedRunningSeconds
+        self.switchCount = switchCount
+        self.ramSampleSumMB = ramSampleSumMB
+        self.ramSampleCount = ramSampleCount
+    }
+
+    var averageRAMMB: Double {
+        ramSampleCount > 0 ? ramSampleSumMB / Double(ramSampleCount) : 0
+    }
+}
+
+/// Aggregated foreground time for one app across the reporting window — the
+/// row shown in the "top apps" bar chart.
+struct AppUsageSummary: Identifiable {
+    let id: String              // bundleID
+    let appName: String
+    let totalForegroundSeconds: TimeInterval
+    let averageRAMMB: Double
+    let switchCount: Int
+
+    var hoursFormatted: String {
+        let hours = totalForegroundSeconds / 3600
+        if hours >= 1 { return String(format: "%.1fh", hours) }
+        return "\(Int(totalForegroundSeconds / 60))m"
+    }
+}
+
+/// An app that Halo observed running continuously for a long stretch without
+/// ever being brought to the foreground — a candidate "background hog".
+struct BackgroundHogApp: Identifiable {
+    let id: String               // bundleID
+    let appName: String
+    let observedRunningSeconds: TimeInterval
+    let foregroundSeconds: TimeInterval
+    let averageRAMMB: Double
+
+    var foregroundRatio: Double {
+        observedRunningSeconds > 0 ? foregroundSeconds / observedRunningSeconds : 0
+    }
+
+    var observedHoursFormatted: String {
+        String(format: "%.1fh", observedRunningSeconds / 3600)
+    }
+}
+
+/// One day's total foreground time across all apps — used for the
+/// week-over-week comparison.
+struct DailyUsageTotal: Identifiable {
+    let id: Date
+    var totalForegroundSeconds: TimeInterval
+}
