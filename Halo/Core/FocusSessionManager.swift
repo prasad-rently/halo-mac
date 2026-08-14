@@ -1,0 +1,263 @@
+import Foundation
+import AppKit
+import UserNotifications
+
+// MARK: - FocusSessionManager (F-028)
+//
+// Pomodoro-style focus session. On start, hides a user-configured list of
+// apps via NSRunningApplication.hide() — never .terminate()/.forceTerminate(),
+// mirroring IdleAppMonitor's preference for reversible, non-destructive app
+// management. Runs a 1s countdown Timer + a 5s sampling Timer that reuses the
+// existing `ProcessMonitor` actor (same one behind Performance → Top
+// Processes) to track the session's peak-RAM process, plus AppState's live
+// `cpuUsage`, so the end-of-session summary is built from real samples.
+//
+// Session history is appended through the existing AlertLog (kindRaw:
+// "focus") rather than inventing a parallel persisted store — this is the
+// pattern the spec itself calls for and the one AlertManager already uses
+// for every other kind of system event.
+//
+// NOTE — notification suppression (read before changing this file):
+// The original F-028 idea sheet said this feature should "suppress macOS
+// notification banners" via the Focus mode API (`INFocusStatusCenter`). That
+// API only lets an app *report its own* busy/focused state so OTHER apps can
+// voluntarily check `isFocused` and choose to hold back their own
+// notifications — it does not let any app enable system-wide Do Not
+// Disturb/Focus or silence other apps' banners. There is no public API for a
+// third-party app to toggle system Focus/DND on the user's behalf. This
+// manager does NOT implement or claim that capability. `openSystemFocusSettings()`
+// below is the honest replacement: a one-click deep link to System Settings so
+// the user can turn on a Focus mode themselves — a manual nudge, not automatic
+// suppression.
+@MainActor
+final class FocusSessionManager: ObservableObject {
+
+    static let shared = FocusSessionManager()
+
+    // MARK: - Published state
+
+    @Published private(set) var isActive: Bool = false
+    @Published private(set) var remainingSeconds: Int = 0
+    @Published private(set) var totalSeconds: Int = 0
+    @Published private(set) var hiddenAppNames: [String] = []
+    @Published var isOverlayVisible: Bool = false
+    @Published private(set) var lastSummary: FocusSessionSummary?
+
+    /// "MM:SS" — used by both the Dashboard card and the menu bar countdown.
+    var remainingFormatted: String {
+        let m = max(0, remainingSeconds) / 60
+        let s = max(0, remainingSeconds) % 60
+        return String(format: "%02d:%02d", m, s)
+    }
+
+    // MARK: - Private state
+
+    private var countdownTimer: Timer?
+    private var sampleTimer: Timer?
+    private let processMonitor = ProcessMonitor()
+    private var endDate: Date?
+    private var hiddenApps: [NSRunningApplication] = []
+    private var maxCPUUsage: Double = 0
+    private var peakRAMByProcess: [String: Double] = [:]
+    private var overlayController: FocusSessionOverlayController?
+
+    private init() {}
+
+    // MARK: - Session control
+
+    /// Starts a session, hiding every currently-running app whose bundle
+    /// identifier is in `bundleIDsToHide`. The caller (FocusSessionCard on
+    /// the Dashboard) is responsible for confirming with the user first,
+    /// listing the exact apps that will be hidden — per CLAUDE.md's "all
+    /// deletions/disruptive actions require confirmation" rule.
+    func start(minutes: Int, bundleIDsToHide: [String]) {
+        guard !isActive, minutes > 0 else { return }
+
+        totalSeconds = minutes * 60
+        remainingSeconds = totalSeconds
+        endDate = Date().addingTimeInterval(TimeInterval(totalSeconds))
+        maxCPUUsage = 0
+        peakRAMByProcess = [:]
+        hiddenApps = []
+        hiddenAppNames = []
+
+        for app in NSWorkspace.shared.runningApplications {
+            guard let bid = app.bundleIdentifier,
+                  bundleIDsToHide.contains(bid),
+                  app.activationPolicy == .regular,
+                  !app.isHidden else { continue }
+            if app.hide() {
+                hiddenApps.append(app)
+                hiddenAppNames.append(app.localizedName ?? bid)
+            }
+        }
+
+        isActive = true
+        isOverlayVisible = true
+
+        if overlayController == nil { overlayController = FocusSessionOverlayController() }
+        overlayController?.show()
+
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tick() }
+        }
+        sampleTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            Task { await self?.sample() }
+        }
+        // One immediate sample so even a very short custom session has data.
+        Task { await sample() }
+    }
+
+    /// Hides the floating overlay panel without ending the session — the
+    /// countdown keeps running in the menu bar. Matches the spec's
+    /// "dismissible minimal countdown overlay".
+    func dismissOverlay() {
+        isOverlayVisible = false
+        overlayController?.hide()
+    }
+
+    func reopenOverlay() {
+        guard isActive else { return }
+        isOverlayVisible = true
+        overlayController?.show()
+    }
+
+    /// User-initiated early stop (from the overlay or the Dashboard card).
+    func endSession() {
+        guard isActive else { return }
+        finish(early: remainingSeconds > 0)
+    }
+
+    // MARK: - Ticking / sampling
+
+    private func tick() {
+        guard let end = endDate else { return }
+        remainingSeconds = max(0, Int(end.timeIntervalSinceNow.rounded(.up)))
+        if remainingSeconds <= 0 {
+            finish(early: false)
+        }
+    }
+
+    private func sample() async {
+        guard isActive else { return }
+        if let cpu = AppState.shared?.cpuUsage {
+            maxCPUUsage = max(maxCPUUsage, cpu)
+        }
+        let top = await processMonitor.topProcesses(sortBy: .ram, limit: 3)
+        for proc in top where proc.isUserApp {
+            let prev = peakRAMByProcess[proc.name] ?? 0
+            if proc.ramMB > prev { peakRAMByProcess[proc.name] = proc.ramMB }
+        }
+    }
+
+    private func finish(early: Bool) {
+        countdownTimer?.invalidate(); countdownTimer = nil
+        sampleTimer?.invalidate(); sampleTimer = nil
+
+        // Restore every app we hid — hide() is always paired with unhide(),
+        // never terminate(). Nothing this feature does is destructive.
+        for app in hiddenApps { app.unhide() }
+
+        let actualSeconds = totalSeconds - remainingSeconds
+        let topEntry = peakRAMByProcess.max(by: { $0.value < $1.value })
+
+        let summary = FocusSessionSummary(
+            plannedMinutes: totalSeconds / 60,
+            actualMinutes: max(1, Int((Double(actualSeconds) / 60).rounded())),
+            hiddenAppNames: hiddenAppNames,
+            topRAMProcessName: topEntry?.key,
+            topRAMProcessMB: topEntry?.value,
+            maxCPUPercent: maxCPUUsage * 100,
+            endedEarly: early
+        )
+        lastSummary = summary
+
+        postEndNotification(summary: summary)
+        AlertLog.shared.append(title: "Focus session ended",
+                                body: summary.digestText,
+                                kindRaw: "focus")
+
+        isActive = false
+        isOverlayVisible = false
+        endDate = nil
+        hiddenApps = []
+        overlayController?.hide()
+    }
+
+    private func postEndNotification(summary: FocusSessionSummary) {
+        let content = UNMutableNotificationContent()
+        content.title = "Focus Session Complete"
+        content.body = summary.digestText
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: "focus-session-\(Int(Date().timeIntervalSince1970))",
+            content: content,
+            trigger: nil // deliver immediately
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    // MARK: - Manual Focus-mode nudge
+    //
+    // Honest replacement for the infeasible "auto-suppress notifications"
+    // bullet — see the file-header note. Opens System Settings' Notifications
+    // pane (where Focus modes live on macOS 13+) so the user can turn one on
+    // themselves in one click. This is a manual step, not automatic suppression.
+    func openSystemFocusSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") else { return }
+        NSWorkspace.shared.open(url)
+    }
+}
+
+// MARK: - Focus Session app-list settings store (F-028)
+//
+// Backs the "Apps to Hide During a Session" list in Settings → Focus.
+// Persists by bundle identifier (survives the target app not currently
+// running) — same JSON-in-UserDefaults pattern as AlertLog / SnippetManager.
+@MainActor
+final class FocusSessionSettingsStore: ObservableObject {
+
+    static let shared = FocusSessionSettingsStore()
+
+    @Published private(set) var apps: [FocusAppConfig] = []
+
+    private static let defaultsKey = "focusSessionAppConfigs"
+
+    private init() { load() }
+
+    func add(_ app: FocusAppConfig) {
+        guard !apps.contains(where: { $0.bundleIdentifier == app.bundleIdentifier }) else { return }
+        apps.append(app)
+        persist()
+    }
+
+    func remove(_ app: FocusAppConfig) {
+        apps.removeAll { $0.bundleIdentifier == app.bundleIdentifier }
+        persist()
+    }
+
+    /// Currently-running, regular (Dock-visible) apps that aren't Halo itself
+    /// and aren't already configured — feeds the "Add App" picker in Settings.
+    func candidateRunningApps() -> [FocusAppConfig] {
+        NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular }
+            .compactMap { app -> FocusAppConfig? in
+                guard let bid = app.bundleIdentifier, bid != Bundle.main.bundleIdentifier else { return nil }
+                return FocusAppConfig(bundleIdentifier: bid, name: app.localizedName ?? bid)
+            }
+            .filter { candidate in !apps.contains(where: { $0.bundleIdentifier == candidate.bundleIdentifier }) }
+            .sorted { $0.name < $1.name }
+    }
+
+    private func persist() {
+        if let data = try? JSONEncoder().encode(apps) {
+            UserDefaults.standard.set(data, forKey: Self.defaultsKey)
+        }
+    }
+
+    private func load() {
+        guard let data = UserDefaults.standard.data(forKey: Self.defaultsKey),
+              let saved = try? JSONDecoder().decode([FocusAppConfig].self, from: data) else { return }
+        apps = saved
+    }
+}

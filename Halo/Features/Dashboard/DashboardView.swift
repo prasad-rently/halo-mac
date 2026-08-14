@@ -10,8 +10,10 @@ struct DashboardView: View {
                 HealthAndMetrics()
                 GPUDashboardCard()            // F-001: GPU utilisation + memory
                 NetworkSparklineCard()        // P3-10: bandwidth history
+                FocusSessionCard()             // F-028: Pomodoro-style focus sessions
                 QuickActionsGrid()
                 AlertHistorySection()          // F-011: system alert history log
+                FocusHistorySection()          // F-028: past focus session log
                 RecentActivityList()
             }
             .padding(28)
@@ -592,5 +594,247 @@ struct AlertEntryRow: View {
         .cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.haloBorder, lineWidth: 1))
         .opacity(entry.isRead ? 0.65 : 1.0)
+    }
+}
+
+// MARK: - Focus Session Card (F-028)
+
+struct FocusSessionCard: View {
+    @ObservedObject private var manager  = FocusSessionManager.shared
+    @ObservedObject private var appStore = FocusSessionSettingsStore.shared
+
+    @State private var selectedPreset: FocusDurationPreset? = .twentyFive
+    @State private var useCustom = false
+    @State private var customMinutes: Double = 90
+    @State private var showStartConfirmation = false
+
+    private var minutesToStart: Int {
+        useCustom ? Int(customMinutes) : (selectedPreset?.rawValue ?? 25)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HaloSectionHeader(
+                title: "Focus Session",
+                subtitle: manager.isActive ? "In progress" : "Pomodoro-style deep work"
+            )
+
+            HaloCard(accentTop: .haloAccent) {
+                VStack(alignment: .leading, spacing: 16) {
+                    if manager.isActive {
+                        activeContent
+                    } else {
+                        idleContent
+                    }
+                }
+                .padding(18)
+            }
+        }
+        // Hiding another app on the user's behalf is disruptive — always
+        // confirm first, listing exactly which apps will be affected.
+        .confirmationDialog(
+            "Start a \(minutesToStart)-minute focus session?",
+            isPresented: $showStartConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(appStore.apps.isEmpty
+                   ? "Start Session"
+                   : "Start — Hide \(appStore.apps.count) app\(appStore.apps.count == 1 ? "" : "s")") {
+                manager.start(minutes: minutesToStart,
+                              bundleIDsToHide: appStore.apps.map(\.bundleIdentifier))
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if appStore.apps.isEmpty {
+                Text("No apps are configured to hide. Add some in Settings → Focus.")
+            } else {
+                Text("This will hide: \(appStore.apps.map(\.name).joined(separator: ", "))")
+            }
+        }
+    }
+
+    // MARK: Idle state
+
+    private var idleContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "moon.stars.fill")
+                    .foregroundColor(.haloAccent)
+                Text("Hide distracting apps and count down a deep-work block.")
+                    .font(HaloFont.body(12))
+                    .foregroundColor(.haloText2)
+            }
+
+            HStack(spacing: 8) {
+                ForEach(FocusDurationPreset.allCases) { preset in
+                    presetButton(title: preset.label, isSelected: !useCustom && selectedPreset == preset) {
+                        useCustom = false
+                        selectedPreset = preset
+                    }
+                }
+                presetButton(title: "Custom", isSelected: useCustom) {
+                    useCustom = true
+                }
+            }
+
+            if useCustom {
+                HStack {
+                    Text("\(Int(customMinutes)) min")
+                        .font(HaloFont.mono(13))
+                        .foregroundColor(.haloAccent)
+                        .frame(width: 60, alignment: .leading)
+                    Slider(value: $customMinutes, in: 5...180, step: 5)
+                        .tint(.haloAccent)
+                }
+            }
+
+            if !appStore.apps.isEmpty {
+                Text("\(appStore.apps.count) app\(appStore.apps.count == 1 ? "" : "s") will be hidden: \(appStore.apps.map(\.name).joined(separator: ", "))")
+                    .font(HaloFont.body(11))
+                    .foregroundColor(.haloText3)
+                    .lineLimit(2)
+            }
+
+            HaloPrimaryButton("Start Focus Session", icon: "play.fill") {
+                showStartConfirmation = true
+            }
+            .accessibilityIdentifier("dashboard.focusSession.start")
+        }
+    }
+
+    private func presetButton(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(HaloFont.body(12, weight: isSelected ? .semibold : .regular))
+                .foregroundColor(isSelected ? .haloText : .haloText3)
+                .padding(.horizontal, 14).padding(.vertical, 7)
+                .background(Capsule().fill(isSelected ? Color.haloAccent.opacity(0.18) : Color.haloSurface2))
+                .overlay(Capsule().stroke(isSelected ? Color.haloAccent.opacity(0.5) : Color.haloBorder, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Active state
+
+    private var activeContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(manager.remainingFormatted)
+                        .font(HaloFont.display(32, weight: .heavy))
+                        .foregroundColor(.haloAccent)
+                        .monospacedDigit()
+                    if !manager.hiddenAppNames.isEmpty {
+                        Text("\(manager.hiddenAppNames.count) apps hidden")
+                            .font(HaloFont.body(11))
+                            .foregroundColor(.haloText2)
+                    }
+                }
+                Spacer()
+                if !manager.isOverlayVisible {
+                    HaloGhostButton("Show Overlay", icon: "rectangle.on.rectangle") {
+                        manager.reopenOverlay()
+                    }
+                }
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    manager.endSession()
+                } label: {
+                    Text("End Session")
+                        .font(HaloFont.body(12, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                        .background(Color.haloRed)
+                        .cornerRadius(9)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("dashboard.focusSession.end")
+
+                // Honest, weaker replacement for automatic notification
+                // suppression (no public API exists for that) — a one-click
+                // manual nudge to System Settings. See FocusSessionManager's
+                // file-header note for the full explanation.
+                Button {
+                    manager.openSystemFocusSettings()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "moon.fill")
+                        Text("Turn on Focus Mode…")
+                    }
+                    .font(HaloFont.body(12))
+                    .foregroundColor(.haloText2)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .background(Color.haloSurface2)
+                    .cornerRadius(9)
+                    .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.haloBorder, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .help("Halo can't suppress notifications for you — this opens System Settings so you can turn on a Focus mode manually.")
+            }
+        }
+    }
+}
+
+// MARK: - Focus History Section (F-028)
+//
+// Reads the existing AlertLog (kindRaw == "focus") rather than a parallel
+// store — every session's end-of-run summary is already appended there by
+// FocusSessionManager.finish(), same as every other alert kind.
+
+struct FocusHistorySection: View {
+    @StateObject private var alertLog = AlertLog.shared
+    @State private var isExpanded = false
+
+    private var focusEntries: [AlertEntry] {
+        alertLog.entries.filter { $0.kindRaw == "focus" }
+    }
+
+    var body: some View {
+        if !focusEntries.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+                    } label: {
+                        HStack {
+                            Image(systemName: "moon.stars.fill")
+                                .font(.system(size: 13))
+                                .foregroundColor(.haloAccent)
+                            Text("Focus History")
+                                .font(HaloFont.body(13, weight: .semibold))
+                                .foregroundColor(.haloText)
+                            Text("\(focusEntries.count)")
+                                .font(HaloFont.body(10, weight: .bold))
+                                .foregroundColor(.haloText2)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.haloSurface2)
+                                .clipShape(Capsule())
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("dashboard.focusHistory")
+                    Spacer()
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+                    } label: {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(HaloFont.body(10))
+                            .foregroundColor(.haloText2)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if isExpanded {
+                    VStack(spacing: 6) {
+                        ForEach(focusEntries.prefix(10)) { entry in
+                            AlertEntryRow(entry: entry)
+                        }
+                    }
+                }
+            }
+        }
     }
 }

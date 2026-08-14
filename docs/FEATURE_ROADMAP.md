@@ -46,7 +46,7 @@
 | [F-025](#f-025--duplicate-photos-finder-perceptual-hash) | Duplicate Photos Finder (pHash) | 💡 Future Idea | ~5 d | DuplicateDetector |
 | [F-026](#f-026--downloads-folder-organiser--manager) | Downloads Folder Organiser & Manager | ✅ Done | 2.5 d | AppScanner, FileSystemScanner |
 | [F-027](#f-027--snippet-manager--text-expansion-engine-clipboard-evolution) | Snippet Manager & Text Expansion Engine | ✅ Done | 3.5 d | Clipboard module |
-| [F-028](#f-028--focus-session-companion) | Focus Session Companion | 💡 Future Idea | ~3 d | MenuBarDisplayStyle |
+| [F-028](#f-028--focus-session-companion) | Focus Session Companion | ✅ Done | ~3 d | MenuBarDisplayStyle |
 | [F-029](#f-029--scheduled-reports--weekly-digest) | Scheduled Reports & Weekly Digest | 💡 Future Idea | ~2 d | ReportGenerator |
 | [F-030](#f-030--icloud-storage-analyser) | iCloud Storage Analyser | 💡 Future Idea | ~4 d | none |
 | [F-031](#f-031--dock--desktop-tinker-actions) | Dock & Desktop Tinker Actions | ✅ Done | 0.5 d | none |
@@ -1713,10 +1713,10 @@ struct TextSnippet: Identifiable, Codable, Equatable {
 
 ## F-028 · Focus Session Companion
 
-**Status:** 💡 Future Idea  
+**Status:** ✅ Done  
 **Effort estimate:** 3 days  
 **Theme:** User Productivity  
-**Branch naming (when ready):** `feat/f028-focus-session`  
+**Branch naming:** `feat/f028-focus-session`  
 **Depends on:** MenuBarDisplayStyle (already built — new session mode needed)
 
 ### Why
@@ -1724,19 +1724,23 @@ This transforms Halo from a passive monitor into an active productivity companio
 
 ### What it delivers
 - **"Start Focus Session"** card on the Dashboard with duration presets: 25 min / 50 min / custom
-- On session start: automatically quits/hides a user-specified list of distracting apps (configurable in Settings), suppresses macOS notification banners, and switches the menu bar display to a **session countdown mode** (replacing the normal CPU/RAM stats)
-- Dismissible minimal fullscreen countdown overlay — shows time remaining, current productivity score, and a "End Session" button
-- Session end: macOS notification + in-app summary: "50-minute session. Top RAM consumer: Chrome (820 MB). CPU stayed below 55%."
-- Session history log: date, duration, productivity summary — visible in a "Focus History" section of the Dashboard
+- On session start: automatically hides (never quits) a user-specified list of distracting apps (configurable in Settings → Focus, with a pre-session confirmation dialog listing exactly which apps will be hidden), and switches the menu bar display to a **session countdown mode** (replacing the normal CPU/RAM stats)
+- Dismissible minimal floating countdown overlay (`NSPanel`) — shows time remaining, hidden-app count, and an "End Session" button; dismissing it only hides the panel, the session keeps running
+- Session end: macOS notification + in-app summary: "50-minute session. Top RAM consumer: Chrome (820 MB). CPU stayed below 55%." — built from real `ProcessMonitor`/`AppState` samples taken every 5s during the session
+- Session history log — visible in a "Focus History" section of the Dashboard, reusing the existing `AlertLog` (`kindRaw: "focus"`) rather than a new store
 
 ### Data sources
-- `NSWorkspace.shared.runningApplications` + `NSWorkspace.hideOtherApplications()` / `terminate()` for app management
-- `UNUserNotificationCenter` for notification suppression (uses Focus mode API on macOS 12+: `INFocusStatusCenter`)
-- Existing `AppState` CPU/RAM metrics for end-of-session report
+- `NSWorkspace.shared.runningApplications` + `NSRunningApplication.hide()`/`unhide()` for app management (not `terminate()` — hiding is reversible and non-destructive)
+- Existing `ProcessMonitor` actor (already powering Performance → Top Processes) sampled every 5s for the peak-RAM process
+- Existing `AppState.cpuUsage` sampled every 5s for the peak-CPU read
+- `UNUserNotificationCenter` for the end-of-session notification
 - New `MenuBarDisplayStyle.sessionCountdown` case added to the existing enum
 
 ### Integration point
-New collapsible **"Focus"** card on the Dashboard. New `sessionCountdown` style added to `MenuBarDisplayStyle` in `MenuBarView.swift`. Session history stored in `AlertLog` with a new `kindRaw: "focus"` entry.
+New collapsible **"Focus Session"** card on the Dashboard (`FocusSessionCard` in `DashboardView.swift`), plus a **"Focus History"** section (`FocusHistorySection`) below Alert History. New `sessionCountdown` style added to `MenuBarDisplayStyle` in `MenuBarView.swift`, applied automatically by `FocusSessionManager` and excluded from manual selection via `MenuBarDisplayStyle.selectable`. Session history stored in `AlertLog` with `kindRaw: "focus"`. New Settings → Focus tab (`FocusSessionSettingsTab` in `OnboardingView.swift`) configures the list of apps to hide.
+
+### As actually built
+The original idea sheet's "suppresses macOS notification banners" bullet, sourced from `INFocusStatusCenter`, was **scoped out** during implementation. `INFocusStatusCenter` only lets an app report its *own* busy/focused state so other apps can *voluntarily* check `isFocused` and choose to hold back their own notifications — it does not give any app the ability to enable system-wide Do Not Disturb/Focus or suppress other apps' banners on the user's behalf, and there is no public macOS API that does. Rather than fake this capability, the shipped feature replaces it with an honest, weaker alternative: a **"Turn on Focus Mode…"** button shown during an active session that deep-links to System Settings' Notifications pane (`x-apple.systempreferences:com.apple.Notifications-Settings.extension`) so the user can enable a Focus mode themselves in one click — clearly a manual nudge, not automatic suppression. Everything else in the "What it delivers" list above shipped as real, working functionality (verified by `xcodebuild … build` succeeding on `HaloUITests`; see `CLAUDE.md`'s Focus Session Manager section for implementation detail). See `docs/HALO_MOBILE_ROADMAP.md` §9 for the mobile feasibility study, which found the auto-hide half is blocked on both mobile OSes but each platform has a *more* capable Focus/DND-adjacent API than desktop in a different dimension.
 
 ---
 
@@ -1837,7 +1841,7 @@ New **"iCloud"** tab in the **Files** module, alongside SpaceLens, Exact Duplica
 
 ---
 
-*Last updated: v4.0 · 25 features shipped (F-001–F-015 + F-026, F-027, F-031–F-034, F-036–F-039, F-041–F-042) · 13 future ideas remaining (F-016–F-025, F-028–F-030)*
+*Last updated: v4.1 · 26 features shipped (F-001–F-015 + F-026, F-027, F-028, F-031–F-034, F-036–F-039, F-041–F-042) · 12 future ideas remaining (F-016–F-025, F-029–F-030)*
 
 ---
 
