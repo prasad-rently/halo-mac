@@ -490,3 +490,124 @@ extension ClipboardItem {
               copiedDate: Date().addingTimeInterval(-100000), sourceApp: "Xcode")
     ]
 }
+
+// MARK: - iCloud Drive Analyzer (F-030)
+//
+// Scope note: this is a LOCAL analyzer of `~/Library/Mobile Documents/` — the
+// on-disk mirror of iCloud Drive — NOT a full-account iCloud storage report.
+// There is no public API (CloudKit, NSUbiquitousKeyValueStore, or otherwise)
+// that returns a third-party app's total iCloud account quota/usage or a
+// category breakdown (Photos/Backups/Mail/etc). Those numbers are only
+// visible in System Settings' own iCloud pane. See docs/FEATURE_ROADMAP.md
+// F-030 "As actually built" for the full feasibility writeup.
+
+/// A top-level folder found under `~/Library/Mobile Documents/`. The single
+/// user-visible "iCloud Drive" folder is `com~apple~CloudDocs`; every other
+/// sibling is a per-app ubiquity container (Pages, Mail, third-party apps).
+struct ICloudContainer: Identifiable, Hashable {
+    let id: String              // folder name on disk, e.g. "com~apple~CloudDocs"
+    let url: URL
+    let isUserDrive: Bool       // true only for com~apple~CloudDocs
+
+    /// Best-effort human name derived from the folder's bundle-id-shaped name.
+    var displayName: String {
+        if isUserDrive { return "iCloud Drive" }
+        var stripped = id
+        for prefix in ["iCloud~", "com~apple~", "com~"] where stripped.hasPrefix(prefix) {
+            stripped.removeFirst(prefix.count)
+            break
+        }
+        let parts = stripped.split(separator: "~")
+        return parts.last.map(String.init)?.capitalized ?? id
+    }
+}
+
+/// Real per-item sync state, read from `URLResourceKey.ubiquitousItemDownloadingStatusKey`
+/// and the `isUploading`/`isDownloading` flags — genuinely available from
+/// `FileManager` for any URL inside a ubiquity container, no entitlement needed.
+enum ICloudSyncStatus: String, Sendable {
+    case local        // fully downloaded; nothing pending
+    case downloading
+    case uploading
+    case evicted       // "Optimise Mac Storage" removed the local copy; cloud-only
+    case unknown
+
+    var label: String {
+        switch self {
+        case .local:       return "On This Mac"
+        case .downloading: return "Downloading…"
+        case .uploading:   return "Uploading…"
+        case .evicted:     return "iCloud Only"
+        case .unknown:     return "Unknown"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .local:       return "checkmark.circle.fill"
+        case .downloading: return "arrow.down.circle"
+        case .uploading:   return "arrow.up.circle"
+        case .evicted:     return "icloud"
+        case .unknown:     return "questionmark.circle"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .local:       return .haloGreen
+        case .downloading: return .haloAccent
+        case .uploading:   return .haloAccent
+        case .evicted:     return .haloText2
+        case .unknown:     return .haloText3
+        }
+    }
+}
+
+/// One file or top-level folder inside an `ICloudContainer`, with a real size
+/// (directories summed, bounded — same approach as `SpaceLensViewModel`) and
+/// a real sync status.
+struct ICloudDriveItem: Identifiable, Sendable {
+    let id: String              // stable: the item's full path
+    let url: URL
+    let name: String
+    let sizeBytes: Int64
+    let isDirectory: Bool
+    let modifiedDate: Date?
+    let syncStatus: ICloudSyncStatus
+
+    var sizeFormatted: String { ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file) }
+
+    var modifiedDateFormatted: String {
+        guard let modifiedDate else { return "—" }
+        let f = RelativeDateTimeFormatter()
+        return f.localizedString(for: modifiedDate, relativeTo: Date())
+    }
+
+    var icon: String {
+        if isDirectory { return "folder.fill" }
+        switch url.pathExtension.lowercased() {
+        case "pdf": return "doc.richtext"
+        case "jpg", "jpeg", "png", "heic", "gif": return "photo"
+        case "mov", "mp4", "m4v": return "film"
+        case "key", "pptx": return "rectangle.on.rectangle"
+        case "numbers", "xlsx", "csv": return "tablecells"
+        case "pages", "doc", "docx", "txt": return "doc.text"
+        case "zip", "gz": return "doc.zipper"
+        default: return "doc"
+        }
+    }
+}
+
+enum ICloudDriveScanError: LocalizedError {
+    case notAvailable
+    case containerUnreadable(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .notAvailable:
+            return "iCloud Drive isn't set up on this Mac, or its local folder isn't accessible yet."
+        case .containerUnreadable(let name):
+            return "Couldn't read \(name) — it may still be syncing for the first time."
+        }
+    }
+}

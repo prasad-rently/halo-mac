@@ -96,6 +96,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | Files — Large files | 🟡 | 🟡 | Scoped | P3 | Assessed |
 | Files — Downloads manager | 🟡 | 🟡 | Downloads dir (Android) / Files (iOS) | P3 | Assessed |
 | Files — **Drive Speed (F-043)** | 🟡 | 🟡 | Benchmark internal storage; external limited (OTG Android) | P2 | Assessed |
+| Files — **iCloud Drive Analyzer (F-030)** | 🟡 | ❌ | iOS: document-picker-scoped folder enumeration only, same limit as SpaceLens; Android: no iCloud concept exists | P3 | Assessed |
 | **Clipboard history** | 🟡 | 🟡 | iOS current-only/foreground; Android 10+ limited → F-045 | P1 | Planned (F-045) |
 | **Snippets / text expansion** | ✅ | ✅ | **Strong on mobile** (keyboard extension / IME) | P1 | Assessed ✓ (§9) |
 | **Actions** — clipboard/text transforms | ✅ | ✅ | JSON/base64/hash/QR/case… pure compute | P1 | Assessed |
@@ -209,6 +210,7 @@ Copy this block into a study when assessing a feature for mobile.
 
 | Date | Change |
 |------|--------|
+| 2026-08 | Feasibility study added (§9) for **F-030 iCloud Drive Analyzer**: iOS 🟡 (document-picker-scoped only, same ceiling as SpaceLens), Android ❌ (no iCloud concept). Row added to §3. Recommendation: don't build — Apple's own Files app already covers this ground better on iOS. |
 | 2026-07 | Formal feasibility studies added (§9): Code Beautifier, Snippets, Speed Test, cloud AI. |
 | 2026-07 | Document created. Assessed all shipped desktop capabilities (F-001–F-043) + planned cloud features (F-044–F-048) for iOS/Android. Established governance rules. First wave specced: F-044/F-045/F-048/F-049/F-050. |
 
@@ -257,3 +259,14 @@ promote to `Planned` (spec) when scheduled.
 - **Scope on mobile:** full chat + context (clipboard/selection/share-sheet input); **trimmed** agent toolset.
 - **Effort:** iOS ~5 d · Android ~6 d (three providers + streaming + Keystore). **Dependencies:** F-049 shell; mirrors F-046 desktop architecture.
 - **Verdict:** **Port (chat) + Adapt (agentic)** → **P1**. **Recommendation:** high value on mobile; ship chat + context first, add the small mobile tool set incrementally. Consider sharing the Swift provider layer between macOS + iOS.
+
+### Feasibility — iCloud Drive Analyzer (from desktop F-030)
+- **Desktop capability:** local analyzer of `~/Library/Mobile Documents/` (iCloud Drive's on-disk sync mirror) — real per-item sizes, real modified dates, real per-item sync status (local/downloading/uploading/evicted) via `URLResourceKey.ubiquitousItemDownloadingStatusKey`, drill-down, Reveal in Finder, Move to Trash. Explicitly **not** an account-wide quota/category report (no public API returns that — see `docs/FEATURE_ROADMAP.md` F-030 "As actually built").
+- **iOS mechanism:** iOS apps cannot enumerate the user's iCloud Drive tree directly the way macOS's `FileManager` can — there is no sandbox path equivalent to `~/Library/Mobile Documents/` visible to third-party apps. The only legitimate access is via **`UIDocumentPickerViewController`**, which can present the "iCloud Drive" location from the Files app and hand back a security-scoped bookmark to whatever folder the *user explicitly picks* — after which `FileManager` enumeration and the same `ubiquitousItemDownloadingStatusKey` resource keys work identically to macOS, scoped to that one picked folder. This is exactly the same ceiling already assigned to Files — SpaceLens (🟡 "scoped/granted dirs only"), so it is not a distinct new mechanism — it inherits SpaceLens's iOS story. Verdict 🟡
+- **Android mechanism:** iCloud is an Apple-only construct; there is no Android equivalent, no local sync mirror, and no API surface to analyze. A generic "cloud drive folder analyzer" could theoretically be built against Android's Storage Access Framework for a user-picked Google Drive/OneDrive sync folder, but that would be a **different feature** aimed at a different cloud provider, not a port of this one. Verdict ❌ (no iCloud concept exists on Android)
+- **OS blockers:** iOS — no bulk/background enumeration of iCloud Drive outside a user-granted document-picker scope (same as every other scoped-storage feature). Android — the underlying concept (iCloud) does not exist on the platform at all.
+- **Permissions required:** iOS — none beyond the one-time document-picker grant (no privacy prompt, it's a standard system picker).
+- **Store-policy risk:** none either platform.
+- **Scope on mobile:** iOS — at most, a scoped-folder version identical in shape to SpaceLens (pick a folder inside Files → iCloud Drive, see sizes/dates/sync status, trash items). No value beyond what Apple's own Files app already provides natively (which additionally shows real account storage/quota, something Halo itself can never surface — see the desktop feasibility finding). Android — nothing to build.
+- **Effort:** iOS ~2 d if bundled as a SpaceLens variant (reuses the picker + enumeration plumbing already required for SpaceLens's own mobile port). Android: N/A. **Dependencies:** F-049 shell; effectively a sub-mode of the Files — SpaceLens mobile port, not a standalone feature.
+- **Verdict:** **Adapt (iOS only, folded into SpaceLens) / Blocked (Android)** → **P3**. **Recommendation:** **don't build as a standalone mobile feature.** On iOS the Files app already does this — and does it better, since it can show real iCloud account quota, which Halo fundamentally cannot access on any platform. The only mobile-exclusive angle worth revisiting later is scoping SpaceLens's own folder picker to include "iCloud Drive" as one of several pickable roots, not a dedicated iCloud tab.
