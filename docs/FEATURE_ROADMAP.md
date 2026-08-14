@@ -35,7 +35,7 @@
 | [F-014](#f-014--pdf-health-report-export) | PDF Health Report Export | ✅ Done | 2 d | none |
 | [F-015](#f-015--custom-scan-schedule-ui) | Custom Scan Schedule UI | ✅ Done | 1 d | F-005 |
 | [F-016](#f-016--permission-auditor) | Permission Auditor | 💡 Future Idea | ~3 d | F-002 (release) |
-| [F-017](#f-017--network-traffic-monitor-app-level-firewall-companion) | Network Traffic Monitor | 💡 Future Idea | ~5 d | none |
+| [F-017](#f-017--network-traffic-monitor-app-level-firewall-companion) | Network Traffic Monitor | ✅ Done | ~5 d | none |
 | [F-018](#f-018--privacy-data-exposure-scanner) | Privacy Data Exposure Scanner | 💡 Future Idea | ~3 d | none |
 | [F-019](#f-019--security-posture-dashboard) | Security Posture Dashboard | 💡 Future Idea | ~1.5 d | none |
 | [F-020](#f-020--smart-disk-health-monitor) | S.M.A.R.T. Disk Health Monitor | 💡 Future Idea | ~3 d | none |
@@ -1240,7 +1240,7 @@ New **"Privacy"** module in the sidebar, or a second tab within the existing Pro
 
 ## F-017 · Network Traffic Monitor (App-Level Firewall Companion)
 
-**Status:** 💡 Future Idea  
+**Status:** ✅ Done — `feat/f017-network-traffic-monitor` branch (2026-08)  
 **Effort estimate:** 5 days  
 **Theme:** Privacy & Security  
 **Branch naming (when ready):** `feat/f017-network-traffic-monitor`  
@@ -1268,6 +1268,16 @@ New sub-tab within the existing **Network** section of the Performance module, o
 - Reverse DNS for every connection is slow — needs async resolution with a local LRU cache
 - May need to be rate-limited (sample connections every 2 s rather than streaming) to avoid CPU overhead
 - Tracker domain list maintenance: needs a hosting endpoint similar to the signatures update endpoint
+
+### As actually built
+The honesty constraint drove every design decision here: **there is no public macOS API — sandboxed or not, short of a Network Extension / `NEFilterDataProvider` entitlement Halo does not have — that reveals the DNS hostname or TLS SNI a process actually requested.** `lsof`/`proc_pidinfo` only ever expose the raw remote IP:port of an open socket. The shipped feature is honest about this at every layer rather than papering over it:
+- **Real, unfaked data:** open outbound sockets per process via `lsof -i -n -P` (only rows with a `local->remote` peer are shown — LISTEN and connectionless UDP sockets are filtered out); real per-app cumulative byte totals via `nettop -P -L 1 -J bytes_in,bytes_out` (the only per-process byte-counter API available to a third-party app).
+- **Best-effort, clearly labeled:** reverse DNS (`getaddrinfo` + `getnameinfo(..., NI_NAMEREQD)`) on the remote IP, cached (capped dictionary, oldest-evicted) so the same IP is never re-resolved on every 2 s tick. The UI column header literally reads "Remote Host (best-effort)", and the footnote explains that CDN/load-balancer IPs often resolve to a generic infra hostname, or don't resolve at all — never guessed. `resolvedHost` is `nil`, not a fabricated value, when resolution fails.
+- **Tracker-domain flagging is conservative:** `isSuspicious` is only ever set when a hostname *actually resolved* and matched the bundled `tracker-domains.json` list (40 known ad/analytics/telemetry domains) — an unresolved IP is never flagged, to avoid implying domain-level certainty the app doesn't have.
+- **Real correctness fix during review:** `lsof`'s COMMAND column and `nettop`'s process-name column truncate the same process's name to *different* lengths (verified live on this machine: `lsof` reports `Google` for a Chrome helper's pid, `nettop` reports `Google Chrome H` for the identical pid). The initial implementation joined connections to byte totals by `processName` string equality, which silently failed whenever the two tools disagreed and would have always shown "—" for real traffic. Fixed to join by `pid` — the only reliable shared key — in both `NetworkTrafficMonitor.fetchAppTotals()` and `AppNetworkTotal`.
+- Sampled every 2 s while the section is expanded (`NetworkTrafficSection`'s own poll loop; not tied to `AppState`'s global 2 s metrics timer), filter by app name, sort by recency/app name/traffic volume, and a "Top talker" session-summary card.
+- No hosting endpoint for tracker-domain updates was built (unlike `SignatureDatabase`'s HTTPS delta-update pattern) — `tracker-domains.json` ships bundle-only for v1. Noted as a known follow-up, not a blocker.
+- Files: `Halo/Core/Scanner/NetworkTrafficMonitor.swift` (actor), `Halo/Features/Performance/NetworkTrafficSection.swift` (sub-section UI embedded in the existing `NetworkDetailSection`), `Halo/Resources/tracker-domains.json`, new models in `Halo/Core/Models/Models.swift` (`NetworkConnectionEntry`, `AppNetworkTotal`, `NetworkTrafficSnapshot`).
 
 ---
 

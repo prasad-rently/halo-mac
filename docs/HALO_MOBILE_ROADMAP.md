@@ -86,6 +86,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | **Cleanup** (caches/logs/trash) | ❌ | 🟡 | Sandbox: own-cache only; Android → guide to Storage settings | P3 | Assessed |
 | **Protection** (malware scan) | ❌ | 🟡 | iOS blocks scanning; Android limited pkg/file heuristics | P3 | Assessed |
 | **Performance — top processes** | ❌ | ❌ | No public live-process enumeration | — | Won't do |
+| Performance — **Network Traffic Monitor (F-017)** | ❌ | ❌ | No public API exposes other apps' open sockets or DNS lookups on either mobile OS | — | Won't do |
 | Performance — login items | ❌ | ❌ | No equivalent concept | — | Won't do |
 | Performance — VPN detection | ✅ | ✅ | NetworkExtension / ConnectivityManager | P2 | Assessed |
 | Performance — **speed test** | ✅ | ✅ | Socket-based; fully portable | P1 | Assessed |
@@ -209,6 +210,7 @@ Copy this block into a study when assessing a feature for mobile.
 
 | Date | Change |
 |------|--------|
+| 2026-08 | F-017 Network Traffic Monitor shipped on desktop. Feasibility study added (§9): verdict ❌/❌ Won't do — same OS-sandbox blocker as top-processes/ports. Row added to §3. |
 | 2026-07 | Formal feasibility studies added (§9): Code Beautifier, Snippets, Speed Test, cloud AI. |
 | 2026-07 | Document created. Assessed all shipped desktop capabilities (F-001–F-043) + planned cloud features (F-044–F-048) for iOS/Android. Established governance rules. First wave specced: F-044/F-045/F-048/F-049/F-050. |
 
@@ -257,3 +259,14 @@ promote to `Planned` (spec) when scheduled.
 - **Scope on mobile:** full chat + context (clipboard/selection/share-sheet input); **trimmed** agent toolset.
 - **Effort:** iOS ~5 d · Android ~6 d (three providers + streaming + Keystore). **Dependencies:** F-049 shell; mirrors F-046 desktop architecture.
 - **Verdict:** **Port (chat) + Adapt (agentic)** → **P1**. **Recommendation:** high value on mobile; ship chat + context first, add the small mobile tool set incrementally. Consider sharing the Swift provider layer between macOS + iOS.
+
+### Feasibility — Network Traffic Monitor (from desktop F-017)
+- **Desktop capability:** per-process outbound socket table via `lsof -i -n -P` (real IP:port, not domain), best-effort reverse-DNS hostname resolution (cached), real per-app byte totals via `nettop -P -L 1`, tracker-domain flagging, filter/sort, session "top talker" summary. Read-only, no blocking.
+- **iOS mechanism:** none. No public API on iOS exposes another app's open sockets, connection table, or per-app network usage — that visibility is confined to Apple's own Network Extension / VPN-provider entitlement, which requires special Apple approval Halo does not have and which only sees traffic Halo itself routes, not a general system-wide table. Verdict ❌
+- **Android mechanism:** `NetworkStatsManager` exists but only reports **aggregate bytes per UID over a time window** for apps the user has granted `PACKAGE_USAGE_STATS` to inspect — it does not expose live per-socket connection tuples (remote IP/port/protocol) the way `lsof` does on macOS, and reverse-DNS-on-a-live-connection has no equivalent without VpnService (same approval/UX cost as iOS's NEFilterDataProvider). Verdict ❌
+- **OS blockers:** same category as `Performance — top processes` and `Ports manager` — both mobile OSes sandbox process/socket introspection to the owning app only; there is no cross-app `lsof`/`nettop` equivalent without a VPN-provider entitlement that fundamentally changes the app's threat model (all traffic routes through it) and store-review posture.
+- **Permissions required:** would need `PACKAGE_USAGE_STATS` (Android, aggregate-only, doesn't unlock the socket table) or a VPN/NEFilterDataProvider profile (both platforms) — the latter is a different, much heavier feature (a real on-device firewall/VPN), not a "port" of this one.
+- **Store-policy risk:** VPN-provider entitlements draw extra App Store / Play review scrutiny and require a persistent "VPN active" system indicator — disproportionate to a read-only monitoring convenience.
+- **Scope on mobile:** none achievable at parity; the *closest* honest mobile equivalent (Android `NetworkStatsManager` per-app aggregate totals, no hostnames, no live connection list) is already covered as **"Per-app network data usage"** in §5's mobile-exclusive table (Android-only, ❌ iOS) and should be pursued there on its own footing rather than as a port of F-017.
+- **Effort:** N/A. **Dependencies:** N/A.
+- **Verdict:** **Blocked** → **Won't do**. **Recommendation:** do not attempt a port; if per-app data-usage insight is wanted on mobile, build it as the separate, already-tracked "Per-app network data usage" mobile-exclusive idea (Android `NetworkStatsManager`, aggregate-only, no socket/hostname table).

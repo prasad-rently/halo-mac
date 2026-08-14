@@ -219,6 +219,58 @@ enum PermissionKind: String, CaseIterable {
     }
 }
 
+// MARK: - Network Traffic Monitor Models (F-017)
+//
+// HONESTY NOTE: `resolvedHost` is best-effort reverse DNS (PTR record) on the
+// real remote IP — it is NOT the domain/SNI the process actually requested
+// (no public macOS API exposes that without a Network Extension entitlement).
+// `resolvedHost` is `nil` when reverse DNS failed; never guess a hostname.
+// `isSuspicious` is only ever set when `resolvedHost` matched the bundled
+// tracker-domain list — an unresolved IP is never flagged.
+
+struct NetworkConnectionEntry: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let pid: Int32
+    let processName: String
+    let remoteIP: String
+    let remotePort: Int
+    let protocolType: String        // "TCP" or "UDP"
+    let state: String               // "ESTABLISHED", "ACTIVE", etc. (real, from lsof)
+    var resolvedHost: String?       // best-effort reverse DNS; nil = unresolved
+    var isSuspicious: Bool          // true only if resolvedHost matched tracker-domains.json
+    let lastSeen: Date
+
+    /// What to display for the remote endpoint when no hostname resolved.
+    var displayHost: String {
+        resolvedHost ?? "\(remoteIP):\(remotePort)"
+    }
+}
+
+/// Real, per-process cumulative byte totals for this session, sourced from
+/// `nettop -P -L 1`. NOT per-connection — macOS does not expose per-socket
+/// byte counters to a third-party app, so this is the honest granularity.
+///
+/// Keyed by `pid`, not `processName` — `lsof`'s COMMAND column and `nettop`'s
+/// process-name column truncate the same process's name to different
+/// lengths (e.g. lsof shows "Google" while nettop shows "Google Chrome H"
+/// for the same Chrome helper pid), so name-string matching silently drops
+/// real data. `pid` is the only reliable join key between the two tools.
+struct AppNetworkTotal: Identifiable, Equatable, Sendable {
+    var id: Int32 { pid }
+    let pid: Int32
+    let processName: String
+    let bytesIn: UInt64
+    let bytesOut: UInt64
+
+    var totalBytes: UInt64 { bytesIn + bytesOut }
+}
+
+struct NetworkTrafficSnapshot: Sendable {
+    var connections: [NetworkConnectionEntry]
+    var appTotals: [AppNetworkTotal]
+    var topTalker: AppNetworkTotal?
+}
+
 // MARK: - Performance Models
 
 struct LoginItem: Identifiable {

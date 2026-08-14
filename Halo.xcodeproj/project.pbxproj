@@ -107,6 +107,9 @@
 		000000000000000000008026 /* SnippetEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008025 /* SnippetEditorView.swift */; };
 		000000000000000000008028 /* SnippetListSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008027 /* SnippetListSection.swift */; };
 		000000000000000000008030 /* ActionShareManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008029 /* ActionShareManager.swift */; };
+		000000000000000000008094 /* NetworkTrafficMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008093 /* NetworkTrafficMonitor.swift */; };
+		000000000000000000008096 /* NetworkTrafficSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008095 /* NetworkTrafficSection.swift */; };
+		000000000000000000008098 /* tracker-domains.json in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008097 /* tracker-domains.json */; };
 		000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009001 /* GetHealthScoreIntent.swift */; };
 		000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009003 /* GetCPUUsageIntent.swift */; };
 		000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009005 /* GetBatteryHealthIntent.swift */; };
@@ -339,6 +342,9 @@
 		000000000000000000008025 /* SnippetEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/SnippetEditorView.swift; sourceTree = "<group>"; };
 		000000000000000000008027 /* SnippetListSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/SnippetListSection.swift; sourceTree = "<group>"; };
 		000000000000000000008029 /* ActionShareManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/ActionShareManager.swift; sourceTree = "<group>"; };
+		000000000000000000008093 /* NetworkTrafficMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/NetworkTrafficMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000008095 /* NetworkTrafficSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/NetworkTrafficSection.swift; sourceTree = "<group>"; };
+		000000000000000000008097 /* tracker-domains.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Halo/Resources/tracker-domains.json; sourceTree = "<group>"; };
 		000000000000000000009001 /* GetHealthScoreIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetHealthScoreIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009003 /* GetCPUUsageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetCPUUsageIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009005 /* GetBatteryHealthIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetBatteryHealthIntent.swift; sourceTree = "<group>"; };
@@ -477,6 +483,7 @@
 				000000000000000000001076 /* SMCReader.swift */,
 				000000000000000000001078 /* GPUMonitor.swift */,
 				000000000000000000001080 /* NetworkDetailMonitor.swift */,
+				000000000000000000008093 /* NetworkTrafficMonitor.swift */,
 				000000000000000000001082 /* SpeedTestService.swift */,
 				000000000000000000001084 /* DiskHealthMonitor.swift */,
 				000000000000000000001086 /* ProcessMonitor.swift */,
@@ -507,6 +514,7 @@
 				000000000000000000001090 /* SensorsSection.swift */,
 				000000000000000000001092 /* BatteryDetailSection.swift */,
 				000000000000000000001094 /* NetworkDetailSection.swift */,
+				000000000000000000008095 /* NetworkTrafficSection.swift */,
 				000000000000000000001096 /* TopProcessesSection.swift */,
 				000000000000000000008021 /* IdleAppsSection.swift */,
 				000000000000000000008029 /* ActionShareManager.swift */,
@@ -520,6 +528,7 @@
 				000000000000000000001056 /* Assets.xcassets */,
 				000000000000000000001058 /* PrivacyInfo.xcprivacy */,
 				000000000000000000004001 /* signatures.json */,
+				000000000000000000008097 /* tracker-domains.json */,
 				000000000000000000009001 /* GetHealthScoreIntent.swift */,
 				000000000000000000009003 /* GetCPUUsageIntent.swift */,
 				000000000000000000009005 /* GetBatteryHealthIntent.swift */,
@@ -855,6 +864,7 @@
 				000000000000000000001057 /* Assets.xcassets in Resources */,
 				000000000000000000001059 /* PrivacyInfo.xcprivacy in Resources */,
 				000000000000000000004002 /* signatures.json in Resources */,
+				000000000000000000008098 /* tracker-domains.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -951,6 +961,8 @@
 				000000000000000000008026 /* SnippetEditorView.swift in Sources */,
 				000000000000000000008028 /* SnippetListSection.swift in Sources */,
 				000000000000000000008030 /* ActionShareManager.swift in Sources */,
+				000000000000000000008094 /* NetworkTrafficMonitor.swift in Sources */,
+				000000000000000000008096 /* NetworkTrafficSection.swift in Sources */,
 				000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */,
 				000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */,
 				000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */,
