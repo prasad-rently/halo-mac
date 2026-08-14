@@ -49,6 +49,7 @@ For the iOS & Android platform feature mapping see `docs/MOBILE_PLATFORM_FEATURE
 - [x] Siri Shortcuts / App Intents (v4.0) — F-042: 8 AppIntents (GetHealthScore, GetCPUUsage, GetBatteryHealth, GetDiskSpace, RunSmartScan, RunAction with HaloAction AppEntity + EntityQuery, GetClipboardHistory with count parameter, ExportReport returning IntentFile PDF), HaloShortcutsProvider with Siri phrases for all 8 intents, AppState.shared static reference for intent access
 - [x] Siri Shortcuts / App Intents (v4.0) — F-042: 8 AppIntents (GetHealthScore, GetCPUUsage, GetBatteryHealth, GetDiskSpace, RunSmartScan, RunAction, GetClipboardHistory, ExportReport), HaloShortcutsProvider with Siri phrases, HaloAction AppEntity for action discovery in Shortcuts.app, IntentFile PDF export
 - [x] Drive Read & Write Speed Test (v4.1) — F-043 / NFeat-121: "Drive Speed" tab in Files module with `DriveSpeedTester` actor; enumerates internal & external volumes; uncached (`F_NOCACHE`) sequential write+read benchmark with `F_FULLFSYNC` durability flush and incompressible random payload; 3-pass multi-sample run reporting both average (sustained) and optimal (peak) MB/s; Quick/Standard/Thorough sizes (128 MB/512 MB/1 GB); live progress, cancellation, friendly error banner for read-only/permission-denied volumes
+- [x] Browser Cleaner — F-024: "Browsers" tab in Cleanup module with `BrowserCleanerScanner` actor; per-category checklist (HTTP cache, GPU shader cache, browsing/download history, cookies, sessions, crash reports, site data) for Safari/Chrome/Arc/Brave/Edge/Opera/Vivaldi/Firefox; paths verified live for Safari/Chrome/Arc, long-stable documented paths for the rest; per-category review sheet, "Clean All Browsers" + per-browser buttons, `trashItem`-only deletion
 
 ---
 
@@ -260,7 +261,6 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 
 | ID | Feature | Effort | Summary |
 |----|---------|--------|---------|
-| F-024 | **Browser Cleaner** | ~2 d | Detects Safari/Chrome/Firefox/Edge/Brave/Arc. Per-browser checklist: HTTP cache, GPU shader cache, history, cookies, crash reports. Master "Clean All" + per-browser buttons. |
 | F-025 | **Duplicate Photos Finder (pHash)** | ~5 d | Perceptual hash clustering for near-duplicate images — same photo at different compressions/crops/sizes. Side-by-side comparison, auto-selects best copy. PhotoKit + loose files. |
 | F-026 | **Downloads Folder Organiser** | ~2 d | Categorises ~/Downloads by type + size. Cross-references .dmg/.pkg installers with installed apps — marks "safe to remove". Stale files list. Optional sort-into-subfolders. |
 | F-030 | **iCloud Storage Analyser** | ~4 d | Donut chart of iCloud quota by category. Drill-down into iCloud Drive files by size. Savings opportunities: large evictable files, duplicate synced files, old device backups. |
@@ -282,7 +282,6 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 **Quick wins** (low effort, immediate value — implement first):
 - F-019 Security Posture Dashboard (~1.5 d)
 - F-022 Time Machine Backup Health (~1.5 d)
-- F-024 Browser Cleaner (~2 d)
 - F-026 Downloads Organiser (~2 d)
 - F-029 Scheduled Reports (~2 d)
 

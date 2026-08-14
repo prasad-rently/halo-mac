@@ -3,19 +3,25 @@ import SwiftUI
 struct CleanupView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var viewModel = CleanupViewModel()
+    @StateObject private var browserViewModel = BrowserCleanerViewModel()
     @State private var selectedCategory: CleanupKind = .systemCaches
 
     var body: some View {
         HStack(spacing: 0) {
             // Left Panel — Categories
-            CleanupSidebar(selectedCategory: $selectedCategory, viewModel: viewModel)
+            CleanupSidebar(selectedCategory: $selectedCategory, viewModel: viewModel, browserViewModel: browserViewModel)
                 .frame(width: 260)
             Divider().background(Color.haloBorder)
-            // Right Panel — File List
-            CleanupFileList(category: selectedCategory, viewModel: viewModel)
+            // Right Panel — File List (or the Browsers pane for that one category)
+            if selectedCategory == .browsers {
+                BrowserCleanerPane(viewModel: browserViewModel)
+            } else {
+                CleanupFileList(category: selectedCategory, viewModel: viewModel)
+            }
         }
         .background(Color.haloSurface)
         .task { await viewModel.scanAll() }
+        .task { await browserViewModel.loadAll() }
     }
 }
 
@@ -101,6 +107,13 @@ final class CleanupViewModel: ObservableObject {
 struct CleanupSidebar: View {
     @Binding var selectedCategory: CleanupKind
     @ObservedObject var viewModel: CleanupViewModel
+    @ObservedObject var browserViewModel: BrowserCleanerViewModel
+
+    private var combinedTotalBytes: Int64 { viewModel.totalBytes + browserViewModel.totalBytes }
+    private var combinedTotalFormatted: String {
+        ByteCountFormatter.string(fromByteCount: combinedTotalBytes, countStyle: .file)
+    }
+    private var isScanningAny: Bool { viewModel.isScanning || browserViewModel.isLoading }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -111,16 +124,16 @@ struct CleanupSidebar: View {
                         .font(HaloFont.display(22, weight: .bold))
                         .foregroundColor(.haloText)
                     Spacer()
-                    if viewModel.isScanning {
+                    if isScanningAny {
                         ProgressView().scaleEffect(0.6).tint(.haloAccent)
                     }
                 }
 
                 VStack(spacing: 3) {
-                    Text(viewModel.isScanning ? "Scanning…" : viewModel.totalFormatted)
+                    Text(isScanningAny ? "Scanning…" : combinedTotalFormatted)
                         .font(HaloFont.display(30, weight: .heavy))
                         .foregroundColor(.haloAccent)
-                        .animation(.easeOut, value: viewModel.totalFormatted)
+                        .animation(.easeOut, value: combinedTotalFormatted)
                     Text("total removable")
                         .font(HaloFont.body(11))
                         .foregroundColor(.haloText2)
@@ -141,12 +154,19 @@ struct CleanupSidebar: View {
             ScrollView {
                 VStack(spacing: 2) {
                     ForEach(CleanupKind.allCases) { kind in
-                        let cat = viewModel.category(for: kind)
-                        CleanupCategoryRow(
-                            kind: kind,
-                            category: cat,
-                            isSelected: selectedCategory == kind
-                        ) { selectedCategory = kind }
+                        if kind == .browsers {
+                            BrowserCleanupCategoryRow(
+                                browserViewModel: browserViewModel,
+                                isSelected: selectedCategory == kind
+                            ) { selectedCategory = kind }
+                        } else {
+                            let cat = viewModel.category(for: kind)
+                            CleanupCategoryRow(
+                                kind: kind,
+                                category: cat,
+                                isSelected: selectedCategory == kind
+                            ) { selectedCategory = kind }
+                        }
                     }
                 }
                 .padding(.vertical, 8)

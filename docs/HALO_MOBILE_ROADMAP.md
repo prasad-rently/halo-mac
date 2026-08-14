@@ -116,6 +116,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | **SMS console (F-044)** | 🟡 | ✅ | Android sync source; iOS viewer only | P0 | Planned (F-044) |
 | **Expenditure (F-048)** | ✅ | ✅ | Parse device SMS (Android) / cloud (iOS) | P1 | Planned (F-048) |
 | **Clipboard sync (F-045)** | 🟡 | 🟡 | F-045 (AccessibilityService Android) | P1 | Planned (F-045) |
+| **Browser Cleaner (F-024)** | ❌ | ❌ | Sandbox blocks reading/deleting another app's (browser's) data entirely | — | Won't do |
 
 ---
 
@@ -209,6 +210,7 @@ Copy this block into a study when assessing a feature for mobile.
 
 | Date | Change |
 |------|--------|
+| 2026-08 | F-024 Browser Cleaner assessed (§9): ❌/❌ Won't do — app sandbox on both platforms blocks any cross-app data access, which is the feature's entire premise. |
 | 2026-07 | Formal feasibility studies added (§9): Code Beautifier, Snippets, Speed Test, cloud AI. |
 | 2026-07 | Document created. Assessed all shipped desktop capabilities (F-001–F-043) + planned cloud features (F-044–F-048) for iOS/Android. Established governance rules. First wave specced: F-044/F-045/F-048/F-049/F-050. |
 
@@ -257,3 +259,14 @@ promote to `Planned` (spec) when scheduled.
 - **Scope on mobile:** full chat + context (clipboard/selection/share-sheet input); **trimmed** agent toolset.
 - **Effort:** iOS ~5 d · Android ~6 d (three providers + streaming + Keystore). **Dependencies:** F-049 shell; mirrors F-046 desktop architecture.
 - **Verdict:** **Port (chat) + Adapt (agentic)** → **P1**. **Recommendation:** high value on mobile; ship chat + context first, add the small mobile tool set incrementally. Consider sharing the Swift provider layer between macOS + iOS.
+
+### Feasibility — Browser Cleaner (from desktop F-024)
+- **Desktop capability:** per-category clearable-data breakdown (HTTP cache, GPU shader cache, history, cookies, sessions, crash reports, site data) for every installed browser (Safari, Chrome, Arc, Brave, Edge, Opera, Vivaldi, Firefox), read straight from each browser's on-disk profile directories under `~/Library`, cleared via `trashItem` after a per-category review sheet.
+- **iOS mechanism:** none. The App Sandbox gives every app (Halo included) its own container; there is no entitlement, public API, or file-system path that lets one app enumerate, measure, or delete another app's data — not even Safari's, which iOS treats as system-owned. Verdict ❌
+- **Android mechanism:** none for third-party browsers. Scoped Storage (Android 10+) and per-app sandboxing block reading another app's private data directory (`/data/data/<pkg>/`) without root; there is no equivalent of `PackageManager`'s "clear app cache" call exposed to third-party apps for other packages (only `ActivityManager.clearApplicationUserData()` on **your own** app, or sending the user to system Settings → App Info → Storage → Clear Cache for a specific app one at a time). Verdict ❌
+- **OS blockers:** full app-sandbox isolation on both platforms — this is a *directly opposed* design goal to what the desktop feature does (cross-app file access), not a reduced/coarser version of it.
+- **Permissions required:** none exist that would grant this; there is no permission to request.
+- **Store-policy risk:** N/A — not implementable, so no submission risk, but attempting to shell out to another app's container (e.g. via root/jailbreak tricks) would be an instant App Store / Play Store rejection if ever attempted.
+- **Scope on mobile:** none. The closest honest mobile analogue is a deep link to the OS's own per-app storage settings (`UIApplication.openSettingsURLString` / Android's `ACTION_APPLICATION_DETAILS_SETTINGS`), which is already effectively covered by the existing general **Cleanup** row above (🟡 Android / ❌ iOS) — no dedicated Browser Cleaner feature adds anything beyond that.
+- **Effort:** N/A. **Dependencies:** none.
+- **Verdict:** **Blocked** → no priority. **Recommendation:** Won't do on either platform. Do not revisit unless a future OS ships a cross-app storage-management API (none exists or is rumored as of this writing).
