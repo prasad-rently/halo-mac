@@ -116,6 +116,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | **SMS console (F-044)** | 🟡 | ✅ | Android sync source; iOS viewer only | P0 | Planned (F-044) |
 | **Expenditure (F-048)** | ✅ | ✅ | Parse device SMS (Android) / cloud (iOS) | P1 | Planned (F-048) |
 | **Clipboard sync (F-045)** | 🟡 | 🟡 | F-045 (AccessibilityService Android) | P1 | Planned (F-045) |
+| **Permission Auditor (F-016)** | ❌ | 🟡 | iOS exposes zero introspection into other apps' TCC/permission grants — no viable path; Android `PackageManager` can enumerate other installed apps' declared + granted permissions, gated by `QUERY_ALL_PACKAGES` visibility and Play policy | P3 | Assessed ✓ (§9) |
 
 ---
 
@@ -209,6 +210,7 @@ Copy this block into a study when assessing a feature for mobile.
 
 | Date | Change |
 |------|--------|
+| 2026-08 | Desktop F-016 (Permission Auditor) shipped. Feasibility study added (§9): iOS blocked (no cross-app TCC introspection exists); Android adapted via `PackageManager` permission enumeration, gated by `QUERY_ALL_PACKAGES` visibility policy → P3. |
 | 2026-07 | Formal feasibility studies added (§9): Code Beautifier, Snippets, Speed Test, cloud AI. |
 | 2026-07 | Document created. Assessed all shipped desktop capabilities (F-001–F-043) + planned cloud features (F-044–F-048) for iOS/Android. Established governance rules. First wave specced: F-044/F-045/F-048/F-049/F-050. |
 
@@ -257,3 +259,14 @@ promote to `Planned` (spec) when scheduled.
 - **Scope on mobile:** full chat + context (clipboard/selection/share-sheet input); **trimmed** agent toolset.
 - **Effort:** iOS ~5 d · Android ~6 d (three providers + streaming + Keystore). **Dependencies:** F-049 shell; mirrors F-046 desktop architecture.
 - **Verdict:** **Port (chat) + Adapt (agentic)** → **P1**. **Recommendation:** high value on mobile; ship chat + context first, add the small mobile tool set incrementally. Consider sharing the Swift provider layer between macOS + iOS.
+
+### Feasibility — Permission Auditor (from desktop F-016)
+- **Desktop capability:** `PermissionAuditor` actor reads real per-app TCC grants from `TCC.db` via the `sqlite3` CLI when the file is readable (Full Disk Access / non-sandboxed build); groups grants by `PermissionKind` with a risk flag for non-browser/non-communication apps holding Screen Recording or Accessibility, plus per-app "Revoke" deep-links into System Settings. Falls back honestly to a category-card-only view with an explanatory banner when the database can't be read — never a fabricated audit.
+- **iOS mechanism:** no public API lets a third-party app enumerate *other* apps' TCC grants — Apple treats "what can app X access" as exactly the kind of cross-app introspection the sandbox exists to prevent. There's no TCC.db-equivalent file an app could reach, sandboxed or not; this is stricter than the desktop's Full-Disk-Access gate, which at least has an *unlock*. Verdict ❌
+- **Android mechanism:** `PackageManager.getInstalledPackages(PackageManager.GET_PERMISSIONS)` (or `getPackageInfo` per app) returns the permissions each *other* installed app declares and whether they're currently granted (`checkPermission`) — a genuinely real, public per-app permission list, unlike anything iOS offers. The catch: seeing the full installed-app list at all requires either individual `<queries>` package-name declarations (impractical for an open-ended auditor) or the `QUERY_ALL_PACKAGES` permission, which Play Console requires a declared-use justification for (a security/anti-virus/device-management app is an accepted category, but review can reject overly broad justifications). Verdict 🟡
+- **OS blockers:** iOS: absolute — no cross-app permission visibility exists at any privilege level available to a normal App Store app. Android: no blocker to reading the data once package visibility is granted, but the visibility grant itself is a Play-policy checkpoint, not a technical one.
+- **Permissions required:** iOS — none possible (moot, since there's nothing to read). Android — `QUERY_ALL_PACKAGES` (special access, declared-use form on Play Console) or a curated `<queries>` list of specific package names (no special review, but only covers apps you enumerate up front).
+- **Store-policy risk:** iOS — no risk since no attempt is made. Android — moderate; `QUERY_ALL_PACKAGES` is one of Play's more heavily scrutinized declared-use permissions, and rejection/removal risk exists if the stated purpose ("show the user which apps can access what") isn't judged proportionate to the visibility gained.
+- **Scope on mobile:** iOS — none; not even a reduced version, since the underlying data simply isn't exposed (the mobile screen would have to be pure static guidance to "check Settings → Privacy yourself," which is not really an "auditor"). Android — a real, if narrower, adaptation: per-app permission list + granted/denied state + the same non-browser/non-communication risk heuristic as desktop, scoped to whatever the `QUERY_ALL_PACKAGES` justification allows, with Settings deep-links per app (`Settings.ACTION_APPLICATION_DETAILS_SETTINGS`) replacing the desktop's per-category System Settings anchors.
+- **Effort:** iOS — N/A (not built). Android ~2.5 d (PackageManager enumeration + `QUERY_ALL_PACKAGES` Play Console justification flow + risk heuristic port + Settings deep-links). **Dependencies:** F-049 shell.
+- **Verdict:** **Blocked (iOS)** / **Adapt (Android)** → **P3**. **Recommendation:** skip iOS entirely rather than ship a hollow "guidance only" screen that doesn't audit anything. Android is buildable but should wait until there's a stronger case for taking on `QUERY_ALL_PACKAGES` review risk for a single feature — bundle it with other package-visibility features (e.g. Applications list, Launch-at-boot) if it's ever prioritized, so the declared-use justification covers more surface area at once.

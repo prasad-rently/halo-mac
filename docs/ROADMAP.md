@@ -49,6 +49,7 @@ For the iOS & Android platform feature mapping see `docs/MOBILE_PLATFORM_FEATURE
 - [x] Siri Shortcuts / App Intents (v4.0) — F-042: 8 AppIntents (GetHealthScore, GetCPUUsage, GetBatteryHealth, GetDiskSpace, RunSmartScan, RunAction with HaloAction AppEntity + EntityQuery, GetClipboardHistory with count parameter, ExportReport returning IntentFile PDF), HaloShortcutsProvider with Siri phrases for all 8 intents, AppState.shared static reference for intent access
 - [x] Siri Shortcuts / App Intents (v4.0) — F-042: 8 AppIntents (GetHealthScore, GetCPUUsage, GetBatteryHealth, GetDiskSpace, RunSmartScan, RunAction, GetClipboardHistory, ExportReport), HaloShortcutsProvider with Siri phrases, HaloAction AppEntity for action discovery in Shortcuts.app, IntentFile PDF export
 - [x] Drive Read & Write Speed Test (v4.1) — F-043 / NFeat-121: "Drive Speed" tab in Files module with `DriveSpeedTester` actor; enumerates internal & external volumes; uncached (`F_NOCACHE`) sequential write+read benchmark with `F_FULLFSYNC` durability flush and incompressible random payload; 3-pass multi-sample run reporting both average (sustained) and optimal (peak) MB/s; Quick/Standard/Thorough sizes (128 MB/512 MB/1 GB); live progress, cancellation, friendly error banner for read-only/permission-denied volumes
+- [x] Permission Auditor (v4.2) — F-016: `PermissionAuditor` actor in the Protection module attempts a real per-app read of `TCC.db` via `sqlite3`; when readable (non-sandboxed/Full Disk Access), replaces the category-card grid with a per-category expandable list of real app grants, a risk flag for non-browser/non-communication apps holding Screen Recording or Accessibility, per-app "Revoke" deep-links into System Settings, and an "X of Y apps excessive" summary; when unreadable (sandboxed release, no Full Disk Access), falls back honestly to the original category-card-only grid with an explanatory banner — never a fabricated per-app audit
 
 ---
 
@@ -238,7 +239,6 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 
 | ID | Feature | Effort | Summary |
 |----|---------|--------|---------|
-| F-016 | **Permission Auditor** | ~3 d | Full map of every app's TCC permissions (mic, camera, screen recording, full disk access). Risk-flags excessive grants. Deep-links to System Settings pane per permission. |
 | F-017 | **Network Traffic Monitor** | ~5 d | Live per-app, per-domain network activity table. Flags telemetry/tracker domains from a bundled list. Read-only — no blocking. Complements existing Network section. |
 | F-018 | **Privacy Data Exposure Scanner** | ~3 d | Scans Downloads/Documents/Desktop for files containing API keys, credit card numbers, SSH private keys, SSNs. Regex-based, entirely on-device. Results grouped by risk level. |
 | F-019 | **Security Posture Dashboard** | ~1.5 d | Checklist of 8 macOS security settings: FileVault, Gatekeeper, SIP, Secure Boot, Find My, Firewall, auto-updates, login window. One-click deep-links. Security Score feeds into health score. |
@@ -287,7 +287,6 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 - F-029 Scheduled Reports (~2 d)
 
 **Core differentiators** (medium effort, highest strategic value):
-- F-016 Permission Auditor
 - F-020 S.M.A.R.T. Disk Health
 - F-027 Snippet Manager
 - F-030 iCloud Storage Analyser
