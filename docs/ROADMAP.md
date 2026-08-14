@@ -49,6 +49,7 @@ For the iOS & Android platform feature mapping see `docs/MOBILE_PLATFORM_FEATURE
 - [x] Siri Shortcuts / App Intents (v4.0) — F-042: 8 AppIntents (GetHealthScore, GetCPUUsage, GetBatteryHealth, GetDiskSpace, RunSmartScan, RunAction with HaloAction AppEntity + EntityQuery, GetClipboardHistory with count parameter, ExportReport returning IntentFile PDF), HaloShortcutsProvider with Siri phrases for all 8 intents, AppState.shared static reference for intent access
 - [x] Siri Shortcuts / App Intents (v4.0) — F-042: 8 AppIntents (GetHealthScore, GetCPUUsage, GetBatteryHealth, GetDiskSpace, RunSmartScan, RunAction, GetClipboardHistory, ExportReport), HaloShortcutsProvider with Siri phrases, HaloAction AppEntity for action discovery in Shortcuts.app, IntentFile PDF export
 - [x] Drive Read & Write Speed Test (v4.1) — F-043 / NFeat-121: "Drive Speed" tab in Files module with `DriveSpeedTester` actor; enumerates internal & external volumes; uncached (`F_NOCACHE`) sequential write+read benchmark with `F_FULLFSYNC` durability flush and incompressible random payload; 3-pass multi-sample run reporting both average (sustained) and optimal (peak) MB/s; Quick/Standard/Thorough sizes (128 MB/512 MB/1 GB); live progress, cancellation, friendly error banner for read-only/permission-denied volumes
+- [x] Memory Leak & App Bloat Tracker (v4.2) — F-023: `MemoryTrendTracker` extends `ProcessMonitor` with per-app RAM sampling (every 30s, rolling 2-hour window, persisted as JSON in Application Support — not SQLite, matching this codebase's existing JSON-over-UserDefaults convention); "Memory Trends" sub-section below Top Processes in the Performance module with per-app sparklines; "Possible memory leak" badge after >1 hour of monotonic growth (15% drop-from-peak or a 5-minute observation gap resets the streak); confirmed terminate+relaunch "Restart App" button on flagged apps; per-app RAM alert (default 2 GB, user-configurable) wired into the existing `AlertManager`
 
 ---
 
@@ -252,7 +253,6 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 | F-020 | **S.M.A.R.T. Disk Health Monitor** | ~3 d | IOKit-based drive health via S.M.A.R.T. attributes: health %, temperature, TBW, reallocated sectors, power-on hours. Lifespan estimate vs manufacturer TBW rating. Alerts on degradation. |
 | F-021 | **App Usage & Screen Time Analytics** | ~3 d | Tracks active foreground time per app using NSWorkspace notifications. Weekly bar chart, context-switch score, "background hog" list. All local — no cloud. |
 | F-022 | **Time Machine Backup Health Monitor** | ~1.5 d | Last backup time, destination free space, 30-day backup-frequency heatmap. Alert if no backup in 48 h. "Back Up Now" button via `tmutil`. |
-| F-023 | **Memory Leak & App Bloat Tracker** | ~3 d | Per-app RAM sparkline (2-hour rolling window). Flags monotonically-growing apps as "Possible leak". Inline Restart button. Alert when any app exceeds configurable threshold. |
 
 ---
 
@@ -294,7 +294,6 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 
 **Ambitious long-term** (high effort, strong market positioning):
 - F-017 Network Traffic Monitor
-- F-023 Memory Leak Tracker
 - F-025 Duplicate Photos Finder (pHash)
 
 ---

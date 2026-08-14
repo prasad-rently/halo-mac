@@ -28,6 +28,7 @@ struct AlertEntry: Identifiable, Codable {
         case "battery_low":       return "battery.25"
         case "battery_critical":  return "battery.0"
         case "charging_done":     return "bolt.fill"
+        case "app_memory_high":   return "memorychip.fill"   // F-023
         default:                  return "bell.fill"
         }
     }
@@ -38,6 +39,7 @@ struct AlertEntry: Identifiable, Codable {
         case "disk_low", "battery_low":      return .haloAmber
         case "battery_critical":             return .haloRed
         case "charging_done":                return .haloGreen
+        case "app_memory_high":              return .haloAmber   // F-023
         default:                             return .haloAccent
         }
     }

@@ -19,11 +19,16 @@ final class AlertManager {
         case batteryLow     = "battery_low"
         case batteryCritical = "battery_critical"
         case chargingDone   = "charging_done"
+        case appMemoryHigh  = "app_memory_high"   // F-023
     }
 
     // MARK: - State
 
     private var lastFired: [AlertKind: Date] = [:]
+
+    // F-023 — per-app cooldown, keyed by bundle ID rather than `AlertKind` so
+    // one app crossing the RAM threshold doesn't suppress another's alert.
+    private var lastFiredPerApp: [String: Date] = [:]
 
     // Tracks whether we've already fired the "CPU sustained high" state
     // (needs 10 consecutive seconds > threshold before firing)
@@ -113,26 +118,52 @@ final class AlertManager {
         }
     }
 
-    // MARK: - Fire helper
+    // MARK: - F-023 — per-app RAM threshold check
+    //
+    // Called from MemoryTrendTracker after every 30 s sample round — a
+    // separate entry point from evaluate() because it fires per-app rather
+    // than once per system-wide metric, and needs its own cooldown dictionary
+    // keyed by bundle ID (see `lastFiredPerApp`) instead of the shared
+    // `lastFired` dictionary, which only has room for one Date per `AlertKind`.
+    func checkAppMemory(appName: String, bundleID: String, ramMB: Double) {
+        let thresholdGB = UserDefaults.standard.double(forKey: "memoryLeakAlertThresholdGB").nonZero
+            ?? MemoryTrendTracker.defaultAlertThresholdGB
+        guard ramMB >= thresholdGB * 1024 else { return }
+
+        let cooldown: TimeInterval = 1800   // 30 min — same order as the other high-usage alerts
+        if let last = lastFiredPerApp[bundleID], Date().timeIntervalSince(last) < cooldown { return }
+        lastFiredPerApp[bundleID] = Date()
+
+        post(
+            title: "\(appName) Using High Memory",
+            body: String(format: "%@ is using %.1f GB of RAM. Consider restarting it.", appName, ramMB / 1024),
+            kindRaw: AlertKind.appMemoryHigh.rawValue
+        )
+    }
+
+    // MARK: - Fire helpers
 
     private func fire(_ kind: AlertKind, title: String, body: String, cooldown: TimeInterval) {
         if let last = lastFired[kind], Date().timeIntervalSince(last) < cooldown { return }
         lastFired[kind] = Date()
+        post(title: title, body: body, kindRaw: kind.rawValue)
+    }
 
+    private func post(title: String, body: String, kindRaw: String) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
 
         let request = UNNotificationRequest(
-            identifier: "\(kind.rawValue)-\(Int(Date().timeIntervalSince1970))",
+            identifier: "\(kindRaw)-\(Int(Date().timeIntervalSince1970))",
             content: content,
             trigger: nil   // deliver immediately
         )
         UNUserNotificationCenter.current().add(request)
 
         // F-011: persist to in-app alert history log
-        AlertLog.shared.append(title: title, body: body, kindRaw: kind.rawValue)
+        AlertLog.shared.append(title: title, body: body, kindRaw: kindRaw)
     }
 
     // MARK: - Permission request

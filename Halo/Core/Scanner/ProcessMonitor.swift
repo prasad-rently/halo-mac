@@ -21,6 +21,20 @@ actor ProcessMonitor {
 
     enum SortKey: Sendable { case cpu, ram }
 
+    // MARK: - F-023 — per-app RAM sample (memory trend tracking)
+
+    /// One RAM reading for a regular (Dock-visible) running application.
+    /// Distinct from `ProcessInfo` above because F-023 needs an identity that
+    /// survives a relaunch (bundle ID), not just the PID — a "Restart App"
+    /// action changes the PID but must keep the same rolling history.
+    struct AppRAMSample: Sendable {
+        let pid: Int32
+        let bundleID: String
+        let name: String
+        let bundlePath: String?
+        let ramMB: Double
+    }
+
     // MARK: - Private state
 
     private var previousCPUInfo: [Int32: (user: UInt64, sys: UInt64, total: UInt64)] = [:]
@@ -59,6 +73,32 @@ actor ProcessMonitor {
         }
 
         return Array(sorted.prefix(limit))
+    }
+
+    // MARK: - F-023 — running-app RAM sampling
+
+    /// Samples RAM usage for every regular (Dock-visible) running application,
+    /// reusing the same `proc_taskinfo` resident-size read as `processInfo(pid:elapsed:)`
+    /// above — this EXTENDS the existing per-process sampling rather than duplicating it,
+    /// it just re-keys by bundle ID (via `NSRunningApplication`) instead of PID, and skips
+    /// the CPU-delta bookkeeping that F-023 doesn't need.
+    /// Called every 30 s by `MemoryTrendTracker`, independent of the 3 s Top Processes timer.
+    func runningAppRAMSamples() -> [AppRAMSample] {
+        let apps = NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }
+        var samples: [AppRAMSample] = []
+        for app in apps {
+            guard let bundleID = app.bundleIdentifier else { continue }
+            let pid = app.processIdentifier
+            var info = proc_taskinfo()
+            let size = MemoryLayout<proc_taskinfo>.size
+            let ret = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &info, Int32(size))
+            guard ret > 0 else { continue }
+            let ramMB = Double(info.pti_resident_size) / 1_048_576
+            let name = app.localizedName ?? processName(pid: pid)
+            samples.append(AppRAMSample(pid: pid, bundleID: bundleID, name: name,
+                                         bundlePath: app.bundleURL?.path, ramMB: ramMB))
+        }
+        return samples
     }
 
     // MARK: - Per-process info

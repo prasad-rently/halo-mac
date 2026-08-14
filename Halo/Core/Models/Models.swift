@@ -257,6 +257,42 @@ struct SystemMaintenanceTask: Identifiable {
     }
 }
 
+// MARK: - Memory Trend Tracking (F-023)
+
+/// One RAM reading for a tracked app, taken every 30 s by `MemoryTrendTracker`.
+struct MemorySample: Codable, Sendable {
+    let date: Date
+    let ramMB: Double
+}
+
+/// Rolling per-app RAM history, persisted as JSON (see `MemoryTrendTracker`).
+/// Keyed by bundle ID rather than PID so a "Restart App" (which changes the PID)
+/// keeps the same history instead of starting a fresh sparkline.
+struct AppMemoryHistory: Codable, Identifiable, Sendable {
+    var id: String { bundleID }
+    let bundleID: String
+    var appName: String
+    /// Path to the .app bundle, used to relaunch via `NSWorkspace.openApplication(at:configuration:)`
+    /// after a "Restart App". Nil only if the app vanished before we ever recorded a path.
+    var bundlePath: String?
+    /// Ascending by date. Trimmed to the rolling 2-hour window on every sample.
+    var samples: [MemorySample]
+}
+
+/// Computed leak-detection result for one app's history. Never persisted —
+/// always recomputed fresh from `samples` so a stale flag can never survive
+/// a real RAM drop, and copy always says "possible", never "confirmed".
+struct MemoryLeakStatus: Sendable {
+    let isPossibleLeak: Bool
+    /// When the current unbroken growth streak began (nil if no growth streak is active).
+    let streakStartDate: Date?
+    /// RAM at the start of the current streak, for the "+N MB since HH:mm" readout.
+    let streakStartRAMMB: Double
+    let currentRAMMB: Double
+
+    static let empty = MemoryLeakStatus(isPossibleLeak: false, streakStartDate: nil, streakStartRAMMB: 0, currentRAMMB: 0)
+}
+
 // MARK: - Application Models
 
 struct InstalledApp: Identifiable {
