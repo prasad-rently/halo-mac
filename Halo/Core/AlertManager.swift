@@ -19,6 +19,7 @@ final class AlertManager {
         case batteryLow     = "battery_low"
         case batteryCritical = "battery_critical"
         case chargingDone   = "charging_done"
+        case backupStale    = "backup_stale"   // F-022
     }
 
     // MARK: - State
@@ -111,6 +112,24 @@ final class AlertManager {
                  body: "Connect your charger soon.",
                  cooldown: 1800)
         }
+    }
+
+    // MARK: - Time Machine backup health (F-022)
+
+    /// Called separately from `evaluate()` — Time Machine status comes from
+    /// `tmutil` shell calls (tens of ms each), far too heavy for the 2 s
+    /// metrics tick. `AppState` polls this on its own longer-interval timer
+    /// and passes the result in here. A 24 h cooldown makes this a genuinely
+    /// "persistent" alert — it keeps recurring daily until a backup runs,
+    /// rather than firing once and going silent.
+    func evaluateBackup(status: TimeMachineStatus) {
+        guard status.isStale, let last = status.lastBackupDate else { return }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        fire(.backupStale,
+             title: "Time Machine Backup Overdue",
+             body: "Your last backup was \(formatter.localizedString(for: last, relativeTo: Date())). Connect your backup drive or run one now.",
+             cooldown: 86400) // once per day until resolved
     }
 
     // MARK: - Fire helper

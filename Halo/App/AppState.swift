@@ -85,6 +85,11 @@ final class AppState: ObservableObject {
     // MARK: Phase 3 — Network Intelligence (P3-05)
     @Published var isVPNActive: Bool = false
 
+    // MARK: Time Machine Backup Health (F-022)
+    @Published var timeMachineStatus: TimeMachineStatus = .notConfigured
+    @Published var isCheckingTimeMachine: Bool = false
+    @Published var isStartingBackup: Bool = false
+
     // MARK: Phase 3 — Bandwidth History (P3-10)
     /// Rolling 30-sample (60 s) buffers — appended in refreshMetrics(), max 30 entries.
     /// Must be @Published so NetworkSparklineCard re-renders on every tick.
@@ -113,6 +118,10 @@ final class AppState: ObservableObject {
     private let alertManager = AlertManager()
     private let networkMonitor = NetworkDetailMonitor()
 
+    // F-022
+    private let timeMachineMonitor = TimeMachineMonitor()
+    private var timeMachineTimer: AnyCancellable?
+
     init() {
         systemMonitor = SystemMonitor()
         startMetricsPolling()
@@ -124,6 +133,7 @@ final class AppState: ObservableObject {
         startClipboardMonitoring()
         setupHotkeys()
         startNetworkMonitoring()
+        startTimeMachineMonitoring()
         AlertManager.requestPermission()
     }
 
@@ -203,6 +213,40 @@ final class AppState: ObservableObject {
                 }
             }
         }
+    }
+
+    // MARK: - Time Machine Backup Health (F-022)
+
+    /// `tmutil` shell calls are tens of ms each — far too heavy for the 2 s
+    /// metrics tick, and backup status doesn't change that fast anyway.
+    /// Runs once at launch, then every 15 minutes, which is frequent enough
+    /// for the 48 h "stale" alert to fire in a timely way without any real cost.
+    private func startTimeMachineMonitoring() {
+        Task { await refreshTimeMachineStatus() }
+        timeMachineTimer = Timer.publish(every: 900.0, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                Task { await self?.refreshTimeMachineStatus() }
+            }
+    }
+
+    func refreshTimeMachineStatus() async {
+        isCheckingTimeMachine = true
+        let status = await timeMachineMonitor.status()
+        timeMachineStatus = status
+        isCheckingTimeMachine = false
+        alertManager.evaluateBackup(status: status)
+    }
+
+    /// "Back Up Now" — a normal, user-initiated Time Machine backup identical
+    /// to the menu bar icon's own action. Re-checks status afterward so the
+    /// card reflects the in-progress state without waiting for the next tick.
+    func startTimeMachineBackupNow() async {
+        guard !isStartingBackup else { return }
+        isStartingBackup = true
+        _ = await timeMachineMonitor.startBackupNow()
+        await refreshTimeMachineStatus()
+        isStartingBackup = false
     }
 
     private func writeWidgetData() {

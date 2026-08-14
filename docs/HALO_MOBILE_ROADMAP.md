@@ -116,6 +116,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | **SMS console (F-044)** | 🟡 | ✅ | Android sync source; iOS viewer only | P0 | Planned (F-044) |
 | **Expenditure (F-048)** | ✅ | ✅ | Parse device SMS (Android) / cloud (iOS) | P1 | Planned (F-048) |
 | **Clipboard sync (F-045)** | 🟡 | 🟡 | F-045 (AccessibilityService Android) | P1 | Planned (F-045) |
+| **Time Machine Backup Health (F-022)** | ❌ | ❌ | Time Machine is a macOS-only concept — no iOS/Android equivalent exists to read. Reimagined separately as the iOS-exclusive "iCloud Backup Health" idea (§5), which is a different, much coarser feature, not a port. | — | Assessed ✓ (§9) |
 
 ---
 
@@ -166,6 +167,7 @@ A phone unlocks capabilities Halo desktop never could — these should be
 | **Device security posture** (lock, encryption, OS patch) | ✅ | ✅ | Read-only checks + advice |
 | **Call log / spam insight** | ❌ | 🟡 | Android CallLog (policy-heavy); iOS none |
 | **Battery/charging habits** | 🟡 | ✅ | Charging history + advice |
+| **iCloud Backup Health** (iOS-exclusive) | 🟡 | ❌ | No public API for actual backup timestamp/size on either OS; iOS: `UIDevice.identifierForVendor` + Settings deep-link only, so the "health" signal is a link, not real data. Android: no equivalent — Google's own backup status isn't exposed to third-party apps either. |
 
 > These are the reason a Halo *phone* app is compelling beyond "companion to
 > desktop." SMS + expenditure (already specced) are the flagship examples.
@@ -209,6 +211,7 @@ Copy this block into a study when assessing a feature for mobile.
 
 | Date | Change |
 |------|--------|
+| 2026-08 | Desktop F-022 (Time Machine Backup Health Monitor) shipped. Feasibility study added (§9): Won't do / Reimagine → Time Machine has no mobile equivalent; the mobile-exclusive "iCloud Backup Health" idea (§5) is a distinct, much coarser reimagining, not a port. |
 | 2026-07 | Formal feasibility studies added (§9): Code Beautifier, Snippets, Speed Test, cloud AI. |
 | 2026-07 | Document created. Assessed all shipped desktop capabilities (F-001–F-043) + planned cloud features (F-044–F-048) for iOS/Android. Established governance rules. First wave specced: F-044/F-045/F-048/F-049/F-050. |
 
@@ -257,3 +260,15 @@ promote to `Planned` (spec) when scheduled.
 - **Scope on mobile:** full chat + context (clipboard/selection/share-sheet input); **trimmed** agent toolset.
 - **Effort:** iOS ~5 d · Android ~6 d (three providers + streaming + Keystore). **Dependencies:** F-049 shell; mirrors F-046 desktop architecture.
 - **Verdict:** **Port (chat) + Adapt (agentic)** → **P1**. **Recommendation:** high value on mobile; ship chat + context first, add the small mobile tool set incrementally. Consider sharing the Swift provider layer between macOS + iOS.
+
+### Feasibility — Time Machine Backup Health Monitor (from desktop F-022)
+- **Desktop capability:** `TimeMachineMonitor` actor parses `tmutil destinationinfo` / `latestbackup` / `listbackups` / `status` (all read-only shell calls) into last-backup time, destination free space, and a 30-day backup-frequency heatmap; alerts when a configured destination goes 48h+ without a backup; "Back Up Now" triggers `tmutil startbackup`.
+- **iOS mechanism:** Time Machine is a macOS-only technology — there is no concept of a local/network backup destination, no `tmutil`-equivalent CLI, and no API exposing backup snapshot history to a third-party app. Verdict ❌.
+- **Android mechanism:** same absence — Android has no Time-Machine-like local backup system for third-party apps to observe at all. Verdict ❌.
+- **OS blockers:** not a permission or sandbox limit — the underlying *concept* Time Machine represents (versioned local/network snapshots of the whole filesystem) simply doesn't exist as a mobile OS primitive. Nothing to port.
+- **Permissions required:** n/a.
+- **Store-policy risk:** n/a.
+- **Scope on mobile:** none, as a direct port. The nearest analogous mobile idea is the pre-existing "iCloud Backup Health" entry in §5 — but that's a *reimagining*, not this feature: it can only report a coarse, mostly-decorative "last backup" signal via `UIDevice.identifierForVendor` + a Settings deep-link, since iOS doesn't expose real iCloud backup timestamps/size to third-party apps either, and Android has no equivalent concept to reimagine at all (Google's own device-backup status isn't exposed to third-party apps).
+- **Effort:** n/a (Won't do) for the direct port; the separate "iCloud Backup Health" idea is iOS-only, ~1 d, advisory-only.
+- **Verdict:** **Won't do** (direct port) → the desktop feature has no mobile home. **Reimagine** as "iCloud Backup Health" (§5) tracked as its own, much smaller idea → **P3**.
+- **Recommendation:** don't treat F-022 as pending mobile work — it's fully addressed by this study. If "iCloud Backup Health" is ever built, scope it as a single link-out advisory row bundled into the mobile app shell (F-049) rather than a dedicated feature — there isn't enough real, readable data to justify more.

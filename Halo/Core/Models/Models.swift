@@ -490,3 +490,67 @@ extension ClipboardItem {
               copiedDate: Date().addingTimeInterval(-100000), sourceApp: "Xcode")
     ]
 }
+
+// MARK: - Time Machine Backup Health (F-022)
+
+/// Snapshot of Time Machine's real state, built entirely from `tmutil` output
+/// and volume metadata. `isConfigured == false` means Halo found no Time
+/// Machine destination at all — the UI must show an honest empty state, never
+/// a fabricated "healthy" card or empty heatmap as if backups exist.
+struct TimeMachineStatus: Sendable {
+    var isConfigured: Bool
+    var destinationName: String? = nil
+    var mountPoint: String? = nil
+    /// Whether the destination volume is currently mounted/reachable (it can
+    /// be configured but disconnected, e.g. an external HDD that's unplugged).
+    var isReachable: Bool = false
+    var availableBytes: Int64? = nil
+    var totalBytes: Int64? = nil
+    /// Most recent backup Halo could find, from `tmutil latestbackup` or,
+    /// failing that, the newest entry in `tmutil listbackups`.
+    var lastBackupDate: Date? = nil
+    var isBackupRunning: Bool = false
+    /// All snapshot dates found via `tmutil listbackups` — used to build the
+    /// 30-day heatmap. Empty when unknown; never fabricated.
+    var backupDates: [Date] = []
+
+    static let notConfigured = TimeMachineStatus(isConfigured: false)
+
+    /// True only when Halo has a real last-backup date and it's 48h+ old.
+    /// Never true for "no data" — that's the separate `.notConfigured` state.
+    var isStale: Bool {
+        guard isConfigured, let last = lastBackupDate else { return false }
+        return Date().timeIntervalSince(last) > (48 * 3600)
+    }
+
+    var spaceUsedRatio: Double? {
+        guard let available = availableBytes, let total = totalBytes, total > 0 else { return nil }
+        return 1 - (Double(available) / Double(total))
+    }
+}
+
+/// One day's cell in the 30-day backup-frequency heatmap.
+enum BackupDayState: Equatable {
+    case backedUp   // a snapshot exists for this calendar day
+    case late       // 1 day since the most recent snapshot on/before this day
+    case missed     // 2+ days since the most recent snapshot on/before this day
+    /// No backup history is known for this day at all (before the earliest
+    /// known snapshot, or Time Machine has never produced one) — a neutral
+    /// gray cell, never colored red as if a backup was "missed".
+    case noData
+
+    var color: Color {
+        switch self {
+        case .backedUp: return .haloGreen
+        case .late: return .haloAmber
+        case .missed: return .haloRed
+        case .noData: return .haloBorder
+        }
+    }
+}
+
+struct BackupHeatmapDay: Identifiable {
+    let id = UUID()
+    let date: Date
+    let state: BackupDayState
+}
