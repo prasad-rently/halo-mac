@@ -219,6 +219,93 @@ enum PermissionKind: String, CaseIterable {
     }
 }
 
+// MARK: - Security Posture (F-019)
+
+struct SecurityCheck: Identifiable {
+    let id: UUID = UUID()
+    let kind: SecurityCheckKind
+    let state: SecurityCheckState
+    /// One-line, human-readable statement of the current value (not a description of the setting).
+    let detail: String
+}
+
+enum SecurityCheckState {
+    case pass, warn, fail
+    /// Halo has no reliable, sandbox-safe way to read this setting — never guessed, never faked.
+    case unknown
+
+    var color: Color {
+        switch self {
+        case .pass: return .haloGreen
+        case .warn: return .haloAmber
+        case .fail: return .haloRed
+        case .unknown: return .haloText3
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .pass: return "checkmark.circle.fill"
+        case .warn: return "exclamationmark.triangle.fill"
+        case .fail: return "xmark.circle.fill"
+        case .unknown: return "questionmark.circle.fill"
+        }
+    }
+}
+
+enum SecurityCheckKind: String, CaseIterable {
+    case fileVault = "FileVault Encryption"
+    case gatekeeper = "Gatekeeper"
+    case firewall = "Application Firewall"
+    case automaticUpdates = "Automatic Security Updates"
+    case sip = "System Integrity Protection"
+    case secureBoot = "Secure Boot"
+    case findMy = "Find My Mac"
+    case loginWindow = "Login Window Security"
+
+    var icon: String {
+        switch self {
+        case .fileVault: return "lock.doc.fill"
+        case .gatekeeper: return "checkmark.shield.fill"
+        case .firewall: return "flame.fill"
+        case .automaticUpdates: return "arrow.triangle.2.circlepath"
+        case .sip: return "lock.shield.fill"
+        case .secureBoot: return "bolt.shield.fill"
+        case .findMy: return "location.magnifyingglass"
+        case .loginWindow: return "person.badge.key.fill"
+        }
+    }
+
+    var explanation: String {
+        switch self {
+        case .fileVault: return "Encrypts your entire disk so it's unreadable without your password."
+        case .gatekeeper: return "Blocks apps that aren't signed by an identified developer."
+        case .firewall: return "Blocks unsolicited incoming network connections."
+        case .automaticUpdates: return "Installs critical macOS security patches without waiting for you."
+        case .sip: return "Prevents even root processes from modifying protected system files."
+        case .secureBoot: return "Verifies the OS hasn't been tampered with at startup. Only changeable in Recovery Mode."
+        case .findMy: return "Lets you locate, lock, or erase this Mac remotely if it's lost or stolen."
+        case .loginWindow: return "Controls whether the login screen shows a user list or requires typing a name."
+        }
+    }
+
+    /// nil when there's no direct System Settings toggle (e.g. SIP/Secure Boot require Recovery Mode).
+    var settingsURL: URL? {
+        switch self {
+        case .fileVault, .gatekeeper, .firewall:
+            return URL(string: "x-apple.systempreferences:com.apple.preference.security")
+        case .automaticUpdates:
+            return URL(string: "x-apple.systempreferences:com.apple.preferences.softwareupdate")
+        case .sip, .secureBoot:
+            return nil
+        case .findMy:
+            return URL(string: "x-apple.systempreferences:com.apple.preferences.AppleIDPrefPane")
+        case .loginWindow:
+            return URL(string: "x-apple.systempreferences:com.apple.preferences.users")
+        }
+    }
+}
+
 // MARK: - Performance Models
 
 struct LoginItem: Identifiable {

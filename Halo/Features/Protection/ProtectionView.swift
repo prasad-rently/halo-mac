@@ -8,6 +8,7 @@ struct ProtectionView: View {
             VStack(spacing: 24) {
                 ProtectionHeader(viewModel: viewModel)
                 ScannerCardsRow(viewModel: viewModel)
+                SecurityPostureSection(viewModel: viewModel)
                 PermissionsAuditSection(viewModel: viewModel)
                 LaunchAgentsSection(viewModel: viewModel)
             }
@@ -44,7 +45,13 @@ final class ProtectionViewModel: ObservableObject {
     @Published var launchAgents: [RealLaunchAgentItem] = []
     @Published var isLoadingAgents = false
 
+    // Security Posture (F-019)
+    @Published var securityChecks: [SecurityCheck] = []
+    @Published var isLoadingSecurity = false
+    var securityScore: Int { SecurityPostureScanner.score(for: securityChecks) }
+
     private let scanner = ProtectionScanner()
+    private let securityScanner = SecurityPostureScanner()
 
     enum ScanState: Equatable {
         case idle, scanning(progress: Double), complete(clean: Bool), found(count: Int)
@@ -75,6 +82,7 @@ final class ProtectionViewModel: ObservableObject {
             group.addTask { await self.loadPermissions() }
             group.addTask { await self.loadInstalledBrowsers() }
             group.addTask { await self.loadLaunchAgents() }
+            group.addTask { await self.loadSecurityPosture() }
         }
     }
 
@@ -143,6 +151,14 @@ final class ProtectionViewModel: ObservableObject {
         isLoadingAgents = true
         launchAgents = await scanner.scanLaunchAgents()
         isLoadingAgents = false
+    }
+
+    // MARK: Security Posture (F-019)
+
+    func loadSecurityPosture() async {
+        isLoadingSecurity = true
+        securityChecks = await securityScanner.scan()
+        isLoadingSecurity = false
     }
 }
 
@@ -604,6 +620,109 @@ struct PermissionCard: View {
             }
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Security Posture (F-019)
+
+struct SecurityPostureSection: View {
+    @ObservedObject var viewModel: ProtectionViewModel
+
+    private var scoreColor: Color {
+        switch viewModel.securityScore {
+        case 80...100: return .haloGreen
+        case 50..<80:  return .haloAmber
+        default:       return .haloRed
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                HaloSectionHeader(
+                    title: "Security Posture",
+                    subtitle: "Read-only checks of key macOS security settings"
+                )
+                Spacer()
+                if viewModel.isLoadingSecurity {
+                    ProgressView().scaleEffect(0.6).tint(.haloAccent)
+                } else if !viewModel.securityChecks.isEmpty {
+                    HStack(spacing: 6) {
+                        HaloBadge(text: "\(viewModel.securityScore)/100", color: scoreColor)
+                        Button {
+                            Task { await viewModel.loadSecurityPosture() }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 12))
+                                .foregroundColor(.haloText2)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            if viewModel.isLoadingSecurity {
+                HStack(spacing: 10) {
+                    ProgressView().scaleEffect(0.8).tint(.haloAccent)
+                    Text("Checking security settings…")
+                        .font(HaloFont.body(13))
+                        .foregroundColor(.haloText2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(Color.haloSurface2)
+                .cornerRadius(12)
+            } else {
+                LazyVStack(spacing: 6) {
+                    ForEach(viewModel.securityChecks) { check in
+                        SecurityCheckRow(check: check)
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct SecurityCheckRow: View {
+    let check: SecurityCheck
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: check.kind.icon)
+                .font(.system(size: 14))
+                .foregroundColor(.haloAccent)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(check.kind.rawValue)
+                    .font(HaloFont.body(13, weight: .semibold))
+                    .foregroundColor(.haloText)
+                Text(check.detail)
+                    .font(HaloFont.body(11))
+                    .foregroundColor(.haloText2)
+            }
+
+            Spacer()
+
+            Image(systemName: check.state.icon)
+                .font(.system(size: 14))
+                .foregroundColor(check.state.color)
+
+            if let url = check.kind.settingsURL {
+                Button {
+                    NSWorkspace.shared.open(url)
+                } label: {
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.haloText3)
+                }
+                .buttonStyle(.plain)
+                .help("Open in System Settings")
+            }
+        }
+        .padding(12)
+        .background(Color.haloSurface2)
+        .cornerRadius(10)
     }
 }
 

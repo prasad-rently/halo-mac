@@ -54,6 +54,9 @@ final class AppState: ObservableObject {
     @Published var batteryHealth: Double = 0
     @Published var batteryCycles: Int = 0
     @Published var systemHealthScore: Int = 0
+    // F-019: optimistic default until the one-time launch scan completes, so we
+    // never show a false "unhealthy" score before Halo has had a chance to check.
+    @Published var securityScore: Int = 100
 
     // MARK: Scan State
     @Published var lastSmartScanDate: Date? = UserDefaults.standard.object(forKey: "lastSmartScanDate") as? Date
@@ -112,6 +115,7 @@ final class AppState: ObservableObject {
     // Phase 3
     private let alertManager = AlertManager()
     private let networkMonitor = NetworkDetailMonitor()
+    private let securityScanner = SecurityPostureScanner()
 
     init() {
         systemMonitor = SystemMonitor()
@@ -124,6 +128,7 @@ final class AppState: ObservableObject {
         startClipboardMonitoring()
         setupHotkeys()
         startNetworkMonitoring()
+        startSecurityPostureCheck()
         AlertManager.requestPermission()
     }
 
@@ -205,6 +210,19 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Security Posture (F-019)
+
+    /// Runs once at launch — these settings rarely change, so there's no
+    /// value in re-checking on the 2 s metrics timer. The Protection module's
+    /// own "Refresh" button re-scans independently for the on-screen checklist.
+    private func startSecurityPostureCheck() {
+        Task {
+            let checks = await securityScanner.scan()
+            let score = SecurityPostureScanner.score(for: checks)
+            await MainActor.run { self.securityScore = score }
+        }
+    }
+
     private func writeWidgetData() {
         let previews = clipboardItems.prefix(5).compactMap { item -> String? in
             if case .text(let s) = item.content { return s }
@@ -244,6 +262,9 @@ final class AppState: ObservableObject {
         else if diskUsedRatio > 0.75 { score -= 10 }
         if batteryHealth < 0.7 { score -= 10 }
         else if batteryHealth < 0.85 { score -= 5 }
+        // F-019: modest weight — a secondary factor, not a dominant one, and
+        // never penalizes the checks Halo can't reliably verify (see SecurityPostureScanner.score).
+        if securityScore < 100 { score -= (100 - securityScore) / 4 }
         return max(0, min(100, score))
     }
 

@@ -116,6 +116,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | **SMS console (F-044)** | 🟡 | ✅ | Android sync source; iOS viewer only | P0 | Planned (F-044) |
 | **Expenditure (F-048)** | ✅ | ✅ | Parse device SMS (Android) / cloud (iOS) | P1 | Planned (F-048) |
 | **Clipboard sync (F-045)** | 🟡 | 🟡 | F-045 (AccessibilityService Android) | P1 | Planned (F-045) |
+| **Security Posture Dashboard (F-019)** | ❌ | 🟡 | Both OSes block reading passcode/encryption/Find-My status from 3rd-party apps → reimagine as an advisory checklist + Settings deep-links only, no automated pass/fail scoring | P3 | Assessed ✓ (§9) |
 
 ---
 
@@ -209,6 +210,7 @@ Copy this block into a study when assessing a feature for mobile.
 
 | Date | Change |
 |------|--------|
+| 2026-08 | Desktop F-019 (Security Posture Dashboard) shipped. Feasibility study added (§9): Reimagine → P3, advisory-only checklist, no automated scoring possible on either platform. |
 | 2026-07 | Formal feasibility studies added (§9): Code Beautifier, Snippets, Speed Test, cloud AI. |
 | 2026-07 | Document created. Assessed all shipped desktop capabilities (F-001–F-043) + planned cloud features (F-044–F-048) for iOS/Android. Established governance rules. First wave specced: F-044/F-045/F-048/F-049/F-050. |
 
@@ -257,3 +259,14 @@ promote to `Planned` (spec) when scheduled.
 - **Scope on mobile:** full chat + context (clipboard/selection/share-sheet input); **trimmed** agent toolset.
 - **Effort:** iOS ~5 d · Android ~6 d (three providers + streaming + Keystore). **Dependencies:** F-049 shell; mirrors F-046 desktop architecture.
 - **Verdict:** **Port (chat) + Adapt (agentic)** → **P1**. **Recommendation:** high value on mobile; ship chat + context first, add the small mobile tool set incrementally. Consider sharing the Swift provider layer between macOS + iOS.
+
+### Feasibility — Security Posture Dashboard (from desktop F-019)
+- **Desktop capability:** 8-check security dashboard (`SecurityPostureScanner`) feeding a 0–100 score into the health score. 4 checks are genuinely auto-verified via read-only shell calls (FileVault, Gatekeeper, Application Firewall, Automatic Updates); the other 4 (SIP, Secure Boot, Find My Mac, Login Window) have no reliable non-interactive read path even on macOS, so they surface as an honest "check manually" row with a deep-link rather than a guessed verdict.
+- **iOS mechanism:** no public API exposes passcode/biometric state, on-disk-encryption state, or Find My Mac/iPhone status to a third-party app — Apple treats this as a privacy boundary, not an oversight. Verdict ❌ for automated checks.
+- **Android mechanism:** `KeyguardManager.isDeviceSecure()` can confirm *a* lock screen is set (coarse pass/fail, no detail on which kind). Play Protect status is readable only via Play Integrity API (adds a Google Play Services dependency for one data point). Find My Device status is not exposed to third-party apps, matching iOS. Verdict 🟡 (partial, one usable signal).
+- **OS blockers:** both platforms treat "can another app read my security settings" as exactly the kind of thing a security-conscious OS should refuse — stronger and more deliberate than most other Halo desktop capabilities' sandbox limits.
+- **Permissions required:** none extra for the one Android signal (`isDeviceSecure()` needs no permission); Play Integrity API would need a Google Cloud project + API key, disproportionate for a single checklist row.
+- **Store-policy risk:** low if kept purely advisory (deep-links to native Settings screens); would rise if the app tried device-admin APIs to get more signal — Play Store reviews `DevicePolicyManager` device-admin usage heavily.
+- **Scope on mobile:** a static advisory checklist (lock screen, Find My, auto-update, "install from unknown sources") with deep-links into native Settings — no automated pass/fail scoring, since neither OS will hand that over. The desktop's honest "unknown, check manually" row *is* what the entire mobile version would look like.
+- **Effort:** iOS ~1 d (static list + deep links) · Android ~2 d (same + the one live `isDeviceSecure()` signal). **Dependencies:** F-049 shell.
+- **Verdict:** **Reimagine** → **P3**. **Recommendation:** defer as standalone work — thin value without real scoring. Revisit only as a low-cost "security tips" screen bundled into the mobile app shell (F-049), not a dedicated feature.
