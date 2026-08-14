@@ -54,7 +54,9 @@ Halo/
 │   │       ├── ProtectionScanner.swift   async; uses SignatureDatabase for threat detection
 │   │       ├── LoginItemScanner.swift    actor; enumerates LaunchAgent/Daemon plists
 │   │       ├── AppScanner.swift          actor; enumerates apps + leftover detection
-│   │       └── DriveSpeedTester.swift     actor; internal/external drive read+write benchmark (F-043)
+│   │       ├── DriveSpeedTester.swift     actor; internal/external drive read+write benchmark (F-043)
+│   │       ├── PrivacyExposureScanner.swift  actor; scans Downloads/Documents/Desktop for exposed secrets (F-018)
+│   │       └── PrivacyPatternDatabase.swift  actor; loads privacy-patterns.json, matches + redacts (F-018)
 │   ├── DesignSystem/DesignSystem.swift   colours, components, typography
 │   ├── Intents/
 │   │   ├── GetHealthScoreIntent.swift
@@ -395,6 +397,21 @@ codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
 
 ---
 
+## PrivacyExposureScanner / PrivacyPatternDatabase (F-018)
+
+`Halo/Core/Scanner/PrivacyExposureScanner.swift` + `Halo/Core/Scanner/PrivacyPatternDatabase.swift` + `Halo/Features/Protection/ProtectionView.swift` (`PrivacyExposureSection`)
+
+- `actor PrivacyExposureScanner` — recursive, read-only scan of Downloads/Documents/Desktop (iCloud Drive local folder is opt-in, off by default) for files containing sensitive data. `func scan(locations:config:) -> AsyncStream<ScanEvent>`.
+- Skips: symlinks; a fixed noise-directory denylist (`.git`, `node_modules`, `Library`, `DerivedData`, `.build`, etc.); files > 10 MB (`ScanConfig.maxFileSizeBytes`); a large binary-extension denylist; anything that fails a null-byte peek heuristic on the first 8 KB (`ScanConfig.peekBytes`) — this catches misnamed/extension-less binaries the extension list misses.
+- `actor PrivacyPatternDatabase` — singleton `.shared`; mirrors `SignatureDatabase`'s bundle-first / cached-update-wins load from `Halo/Resources/privacy-patterns.json`. **All matching and redaction happen inside this actor** — `func evaluate(text:) -> [PrivacyPatternHit]` returns only pre-redacted previews; the full matched secret never leaves the actor's local scope.
+- Three match types in `privacy-patterns.json`: `"exact"` (SSH PEM headers), `"regex"` (AWS/GitHub/Stripe key prefixes, SSN), `"luhnCandidate"` (credit card digit runs — regex finds candidates, each is Luhn-checksum validated before being reported; this is what keeps the false-positive rate down versus a raw digit-count regex).
+- **Detection categories:** `PrivacyExposureCategory` — `.creditCard`, `.awsKey`, `.githubToken`, `.stripeKey`, `.sshPrivateKey`, `.ssn`. "Hardcoded passwords in config files" from the original brainstorm was deliberately **not** implemented — no prefix/checksum precision exists for that shape, and a generic key=value heuristic would flood results with false positives.
+- **Redaction is mandatory, not incidental** — `PrivacyPatternDatabase.redact(_:category:)` is the only path that produces a `PrivacyPatternHit`'s `redactedPreview` (e.g. `sk_live_••••••••3f2a`, `•••• •••• •••• 3f2a`). No `print`/`NSLog`/`os_log` call anywhere in this feature touches a raw matched value; findings live only in `ProtectionViewModel.privacyFindings` for the current session — never persisted to disk or `UserDefaults`.
+- **Find-only, no delete path** — the only action on a `PrivacyExposureFinding` is `ProtectionViewModel.revealInFinder(_:)` (`NSWorkspace.activateFileViewerSelecting`). There is no quarantine/delete capability anywhere in this feature, by design.
+- `PrivacyScanLocation.defaultLocations` = Downloads/Documents/Desktop; `PrivacyScanLocation.iCloudDriveLocation()` resolves lazily (not a stored static) since `url(forUbiquityContainerIdentifier:)` can block briefly — only called when the user opts in via the iCloud toggle.
+
+---
+
 ## MenuBar Display Styles
 
 `Halo/Features/MenuBar/MenuBarView.swift`
@@ -437,7 +454,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 |--------|------|-----------|---------|-------|
 | Dashboard | ✅ | AppState | SystemMonitor | — |
 | Cleanup | ✅ | CleanupViewModel | FileSystemScanner | — |
-| Protection | ✅ | ProtectionViewModel | SignatureDatabase ✅ | — |
+| Protection | ✅ | ProtectionViewModel | SignatureDatabase ✅ + PrivacyExposureScanner ✅ | — |
 | Performance | ✅ | PerformanceViewModel | SystemMonitor + LoginItemScanner | — |
 | Applications | ✅ | ApplicationsViewModel | AppScanner | — |
 | Files (SpaceLens) | ✅ | SpaceLensViewModel | — | — |
@@ -500,6 +517,9 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `8025` / `8026` | SnippetEditorView.swift file ref / sources build file |
 | `8027` / `8028` | SnippetListSection.swift file ref / sources build file |
 | `8029` / `8030` | ActionShareManager.swift file ref / sources build file |
+| `8083` / `8084` | PrivacyExposureScanner.swift file ref / sources build file |
+| `8085` / `8086` | PrivacyPatternDatabase.swift file ref / sources build file |
+| `8087` / `8088` | privacy-patterns.json file ref / resource build file |
 | `9001` / `9002` | GetHealthScoreIntent.swift file ref / sources build file |
 | `9003` / `9004` | GetCPUUsageIntent.swift file ref / sources build file |
 | `9005` / `9006` | GetBatteryHealthIntent.swift file ref / sources build file |

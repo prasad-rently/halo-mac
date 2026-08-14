@@ -219,6 +219,107 @@ enum PermissionKind: String, CaseIterable {
     }
 }
 
+// MARK: - Privacy Exposure Scanner (F-018)
+
+/// A single sensitive-data hit found on disk. The full matched secret is NEVER
+/// stored on this type (or anywhere else) — only a redacted preview built by
+/// `PrivacyPatternDatabase` at match time. See `PrivacyExposureScanner`.
+struct PrivacyExposureFinding: Identifiable {
+    let id: UUID = UUID()
+    let category: PrivacyExposureCategory
+    let riskLevel: PrivacyExposureRiskLevel
+    let fileURL: URL
+    /// e.g. "sk_live_••••••••3f2a" — safe to show in the UI; the real value is discarded after this is built.
+    let redactedPreview: String
+    let modifiedDate: Date?
+    let fileSizeBytes: Int64
+
+    var fileName: String { fileURL.lastPathComponent }
+    var displayPath: String { fileURL.path.replacingOccurrences(of: NSHomeDirectory(), with: "~") }
+    var fileSizeFormatted: String { ByteCountFormatter.string(fromByteCount: fileSizeBytes, countStyle: .file) }
+}
+
+enum PrivacyExposureRiskLevel: String, CaseIterable, Comparable {
+    case critical = "Critical"
+    case warning = "Warning"
+    case info = "Info"
+
+    /// Declaration order defines severity ordering: Critical > Warning > Info.
+    private var sortIndex: Int {
+        switch self {
+        case .critical: return 0
+        case .warning: return 1
+        case .info: return 2
+        }
+    }
+    static func < (lhs: Self, rhs: Self) -> Bool { lhs.sortIndex < rhs.sortIndex }
+
+    var color: Color {
+        switch self {
+        case .critical: return .haloRed
+        case .warning: return .haloAmber
+        case .info: return .haloAccent
+        }
+    }
+}
+
+enum PrivacyExposureCategory: String, CaseIterable {
+    case creditCard = "Credit Card Number"
+    case awsKey = "AWS Access Key"
+    case githubToken = "GitHub Token"
+    case stripeKey = "Stripe API Key"
+    case sshPrivateKey = "SSH Private Key"
+    case ssn = "Social Security Number"
+
+    var icon: String {
+        switch self {
+        case .creditCard: return "creditcard.fill"
+        case .awsKey: return "key.fill"
+        case .githubToken: return "chevron.left.forwardslash.chevron.right"
+        case .stripeKey: return "dollarsign.circle.fill"
+        case .sshPrivateKey: return "lock.rectangle.stack.fill"
+        case .ssn: return "person.text.rectangle.fill"
+        }
+    }
+}
+
+/// A user-writable location Halo can scan for sensitive data. Downloads, Documents,
+/// and Desktop are on by default; iCloud Drive's local folder is opt-in only — per
+/// spec it must never be scanned unless the user explicitly enables it.
+struct PrivacyScanLocation: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let url: URL
+    let isEnabledByDefault: Bool
+
+    static let downloads = PrivacyScanLocation(
+        id: "downloads", name: "Downloads",
+        url: FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory() + "/Downloads"),
+        isEnabledByDefault: true)
+    static let documents = PrivacyScanLocation(
+        id: "documents", name: "Documents",
+        url: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory() + "/Documents"),
+        isEnabledByDefault: true)
+    static let desktop = PrivacyScanLocation(
+        id: "desktop", name: "Desktop",
+        url: FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory() + "/Desktop"),
+        isEnabledByDefault: true)
+
+    /// Resolved lazily (not a stored static) — `url(forUbiquityContainerIdentifier:)`
+    /// can block briefly on first call and should only run when the user opts in.
+    static func iCloudDriveLocation() -> PrivacyScanLocation? {
+        guard let container = FileManager.default.url(forUbiquityContainerIdentifier: nil) else { return nil }
+        return PrivacyScanLocation(id: "icloud", name: "iCloud Drive",
+                                    url: container.appendingPathComponent("Documents"),
+                                    isEnabledByDefault: false)
+    }
+
+    static let defaultLocations: [PrivacyScanLocation] = [.downloads, .documents, .desktop]
+}
+
 // MARK: - Performance Models
 
 struct LoginItem: Identifiable {

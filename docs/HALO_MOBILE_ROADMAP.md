@@ -85,6 +85,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | Dashboard — GPU / temp / sensors | ❌ | 🟡 | No public GPU; Android thermal coarse | P3 | Assessed |
 | **Cleanup** (caches/logs/trash) | ❌ | 🟡 | Sandbox: own-cache only; Android → guide to Storage settings | P3 | Assessed |
 | **Protection** (malware scan) | ❌ | 🟡 | iOS blocks scanning; Android limited pkg/file heuristics | P3 | Assessed |
+| Protection — **Privacy/Sensitive Data Scanner (F-018)** | 🟡 | 🟡 | Scoped to user-picked folders (SAF/document picker) — no broad Downloads/Desktop sweep | P3 | Assessed ✓ (§9) |
 | **Performance — top processes** | ❌ | ❌ | No public live-process enumeration | — | Won't do |
 | Performance — login items | ❌ | ❌ | No equivalent concept | — | Won't do |
 | Performance — VPN detection | ✅ | ✅ | NetworkExtension / ConnectivityManager | P2 | Assessed |
@@ -209,6 +210,7 @@ Copy this block into a study when assessing a feature for mobile.
 
 | Date | Change |
 |------|--------|
+| 2026-08 | Feasibility study added (§9) for Privacy/Sensitive Data Scanner (F-018); row added to §3. |
 | 2026-07 | Formal feasibility studies added (§9): Code Beautifier, Snippets, Speed Test, cloud AI. |
 | 2026-07 | Document created. Assessed all shipped desktop capabilities (F-001–F-043) + planned cloud features (F-044–F-048) for iOS/Android. Established governance rules. First wave specced: F-044/F-045/F-048/F-049/F-050. |
 
@@ -257,3 +259,15 @@ promote to `Planned` (spec) when scheduled.
 - **Scope on mobile:** full chat + context (clipboard/selection/share-sheet input); **trimmed** agent toolset.
 - **Effort:** iOS ~5 d · Android ~6 d (three providers + streaming + Keystore). **Dependencies:** F-049 shell; mirrors F-046 desktop architecture.
 - **Verdict:** **Port (chat) + Adapt (agentic)** → **P1**. **Recommendation:** high value on mobile; ship chat + context first, add the small mobile tool set incrementally. Consider sharing the Swift provider layer between macOS + iOS.
+
+### Feasibility — Privacy/Sensitive Data Scanner (from desktop F-018)
+- **Desktop capability:** recursive `FileManager` scan of Downloads/Documents/Desktop (+ opt-in iCloud Drive) for exposed secrets — Luhn-validated credit card numbers, exact-prefix AWS/GitHub/Stripe keys, exact SSH private-key headers, SSN patterns — via a bundled/updatable `privacy-patterns.json`; redacted-preview-only results, "Reveal in Finder" only, no delete path.
+- **iOS mechanism:** the pattern-matching core (`PrivacyPatternDatabase` — regex + Luhn + redaction) is pure Swift/Foundation and **ports as-is**. Folder access, however, is fully sandboxed: no equivalent of "just enumerate Downloads/Desktop." The app must go through **`UIDocumentPickerViewController`** (security-scoped bookmark) per folder the user wants scanned, then walk only that scoped tree. Verdict 🟡
+- **Android mechanism:** pattern core ports to Kotlin unchanged. Folder access via the **Storage Access Framework** (`ACTION_OPEN_DOCUMENT_TREE`), persisting a `Uri` permission per folder the user grants; scan walks only that `DocumentFile` tree via `ContentResolver`. Broad filesystem access (`MANAGE_EXTERNAL_STORAGE`) is deliberately avoided — Play Store restricts that permission to file-manager-class apps and it would put the whole app's listing at review risk. Verdict 🟡
+- **OS blockers:** neither OS allows a background/automatic sweep of Downloads-equivalent folders the way macOS does; every folder must be explicitly picked by the user, per session or via a persisted scoped bookmark/URI. No scheduled background scan is realistic (no persistent full-disk grant to wake into).
+- **Permissions required:** iOS — none beyond the standard document-picker UI (no Info.plist usage-description needed since the picker itself is the consent). Android — SAF folder-grant dialog per tree (revocable by the user at any time); explicitly **not** requesting `MANAGE_EXTERNAL_STORAGE`.
+- **Store-policy risk:** low if scoped to SAF/document-picker; **high** if `MANAGE_EXTERNAL_STORAGE` were used instead — avoid.
+- **Scope on mobile:** reduced — one or more user-picked folders per run rather than a fixed Downloads/Documents/Desktop set; no iCloud-Drive-style "opt-in extra location" concept carries over 1:1 (iOS: pick the iCloud Drive folder via the same picker; Android: pick any SAF-exposed provider tree, including cloud providers that register as a `DocumentsProvider`).
+- **Effort:** iOS ~2 d (pattern port + document-picker plumbing + security-scoped bookmark persistence) · Android ~2.5 d (pattern port + SAF tree walk + persisted `Uri` permissions).
+- **Dependencies:** F-049 mobile shell.
+- **Verdict:** **Adapt / Adapt** → **P3**. **Recommendation:** defer behind Tier 1/2 — the detection engine is a cheap reuse once the mobile shell exists, but the picker-per-folder UX is a meaningfully different (and weaker) product than desktop's "just works on Downloads" story, so it isn't a priority mover on its own.

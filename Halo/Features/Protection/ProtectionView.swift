@@ -10,6 +10,7 @@ struct ProtectionView: View {
                 ScannerCardsRow(viewModel: viewModel)
                 PermissionsAuditSection(viewModel: viewModel)
                 LaunchAgentsSection(viewModel: viewModel)
+                PrivacyExposureSection(viewModel: viewModel)
             }
             .padding(28)
         }
@@ -44,10 +45,53 @@ final class ProtectionViewModel: ObservableObject {
     @Published var launchAgents: [RealLaunchAgentItem] = []
     @Published var isLoadingAgents = false
 
+    // Privacy Exposure Scanner (F-018) — find-only, no deletion capability.
+    @Published var privacyScanState: PrivacyScanState = .idle
+    @Published var privacyFindings: [PrivacyExposureFinding] = []
+    @Published var privacyLastScanDate: Date? = nil
+    @Published var privacyIncludeICloud: Bool = false
+    @Published var privacyCurrentPath: String = ""
+
     private let scanner = ProtectionScanner()
+    private let privacyScanner = PrivacyExposureScanner()
+    private var privacyScanTask: Task<Void, Never>?
 
     enum ScanState: Equatable {
         case idle, scanning(progress: Double), complete(clean: Bool), found(count: Int)
+    }
+
+    /// Separate from `ScanState` because a privacy scan has no known total file count
+    /// up front (unlike the malware scan's fixed drop-zone list), so progress is
+    /// reported as a running count rather than a percentage.
+    enum PrivacyScanState: Equatable {
+        case idle
+        case scanning(filesScanned: Int)
+        case complete(findingsCount: Int)
+    }
+
+    var privacyScanStatusText: String {
+        switch privacyScanState {
+        case .idle: return "Not yet scanned"
+        case .scanning(let n): return "Scanning… \(n) file\(n == 1 ? "" : "s") checked"
+        case .complete(let n): return n == 0 ? "No exposed sensitive data found" : "\(n) item\(n == 1 ? "" : "s") found"
+        }
+    }
+
+    var privacyScanStatusColor: Color {
+        switch privacyScanState {
+        case .idle: return .haloText2
+        case .scanning: return .haloAccent
+        case .complete(let n): return n == 0 ? .haloGreen : .haloRed
+        }
+    }
+
+    var privacyFindingsByRisk: [(PrivacyExposureRiskLevel, [PrivacyExposureFinding])] {
+        let grouped = Dictionary(grouping: privacyFindings, by: \.riskLevel)
+        return PrivacyExposureRiskLevel.allCases.compactMap { risk in
+            guard let items = grouped[risk], !items.isEmpty else { return nil }
+            let sorted = items.sorted { ($0.modifiedDate ?? .distantPast) > ($1.modifiedDate ?? .distantPast) }
+            return (risk, sorted)
+        }
     }
 
     var scanStatusText: String {
@@ -143,6 +187,52 @@ final class ProtectionViewModel: ObservableObject {
         isLoadingAgents = true
         launchAgents = await scanner.scanLaunchAgents()
         isLoadingAgents = false
+    }
+
+    // MARK: Privacy Exposure Scanner (F-018)
+
+    func runPrivacyScan() {
+        privacyScanTask?.cancel()
+        privacyScanTask = Task {
+            privacyScanState = .scanning(filesScanned: 0)
+            privacyFindings = []
+            privacyCurrentPath = ""
+
+            var locations = PrivacyScanLocation.defaultLocations.map(\.url)
+            if privacyIncludeICloud, let icloud = PrivacyScanLocation.iCloudDriveLocation() {
+                locations.append(icloud.url)
+            }
+
+            for await event in await privacyScanner.scan(locations: locations) {
+                if Task.isCancelled { break }
+                switch event {
+                case .progress(let filesScanned, let currentPath):
+                    privacyScanState = .scanning(filesScanned: filesScanned)
+                    privacyCurrentPath = currentPath
+                case .finding(let finding):
+                    privacyFindings.append(finding)
+                case .completed(_, let findingsCount):
+                    privacyLastScanDate = Date()
+                    privacyScanState = .complete(findingsCount: findingsCount)
+                    privacyCurrentPath = ""
+                case .error:
+                    privacyScanState = .complete(findingsCount: privacyFindings.count)
+                    privacyCurrentPath = ""
+                }
+            }
+        }
+    }
+
+    func cancelPrivacyScan() {
+        privacyScanTask?.cancel()
+        privacyScanTask = nil
+    }
+
+    /// Opens Finder with the file selected. This — and nothing else — is the only
+    /// action a user can take on a finding. There is deliberately no delete/quarantine
+    /// path: v1 is find-only, the user decides what to do next.
+    func revealInFinder(_ finding: PrivacyExposureFinding) {
+        NSWorkspace.shared.activateFileViewerSelecting([finding.fileURL])
     }
 }
 
@@ -728,5 +818,172 @@ struct LaunchAgentRow: View {
         .overlay(RoundedRectangle(cornerRadius: 10)
             .stroke(agent.isSuspicious ? Color.haloAmber.opacity(0.3) : Color.haloBorder,
                     lineWidth: 1))
+    }
+}
+
+// MARK: - Privacy Exposure Scanner (F-018)
+
+struct PrivacyExposureSection: View {
+    @ObservedObject var viewModel: ProtectionViewModel
+
+    private var isScanning: Bool {
+        if case .scanning = viewModel.privacyScanState { return true }
+        return false
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                HaloSectionHeader(
+                    title: "Sensitive Data Scanner",
+                    subtitle: "Scans Downloads, Documents, and Desktop for exposed credit card numbers, API keys, SSH private keys, and SSNs — find-only, nothing is ever deleted"
+                )
+                Spacer()
+                if let date = viewModel.privacyLastScanDate {
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text("Last scan")
+                            .font(HaloFont.body(10))
+                            .foregroundColor(.haloText3)
+                        Text(RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date()))
+                            .font(HaloFont.body(10, weight: .medium))
+                            .foregroundColor(.haloText2)
+                    }
+                }
+            }
+
+            HaloCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    Toggle(isOn: $viewModel.privacyIncludeICloud) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Include iCloud Drive")
+                                .font(HaloFont.body(12, weight: .medium))
+                                .foregroundColor(.haloText)
+                            Text("Off by default — Downloads, Documents, and Desktop are scanned either way.")
+                                .font(HaloFont.body(11))
+                                .foregroundColor(.haloText3)
+                        }
+                    }
+                    .toggleStyle(.switch)
+                    .disabled(isScanning)
+
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(viewModel.privacyScanStatusColor)
+                            .frame(width: 7, height: 7)
+                            .shadow(color: viewModel.privacyScanStatusColor.opacity(0.5), radius: 3)
+                        Text(viewModel.privacyScanStatusText)
+                            .font(HaloFont.body(12))
+                            .foregroundColor(viewModel.privacyScanStatusColor)
+                    }
+
+                    if isScanning, !viewModel.privacyCurrentPath.isEmpty {
+                        Text(viewModel.privacyCurrentPath)
+                            .font(HaloFont.mono(10))
+                            .foregroundColor(.haloText3)
+                            .lineLimit(1)
+                    }
+
+                    HaloPrimaryButton(
+                        isScanning ? "Scanning…" : "Run Sensitive Data Scan",
+                        icon: "magnifyingglass.circle.fill",
+                        isLoading: isScanning
+                    ) { viewModel.runPrivacyScan() }
+                    .accessibilityIdentifier("protection.privacyscan.button")
+                }
+                .padding(20)
+            }
+
+            if !viewModel.privacyFindings.isEmpty {
+                VStack(spacing: 14) {
+                    ForEach(viewModel.privacyFindingsByRisk, id: \.0) { risk, findings in
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 6) {
+                                HaloBadge(text: risk.rawValue, color: risk.color)
+                                Text("\(findings.count) item\(findings.count == 1 ? "" : "s")")
+                                    .font(HaloFont.body(11))
+                                    .foregroundColor(.haloText3)
+                            }
+                            LazyVStack(spacing: 6) {
+                                ForEach(findings) { finding in
+                                    PrivacyFindingRow(finding: finding) {
+                                        viewModel.revealInFinder(finding)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if case .complete(let count) = viewModel.privacyScanState, count == 0 {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill").foregroundColor(.haloGreen)
+                    Text("No exposed sensitive data found in the scanned locations.")
+                        .font(HaloFont.body(13))
+                        .foregroundColor(.haloText2)
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.haloSurface2)
+                .cornerRadius(12)
+            }
+        }
+    }
+}
+
+struct PrivacyFindingRow: View {
+    let finding: PrivacyExposureFinding
+    let onReveal: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: finding.category.icon)
+                .font(.system(size: 14))
+                .foregroundColor(finding.riskLevel.color)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(finding.fileName)
+                        .font(HaloFont.body(12, weight: .medium))
+                        .foregroundColor(.haloText)
+                        .lineLimit(1)
+                    Text(finding.category.rawValue)
+                        .font(HaloFont.body(10))
+                        .foregroundColor(.haloText3)
+                }
+                Text(finding.redactedPreview)
+                    .font(HaloFont.mono(11))
+                    .foregroundColor(finding.riskLevel.color)
+                    .lineLimit(1)
+                Text(finding.displayPath)
+                    .font(HaloFont.body(10))
+                    .foregroundColor(.haloText3)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 6) {
+                if let date = finding.modifiedDate {
+                    Text(RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date()))
+                        .font(HaloFont.body(10))
+                        .foregroundColor(.haloText3)
+                }
+                Button(action: onReveal) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: 10))
+                        Text("Reveal in Finder")
+                            .font(HaloFont.body(10, weight: .semibold))
+                    }
+                    .foregroundColor(.haloAccent)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(Color.haloSurface2)
+        .cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10)
+            .stroke(finding.riskLevel.color.opacity(0.25), lineWidth: 1))
     }
 }
