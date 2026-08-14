@@ -297,6 +297,8 @@ struct SettingsView: View {
     @AppStorage("scanPreferredWeekday") private var scanWeekday: Int = 2  // 1=Sun … 7=Sat (Calendar.Component)
     @AppStorage("scanPreferredHour")    private var scanHour: Int = 3      // 0–23
 
+    @State private var showClearClipboardConfirm = false
+
     var body: some View {
         TabView {
             // General
@@ -310,7 +312,6 @@ struct SettingsView: View {
                             LaunchAtLoginManager.setEnabled(newValue)
                         }
                     ))
-                    Toggle("Enable menu bar agent", isOn: $enableMenuBar)
                 }
                 // F-015: rich scan schedule UI
                 Section("Scheduled Scans") {
@@ -356,13 +357,17 @@ struct SettingsView: View {
                     Toggle("Share anonymous analytics to improve Halo", isOn: $enableAnalytics)
                 }
             }
+            .formStyle(.grouped)
             .tabItem { Label("General", systemImage: "gearshape") }
 
             // Clipboard
             Form {
                 Section("History") {
                     Stepper("Keep \(clipboardLimit) items", value: $clipboardLimit, in: 50...500, step: 50)
-                    Button("Clear All History Now", role: .destructive) {}
+                    Button("Clear All History Now", role: .destructive) {
+                        showClearClipboardConfirm = true
+                    }
+                    .disabled(appState.clipboardItems.isEmpty)
                 }
                 Section("Quick Picker Shortcut") {
                     HStack {
@@ -382,6 +387,13 @@ struct SettingsView: View {
                     Text("Clipboard items are stored only on this device and never synced to iCloud.")
                         .font(.caption).foregroundColor(.secondary)
                 }
+            }
+            .formStyle(.grouped)
+            .alert("Clear All Clipboard History?", isPresented: $showClearClipboardConfirm) {
+                Button("Clear All", role: .destructive) { appState.clearAllClipboard() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This permanently removes all \(appState.clipboardItems.count) saved clipboard items. This can't be undone.")
             }
             .tabItem { Label("Clipboard", systemImage: "doc.on.clipboard") }
 
@@ -420,30 +432,50 @@ struct SettingsView: View {
                         .font(.caption).foregroundColor(.secondary)
                 }
             }
+            .formStyle(.grouped)
             .tabItem { Label("Alerts", systemImage: "bell.fill") }
 
             // Menu Bar (P3-09)
             Form {
+                Section("Menu Bar Agent") {
+                    Toggle("Show Halo in the menu bar", isOn: $enableMenuBar)
+                    Text("Halo keeps monitoring and scanning in the background even when the menu bar icon is hidden.")
+                        .font(.caption).foregroundColor(.secondary)
+                }
                 Section("Visible Modules") {
                     Toggle("CPU usage", isOn: $showCPU)
                     Toggle("RAM pressure", isOn: $showRAM)
                     Toggle("Network ↑↓", isOn: $showNet)
                     Toggle("Battery %", isOn: $showBattery)
-                    Toggle("Disk I/O", isOn: $showDisk)
+                    Toggle("Disk free space", isOn: $showDisk)
                 }
+                .disabled(!enableMenuBar)
                 Section("Display") {
-                    // F-008: icon style picker
-                    Picker("Status Item Style", selection: $displayStyle) {
-                        ForEach(MenuBarDisplayStyle.allCases) { style in
-                            Text(style.label).tag(style.rawValue)
+                    // F-008: icon style picker — label stacked above the segmented
+                    // control (rather than Form's default trailing-label/leading-
+                    // control row) since 5 segments don't fit beside a label at
+                    // this window width without clipping.
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Status Item Style")
+                        Picker("Status Item Style", selection: $displayStyle) {
+                            ForEach(MenuBarDisplayStyle.allCases) { style in
+                                Text(style.label).tag(style.rawValue)
+                            }
                         }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
                     }
-                    .pickerStyle(.segmented)
+                    if displayStyle == MenuBarDisplayStyle.custom.rawValue {
+                        Text("Click the Halo menu bar icon → Customize to edit the token format with a live preview.")
+                            .font(.caption).foregroundColor(.secondary)
+                    }
                     Toggle("Compact mode (smaller text)", isOn: $compactMode)
                     Text("When compact mode is on, values are abbreviated (e.g. 42% → 42).")
                         .font(.caption).foregroundColor(.secondary)
                 }
+                .disabled(!enableMenuBar)
             }
+            .formStyle(.grouped)
             .tabItem { Label("Menu Bar", systemImage: "menubar.rectangle") }
 
             // Quick Actions
@@ -460,8 +492,14 @@ struct SettingsView: View {
                 Text("dev · \(Build.token)").font(.caption2).foregroundColor(.secondary)
                 Divider()
                 Button("Check for Updates") {}
+                    .disabled(true)
+                    .help("Coming soon")
                 Button("View Privacy Policy") {}
+                    .disabled(true)
+                    .help("Coming soon")
                 Button("Send Feedback") {}
+                    .disabled(true)
+                    .help("Coming soon")
             }
             .padding(40)
             .tabItem { Label("About", systemImage: "info.circle") }

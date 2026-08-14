@@ -193,7 +193,7 @@ be captured in a nonisolated closure."
   - `widgetReloadTimer` — fires every **60 s** → `WidgetCenter.shared.reloadAllTimelines()`
 - `writeWidgetData()` saves `HaloWidgetData` to `UserDefaults(suiteName: "group.com.halo.mac")` — do **NOT** call `reloadAllTimelines()` here (budget will be exhausted)
 - `calculateHealthScore()` — subtracts from 100 based on CPU/RAM/disk/battery thresholds
-- Clipboard cap: 500 items in memory; top 5 text/code/URL snippets forwarded to widget
+- Clipboard cap: user-configurable via Settings → Clipboard → "Keep N items" (`clipboardHistoryLimit` AppStorage, 50–500, default 200); top 5 text/code/URL snippets forwarded to widget
 
 ---
 

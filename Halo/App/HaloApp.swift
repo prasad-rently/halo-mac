@@ -5,6 +5,7 @@ import Sentry
 struct HaloApp: App {
     @StateObject private var appState = AppState()
     @StateObject private var menuBarManager = MenuBarManager()
+    @AppStorage("enableMenuBar") private var enableMenuBar = true
     // Under UI testing, this delegate forces the main window to open + activate
     // so XCUITest can drive the sidebar (Halo is a WindowGroup + MenuBarExtra app,
     // and the window doesn't reliably appear on a headless test launch).
@@ -88,7 +89,7 @@ struct HaloApp: App {
         }
 
         // Menu Bar Extra
-        MenuBarExtra {
+        MenuBarExtra(isInserted: $enableMenuBar) {
             MenuBarPopoverView()
                 .environmentObject(appState)
                 .environmentObject(menuBarManager)

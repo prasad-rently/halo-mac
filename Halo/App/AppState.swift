@@ -344,7 +344,10 @@ final class AppState: ObservableObject {
 
     func addClipboardItem(_ item: ClipboardItem) {
         clipboardItems.insert(item, at: 0)
-        if clipboardItems.count > 500 { clipboardItems.removeLast() }
+        let limit = UserDefaults.standard.object(forKey: "clipboardHistoryLimit") as? Int ?? 200
+        if clipboardItems.count > limit {
+            clipboardItems.removeLast(clipboardItems.count - limit)
+        }
     }
 
     func deleteClipboardItem(_ item: ClipboardItem) {

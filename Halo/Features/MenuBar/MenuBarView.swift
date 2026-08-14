@@ -207,6 +207,8 @@ struct MenuBarIconView: View {
 
     @AppStorage("menuBarDisplayStyle") private var styleRaw = MenuBarDisplayStyle.icon.rawValue
     @AppStorage("menuBarFormatString") private var formatString = "CPU {cpu}% · RAM {ram}%"
+    // P3-09: abbreviate values (42% → 42) when compact mode is on
+    @AppStorage("menuBarCompact") private var compactMode = false
 
     private var style: MenuBarDisplayStyle {
         MenuBarDisplayStyle(rawValue: styleRaw) ?? .icon
@@ -242,14 +244,15 @@ struct MenuBarIconView: View {
 
     // Style: compact "47% · 68%" text
     @ViewBuilder private var textStatsView: some View {
+        let suffix = compactMode ? "%.0f" : "%.0f%%"
         HStack(spacing: 4) {
-            Text(String(format: "%.0f%%", cpuUsage * 100))
+            Text(String(format: suffix, cpuUsage * 100))
                 .font(.system(size: 10, weight: .semibold, design: .monospaced))
                 .foregroundColor(cpuUsage > 0.85 ? .haloRed : cpuUsage > 0.60 ? .haloAmber : .primary)
             Text("·")
                 .font(.system(size: 10))
                 .foregroundColor(.secondary)
-            Text(String(format: "%.0f%%", ramUsage * 100))
+            Text(String(format: suffix, ramUsage * 100))
                 .font(.system(size: 10, weight: .semibold, design: .monospaced))
                 .foregroundColor(ramUsage > 0.90 ? .haloRed : ramUsage > 0.75 ? .haloAmber : .primary)
         }
@@ -409,23 +412,32 @@ struct MenuBarHeader: View {
 
 struct MenuBarMetricsSection: View {
     @EnvironmentObject var appState: AppState
+    // P3-09: respect module visibility settings
+    @AppStorage("menuBarShowCPU") private var showCPU = true
+    @AppStorage("menuBarShowRAM") private var showRAM = true
 
     var body: some View {
-        HStack(spacing: 10) {
-            MenuBarRingCard(
-                value: appState.cpuUsage,
-                label: String(format: "%.0f%%", appState.cpuUsage * 100),
-                subtitle: "CPU",
-                color: .haloAccent
-            )
-            MenuBarRingCard(
-                value: appState.ramUsage,
-                label: String(format: "%.0f%%", appState.ramUsage * 100),
-                subtitle: "RAM",
-                color: appState.ramUsage > 0.8 ? .haloAmber : .haloPurple
-            )
+        if showCPU || showRAM {
+            HStack(spacing: 10) {
+                if showCPU {
+                    MenuBarRingCard(
+                        value: appState.cpuUsage,
+                        label: String(format: "%.0f%%", appState.cpuUsage * 100),
+                        subtitle: "CPU",
+                        color: .haloAccent
+                    )
+                }
+                if showRAM {
+                    MenuBarRingCard(
+                        value: appState.ramUsage,
+                        label: String(format: "%.0f%%", appState.ramUsage * 100),
+                        subtitle: "RAM",
+                        color: appState.ramUsage > 0.8 ? .haloAmber : .haloPurple
+                    )
+                }
+            }
+            .padding(12)
         }
-        .padding(12)
     }
 }
 
