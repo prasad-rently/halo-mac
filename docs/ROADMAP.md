@@ -38,6 +38,7 @@ For the iOS & Android platform feature mapping see `docs/MOBILE_PLATFORM_FEATURE
 - [x] Quick Actions Phase 1 expansion (v3.0) — 24 new shell-based actions (39 total), 3 new categories (Developer, Files, Clipboard), covering system maintenance, network utils, dev tools, clipboard transforms
 - [x] Quick Actions Phase 2 expansion (v3.0) — 29 new actions (70 total), 2 new categories (Creative, Media), covering creative suite cache cleanup, clipboard transforms, media/image/video utilities
 - [x] Quick Actions Phase R1 expansion (v4.0) — 37 new actions (107 total), 3 new categories (Dock & Desktop, Display, Audio), covering Dock tinker (spacers, animations, orientation), display/screenshot controls, audio/mic management, system junk cleanup (resource forks, font cache, logs, symlinks, QuickLook, Launch Services), developer cache cleanup (CocoaPods, Gradle, Docker, pip, Homebrew)
+- [x] Scheduled Reports & Weekly Digest (F-029) — hourly `MetricsHistory` store powering a new 7-day health-score sparkline on the Dashboard; opt-in Weekly Digest local notification (day/hour picker reusing the Scheduled Scans pattern) summarising health trend, disk-free delta, scans completed, and threats flagged from `AlertLog`; PDF report share via `NSSharingServicePicker` and a "View Report" notification action
 - [x] Port Manager module (v4.0) — F-034: dedicated sidebar module with `PortScanner` actor, list/kill open TCP/UDP ports, named ports with friendly labels, configurable kill signals (ask/SIGTERM/SIGKILL), copy lsof/kill commands, 5s auto-refresh, search/sort
 - [x] Downloads Manager (v4.0) — F-026: "Downloads" tab in Files module with age-based grouping (Today/Week/Month/Older/Stale), type-based grouping, installer cross-reference with installed apps ("Safe to remove"), one-click stale cleanup, organize into subfolders by type, search/filter, breakdown bar visualization
 - [x] Customizable Menu Bar Format Strings (v4.0) — F-036: 5th "Custom" display style with user-editable format strings, 11 tokens ({cpu}, {ram}, {disk}, {battery}, {net_down}, {net_up}, {health}, etc.), 5 preset templates (Minimal/Standard/Full/Network/Battery), live preview, clickable token insertion grid
@@ -273,7 +274,6 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 |----|---------|--------|---------|
 | F-027 | **Snippet Manager** | ~3 d | Promotes clipboard items to permanent labelled snippets with tags and collections. ⌘⇧V picker gains a Snippets tab. Persists across reboots, searchable. Evolution of existing Clipboard module. |
 | F-028 | **Focus Session Companion** | ~3 d | Timed focus sessions (25/50/custom min). Auto-quits distracting apps, suppresses notifications, switches menu bar to session countdown. End-of-session efficiency summary. |
-| F-029 | **Scheduled Reports & Weekly Digest** | ~2 d | Weekly macOS notification summarising health score trend, top storage growers, high-RAM apps, backup status, threats. Optional PDF attachment via existing ReportGenerator. |
 
 ---
 
@@ -284,7 +284,6 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 - F-022 Time Machine Backup Health (~1.5 d)
 - F-024 Browser Cleaner (~2 d)
 - F-026 Downloads Organiser (~2 d)
-- F-029 Scheduled Reports (~2 d)
 
 **Core differentiators** (medium effort, highest strategic value):
 - F-016 Permission Auditor

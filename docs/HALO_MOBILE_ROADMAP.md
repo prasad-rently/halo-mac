@@ -106,6 +106,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | **Widget** | ✅ | ✅ | WidgetKit / App Widgets (Glance) | P1 | Assessed |
 | **Alert history** | ✅ | ✅ | Local notifications + log | P2 | Assessed |
 | **Report export (PDF)** | ✅ | ✅ | PDFKit / PdfDocument | P2 | Assessed |
+| **Scheduled Reports / Weekly Digest (F-029)** | ✅ | ✅ | Local notifications + BGTaskScheduler/WorkManager + share sheet, all direct equivalents of already-assessed rows above | P2 | Assessed ✓ (§9) |
 | **Siri Shortcuts / App Intents** | ✅ | 🟡 | iOS App Intents (rich); Android App Actions (lighter) | P2 | Assessed |
 | **HaloShare (P2P)** | ✅ | ✅ | LocalSend v2.1 native peer | P0 | Planned (F-050) |
 | **Code Beautifier** | ✅ | ✅ | Pure text/render + PNG export; fully portable | P1 | Assessed ✓ (§9) |
@@ -209,6 +210,7 @@ Copy this block into a study when assessing a feature for mobile.
 
 | Date | Change |
 |------|--------|
+| 2026-08 | Feasibility study added (§9): Scheduled Reports / Weekly Digest (F-029). Row added to §3 — near-full Port on both platforms, entirely composed of already-assessed primitives (local notifications, BG scheduling, PDF export, share sheet). |
 | 2026-07 | Formal feasibility studies added (§9): Code Beautifier, Snippets, Speed Test, cloud AI. |
 | 2026-07 | Document created. Assessed all shipped desktop capabilities (F-001–F-043) + planned cloud features (F-044–F-048) for iOS/Android. Established governance rules. First wave specced: F-044/F-045/F-048/F-049/F-050. |
 
@@ -257,3 +259,14 @@ promote to `Planned` (spec) when scheduled.
 - **Scope on mobile:** full chat + context (clipboard/selection/share-sheet input); **trimmed** agent toolset.
 - **Effort:** iOS ~5 d · Android ~6 d (three providers + streaming + Keystore). **Dependencies:** F-049 shell; mirrors F-046 desktop architecture.
 - **Verdict:** **Port (chat) + Adapt (agentic)** → **P1**. **Recommendation:** high value on mobile; ship chat + context first, add the small mobile tool set incrementally. Consider sharing the Swift provider layer between macOS + iOS.
+
+### Feasibility — Scheduled Reports & Weekly Digest (from desktop F-029)
+- **Desktop capability:** hourly `MetricsHistory` rolling buffer (health score + disk-free + top-RAM-process samples) feeding a 7-day Dashboard sparkline; `WeeklyDigestScheduler` (`NSBackgroundActivityScheduler`) delivers a local notification summarising the past 7 days (health trend, disk-free delta, scans completed, threats flagged) with a "View Report" action; PDF export/share via the existing `ReportGenerator` + `NSSharingServicePicker`.
+- **iOS mechanism:** `UNUserNotificationCenter` local notifications with a matching `UNNotificationCategory`/action (identical API family to macOS — near line-for-line port); **`BGAppRefreshTask`** (or `BGProcessingTask`) for the periodic compose-and-fire step, subject to iOS's opportunistic scheduling (no guaranteed exact-time fire, unlike macOS's `NSBackgroundActivityScheduler`); `PDFKit` for the report; `UIActivityViewController` in place of `NSSharingServicePicker` for the share sheet. Verdict ✅ (notification/PDF/share) / 🟡 (exact-time scheduling).
+- **Android mechanism:** local notifications via `NotificationManager` + `NotificationChannel` with an action button; **`WorkManager`** `PeriodicWorkRequest` for the compose-and-fire step (Android's battery optimizations can delay fire time similarly to iOS `BGTaskScheduler`, though `setExpedited`/exact-alarm APIs narrow the gap); `PdfDocument` for the report; `Intent.ACTION_SEND` for the share sheet. Verdict ✅ (notification/PDF/share) / 🟡 (exact-time scheduling).
+- **OS blockers:** neither mobile OS guarantees a background task fires at a user-picked exact day/hour the way `NSBackgroundActivityScheduler` does on a running Mac — both platforms treat this as a *best-effort* window (typically within a few hours of the target), so the mobile Settings UI should say "around 9 AM" rather than promise exact delivery. No blocker for the notification/PDF/share primitives themselves — all three are already assessed ✅ elsewhere in this table (Alert history, Report export (PDF)).
+- **Permissions required:** notification permission (already requested for Alert history parity); no new permission beyond what F-029's dependencies already need. Background refresh/battery-optimization opt-out is a user-facing nudge, not a hard permission.
+- **Store-policy risk:** none — local notifications and periodic background work are standard, well-trodden APIs on both platforms.
+- **Scope on mobile:** full for the notification + PDF + share flow; the health-score-trend + disk-free-delta content is directly portable since the mobile Dashboard's health score / storage rows are already assessed (🟡/✅ respectively) elsewhere in §3. The "top-RAM-apps" bullet does **not** port — mobile OSes provide no live per-process RAM enumeration for other apps (see "Performance — top processes: Won't do" in §3), so a mobile digest would honestly drop that line, same honesty principle as the desktop build.
+- **Effort:** iOS ~1.5 d (mostly notification category + BGAppRefreshTask wiring; PDF/report code shares heavily with the desktop pattern) · Android ~2 d (WorkManager + NotificationChannel setup). **Dependencies:** mobile Dashboard health score (assessed), mobile Report export (assessed), mobile Alert history (assessed) — F-029 mobile is a thin composition layer over three already-assessed primitives, not new capability.
+- **Verdict:** **Port** → **P2**. **Recommendation:** low-risk, low-effort follow-on once the mobile Dashboard + PDF export + notification primitives it depends on are built; schedule after those land rather than before.

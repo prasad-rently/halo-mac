@@ -47,7 +47,7 @@
 | [F-026](#f-026--downloads-folder-organiser--manager) | Downloads Folder Organiser & Manager | ✅ Done | 2.5 d | AppScanner, FileSystemScanner |
 | [F-027](#f-027--snippet-manager--text-expansion-engine-clipboard-evolution) | Snippet Manager & Text Expansion Engine | ✅ Done | 3.5 d | Clipboard module |
 | [F-028](#f-028--focus-session-companion) | Focus Session Companion | 💡 Future Idea | ~3 d | MenuBarDisplayStyle |
-| [F-029](#f-029--scheduled-reports--weekly-digest) | Scheduled Reports & Weekly Digest | 💡 Future Idea | ~2 d | ReportGenerator |
+| [F-029](#f-029--scheduled-reports--weekly-digest) | Scheduled Reports & Weekly Digest | ✅ Done | 2 d | ReportGenerator |
 | [F-030](#f-030--icloud-storage-analyser) | iCloud Storage Analyser | 💡 Future Idea | ~4 d | none |
 | [F-031](#f-031--dock--desktop-tinker-actions) | Dock & Desktop Tinker Actions | ✅ Done | 0.5 d | none |
 | [F-032](#f-032--display--audio-quick-actions) | Display & Audio Quick Actions | ✅ Done | 0.5 d | none |
@@ -1742,7 +1742,7 @@ New collapsible **"Focus"** card on the Dashboard. New `sessionCountdown` style 
 
 ## F-029 · Scheduled Reports & Weekly Digest
 
-**Status:** 💡 Future Idea  
+**Status:** ✅ Done — `feat/f029-scheduled-reports` branch (2026-08)  
 **Effort estimate:** 2 days  
 **Theme:** User Productivity  
 **Branch naming (when ready):** `feat/f029-scheduled-reports`  
@@ -1766,6 +1766,26 @@ Power users want to stay informed without opening the app every day. A weekly "y
 
 ### Integration point
 New **"Digest"** section in Settings. The 7-day health sparkline appears as a new card on the Dashboard. Entirely reuses existing components — minimal new code.
+
+### As actually built
+Scope was narrowed from the original 6-bullet digest plan for honesty, following the same principle as F-019's "verified data only" approach:
+- **Health score trend** — REAL. New `MetricsHistory` actor-adjacent `@MainActor` store samples once/hour (a dedicated slow timer in `AppState`, deliberately separate from the existing 2 s metrics timer) and persists a rolling 168-sample (7-day) buffer to `UserDefaults`. Powers both the new `HealthTrendCard` Dashboard sparkline and the digest body.
+- **"Top storage growers"** — simplified to a real week-over-week **disk-free delta** (current `diskFreeGB` vs. the oldest sample in the 7-day window) rather than the originally-imagined "largest files added" audit, which would need a full filesystem diff Halo doesn't otherwise track. This is called out explicitly in the digest body as a GB delta, not a fabricated file list.
+- **"Apps with high average RAM"** — built as a real, if coarse, minimal version: the hourly `MetricsHistory` sample also captures the top 5 RAM processes via the existing `ProcessMonitor.topProcesses(sortBy: .ram)` (already used by the Performance module's Top Processes section). The digest aggregates these hourly readings into a per-app average RAM ranking (`WeeklyDigestGenerator.composeSummary` → `RankedApp`). This is genuinely real data, just sampled hourly rather than continuously — an app that spiked RAM briefly between samples won't be caught.
+- **Backup status** — **omitted**. Halo has no Time Machine integration yet (that's F-022, still a Future Idea in this pipeline) — rather than fabricate a backup-status line, the digest simply doesn't include one.
+- **Threats detected / scans completed** — REAL, filtered from `AlertLog.entries` over the digest period.
+- **PDF attachment / NSSharingService** — built as a "Share Weekly Report Now…" button in Settings (generates the existing 4-page `ReportGenerator` PDF to a temp file and opens `NSSharingServicePicker` — Mail/AirDrop/Messages), plus the notification's "View Report" action button which reuses the Dashboard's existing Export Report flow (save panel). Not a true PDF *attachment* inside the notification banner itself — macOS `UNNotificationAttachment` is meant for images/audio/video preview thumbnails, not documents, so attaching a PDF there would render awkwardly; the two explicit share paths above are the honest equivalent.
+- **Delivery + schedule** — new `WeeklyDigestScheduler` (mirrors `ScanScheduler`'s `NSBackgroundActivityScheduler` pattern exactly, with its own `com.halo.mac.weeklydigest` identifier so it's fully independent of the Smart Scan schedule). Settings → General → "Weekly Digest" section reuses the identical day/hour `Picker` UI as "Scheduled Scans". A "Send Test Digest Now" button lets the user manually fire a digest to verify the flow without waiting for the schedule.
+
+**Files:**
+- `Halo/Core/MetricsHistory.swift` — hourly rolling sample store (new)
+- `Halo/Core/WeeklyDigestGenerator.swift` — summary composition, notification delivery, `WeeklyDigestScheduler`, `DigestNotificationDelegate` (new)
+- `Halo/Features/Dashboard/HealthTrendCard.swift` — 7-day sparkline Dashboard card (new)
+- `Halo/Core/Models/Models.swift` — `MetricsSample`, `ProcessRAMSample`, `RankedApp`, `WeeklyDigestSummary`
+- `Halo/App/AppState.swift` — `metricsHistoryTimer` (hourly), `recordMetricsHistorySample()`
+- `Halo/App/HaloApp.swift` — `WeeklyDigestScheduler.shared.start(appState:)` alongside `ScanScheduler.shared.start(appState:)`
+- `Halo/Features/Onboarding/OnboardingView.swift` — "Weekly Digest" section in `SettingsView`'s General tab
+- `Halo/Features/Dashboard/DashboardView.swift` — `HealthTrendCard()` added to the Dashboard stack
 
 ---
 

@@ -107,6 +107,9 @@
 		000000000000000000008026 /* SnippetEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008025 /* SnippetEditorView.swift */; };
 		000000000000000000008028 /* SnippetListSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008027 /* SnippetListSection.swift */; };
 		000000000000000000008030 /* ActionShareManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008029 /* ActionShareManager.swift */; };
+		000000000000000000008074 /* MetricsHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008073 /* MetricsHistory.swift */; };
+		000000000000000000008076 /* WeeklyDigestGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008075 /* WeeklyDigestGenerator.swift */; };
+		000000000000000000008078 /* HealthTrendCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008077 /* HealthTrendCard.swift */; };
 		000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009001 /* GetHealthScoreIntent.swift */; };
 		000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009003 /* GetCPUUsageIntent.swift */; };
 		000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009005 /* GetBatteryHealthIntent.swift */; };
@@ -339,6 +342,9 @@
 		000000000000000000008025 /* SnippetEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/SnippetEditorView.swift; sourceTree = "<group>"; };
 		000000000000000000008027 /* SnippetListSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/SnippetListSection.swift; sourceTree = "<group>"; };
 		000000000000000000008029 /* ActionShareManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/ActionShareManager.swift; sourceTree = "<group>"; };
+		000000000000000000008073 /* MetricsHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/MetricsHistory.swift; sourceTree = "<group>"; };
+		000000000000000000008075 /* WeeklyDigestGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/WeeklyDigestGenerator.swift; sourceTree = "<group>"; };
+		000000000000000000008077 /* HealthTrendCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/HealthTrendCard.swift; sourceTree = "<group>"; };
 		000000000000000000009001 /* GetHealthScoreIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetHealthScoreIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009003 /* GetCPUUsageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetCPUUsageIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009005 /* GetBatteryHealthIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetBatteryHealthIntent.swift; sourceTree = "<group>"; };
@@ -472,6 +478,8 @@
 				000000000000000000004011 /* AlertLog.swift */,
 				000000000000000000004013 /* ReportGenerator.swift */,
 				000000000000000000004005 /* ScanScheduler.swift */,
+				000000000000000000008073 /* MetricsHistory.swift */,
+				000000000000000000008075 /* WeeklyDigestGenerator.swift */,
 				000000000000000000003006 /* HelperClient.swift */,
 				000000000000000000001074 /* CPUDetailMonitor.swift */,
 				000000000000000000001076 /* SMCReader.swift */,
@@ -496,6 +504,7 @@
 				000000000000000000001065 /* HotkeyManager.swift */,
 				000000000000000000001038 /* DashboardView.swift */,
 				000000000000000000001098 /* NetworkSparklineCard.swift */,
+				000000000000000000008077 /* HealthTrendCard.swift */,
 				000000000000000000001102 /* GPUDashboardCard.swift */,
 				000000000000000000001040 /* FilesView.swift */,
 				000000000000000000008007 /* DownloadsView.swift */,
@@ -903,6 +912,8 @@
 				000000000000000000004012 /* AlertLog.swift in Sources */,
 				000000000000000000004014 /* ReportGenerator.swift in Sources */,
 				000000000000000000004006 /* ScanScheduler.swift in Sources */,
+				000000000000000000008074 /* MetricsHistory.swift in Sources */,
+				000000000000000000008076 /* WeeklyDigestGenerator.swift in Sources */,
 				000000000000000000001075 /* CPUDetailMonitor.swift in Sources */,
 				000000000000000000001077 /* SMCReader.swift in Sources */,
 				000000000000000000001079 /* GPUMonitor.swift in Sources */,
@@ -920,6 +931,7 @@
 				000000000000000000001066 /* HotkeyManager.swift in Sources */,
 				000000000000000000001039 /* DashboardView.swift in Sources */,
 				000000000000000000001099 /* NetworkSparklineCard.swift in Sources */,
+				000000000000000000008078 /* HealthTrendCard.swift in Sources */,
 				000000000000000000001103 /* GPUDashboardCard.swift in Sources */,
 				000000000000000000006002 /* ActionModels.swift in Sources */,
 				000000000000000000006004 /* ActionLibrary.swift in Sources */,

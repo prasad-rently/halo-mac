@@ -102,6 +102,10 @@ final class AppState: ObservableObject {
     private var systemMonitor: SystemMonitor?
     private var metricsTimer: AnyCancellable?
     private var widgetReloadTimer: AnyCancellable?
+    // F-029: separate, much-slower timer for MetricsHistory — deliberately NOT
+    // hooked into the 2 s metricsTimer above (see MetricsHistory.swift).
+    private var metricsHistoryTimer: AnyCancellable?
+    private let historyProcessMonitor = ProcessMonitor()
     private var clipboardMonitor: ClipboardMonitor?
     private let hotkeyManager = HotkeyManager()
     private let quickPickerController  = ClipboardQuickPickerController()
@@ -117,6 +121,7 @@ final class AppState: ObservableObject {
         systemMonitor = SystemMonitor()
         startMetricsPolling()
         startWidgetReloadTimer()
+        startMetricsHistoryTimer()
         loadStoredActivity()
         // Mock/sample clipboard seed data disabled — real history now comes only
         // from ClipboardMonitor picking up actual pasteboard changes.
@@ -231,6 +236,35 @@ final class AppState: ObservableObject {
             }
         // Fire once immediately so the widget shows data right after launch.
         WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    // MARK: - Metrics History (F-029)
+    //
+    // Samples once/hour into MetricsHistory — powers the Dashboard's 7-day
+    // health sparkline and the Weekly Digest. This is a SEPARATE, much slower
+    // timer from metricsTimer (2 s) — see MetricsHistory.swift for why hooking
+    // into the fast tick would be the wrong move.
+
+    private func startMetricsHistoryTimer() {
+        metricsHistoryTimer = Timer.publish(every: 3600.0, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                Task { await self?.recordMetricsHistorySample() }
+            }
+        // Seed one sample immediately so the sparkline / digest aren't
+        // completely empty right after a fresh launch.
+        Task { await recordMetricsHistorySample() }
+    }
+
+    private func recordMetricsHistorySample() async {
+        let topRAM = await historyProcessMonitor.topProcesses(sortBy: .ram, limit: 5)
+            .filter(\.isUserApp)
+            .map { ProcessRAMSample(name: $0.name, ramMB: $0.ramMB) }
+        MetricsHistory.shared.record(
+            healthScore: systemHealthScore,
+            diskFreeGB: diskFreeGB,
+            topRAMProcesses: topRAM
+        )
     }
 
     private func calculateHealthScore() -> Int {
