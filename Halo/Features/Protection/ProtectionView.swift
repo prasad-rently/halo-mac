@@ -588,6 +588,7 @@ struct PermissionsAuditSection: View {
                         text: "\(excessiveAppCount) of \(totalAuditedApps) apps excessive",
                         color: excessiveAppCount > 0 ? .haloAmber : .haloGreen
                     )
+                    .accessibilityIdentifier("protection.permissions.summary")
                 }
             }
 
@@ -597,6 +598,7 @@ struct PermissionsAuditSection: View {
 
             case .unavailable(let reason):
                 FullDiskAccessBanner(reason: reason)
+                    .accessibilityIdentifier("protection.permissions.banner")
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
                     ForEach(viewModel.permissions) { permission in
                         PermissionCard(permission: permission)
@@ -661,6 +663,12 @@ struct PermissionGroupRow: View {
 
     private var riskCount: Int { grants.filter(\.isElevatedRisk).count }
 
+    /// Stable slug for this kind, used to build `protection.permissions.*`
+    /// accessibility identifiers (e.g. "Screen Recording" → "screenrecording").
+    private var slug: String {
+        kind.rawValue.replacingOccurrences(of: " ", with: "").lowercased()
+    }
+
     /// System Settings privacy-pane anchor for this permission kind — same
     /// mapping `PermissionCard` uses for its deep link.
     private var settingsURL: URL? {
@@ -704,6 +712,7 @@ struct PermissionGroupRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("protection.permissions.row.\(slug)")
 
             if isExpanded {
                 VStack(spacing: 4) {
@@ -736,6 +745,7 @@ struct PermissionGroupRow: View {
                                 .foregroundColor(.haloRed)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityIdentifier("protection.permissions.revoke.\(slug)")
                         }
                         .padding(.horizontal, 12).padding(.vertical, 5)
                     }
@@ -798,6 +808,9 @@ struct PermissionCard: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(
+            "protection.permissions.card.\(permission.kind.rawValue.replacingOccurrences(of: " ", with: "").lowercased())"
+        )
     }
 }
 

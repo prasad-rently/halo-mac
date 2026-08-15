@@ -102,6 +102,9 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 | `dashboard.smartScan.button` / `dashboard.exportReport.button` / `dashboard.alertHistory` | Dashboard |
 | `cleanup.cleanAll.button` · `fileListView` | Cleanup |
 | `protection.scan.button` | Protection |
+| `protection.permissions.summary` · `protection.permissions.banner` | Protection → Permission Auditor (F-016) header/fallback |
+| `protection.permissions.row.<kind>` · `protection.permissions.revoke.<kind>` | Protection → Permission Auditor per-app list (rich state) |
+| `protection.permissions.card.<kind>` | Protection → Permission Auditor category grid (fallback state) |
 | `performance.idleApp.quit.button` | Performance → Idle Apps |
 | `applications.row.<bundleId>` · `applications.uninstall.button` · `applications.leftover.<kind>` | Applications |
 | `files.tab.<TabTitle>` | Files tab bar |
