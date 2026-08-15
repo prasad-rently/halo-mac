@@ -366,6 +366,7 @@ struct SettingsView: View {
                             AppUsageTracker.shared.setTrackingEnabled(newValue)
                         }
                     ))
+                    .accessibilityIdentifier("settings.appUsageTracking.toggle")
                     Text("Only counts time Halo itself is running — not a full Screen Time replacement.")
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -373,6 +374,7 @@ struct SettingsView: View {
                         Button("Clear Usage History", role: .destructive) {
                             AppUsageTracker.shared.clearHistory()
                         }
+                        .accessibilityIdentifier("settings.appUsageTracking.clearHistory.button")
                     }
                 }
             }

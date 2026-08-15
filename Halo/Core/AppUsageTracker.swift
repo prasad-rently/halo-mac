@@ -214,14 +214,61 @@ final class AppUsageTracker: ObservableObject {
     var firstObservedDay: Date? { records.map(\.day).min() }
 
     private func recordsInWindow(days: Int) -> [AppUsageRecord] {
-        guard let cutoff = Calendar.current.date(byAdding: .day, value: -(days - 1), to: Calendar.current.startOfDay(for: Date())) else { return records }
-        return records.filter { $0.day >= cutoff }
+        Self.recordsInWindow(records, days: days, now: Date())
     }
 
     /// Top apps by foreground time over the last 7 days.
     func topApps(limit: Int = 5) -> [AppUsageSummary] {
+        Self.topApps(from: records, limit: limit, windowDays: Self.headlineWindowDays, now: Date())
+    }
+
+    /// Apps observed running continuously for a long stretch (default 8 h)
+    /// over the last 7 days while almost never being brought to the front.
+    func backgroundHogs(minObservedHours: Double = 8, maxForegroundRatio: Double = 0.02) -> [BackgroundHogApp] {
+        Self.backgroundHogs(from: records, minObservedHours: minObservedHours, maxForegroundRatio: maxForegroundRatio,
+                             windowDays: Self.headlineWindowDays, now: Date())
+    }
+
+    /// Context switches per hour of tracked time — `nil` until there's at
+    /// least an hour of real history, rather than reporting a wild number
+    /// from a couple of minutes of data.
+    func contextSwitchesPerHour() -> Double? {
+        Self.contextSwitchesPerHour(from: records, firstObservedDay: firstObservedDay,
+                                     windowDays: Self.headlineWindowDays, now: Date())
+    }
+
+    struct WeekOverWeek: Equatable {
+        let thisWeekSeconds: TimeInterval
+        let lastWeekSeconds: TimeInterval
+        var percentChange: Double? {
+            guard lastWeekSeconds > 0 else { return nil }
+            return ((thisWeekSeconds - lastWeekSeconds) / lastWeekSeconds) * 100
+        }
+    }
+
+    /// `nil` until Halo has observed at least 14 days — otherwise "last week"
+    /// would be silently zero and every result would show a fake +100%.
+    func weekOverWeekChange() -> WeekOverWeek? {
+        Self.weekOverWeekChange(from: records, firstObservedDay: firstObservedDay, now: Date())
+    }
+
+    // MARK: - Pure aggregation logic (F-021)
+    //
+    // Extracted from the instance methods above, parameterized on `records`
+    // and `now`, so `HaloTests` can exercise the exact same math against
+    // synthetic `[AppUsageRecord]` arrays and a fixed date — no live
+    // NSWorkspace/timer/UserDefaults required. No behavior change: the
+    // instance methods above just forward to these with `self.records` and
+    // `Date()`.
+
+    static func recordsInWindow(_ records: [AppUsageRecord], days: Int, now: Date) -> [AppUsageRecord] {
+        guard let cutoff = Calendar.current.date(byAdding: .day, value: -(days - 1), to: Calendar.current.startOfDay(for: now)) else { return records }
+        return records.filter { $0.day >= cutoff }
+    }
+
+    static func topApps(from records: [AppUsageRecord], limit: Int, windowDays: Int, now: Date) -> [AppUsageSummary] {
         var byBundle: [String: (name: String, fg: TimeInterval, ramSum: Double, ramCount: Int, switches: Int)] = [:]
-        for r in recordsInWindow(days: Self.headlineWindowDays) {
+        for r in recordsInWindow(records, days: windowDays, now: now) {
             var entry = byBundle[r.bundleID] ?? (r.appName, 0, 0, 0, 0)
             entry.fg += r.foregroundSeconds
             entry.ramSum += r.ramSampleSumMB
@@ -242,11 +289,10 @@ final class AppUsageTracker: ObservableObject {
             .map { $0 }
     }
 
-    /// Apps observed running continuously for a long stretch (default 8 h)
-    /// over the last 7 days while almost never being brought to the front.
-    func backgroundHogs(minObservedHours: Double = 8, maxForegroundRatio: Double = 0.02) -> [BackgroundHogApp] {
+    static func backgroundHogs(from records: [AppUsageRecord], minObservedHours: Double, maxForegroundRatio: Double,
+                                windowDays: Int, now: Date) -> [BackgroundHogApp] {
         var byBundle: [String: (name: String, observed: TimeInterval, fg: TimeInterval, ramSum: Double, ramCount: Int)] = [:]
-        for r in recordsInWindow(days: Self.headlineWindowDays) {
+        for r in recordsInWindow(records, days: windowDays, now: now) {
             var entry = byBundle[r.bundleID] ?? (r.appName, 0, 0, 0, 0)
             entry.observed += r.observedRunningSeconds
             entry.fg += r.foregroundSeconds
@@ -267,35 +313,22 @@ final class AppUsageTracker: ObservableObject {
             .sorted { $0.observedRunningSeconds > $1.observedRunningSeconds }
     }
 
-    /// Context switches per hour of tracked time — `nil` until there's at
-    /// least an hour of real history, rather than reporting a wild number
-    /// from a couple of minutes of data.
-    func contextSwitchesPerHour() -> Double? {
+    static func contextSwitchesPerHour(from records: [AppUsageRecord], firstObservedDay: Date?,
+                                        windowDays: Int, now: Date) -> Double? {
         guard let first = firstObservedDay else { return nil }
-        let hoursTracked = max(0, Date().timeIntervalSince(first) / 3600)
+        let hoursTracked = max(0, now.timeIntervalSince(first) / 3600)
         guard hoursTracked >= 1 else { return nil }
 
-        let window = recordsInWindow(days: Self.headlineWindowDays)
+        let window = recordsInWindow(records, days: windowDays, now: now)
         let totalSwitches = window.reduce(0) { $0 + $1.switchCount }
-        let windowHours = min(hoursTracked, Double(Self.headlineWindowDays * 24))
+        let windowHours = min(hoursTracked, Double(windowDays * 24))
         guard windowHours > 0 else { return nil }
         return Double(totalSwitches) / windowHours
     }
 
-    struct WeekOverWeek {
-        let thisWeekSeconds: TimeInterval
-        let lastWeekSeconds: TimeInterval
-        var percentChange: Double? {
-            guard lastWeekSeconds > 0 else { return nil }
-            return ((thisWeekSeconds - lastWeekSeconds) / lastWeekSeconds) * 100
-        }
-    }
-
-    /// `nil` until Halo has observed at least 14 days — otherwise "last week"
-    /// would be silently zero and every result would show a fake +100%.
-    func weekOverWeekChange() -> WeekOverWeek? {
+    static func weekOverWeekChange(from records: [AppUsageRecord], firstObservedDay: Date?, now: Date) -> WeekOverWeek? {
         guard let first = firstObservedDay else { return nil }
-        let today = Calendar.current.startOfDay(for: Date())
+        let today = Calendar.current.startOfDay(for: now)
         guard let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -6, to: today),
               let fourteenDaysAgo = Calendar.current.date(byAdding: .day, value: -13, to: today) else { return nil }
         guard first <= fourteenDaysAgo else { return nil }

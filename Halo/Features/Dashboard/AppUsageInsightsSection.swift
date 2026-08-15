@@ -90,6 +90,7 @@ struct AppUsageInsightsSection: View {
         .frame(maxWidth: .infinity)
         .background(Color.haloSurface2)
         .cornerRadius(10)
+        .accessibilityIdentifier("dashboard.appUsageInsights.disabledState")
     }
 
     private var collectingState: some View {
@@ -104,6 +105,7 @@ struct AppUsageInsightsSection: View {
         .frame(maxWidth: .infinity)
         .background(Color.haloSurface2)
         .cornerRadius(10)
+        .accessibilityIdentifier("dashboard.appUsageInsights.collectingState")
     }
 
     // MARK: - Populated content
@@ -160,6 +162,7 @@ struct AppUsageInsightsSection: View {
             }
             .frame(height: CGFloat(apps.count) * 32 + 20)
         }
+        .accessibilityIdentifier("dashboard.appUsageInsights.chart")
     }
 
     private var statsRow: some View {
@@ -238,6 +241,7 @@ struct AppUsageInsightsSection: View {
                 }
             }
         }
+        .accessibilityIdentifier("dashboard.appUsageInsights.backgroundHogs.list")
     }
 }
 

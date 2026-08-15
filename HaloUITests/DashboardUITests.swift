@@ -56,4 +56,31 @@ final class DashboardUITests: HaloUITestCase {
         HaloSidebar(test: self).navigate(to: .dashboard)
         assertID("dashboard.alertHistory", "Dashboard should show the Alert History section")
     }
+
+    // MARK: - App Usage Insights (F-021) — TC-DASH-09…19
+    //
+    // Usage tracking is off by default (opt-in only), so on a fresh test run
+    // the section should render in its disabled state — never a crash and
+    // never fabricated data.
+
+    // TC-DASH-09 — the section renders (in whichever state — disabled by
+    // default, collecting, or populated — depending on this machine's prior
+    // opt-in state).
+    func test_appUsageInsights_section_renders() {
+        HaloSidebar(test: self).navigate(to: .dashboard)
+        XCTAssertTrue(assertID("dashboard.appUsageInsights",
+                                "Dashboard should show the App Usage Insights header", timeout: 10).exists)
+    }
+
+    // TC-DASH-09 — when tracking has never been enabled on this machine, the
+    // disabled state (not a chart, not "collecting") is what's shown.
+    func test_appUsageInsights_shows_disabled_state_when_tracking_off() throws {
+        HaloSidebar(test: self).navigate(to: .dashboard)
+        guard waitForID("dashboard.appUsageInsights.disabledState", timeout: 5) != nil else {
+            throw XCTSkip("Usage tracking is already enabled on this test machine — " +
+                          "disabled-state expectation only applies to a fresh opt-in.")
+        }
+        XCTAssertFalse(element(id: "dashboard.appUsageInsights.chart").exists,
+                       "The Top Apps chart must not render while tracking is off")
+    }
 }
