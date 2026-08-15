@@ -189,3 +189,143 @@ struct ModelTests {
         #expect(cat.allBytes == 3000)
     }
 }
+
+// MARK: - SecurityPostureScanner Tests (F-019)
+//
+// `SecurityPostureScanner.score(for:)` is a pure function over synthetic
+// `[SecurityCheck]` arrays, so these tests never spawn the live `Process`
+// checks (those depend on the machine's actual FileVault/Gatekeeper/firewall/
+// update state and are intentionally left untested here — see
+// docs/MANUAL_TEST_PLAN.md §4.1 for their manual coverage).
+
+@Suite("SecurityPostureScanner")
+struct SecurityPostureScannerTests {
+
+    /// Builds a synthetic check with an arbitrary state, for scoring in isolation.
+    private func check(_ kind: SecurityCheckKind, _ state: SecurityCheckState) -> SecurityCheck {
+        SecurityCheck(kind: kind, state: state, detail: "synthetic")
+    }
+
+    @Test("All checks passing scores 100")
+    func testAllPassScoresFull() {
+        let checks = SecurityCheckKind.allCases.map { check($0, .pass) }
+        #expect(SecurityPostureScanner.score(for: checks) == 100)
+    }
+
+    @Test("Empty check list scores 100")
+    func testEmptyScoresFull() {
+        #expect(SecurityPostureScanner.score(for: []) == 100)
+    }
+
+    @Test("A single fail subtracts 15")
+    func testSingleFailSubtracts15() {
+        let checks = [check(.fileVault, .fail)] + SecurityCheckKind.allCases.dropFirst().map { check($0, .pass) }
+        #expect(SecurityPostureScanner.score(for: checks) == 85)
+    }
+
+    @Test("A single warn subtracts 7")
+    func testSingleWarnSubtracts7() {
+        let checks = [check(.automaticUpdates, .warn)] + SecurityCheckKind.allCases.filter { $0 != .automaticUpdates }.map { check($0, .pass) }
+        #expect(SecurityPostureScanner.score(for: checks) == 93)
+    }
+
+    @Test("Multiple fails and warns sum correctly")
+    func testMultipleFailsAndWarnsSum() {
+        // 2 fails (-30) + 1 warn (-7) + rest pass = 100 - 37 = 63
+        let checks: [SecurityCheck] = [
+            check(.fileVault, .fail),
+            check(.gatekeeper, .fail),
+            check(.firewall, .warn),
+            check(.automaticUpdates, .pass),
+            check(.sip, .pass),
+            check(.secureBoot, .pass),
+            check(.findMy, .pass),
+            check(.loginWindow, .pass)
+        ]
+        #expect(SecurityPostureScanner.score(for: checks) == 63)
+    }
+
+    @Test("Score is clamped to a 0...100 range and never goes negative")
+    func testScoreClampedAtZero() {
+        // 8 fails would be 100 - 120 = -20 unclamped; must clamp to 0.
+        let checks = SecurityCheckKind.allCases.map { check($0, .fail) }
+        #expect(SecurityPostureScanner.score(for: checks) == 0)
+    }
+
+    @Test("Score never exceeds 100 even with no penalizing checks")
+    func testScoreClampedAtHundred() {
+        let checks = SecurityCheckKind.allCases.map { check($0, .pass) }
+        #expect(SecurityPostureScanner.score(for: checks) <= 100)
+    }
+
+    // MARK: - The critical invariant
+
+    @Test("All-unknown checks NEVER penalize the score — this is the core F-019 invariant")
+    func testAllUnknownNeverPenalizes() {
+        let checks = SecurityCheckKind.allCases.map { check($0, .unknown) }
+        #expect(SecurityPostureScanner.score(for: checks) == 100,
+                """
+                Unknown states (SIP, Secure Boot, Find My, Login Window — and any \
+                check whose Process call failed) must never subtract from the score, \
+                since Halo has no reliable way to verify them and must not guess.
+                """)
+    }
+
+    @Test("Mixed fail + unknown: only the fail counts, unknowns are ignored")
+    func testMixedFailAndUnknownOnlyFailCounts() {
+        let checks: [SecurityCheck] = [
+            check(.fileVault, .fail),
+            check(.gatekeeper, .unknown),
+            check(.firewall, .unknown),
+            check(.automaticUpdates, .unknown),
+            check(.sip, .unknown),
+            check(.secureBoot, .unknown),
+            check(.findMy, .unknown),
+            check(.loginWindow, .unknown)
+        ]
+        // Only the single fail (-15) should count; all 7 unknowns contribute nothing.
+        #expect(SecurityPostureScanner.score(for: checks) == 85)
+    }
+
+    @Test("Mixed warn + unknown: only the warn counts, unknowns are ignored")
+    func testMixedWarnAndUnknownOnlyWarnCounts() {
+        let checks: [SecurityCheck] = [
+            check(.automaticUpdates, .warn),
+            check(.fileVault, .unknown),
+            check(.gatekeeper, .unknown),
+            check(.firewall, .unknown),
+            check(.sip, .unknown),
+            check(.secureBoot, .unknown),
+            check(.findMy, .unknown),
+            check(.loginWindow, .unknown)
+        ]
+        #expect(SecurityPostureScanner.score(for: checks) == 93)
+    }
+
+    @Test("SecurityCheckState maps to expected color and icon")
+    func testStateColorAndIcon() {
+        #expect(SecurityCheckState.pass.icon == "checkmark.circle.fill")
+        #expect(SecurityCheckState.warn.icon == "exclamationmark.triangle.fill")
+        #expect(SecurityCheckState.fail.icon == "xmark.circle.fill")
+        #expect(SecurityCheckState.unknown.icon == "questionmark.circle.fill")
+    }
+
+    @Test("The 4 manual-guidance checks have no System Settings deep link for SIP/Secure Boot")
+    func testManualChecksSettingsURLs() {
+        // SIP and Secure Boot are only viewable from Terminal / Recovery Mode —
+        // there is no System Settings pane to deep-link to, so the "Fix" button
+        // must not render for these two.
+        #expect(SecurityCheckKind.sip.settingsURL == nil)
+        #expect(SecurityCheckKind.secureBoot.settingsURL == nil)
+        // Find My and Login Window DO have a reachable settings pane.
+        #expect(SecurityCheckKind.findMy.settingsURL != nil)
+        #expect(SecurityCheckKind.loginWindow.settingsURL != nil)
+    }
+
+    @Test("All 8 SecurityCheckKind cases have distinct id slugs")
+    func testIdSlugsAreDistinct() {
+        let slugs = SecurityCheckKind.allCases.map(\.idSlug)
+        #expect(Set(slugs).count == slugs.count)
+        #expect(slugs.count == 8)
+    }
+}

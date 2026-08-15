@@ -276,6 +276,22 @@ enum SecurityCheckKind: String, CaseIterable {
         }
     }
 
+    /// Stable, non-localized slug for accessibility identifiers (`protection.securityPosture.check.<idSlug>`).
+    /// Deliberately independent of `rawValue` (the display title) so UI tests
+    /// don't break if copy changes.
+    var idSlug: String {
+        switch self {
+        case .fileVault: return "fileVault"
+        case .gatekeeper: return "gatekeeper"
+        case .firewall: return "firewall"
+        case .automaticUpdates: return "automaticUpdates"
+        case .sip: return "sip"
+        case .secureBoot: return "secureBoot"
+        case .findMy: return "findMy"
+        case .loginWindow: return "loginWindow"
+        }
+    }
+
     var explanation: String {
         switch self {
         case .fileVault: return "Encrypts your entire disk so it's unreadable without your password."

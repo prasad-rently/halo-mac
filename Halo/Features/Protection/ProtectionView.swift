@@ -649,6 +649,7 @@ struct SecurityPostureSection: View {
                 } else if !viewModel.securityChecks.isEmpty {
                     HStack(spacing: 6) {
                         HaloBadge(text: "\(viewModel.securityScore)/100", color: scoreColor)
+                            .accessibilityIdentifier("protection.securityPosture.score")
                         Button {
                             Task { await viewModel.loadSecurityPosture() }
                         } label: {
@@ -678,6 +679,7 @@ struct SecurityPostureSection: View {
                         SecurityCheckRow(check: check)
                     }
                 }
+                .accessibilityIdentifier("protection.securityPosture.list")
             }
         }
     }
@@ -707,6 +709,7 @@ struct SecurityCheckRow: View {
             Image(systemName: check.state.icon)
                 .font(.system(size: 14))
                 .foregroundColor(check.state.color)
+                .accessibilityIdentifier("protection.securityPosture.check.\(check.kind.idSlug).state")
 
             if let url = check.kind.settingsURL {
                 Button {
@@ -718,11 +721,13 @@ struct SecurityCheckRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Open in System Settings")
+                .accessibilityIdentifier("protection.securityPosture.check.\(check.kind.idSlug).fix")
             }
         }
         .padding(12)
         .background(Color.haloSurface2)
         .cornerRadius(10)
+        .accessibilityIdentifier("protection.securityPosture.check.\(check.kind.idSlug)")
     }
 }
 

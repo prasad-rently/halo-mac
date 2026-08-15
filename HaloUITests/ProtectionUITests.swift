@@ -66,4 +66,91 @@ final class ProtectionUITests: HaloUITestCase {
                           "an identifier such as `protection.signatureCount.text`.")
         }
     }
+
+    // MARK: - Security Posture Dashboard (F-019) — TC-PROT-08…30
+
+    /// All 8 `SecurityCheckKind` id slugs, in the order `SecurityPostureScanner.scan()`
+    /// returns them. Kept in sync manually with `Models.swift`'s `SecurityCheckKind`.
+    private let securityCheckSlugs = [
+        "fileVault", "gatekeeper", "firewall", "automaticUpdates",
+        "sip", "secureBoot", "findMy", "loginWindow"
+    ]
+
+    // TC-PROT-08 — navigating to Protection surfaces the Security Posture
+    // section, and it eventually settles (loading spinner clears).
+    func test_securityPosture_section_renders() {
+        XCTAssertTrue(HaloSidebar(test: self).navigate(to: .protection))
+        XCTAssertTrue(element(labeled: "Security Posture", timeout: 10)?.exists ?? false,
+                      "Protection should show a 'Security Posture' section")
+        // Give the one-shot async scan time to settle before asserting on rows.
+        _ = waitForID("protection.securityPosture.list", timeout: 15)
+    }
+
+    // TC-PROT-08 / TC-PROT-21…24 — all 8 check rows render with some state
+    // icon, regardless of which are auto-verified vs. always-unknown.
+    func test_securityPosture_all_eight_checks_render() {
+        HaloSidebar(test: self).navigate(to: .protection)
+        guard waitForID("protection.securityPosture.list", timeout: 20) != nil else {
+            XCTFail("Security Posture list did not appear/settle in time")
+            return
+        }
+        for slug in securityCheckSlugs {
+            let row = element(id: "protection.securityPosture.check.\(slug)")
+            XCTAssertTrue(row.waitForExistence(timeout: 5),
+                          "Expected a Security Posture row for '\(slug)'")
+            let stateIcon = element(id: "protection.securityPosture.check.\(slug).state")
+            XCTAssertTrue(stateIcon.waitForExistence(timeout: 5),
+                          "Row '\(slug)' should render a state icon (pass/warn/fail/unknown)")
+        }
+    }
+
+    // TC-PROT-27…29 — the score badge is visible once checks have loaded.
+    func test_securityPosture_score_badge_visible() {
+        HaloSidebar(test: self).navigate(to: .protection)
+        guard waitForID("protection.securityPosture.list", timeout: 20) != nil else {
+            XCTFail("Security Posture list did not appear/settle in time")
+            return
+        }
+        let badge = assertID("protection.securityPosture.score",
+                              "Security Posture score badge should be visible once checks load",
+                              timeout: 10)
+        // Sanity: label should look like "NN/100" or "N/100".
+        XCTAssertTrue(badge.label.contains("/100"), "Score badge label was '\(badge.label)'")
+    }
+
+    // TC-PROT-25 — tapping a "Fix →" settings-link button on a check that has
+    // one (e.g. FileVault, which always has a settingsURL) must not crash.
+    // We deliberately do NOT assert System Settings actually opens — only
+    // that the app survives the tap and remains responsive.
+    func test_securityPosture_fix_button_does_not_crash() {
+        HaloSidebar(test: self).navigate(to: .protection)
+        guard waitForID("protection.securityPosture.list", timeout: 20) != nil else {
+            XCTFail("Security Posture list did not appear/settle in time")
+            return
+        }
+        let fixButton = element(id: "protection.securityPosture.check.fileVault.fix")
+        guard fixButton.waitForExistence(timeout: 5) else {
+            XCTFail("Expected a Fix button on the FileVault row (it always has a settingsURL)")
+            return
+        }
+        fixButton.click()
+        // App should still be alive and on the Protection screen afterward.
+        XCTAssertTrue(app.state == .runningForeground || app.state == .runningBackground,
+                      "App should not crash after tapping a Fix/settings-link button")
+        XCTAssertTrue(element(labeled: "Security Posture", timeout: 5)?.exists ?? false)
+    }
+
+    // TC-PROT-26 — SIP and Secure Boot have no reachable System Settings pane,
+    // so their rows must not render a Fix button at all.
+    func test_securityPosture_no_fix_button_for_sip_and_secureBoot() {
+        HaloSidebar(test: self).navigate(to: .protection)
+        guard waitForID("protection.securityPosture.list", timeout: 20) != nil else {
+            XCTFail("Security Posture list did not appear/settle in time")
+            return
+        }
+        XCTAssertFalse(element(id: "protection.securityPosture.check.sip.fix").exists,
+                        "SIP has no System Settings pane — no Fix button should render")
+        XCTAssertFalse(element(id: "protection.securityPosture.check.secureBoot.fix").exists,
+                        "Secure Boot has no System Settings pane — no Fix button should render")
+    }
 }
