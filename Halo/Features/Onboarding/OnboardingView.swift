@@ -358,11 +358,13 @@ struct SettingsView: View {
                 // "Scheduled Scans" above, backed by WeeklyDigestScheduler.
                 Section("Weekly Digest") {
                     Toggle("Send Weekly Digest", isOn: $weeklyDigestEnabled)
+                        .accessibilityIdentifier("settings.weeklyDigest.toggle")
                     if weeklyDigestEnabled {
                         Picker("Frequency", selection: $weeklyDigestFrequency) {
                             Text("Weekly").tag("weekly")
                             Text("Daily").tag("daily")
                         }
+                        .accessibilityIdentifier("settings.weeklyDigest.frequency.picker")
                         if weeklyDigestFrequency == "weekly" {
                             Picker("Day", selection: $weeklyDigestWeekday) {
                                 Text("Sunday").tag(1)
@@ -379,6 +381,7 @@ struct SettingsView: View {
                                 Text(String(format: "%02d:00", h)).tag(h)
                             }
                         }
+                        .accessibilityIdentifier("settings.weeklyDigest.hour.picker")
                         if let next = WeeklyDigestScheduler.shared.nextDigestDate(
                             frequency: weeklyDigestFrequency,
                             weekday: weeklyDigestWeekday,
@@ -396,11 +399,13 @@ struct SettingsView: View {
                             Button("Share Weekly Report Now…") {
                                 WeeklyDigestGenerator.shareReportPDF(appState: appState)
                             }
+                            .accessibilityIdentifier("settings.weeklyDigest.shareNow.button")
                             Spacer()
                             Button("Send Test Digest Now") {
                                 WeeklyDigestScheduler.shared.sendNow()
                             }
                             .foregroundColor(.secondary)
+                            .accessibilityIdentifier("settings.weeklyDigest.sendTestNow.button")
                         }
                         .font(.caption)
                     }

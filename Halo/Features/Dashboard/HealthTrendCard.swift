@@ -109,5 +109,6 @@ struct HealthTrendCard: View {
             }
             .padding(16)
         }
+        .accessibilityIdentifier("dashboard.healthTrend.card")
     }
 }

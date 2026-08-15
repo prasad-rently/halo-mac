@@ -153,6 +153,195 @@ struct DuplicateDetectorTests {
     }
 }
 
+// MARK: - MetricsSample / Weekly Digest Tests (F-029)
+//
+// MetricsHistory.shared and AlertLog.shared are real persisted singletons with
+// no injectable seam, so — matching this session's established pattern for
+// AlertManager/FocusSessionManager — they're left to manual/UI coverage only.
+// What's tested here is the pure logic: the Codable model, the summary's
+// computed deltas, the notification-body composition, and the scheduler's
+// pure date arithmetic (none of which touch UserDefaults or fire real
+// notifications).
+
+@Suite("MetricsSample")
+struct MetricsSampleTests {
+
+    @Test("Codable roundtrip preserves all fields, including RAM samples")
+    func testCodableRoundtrip() throws {
+        let ramSamples = [
+            ProcessRAMSample(name: "Safari", ramMB: 512.5),
+            ProcessRAMSample(name: "Xcode", ramMB: 2048.0)
+        ]
+        let sample = MetricsSample(healthScore: 82, diskFreeGB: 128.4, topRAMProcesses: ramSamples)
+
+        let data = try JSONEncoder().encode(sample)
+        let decoded = try JSONDecoder().decode(MetricsSample.self, from: data)
+
+        #expect(decoded.id == sample.id)
+        #expect(decoded.healthScore == 82)
+        #expect(decoded.diskFreeGB == 128.4)
+        #expect(decoded.topRAMProcesses.count == 2)
+        #expect(decoded.topRAMProcesses[0].name == "Safari")
+        #expect(decoded.topRAMProcesses[0].ramMB == 512.5)
+    }
+
+    @Test("Default init stamps an id/date and defaults RAM list to empty")
+    func testDefaultInit() {
+        let sample = MetricsSample(healthScore: 90, diskFreeGB: 50)
+        #expect(sample.topRAMProcesses.isEmpty)
+        #expect(sample.healthScore == 90)
+        #expect(sample.diskFreeGB == 50)
+    }
+}
+
+@Suite("WeeklyDigestSummary")
+struct WeeklyDigestSummaryTests {
+
+    private func makeSummary(start: Int?, end: Int, diskStart: Double?, diskEnd: Double,
+                              scans: Int = 0, threats: Int = 0) -> WeeklyDigestSummary {
+        WeeklyDigestSummary(
+            generatedDate: Date(),
+            periodDays: 7,
+            healthScoreStart: start,
+            healthScoreEnd: end,
+            healthSamples: [],
+            diskFreeStartGB: diskStart,
+            diskFreeEndGB: diskEnd,
+            topAverageRAMApps: [],
+            alertsInPeriod: [],
+            threatsDetectedCount: threats,
+            scansCompletedCount: scans
+        )
+    }
+
+    @Test("healthScoreDelta is nil with no starting sample (fresh install)")
+    func testHealthScoreDeltaNilWithoutStart() {
+        let summary = makeSummary(start: nil, end: 80, diskStart: nil, diskEnd: 100)
+        #expect(summary.healthScoreDelta == nil)
+    }
+
+    @Test("healthScoreDelta computes a signed difference")
+    func testHealthScoreDeltaSigned() {
+        let improved = makeSummary(start: 70, end: 85, diskStart: nil, diskEnd: 0)
+        #expect(improved.healthScoreDelta == 15)
+
+        let worsened = makeSummary(start: 90, end: 60, diskStart: nil, diskEnd: 0)
+        #expect(worsened.healthScoreDelta == -30)
+    }
+
+    @Test("diskFreeDeltaGB is nil with no starting sample")
+    func testDiskFreeDeltaNilWithoutStart() {
+        let summary = makeSummary(start: 50, end: 60, diskStart: nil, diskEnd: 200)
+        #expect(summary.diskFreeDeltaGB == nil)
+    }
+
+    @Test("diskFreeDeltaGB computes a signed difference")
+    func testDiskFreeDeltaSigned() {
+        let freed = makeSummary(start: 50, end: 60, diskStart: 100, diskEnd: 130)
+        #expect(freed.diskFreeDeltaGB == 30)
+
+        let consumed = makeSummary(start: 50, end: 60, diskStart: 130, diskEnd: 100)
+        #expect(consumed.diskFreeDeltaGB == -30)
+    }
+}
+
+@Suite("WeeklyDigestGenerator")
+struct WeeklyDigestGeneratorTests {
+
+    private func makeSummary(start: Int?, end: Int, diskStart: Double?, diskEnd: Double,
+                              scans: Int = 0, threats: Int = 0) -> WeeklyDigestSummary {
+        WeeklyDigestSummary(
+            generatedDate: Date(),
+            periodDays: 7,
+            healthScoreStart: start,
+            healthScoreEnd: end,
+            healthSamples: [],
+            diskFreeStartGB: diskStart,
+            diskFreeEndGB: diskEnd,
+            topAverageRAMApps: [],
+            alertsInPeriod: [],
+            threatsDetectedCount: threats,
+            scansCompletedCount: scans
+        )
+    }
+
+    @Test("notificationBody reports an upward trend, freed space, and pluralised counts")
+    @MainActor
+    func testNotificationBodyUpwardTrend() {
+        let summary = makeSummary(start: 70, end: 85, diskStart: 100, diskEnd: 105, scans: 2, threats: 1)
+        let body = WeeklyDigestGenerator.notificationBody(for: summary)
+
+        #expect(body.contains("Health score up 15 pts (now 85)"))
+        #expect(body.contains("GB freed up"))
+        #expect(body.contains("2 scans completed"))
+        #expect(body.contains("1 threat flagged"))
+    }
+
+    @Test("notificationBody reports a downward trend and lost space with singular wording")
+    @MainActor
+    func testNotificationBodyDownwardTrendSingular() {
+        let summary = makeSummary(start: 90, end: 60, diskStart: 200, diskEnd: 195, scans: 1, threats: 0)
+        let body = WeeklyDigestGenerator.notificationBody(for: summary)
+
+        #expect(body.contains("Health score down 30 pts (now 60)"))
+        #expect(body.contains("GB less free space"))
+        #expect(body.contains("1 scan completed"))
+        #expect(!body.contains("threat"))
+    }
+
+    @Test("notificationBody ignores sub-0.1GB disk noise and reports a steady score")
+    @MainActor
+    func testNotificationBodyIgnoresTinyDiskDelta() {
+        let summary = makeSummary(start: 80, end: 80, diskStart: 100.00, diskEnd: 100.05)
+        let body = WeeklyDigestGenerator.notificationBody(for: summary)
+
+        #expect(body.contains("Health score steady 0 pts (now 80)"))
+        #expect(!body.contains("GB"))
+    }
+}
+
+@Suite("WeeklyDigestScheduler")
+struct WeeklyDigestSchedulerTests {
+
+    @Test("nextDigestDate returns nil when the digest is off")
+    @MainActor
+    func testOffFrequencyReturnsNil() {
+        let next = WeeklyDigestScheduler.shared.nextDigestDate(frequency: "off", weekday: 2, hour: 9)
+        #expect(next == nil)
+    }
+
+    @Test("nextDigestDate(daily) lands on the requested hour, within the next day")
+    @MainActor
+    func testDailyReturnsUpcomingDateAtRequestedHour() throws {
+        let next = try #require(
+            WeeklyDigestScheduler.shared.nextDigestDate(frequency: "daily", weekday: 2, hour: 14)
+        )
+        #expect(next > Date())
+        #expect(next.timeIntervalSinceNow <= 24 * 3600 + 60)
+        #expect(Calendar.current.component(.hour, from: next) == 14)
+    }
+
+    @Test("nextDigestDate(weekly) lands on the requested weekday and hour")
+    @MainActor
+    func testWeeklyReturnsRequestedWeekdayAndHour() throws {
+        let next = try #require(
+            WeeklyDigestScheduler.shared.nextDigestDate(frequency: "weekly", weekday: 5, hour: 9)
+        )
+        #expect(next > Date())
+        #expect(Calendar.current.component(.weekday, from: next) == 5)
+        #expect(Calendar.current.component(.hour, from: next) == 9)
+    }
+
+    @Test("nextDigestDate clamps an out-of-range hour into 0...23")
+    @MainActor
+    func testHourIsClamped() throws {
+        let next = try #require(
+            WeeklyDigestScheduler.shared.nextDigestDate(frequency: "daily", weekday: 2, hour: 99)
+        )
+        #expect(Calendar.current.component(.hour, from: next) == 23)
+    }
+}
+
 // MARK: - Model Tests
 
 @Suite("Models")
