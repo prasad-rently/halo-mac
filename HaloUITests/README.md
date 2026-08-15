@@ -101,6 +101,7 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 | `sidebar.row.<AppModule.rawValue>` | every sidebar row (drives all navigation) |
 | `dashboard.smartScan.button` / `dashboard.exportReport.button` / `dashboard.alertHistory` | Dashboard |
 | `cleanup.cleanAll.button` · `fileListView` | Cleanup |
+| `cleanup.category.browsers.button` · `browserCleaner.cleanAll.button` · `browserCleaner.clearSelected.button` | Cleanup → Browsers (F-024) |
 | `protection.scan.button` | Protection |
 | `performance.idleApp.quit.button` | Performance → Idle Apps |
 | `applications.row.<bundleId>` · `applications.uninstall.button` · `applications.leftover.<kind>` | Applications |

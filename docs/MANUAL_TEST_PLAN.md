@@ -117,6 +117,33 @@
 | **Unit** TC-CLEAN-U1 | P1 | Size aggregation | Sum file sizes | Total equals sum of selected items |
 | **Unit** TC-CLEAN-U2 | P0 | trashItem invoked | Mock FileManager | `trashItem(at:)` called, never `removeItem` |
 
+### 3.1 Browsers (F-024 — Browser Cleaner)
+
+**Files:** `BrowserCleanerScanner.swift`, `BrowserCleanerView.swift`
+
+Per-category breakdown (HTTP cache, GPU shader cache, history, cookies, sessions, crash reports, site data, download history) for Safari, Chrome, Arc, Brave, Edge, Opera, Vivaldi, and Firefox — a more granular sibling to Protection's whole-browser Privacy Cleaner card. All clearing is `trashItem`-only, gated behind the review sheet.
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-CLEAN-10 | P0 | Browsers tab detects installed browsers | Open Cleanup → Browsers | Only browsers actually present under `/Applications` are listed; "No supported browsers detected" if none |
+| TC-CLEAN-11 | P0 | Per-category sizes measured | Browser detected | Each category (Cache, History, Cookies, …) shows a real on-disk size, not zero/guessed |
+| TC-CLEAN-12 | P1 | Pre-selection matches data presence | Open review sheet | Only categories with `hasData == true` are pre-selected |
+| TC-CLEAN-13 | P0 | Review & Clear confirms before deleting | Click "Review & Clear" on one browser, or "Clean All Browsers" | Review sheet lists in-scope browser(s) + categories; nothing is cleared until "Clear Selected" is clicked |
+| TC-CLEAN-14 | P0 / TC-SAFE-02 | Cancel deletes nothing | From the review sheet, click Cancel | Sheet dismisses; no files trashed; sizes unchanged on next re-scan |
+| TC-CLEAN-15 | P1 | Per-category toggle | In the review sheet, untoggle one category | That category excluded from "Clear Selected ($SIZE)"; total updates live |
+| TC-CLEAN-16 | P0 | Clearing uses Trash, never permanent delete | Confirm "Clear Selected" on a real, disposable category (e.g. HTTP cache) | Files moved to Trash (recoverable) — never `removeItem` |
+| TC-CLEAN-17 | P1 | Freed-space banner | After a successful clear | Green "Freed X" banner shows the real freed byte count |
+| TC-CLEAN-18 | P1 | Error banner on partial failure | Force a clear error (e.g. permission-denied path) | Amber error banner shows the first error message; doesn't block other categories from clearing |
+| TC-CLEAN-19 | P2 | Chromium multi-profile detection | A Chromium browser with 2+ real profiles (Default, Profile 1, …) | All profiles' data included in the category totals, not just Default |
+| TC-CLEAN-20 | P2 | Celebration on large recovery | Clear > 1 GB total | `CelebrationManager` triggers `.spaceRecovered` |
+| **Unit** TC-CLEAN-U3 | P0 | `candidates(home:)` lists all 8 browsers | — | Exactly 8 entries with correct `/Applications/<Name>.app` paths |
+| **Unit** TC-CLEAN-U4 | P0 | `detectBrowsers()` only returns installed browsers | Run on real machine | Every returned profile's `appPath` actually exists |
+| **Unit** TC-CLEAN-U5 | P0 | `chromiumProfileDirs` — discovery + fallback | Real profiles present; root unreadable; root readable but no matches | Correct filtered set; `["Default"]` fallback in both failure cases |
+| **Unit** TC-CLEAN-U6 | P1 | `firefoxProfileDirs` — discovery + dotfile filtering | Profiles dir with real + dotfile entries | Only non-dotfile profile folders returned; `[]` when the dir doesn't exist |
+| **Unit** TC-CLEAN-U7 | P0 | `size(ofPaths:)` — file, directory, multi-path, missing | Single file; nested directory; multiple paths; nonexistent path | Exact byte counts; recursive directory sum; missing paths contribute 0 |
+| **Unit** TC-CLEAN-U8 | P0 | `measure(_:)` fills in real sizes | Synthetic profile with a temp-file-backed category | Category `.size` matches the real file size on disk |
+| **Unit** TC-CLEAN-U9 | P0 | `clear(_:categories:)` — selective, trashItem-only | Two categories, only one selected | Only the selected category's paths are trashed; the other is untouched; `cleared`/`freed` counts match |
+
 ---
 
 ## 4. Protection

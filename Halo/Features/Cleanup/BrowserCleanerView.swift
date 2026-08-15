@@ -150,6 +150,7 @@ struct BrowserCleanupCategoryRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("cleanup.category.browsers.button")
     }
 }
 

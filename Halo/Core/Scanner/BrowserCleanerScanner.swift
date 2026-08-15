@@ -84,7 +84,9 @@ actor BrowserCleanerScanner {
 
     // MARK: - Size measurement
 
-    private static func size(ofPaths paths: [String]) -> Int64 {
+    /// Non-private (internal) purely for `HaloTests` — recursive on-disk size
+    /// over synthetic paths, no behavior change.
+    static func size(ofPaths paths: [String]) -> Int64 {
         paths.reduce(0) { $0 + recursiveSize(URL(fileURLWithPath: $1)) }
     }
 
@@ -102,14 +104,16 @@ actor BrowserCleanerScanner {
 
     // MARK: - Candidate table
 
-    private struct Candidate {
+    /// Non-private (internal) purely for `HaloTests` — the candidate table
+    /// itself is pure data, no I/O until `.categories()` is invoked.
+    struct Candidate {
         let name: String
         let icon: String
         let appPath: String
         let categories: () -> [BrowserCategoryItem]
     }
 
-    private static func candidates(home: String) -> [Candidate] {
+    static func candidates(home: String) -> [Candidate] {
         [
             Candidate(name: "Safari", icon: "safari", appPath: "/Applications/Safari.app") {
                 safariCategories(home: home)
@@ -241,7 +245,9 @@ actor BrowserCleanerScanner {
     /// Enumerated dynamically because real installs commonly have several (this
     /// dev machine's live Chrome has 4). Falls back to ["Default"] if the user-data
     /// root can't be read yet (fresh install / never launched).
-    private static func chromiumProfileDirs(appSupportRoot: String) -> [String] {
+    /// Non-private (internal) purely for `HaloTests`, against a synthetic
+    /// temp directory instead of a real browser install.
+    static func chromiumProfileDirs(appSupportRoot: String) -> [String] {
         guard let entries = try? FileManager.default.contentsOfDirectory(atPath: appSupportRoot) else {
             return ["Default"]
         }
@@ -254,7 +260,9 @@ actor BrowserCleanerScanner {
     /// Firefox profile folders have randomized names (`<hash>.default-release`),
     /// so — unlike Chromium — they must be discovered by listing the Profiles
     /// directory rather than assumed.
-    private static func firefoxProfileDirs(home: String) -> [String] {
+    /// Non-private (internal) purely for `HaloTests`, against a synthetic
+    /// temp directory instead of a real Firefox install.
+    static func firefoxProfileDirs(home: String) -> [String] {
         let root = "\(home)/Library/Application Support/Firefox/Profiles"
         guard let entries = try? FileManager.default.contentsOfDirectory(atPath: root) else { return [] }
         return entries.filter { !$0.hasPrefix(".") }
