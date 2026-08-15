@@ -100,7 +100,11 @@ actor PerceptualDuplicateDetector {
 
     // MARK: - Grouping
 
-    nonisolated private static func makeGroup(from cluster: [PhotoHashResult]) -> PhotoSimilarGroup {
+    /// Non-private (internal) purely for `HaloTests` — the "recommended keep"
+    /// tie-break logic (highest resolution, then most recent) is deterministic
+    /// and worth testing directly against synthetic `PhotoHashResult` values,
+    /// independent of the real perceptual-hash pipeline. No behavior change.
+    nonisolated static func makeGroup(from cluster: [PhotoHashResult]) -> PhotoSimilarGroup {
         var items: [PhotoHashItem] = cluster.map {
             PhotoHashItem(
                 url: $0.url,

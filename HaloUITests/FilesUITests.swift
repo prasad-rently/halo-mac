@@ -8,9 +8,9 @@
 //    7.3 Downloads         (TC-FILE-20…)
 //    7.4 Large Files       (TC-FILE-30…)
 //    7.5 Drive Speed       (TC-FILE-40… / F-043)
-//    7.6 Similar Photos    (F-025, perceptual hash — no automated UI test yet;
-//                            loose-file scan tested via compilation + algorithm
-//                            sanity checks, Photos Library path untested)
+//    7.6 Similar Photos    (F-025, perceptual hash — TC-FILE-60…62; Photos
+//                            Library path is real code but untested this pass —
+//                            it needs a live permission-grant walkthrough)
 //
 //  SAFETY: the duplicate/large-file/downloads flows can delete files, so every
 //  destructive path is driven to its confirmation and cancelled, with dummy
@@ -128,5 +128,50 @@ final class FilesUITests: HaloUITestCase {
         let residue = temp.appendingPathComponent(".HaloSpeedTest")
         XCTAssertFalse(FileManager.default.fileExists(atPath: residue.path),
                        "Drive Speed scratch file must be cleaned up after the run")
+    }
+
+    // MARK: - Similar Photos (F-025) — TC-FILE-60…66
+    //
+    // Only the loose-file scan is exercised here — the Photos Library path
+    // needs a live system permission-grant walkthrough, out of scope for
+    // headless automation (see docs/MANUAL_TEST_PLAN.md TC-FILE-69).
+
+    // TC-FILE-60 — scanning the default locations settles into either a
+    // populated cluster list or the explicit empty state, never a stuck
+    // progress bar.
+    func test_similarPhotos_scan_settles() {
+        openFiles(tab: "Similar Photos")
+        guard tapID("files.similarPhotos.scan.button", timeout: 10) else {
+            XCTFail("Expected a 'Scan Pictures' button in Similar Photos")
+            return
+        }
+        let settled = element(labeled: "reclaimable", timeout: 60) != nil
+            || app.staticTexts.containing(
+                NSPredicate(format: "label CONTAINS[c] %@", "look alike")).firstMatch.waitForExistence(timeout: 60)
+        XCTAssertTrue(settled, "Similar Photos scan should settle into clusters or the empty state")
+    }
+
+    // TC-FILE-64 / TC-FILE-65 / TC-SAFE-02 — "Delete marked" on a cluster must
+    // confirm before trashing anything; cancelling deletes nothing.
+    func test_similarPhotos_deleteMarked_requires_confirmation() throws {
+        let fx = HaloTestFixtures(self)
+        fx.captureTrashBaseline()
+        openFiles(tab: "Similar Photos")
+        guard tapID("files.similarPhotos.scan.button", timeout: 10) else {
+            fx.tearDown()
+            XCTFail("Expected a 'Scan Pictures' button in Similar Photos")
+            return
+        }
+        guard waitForID("files.similarPhotos.deleteMarked.button", timeout: 60) != nil,
+              tapID("files.similarPhotos.deleteMarked.button", timeout: 5) else {
+            fx.tearDown()
+            throw XCTSkip("No near-duplicate photo clusters were found in ~/Pictures, ~/Downloads, " +
+                          "or ~/Desktop on this test machine, so there's nothing to mark for deletion.")
+        }
+        XCTAssertTrue(confirmationSurfaceAppeared(),
+                      "Deleting marked similar photos must confirm first (TC-SAFE-02)")
+        cancelConfirmation()
+        fx.assertTrashUnchanged()
+        fx.tearDown()
     }
 }
