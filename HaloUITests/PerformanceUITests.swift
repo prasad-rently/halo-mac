@@ -107,4 +107,72 @@ final class PerformanceUITests: HaloUITestCase {
                       "Quitting an idle app must confirm first (TC-SAFE-02)")
         cancelConfirmation()   // never actually quit the user's app
     }
+
+    // MARK: - Network Traffic Monitor (F-017) — TC-PERF-70…77
+
+    // TC-PERF-70 — the collapsed section is present under the Network card,
+    // and expanding it (Show/Hide toggle) reveals the monitor's controls.
+    func test_networkTraffic_section_expands() {
+        openPerformance()
+        XCTAssertTrue(element(labeled: "Network Traffic Monitor", timeout: 10)?.exists ?? false,
+                      "Performance → Network should show a 'Network Traffic Monitor' sub-section")
+        guard clickAny(of: ["Show"], timeout: 5) else {
+            XCTFail("Expected a 'Show' toggle to expand Network Traffic Monitor")
+            return
+        }
+        // Either the loading state or the settled list/empty state should appear.
+        let settled = waitForID("performance.networkTraffic.list", timeout: 15)
+            ?? waitForID("performance.networkTraffic.empty", timeout: 5)
+            ?? waitForID("performance.networkTraffic.loading", timeout: 2)
+        XCTAssertNotNil(settled, "Network Traffic Monitor should settle into loading/list/empty")
+    }
+
+    // TC-PERF-71 — the filter field and sort picker render once expanded.
+    func test_networkTraffic_filter_and_sort_controls_render() throws {
+        openPerformance()
+        guard clickAny(of: ["Show"], timeout: 5) else {
+            throw XCTSkip("Network Traffic Monitor 'Show' toggle not found")
+        }
+        XCTAssertTrue(assertID("performance.networkTraffic.filter.field",
+                                "Filter-by-app field should render", timeout: 10).exists)
+        XCTAssertTrue(assertID("performance.networkTraffic.sort.picker",
+                                "Sort picker should render", timeout: 5).exists)
+    }
+
+    // TC-PERF-72 — filtering by an app name that matches nothing shows the
+    // explicit empty state, never an infinite spinner.
+    func test_networkTraffic_filter_with_no_matches_shows_empty_state() throws {
+        openPerformance()
+        guard clickAny(of: ["Show"], timeout: 5) else {
+            throw XCTSkip("Network Traffic Monitor 'Show' toggle not found")
+        }
+        let field = element(id: "performance.networkTraffic.filter.field")
+        guard field.waitForExistence(timeout: 10) else {
+            throw XCTSkip("Filter field did not appear in time")
+        }
+        field.click()
+        field.typeText("zzz-no-such-process-zzz")
+        XCTAssertTrue(waitForID("performance.networkTraffic.empty", timeout: 10) != nil,
+                      "An unmatched filter should show the explicit empty state")
+    }
+
+    // TC-PERF-73 — collapsing the section (Hide) stops polling and hides the
+    // controls again; re-expanding must not crash.
+    func test_networkTraffic_collapse_and_reexpand() throws {
+        openPerformance()
+        guard clickAny(of: ["Show"], timeout: 5) else {
+            throw XCTSkip("Network Traffic Monitor 'Show' toggle not found")
+        }
+        _ = waitForID("performance.networkTraffic.list", timeout: 15)
+            ?? waitForID("performance.networkTraffic.empty", timeout: 5)
+        guard clickAny(of: ["Hide"], timeout: 5) else {
+            XCTFail("Expected a 'Hide' toggle after expanding")
+            return
+        }
+        XCTAssertFalse(element(id: "performance.networkTraffic.filter.field").exists,
+                       "Controls should be hidden again after collapsing")
+        // Re-expand — app must remain responsive.
+        XCTAssertTrue(clickAny(of: ["Show"], timeout: 5))
+        XCTAssertTrue(app.windows.firstMatch.exists)
+    }
 }

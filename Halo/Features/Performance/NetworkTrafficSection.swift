@@ -70,6 +70,7 @@ struct NetworkTrafficSection: View {
                             Text("Top talker: \(topTalker.processName) \u{2014} \(formatBytes(topTalker.totalBytes)) this session")
                                 .font(HaloFont.body(12, weight: .semibold))
                                 .foregroundColor(.haloText)
+                                .accessibilityIdentifier("performance.networkTraffic.topTalker.text")
                             Spacer()
                         }
                     }
@@ -82,6 +83,7 @@ struct NetworkTrafficSection: View {
                             TextField("Filter by app…", text: $filterText)
                                 .textFieldStyle(.plain)
                                 .font(HaloFont.body(12))
+                                .accessibilityIdentifier("performance.networkTraffic.filter.field")
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
@@ -96,18 +98,21 @@ struct NetworkTrafficSection: View {
                         .labelsHidden()
                         .pickerStyle(.menu)
                         .frame(width: 130)
+                        .accessibilityIdentifier("performance.networkTraffic.sort.picker")
                     }
 
                     if snapshot == nil {
                         ProgressView("Scanning connections…")
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
+                            .accessibilityIdentifier("performance.networkTraffic.loading")
                     } else if filteredConnections.isEmpty {
                         Text("No active outbound connections match.")
                             .font(HaloFont.body(12))
                             .foregroundColor(.haloText3)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.vertical, 16)
+                            .accessibilityIdentifier("performance.networkTraffic.empty")
                     } else {
                         VStack(spacing: 0) {
                             TrafficHeaderRow()
@@ -120,6 +125,7 @@ struct NetworkTrafficSection: View {
                         }
                         .background(Color.haloSurface)
                         .cornerRadius(8)
+                        .accessibilityIdentifier("performance.networkTraffic.list")
                     }
 
                     Text("Remote Host is best-effort reverse DNS on the real IP address — many hosts (CDNs, load balancers) resolve to a generic infrastructure name rather than the domain you'd recognize, or don't resolve at all; unresolved hosts are never flagged as suspicious. Data totals are real per-app session figures from nettop — macOS doesn't expose per-connection byte counts to third-party apps.")
@@ -228,5 +234,6 @@ private struct TrafficRow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
+        .accessibilityIdentifier("performance.networkTraffic.row.\(entry.pid)")
     }
 }

@@ -103,6 +103,7 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 | `cleanup.cleanAll.button` · `fileListView` | Cleanup |
 | `protection.scan.button` | Protection |
 | `performance.idleApp.quit.button` | Performance → Idle Apps |
+| `performance.networkTraffic.filter.field` · `.sort.picker` · `.topTalker.text` · `.list` · `.loading` · `.empty` · `.row.<pid>` | Performance → Network Traffic Monitor (F-017) |
 | `applications.row.<bundleId>` · `applications.uninstall.button` · `applications.leftover.<kind>` | Applications |
 | `files.tab.<TabTitle>` | Files tab bar |
 | `files.duplicates.deleteMarked.button` | Files → Duplicates |

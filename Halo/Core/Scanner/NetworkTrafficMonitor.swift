@@ -47,6 +47,10 @@ actor NetworkTrafficMonitor {
     private var dnsCacheOrder: [String] = []
     private let dnsCacheLimit = 500
 
+    /// Test hook — mirrors `SignatureDatabase.signatureCount`. Lets a unit
+    /// test assert the cache doesn't grow on a repeated lookup of the same IP.
+    var cachedIPCount: Int { dnsCache.count }
+
     // MARK: - Tracker domain list (bundle-loaded once, same pattern as SignatureDatabase)
 
     private var trackerDomains: Set<String> = []
@@ -104,8 +108,17 @@ actor NetworkTrafficMonitor {
     }
 
     private func isTrackerDomain(_ host: String) -> Bool {
+        Self.matchesTrackerDomain(host, domains: trackerDomains)
+    }
+
+    /// Pure matching logic, extracted so it's testable without needing to
+    /// spin up the actor or load the bundle resource. A host matches if it
+    /// equals a listed domain exactly, or is a subdomain of one (e.g.
+    /// `www.doubleclick.net` matches `doubleclick.net`, but
+    /// `notdoubleclick.net` does not).
+    static func matchesTrackerDomain(_ host: String, domains: Set<String>) -> Bool {
         let lower = host.lowercased()
-        return trackerDomains.contains { lower == $0 || lower.hasSuffix("." + $0) }
+        return domains.contains { lower == $0 || lower.hasSuffix("." + $0) }
     }
 
     // MARK: - lsof-based outbound connection enumeration
@@ -135,7 +148,14 @@ actor NetworkTrafficMonitor {
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         guard let output = String(data: data, encoding: .utf8) else { return [] }
 
-        let now = Date()
+        return Self.parseLsofOutput(output)
+    }
+
+    /// Pure parser for `lsof -i -n -P` output — extracted so it's testable
+    /// with captured sample text, no subprocess required. See the parsing
+    /// note above `fetchConnections` for why we anchor on the "TCP"/"UDP"
+    /// token rather than a fixed column position.
+    static func parseLsofOutput(_ output: String, now: Date = Date()) -> [NetworkConnectionEntry] {
         var entries: [NetworkConnectionEntry] = []
 
         for line in output.components(separatedBy: "\n").dropFirst() where !line.isEmpty {
@@ -190,7 +210,7 @@ actor NetworkTrafficMonitor {
     }
 
     /// Splits "ip:port" or "[ipv6]:port" into (host, port).
-    private static func splitHostPort(_ field: String) -> (String, Int)? {
+    static func splitHostPort(_ field: String) -> (String, Int)? {
         if field.hasPrefix("[") {
             guard let closeBracket = field.firstIndex(of: "]") else { return nil }
             let host = String(field[field.index(after: field.startIndex)..<closeBracket])
@@ -237,6 +257,14 @@ actor NetworkTrafficMonitor {
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         guard let output = String(data: data, encoding: .utf8) else { return [] }
 
+        return Self.parseNettopOutput(output)
+    }
+
+    /// Pure parser for `nettop -P -L 1 -J bytes_in,bytes_out` CSV output —
+    /// extracted so it's testable with captured sample text, no subprocess
+    /// required. See the parsing note above `fetchAppTotals` for why the pid
+    /// is taken from the trailing ".pid" suffix rather than a delimiter split.
+    static func parseNettopOutput(_ output: String) -> [AppNetworkTotal] {
         var totals: [Int32: (name: String, bytesIn: UInt64, bytesOut: UInt64)] = [:]
         for line in output.components(separatedBy: "\n").dropFirst() where !line.isEmpty {
             let cols = line.components(separatedBy: ",")
@@ -268,7 +296,7 @@ actor NetworkTrafficMonitor {
 
     // MARK: - Reverse DNS (best-effort, cached)
 
-    private func resolveHost(ip: String) async -> String? {
+    func resolveHost(ip: String) async -> String? {
         if let cached = dnsCache[ip] {
             return cached
         }
