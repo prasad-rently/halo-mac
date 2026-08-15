@@ -48,6 +48,7 @@ struct MemoryTrendsSection: View {
                     .font(HaloFont.mono(11))
                     .foregroundColor(.haloText)
                     .fixedSize()
+                    .accessibilityIdentifier("performance.memoryTrends.alertThreshold.stepper")
                     Spacer()
                 }
 
@@ -93,6 +94,7 @@ struct MemoryTrendsSection: View {
         } message: {
             Text("This will quit the app immediately, which may cause unsaved data loss, then relaunch it fresh.")
         }
+        .accessibilityIdentifier("performance.memoryTrends.tab")
     }
 }
 
@@ -167,14 +169,17 @@ private struct MemoryTrendRow: View {
                 if leak.isPossibleLeak {
                     Button("Restart App", action: onRestart)
                         .buttonStyle(HaloSmallButtonStyle(color: .haloRed))
+                        .accessibilityIdentifier("performance.memoryTrends.restart.\(history.bundleID)")
                 }
             }
 
             sparkline
                 .frame(height: 28)
+                .accessibilityIdentifier("performance.memoryTrends.sparkline.\(history.bundleID)")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .accessibilityIdentifier("performance.memoryTrends.row.\(history.bundleID)")
     }
 
     @ViewBuilder
