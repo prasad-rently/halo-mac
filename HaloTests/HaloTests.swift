@@ -189,3 +189,114 @@ struct ModelTests {
         #expect(cat.allBytes == 3000)
     }
 }
+
+// MARK: - Focus Session Tests (F-028)
+//
+// `FocusSessionSummary.digestText`, `FocusAppConfig`, and `FocusDurationPreset`
+// are plain data types with no actor/singleton involved, so they're tested
+// directly. `FocusSessionManager.start()`/`endSession()` and
+// `FocusSessionSettingsStore.add()`/`.remove()` are intentionally NOT
+// exercised here — they have real side effects on the host machine (posting
+// a genuine `UNUserNotificationCenter` notification, appending a permanent
+// entry to the real `AlertLog.shared`, and persisting to the real
+// `UserDefaults["focusSessionAppConfigs"]`) with no injectable seam, the same
+// category of side effect this suite avoided for `AlertManager.checkAppMemory`
+// in the F-023 pass. See docs/MANUAL_TEST_PLAN.md for their manual coverage.
+
+@Suite("FocusSessionSummary")
+struct FocusSessionSummaryTests {
+
+    @Test("digestText — full data, not ended early, matches the documented example exactly")
+    func testDigestTextFullData() {
+        let summary = FocusSessionSummary(
+            plannedMinutes: 50, actualMinutes: 50, hiddenAppNames: ["Slack", "Mail"],
+            topRAMProcessName: "Chrome", topRAMProcessMB: 820.4, maxCPUPercent: 42, endedEarly: false)
+        #expect(summary.digestText == "50-minute session. Top RAM consumer: Chrome (820 MB). CPU stayed below 45%.")
+    }
+
+    @Test("digestText — ended early, no RAM data, zero CPU")
+    func testDigestTextEndedEarlyNoData() {
+        let summary = FocusSessionSummary(
+            plannedMinutes: 25, actualMinutes: 10, hiddenAppNames: [],
+            topRAMProcessName: nil, topRAMProcessMB: nil, maxCPUPercent: 0, endedEarly: true)
+        #expect(summary.digestText == "10-minute session (ended early). CPU usage stayed minimal throughout.")
+    }
+
+    @Test("digestText — CPU percent rounds up to the nearest multiple of 5")
+    func testDigestTextCPURounding() {
+        func cpuLine(_ pct: Double) -> String {
+            FocusSessionSummary(plannedMinutes: 25, actualMinutes: 25, hiddenAppNames: [],
+                                 topRAMProcessName: nil, topRAMProcessMB: nil,
+                                 maxCPUPercent: pct, endedEarly: false).digestText
+        }
+        #expect(cpuLine(40).hasSuffix("CPU stayed below 40%."))    // exact multiple — no rounding needed
+        #expect(cpuLine(41).hasSuffix("CPU stayed below 45%."))    // rounds up to next multiple of 5
+        #expect(cpuLine(55).hasSuffix("CPU stayed below 55%."))
+        #expect(cpuLine(56).hasSuffix("CPU stayed below 60%."))
+    }
+
+    @Test("digestText omits the RAM line entirely when no process data was sampled")
+    func testDigestTextOmitsRAMLineWhenMissing() {
+        let summary = FocusSessionSummary(
+            plannedMinutes: 25, actualMinutes: 25, hiddenAppNames: [],
+            topRAMProcessName: nil, topRAMProcessMB: nil, maxCPUPercent: 12, endedEarly: false)
+        #expect(!summary.digestText.contains("Top RAM consumer"))
+    }
+}
+
+@Suite("FocusAppConfig")
+struct FocusAppConfigTests {
+
+    @Test("id is derived from bundleIdentifier")
+    func testIDIsBundleIdentifier() {
+        let config = FocusAppConfig(bundleIdentifier: "com.tinyspeck.slackmacgap", name: "Slack")
+        #expect(config.id == "com.tinyspeck.slackmacgap")
+    }
+
+    @Test("Equatable — same bundleIdentifier and name are equal, different name or bundle are not")
+    func testEquatable() {
+        let a = FocusAppConfig(bundleIdentifier: "com.a", name: "A")
+        let sameA = FocusAppConfig(bundleIdentifier: "com.a", name: "A")
+        let differentName = FocusAppConfig(bundleIdentifier: "com.a", name: "A renamed")
+        let differentBundle = FocusAppConfig(bundleIdentifier: "com.b", name: "A")
+        #expect(a == sameA)
+        #expect(a != differentName)
+        #expect(a != differentBundle)
+    }
+
+    @Test("Codable round-trips an array of configs")
+    func testCodableRoundTrip() throws {
+        let configs = [
+            FocusAppConfig(bundleIdentifier: "com.tinyspeck.slackmacgap", name: "Slack"),
+            FocusAppConfig(bundleIdentifier: "com.apple.mail", name: "Mail"),
+        ]
+        let data = try JSONEncoder().encode(configs)
+        let decoded = try JSONDecoder().decode([FocusAppConfig].self, from: data)
+        #expect(decoded == configs)
+    }
+
+    @Test("Hashable — usable in a Set, deduplicating by value equality")
+    func testHashableInSet() {
+        let a = FocusAppConfig(bundleIdentifier: "com.a", name: "A")
+        let sameA = FocusAppConfig(bundleIdentifier: "com.a", name: "A")
+        let b = FocusAppConfig(bundleIdentifier: "com.b", name: "B")
+        let set: Set<FocusAppConfig> = [a, sameA, b]
+        #expect(set.count == 2)
+    }
+}
+
+@Suite("FocusDurationPreset")
+struct FocusDurationPresetTests {
+
+    @Test("Exactly two presets: 25 and 50 minutes")
+    func testPresetValues() {
+        #expect(FocusDurationPreset.allCases.count == 2)
+        #expect(Set(FocusDurationPreset.allCases.map(\.rawValue)) == [25, 50])
+    }
+
+    @Test("label formats as 'N min'")
+    func testPresetLabels() {
+        #expect(FocusDurationPreset.twentyFive.label == "25 min")
+        #expect(FocusDurationPreset.fifty.label == "50 min")
+    }
+}

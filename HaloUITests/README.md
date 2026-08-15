@@ -100,6 +100,7 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 |------------|-------|
 | `sidebar.row.<AppModule.rawValue>` | every sidebar row (drives all navigation) |
 | `dashboard.smartScan.button` / `dashboard.exportReport.button` / `dashboard.alertHistory` | Dashboard |
+| `dashboard.focusSession.start` · `.end` · `dashboard.focusHistory` | Dashboard → Focus Session (F-028) |
 | `cleanup.cleanAll.button` · `fileListView` | Cleanup |
 | `protection.scan.button` | Protection |
 | `performance.idleApp.quit.button` | Performance → Idle Apps |
