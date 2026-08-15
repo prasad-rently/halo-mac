@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftUI
 @testable import Halo
 
 // MARK: - FileSystemScanner Tests
@@ -150,6 +151,187 @@ struct DuplicateDetectorTests {
         #expect(groups.count == 1)
         // Wasted = 2 copies × 10000 bytes
         #expect(groups[0].wastedBytes == Int64(content.count) * 2)
+    }
+}
+
+// MARK: - ICloudDriveScanner Tests (F-030)
+//
+// `scanDirectory` and its private helpers operate purely on whatever URL is
+// passed in — no dependency on the real `~/Library/Mobile Documents` or any
+// persisted singleton — so, like FileSystemScanner above, these run against
+// disposable temp directories. `trash(_:)` performs a real `FileManager.
+// trashItem` and is deliberately NOT unit-tested here (no established
+// precedent in this suite for exercising trashItem for real — see
+// FilesUITests, which drives that flow to its confirmation dialog and always
+// cancels).
+
+@Suite("ICloudDriveScanner")
+struct ICloudDriveScannerTests {
+
+    @Test("scanDirectory reports real file sizes, sums directories, and sorts largest-first")
+    func testScanDirectorySizesAndSorting() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("com.halo.test.icloud.\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        // A small top-level file...
+        let smallFile = tempDir.appendingPathComponent("small.txt")
+        try Data(repeating: 0x41, count: 100).write(to: smallFile)
+
+        // ...and a subfolder whose contents should be summed into one size.
+        let subfolder = tempDir.appendingPathComponent("Bigger")
+        try FileManager.default.createDirectory(at: subfolder, withIntermediateDirectories: true)
+        try Data(repeating: 0x42, count: 10_000).write(to: subfolder.appendingPathComponent("a.dat"))
+        try Data(repeating: 0x43, count: 10_000).write(to: subfolder.appendingPathComponent("b.dat"))
+
+        let scanner = ICloudDriveScanner()
+        let items = await scanner.scanDirectory(tempDir)
+
+        #expect(items.count == 2)
+        // Largest (the summed 20,000-byte folder) sorts first.
+        #expect(items.first?.name == "Bigger")
+        #expect(items.first?.isDirectory == true)
+        #expect(items.first?.sizeBytes == 20_000)
+        #expect(items.last?.name == "small.txt")
+        #expect(items.last?.isDirectory == false)
+        #expect(items.last?.sizeBytes == 100)
+    }
+
+    @Test("scanDirectory returns an empty list for an empty folder")
+    func testScanDirectoryEmpty() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("com.halo.test.icloud.empty.\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let scanner = ICloudDriveScanner()
+        let items = await scanner.scanDirectory(tempDir)
+        #expect(items.isEmpty)
+    }
+
+    @Test("scanDirectory fails soft (returns empty) for a nonexistent URL")
+    func testScanDirectoryMissingFolder() async throws {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("com.halo.test.icloud.does-not-exist.\(UUID().uuidString)")
+        let scanner = ICloudDriveScanner()
+        let items = await scanner.scanDirectory(missing)
+        #expect(items.isEmpty)
+    }
+}
+
+// MARK: - iCloud Drive Model Tests (F-030)
+
+@Suite("ICloudContainer")
+struct ICloudContainerTests {
+
+    @Test("displayName is always \"iCloud Drive\" for the user drive, regardless of folder name")
+    func testUserDriveDisplayName() {
+        let container = ICloudContainer(id: "com~apple~CloudDocs",
+                                         url: URL(fileURLWithPath: "/tmp"), isUserDrive: true)
+        #expect(container.displayName == "iCloud Drive")
+    }
+
+    @Test("displayName strips the com~apple~ prefix for a first-party app container")
+    func testAppleAppContainerDisplayName() {
+        let container = ICloudContainer(id: "com~apple~Pages",
+                                         url: URL(fileURLWithPath: "/tmp"), isUserDrive: false)
+        #expect(container.displayName == "Pages")
+    }
+
+    @Test("displayName strips the generic com~ prefix for a third-party container")
+    func testThirdPartyContainerDisplayName() {
+        let container = ICloudContainer(id: "com~examplecorp~notesapp",
+                                         url: URL(fileURLWithPath: "/tmp"), isUserDrive: false)
+        #expect(container.displayName == "Notesapp")
+    }
+}
+
+@Suite("ICloudSyncStatus")
+struct ICloudSyncStatusTests {
+
+    @Test("Each status maps to its own label, SF Symbol, and color")
+    func testStatusPresentation() {
+        #expect(ICloudSyncStatus.local.label == "On This Mac")
+        #expect(ICloudSyncStatus.local.icon == "checkmark.circle.fill")
+        #expect(ICloudSyncStatus.local.color == Color.haloGreen)
+
+        #expect(ICloudSyncStatus.downloading.label == "Downloading…")
+        #expect(ICloudSyncStatus.downloading.icon == "arrow.down.circle")
+
+        #expect(ICloudSyncStatus.uploading.label == "Uploading…")
+        #expect(ICloudSyncStatus.uploading.icon == "arrow.up.circle")
+
+        #expect(ICloudSyncStatus.evicted.label == "iCloud Only")
+        #expect(ICloudSyncStatus.evicted.icon == "icloud")
+        #expect(ICloudSyncStatus.evicted.color == Color.haloText2)
+
+        #expect(ICloudSyncStatus.unknown.label == "Unknown")
+        #expect(ICloudSyncStatus.unknown.icon == "questionmark.circle")
+    }
+}
+
+@Suite("ICloudDriveItem")
+struct ICloudDriveItemTests {
+
+    private func makeItem(name: String, isDirectory: Bool = false,
+                           modifiedDate: Date? = nil) -> ICloudDriveItem {
+        ICloudDriveItem(id: name, url: URL(fileURLWithPath: "/tmp/\(name)"),
+                         name: name, sizeBytes: 1024, isDirectory: isDirectory,
+                         modifiedDate: modifiedDate, syncStatus: .local)
+    }
+
+    @Test("Directories always get the folder icon, regardless of name")
+    func testDirectoryIcon() {
+        let dir = makeItem(name: "Projects.pdf", isDirectory: true)
+        #expect(dir.icon == "folder.fill")
+    }
+
+    @Test("File icon is chosen from the file extension")
+    func testFileExtensionIcons() {
+        #expect(makeItem(name: "report.pdf").icon == "doc.richtext")
+        #expect(makeItem(name: "photo.HEIC").icon == "photo")
+        #expect(makeItem(name: "clip.mov").icon == "film")
+        #expect(makeItem(name: "deck.key").icon == "rectangle.on.rectangle")
+        #expect(makeItem(name: "sheet.xlsx").icon == "tablecells")
+        #expect(makeItem(name: "notes.pages").icon == "doc.text")
+        #expect(makeItem(name: "archive.zip").icon == "doc.zipper")
+        #expect(makeItem(name: "unknownkind.xyz").icon == "doc")
+    }
+
+    @Test("modifiedDateFormatted falls back to an em dash when there's no date")
+    func testModifiedDateFallback() {
+        let item = makeItem(name: "no-date.txt", modifiedDate: nil)
+        #expect(item.modifiedDateFormatted == "—")
+    }
+
+    @Test("modifiedDateFormatted renders a relative string when a date is present")
+    func testModifiedDateRelative() {
+        let item = makeItem(name: "recent.txt", modifiedDate: Date().addingTimeInterval(-3600))
+        #expect(item.modifiedDateFormatted != "—")
+        #expect(!item.modifiedDateFormatted.isEmpty)
+    }
+
+    @Test("sizeFormatted uses ByteCountFormatter")
+    func testSizeFormatted() {
+        let item = makeItem(name: "sized.txt")
+        #expect(item.sizeFormatted.contains("KB") || item.sizeFormatted.contains("1"))
+    }
+}
+
+@Suite("ICloudDriveScanError")
+struct ICloudDriveScanErrorTests {
+
+    @Test("notAvailable explains iCloud Drive isn't set up")
+    func testNotAvailableMessage() {
+        let error = ICloudDriveScanError.notAvailable
+        #expect(error.errorDescription?.contains("iCloud Drive") == true)
+    }
+
+    @Test("containerUnreadable names the container in its message")
+    func testContainerUnreadableMessage() {
+        let error = ICloudDriveScanError.containerUnreadable("Pages")
+        #expect(error.errorDescription?.contains("Pages") == true)
     }
 }
 
