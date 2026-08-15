@@ -865,6 +865,7 @@ struct PrivacyExposureSection: View {
                     }
                     .toggleStyle(.switch)
                     .disabled(isScanning)
+                    .accessibilityIdentifier("protection.privacyscan.icloudToggle")
 
                     HStack(spacing: 6) {
                         Circle()
@@ -875,6 +876,7 @@ struct PrivacyExposureSection: View {
                             .font(HaloFont.body(12))
                             .foregroundColor(viewModel.privacyScanStatusColor)
                     }
+                    .accessibilityIdentifier("protection.privacyscan.status")
 
                     if isScanning, !viewModel.privacyCurrentPath.isEmpty {
                         Text(viewModel.privacyCurrentPath)
@@ -913,6 +915,7 @@ struct PrivacyExposureSection: View {
                         }
                     }
                 }
+                .accessibilityIdentifier("protection.privacyscan.findings.list")
             } else if case .complete(let count) = viewModel.privacyScanState, count == 0 {
                 HStack(spacing: 10) {
                     Image(systemName: "checkmark.circle.fill").foregroundColor(.haloGreen)
@@ -924,6 +927,7 @@ struct PrivacyExposureSection: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.haloSurface2)
                 .cornerRadius(12)
+                .accessibilityIdentifier("protection.privacyscan.emptyState")
             }
         }
     }
@@ -978,6 +982,7 @@ struct PrivacyFindingRow: View {
                     .foregroundColor(.haloAccent)
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("protection.privacyscan.reveal.\(finding.id)")
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
@@ -985,5 +990,6 @@ struct PrivacyFindingRow: View {
         .cornerRadius(10)
         .overlay(RoundedRectangle(cornerRadius: 10)
             .stroke(finding.riskLevel.color.opacity(0.25), lineWidth: 1))
+        .accessibilityIdentifier("protection.privacyscan.row.\(finding.id)")
     }
 }

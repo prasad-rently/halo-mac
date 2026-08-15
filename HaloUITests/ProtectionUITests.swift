@@ -66,4 +66,63 @@ final class ProtectionUITests: HaloUITestCase {
                           "an identifier such as `protection.signatureCount.text`.")
         }
     }
+
+    // MARK: - Sensitive Data Scanner (F-018) — TC-PROT-08…20
+    //
+    // Find-only feature: there is no delete/quarantine path anywhere here, so
+    // these tests can run a real scan to completion without any confirmation
+    // gate to navigate.
+
+    // TC-PROT-08 — the section renders and a scan can be triggered; status
+    // eventually settles (never a stuck "Scanning…" state).
+    func test_privacyScan_runs_and_settles() {
+        XCTAssertTrue(HaloSidebar(test: self).navigate(to: .protection))
+        XCTAssertTrue(element(labeled: "Sensitive Data Scanner", timeout: 10)?.exists ?? false,
+                      "Protection should show a 'Sensitive Data Scanner' section")
+        guard tapID("protection.privacyscan.button", timeout: 8) else {
+            XCTFail("Expected a 'Run Sensitive Data Scan' button")
+            return
+        }
+        XCTAssertTrue(assertID("protection.privacyscan.status",
+                                "Scan status indicator should be visible", timeout: 5).exists)
+        // The scan walks Downloads/Documents/Desktop for real, so allow a
+        // generous timeout; either the findings list or the clean empty state
+        // is an acceptable settled outcome.
+        let settled = waitForID("protection.privacyscan.findings.list", timeout: 120)
+            ?? waitForID("protection.privacyscan.emptyState", timeout: 30)
+        XCTAssertNotNil(settled, "Privacy scan should settle into either findings or the empty state")
+    }
+
+    // TC-PROT-17 — iCloud Drive inclusion is opt-in and off by default. We
+    // only assert the toggle renders here; the exact off/on value
+    // representation for a SwiftUI switch-style Toggle isn't stable enough
+    // to assert without a live GUI session to confirm against, so the
+    // off-by-default expectation itself is documented in
+    // MANUAL_TEST_PLAN.md TC-PROT-17 for manual verification.
+    func test_privacyScan_icloudToggle_renders() {
+        HaloSidebar(test: self).navigate(to: .protection)
+        XCTAssertTrue(assertID("protection.privacyscan.icloudToggle",
+                                "Expected the 'Include iCloud Drive' toggle to render",
+                                timeout: 10).exists)
+    }
+
+    // TC-PROT-19 — "Reveal in Finder" is the only action available on a
+    // finding; if any findings exist, the reveal button must be present and
+    // tappable without crashing the app (Finder itself is out of scope here).
+    func test_privacyScan_reveal_button_present_when_findings_exist() throws {
+        HaloSidebar(test: self).navigate(to: .protection)
+        guard tapID("protection.privacyscan.button", timeout: 8) else {
+            throw XCTSkip("Run Sensitive Data Scan button not found")
+        }
+        guard waitForID("protection.privacyscan.findings.list", timeout: 120) != nil else {
+            throw XCTSkip("No sensitive data findings on this machine — nothing to reveal. " +
+                          "Expectation: each finding row exposes a 'Reveal in Finder' " +
+                          "button (protection.privacyscan.reveal.<id>) and no delete/quarantine action.")
+        }
+        let revealButtons = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "protection.privacyscan.reveal.")
+        )
+        XCTAssertGreaterThan(revealButtons.count, 0,
+                             "At least one finding should expose a Reveal in Finder button")
+    }
 }

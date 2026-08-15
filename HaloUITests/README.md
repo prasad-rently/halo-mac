@@ -102,6 +102,7 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 | `dashboard.smartScan.button` / `dashboard.exportReport.button` / `dashboard.alertHistory` | Dashboard |
 | `cleanup.cleanAll.button` · `fileListView` | Cleanup |
 | `protection.scan.button` | Protection |
+| `protection.privacyscan.button` · `.icloudToggle` · `.status` · `.findings.list` · `.emptyState` · `.row.<id>` · `.reveal.<id>` | Protection → Sensitive Data Scanner (F-018) |
 | `performance.idleApp.quit.button` | Performance → Idle Apps |
 | `applications.row.<bundleId>` · `applications.uninstall.button` · `applications.leftover.<kind>` | Applications |
 | `files.tab.<TabTitle>` | Files tab bar |
