@@ -70,6 +70,7 @@ struct DriveHealthSection: View {
             }
             .padding(16)
         }
+        .accessibilityIdentifier("files.driveHealth.card")
         .onAppear { vm.scanIfNeeded(volume: volume) }
         .onChange(of: volume.id) { _ in vm.scanIfNeeded(volume: volume) }
     }
@@ -92,6 +93,7 @@ struct DriveHealthSection: View {
                 HaloGhostButton(vm.info == nil ? "Check Drive Health" : "Re-Check", icon: "arrow.clockwise") {
                     vm.scan(volume: volume)
                 }
+                .accessibilityIdentifier("files.driveHealth.check.button")
             }
         }
     }
@@ -128,6 +130,7 @@ struct DriveHealthSection: View {
                             .font(HaloFont.body(13, weight: .semibold))
                             .foregroundColor(.haloText)
                         HaloBadge(text: statusLabel(info), color: accentColor(info))
+                            .accessibilityIdentifier("files.driveHealth.status")
                     }
                     Text(rawStatusDetail(info))
                         .font(HaloFont.body(11))
@@ -161,18 +164,18 @@ struct DriveHealthSection: View {
     private func metricsGrid(_ info: SMARTDiskMonitor.SMARTDiskInfo) -> some View {
         let columns = [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)]
         return LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
-            metric("Capacity", byteString(info.capacityBytes))
-            metric("Serial Number", info.serialNumber)
-            metric("Bus / Connection", info.busProtocol)
-            metric("Temperature", info.temperatureCelsius.map { String(format: "%.0f°C", $0) })
-            metric("Power-On Hours", info.powerOnHours.map { "\($0) hrs" })
-            metric("Power Cycles", info.powerCycles.map { "\($0)" })
-            metric("Total Bytes Written", info.totalBytesWritten.map(byteString))
-            metric("Total Bytes Read", info.totalBytesRead.map(byteString))
-            metric("Available Spare", info.availableSparePercent.map { "\($0)%" })
-            metric("Media Errors", info.mediaErrorCount.map { "\($0)" })
-            metric("Reallocated Sectors", reallocatedSectorNote(info))
-            metric("Pending Sectors", pendingSectorNote(info))
+            metric("Capacity", byteString(info.capacityBytes), id: "capacity")
+            metric("Serial Number", info.serialNumber, id: "serialNumber")
+            metric("Bus / Connection", info.busProtocol, id: "busProtocol")
+            metric("Temperature", info.temperatureCelsius.map { String(format: "%.0f°C", $0) }, id: "temperature")
+            metric("Power-On Hours", info.powerOnHours.map { "\($0) hrs" }, id: "powerOnHours")
+            metric("Power Cycles", info.powerCycles.map { "\($0)" }, id: "powerCycles")
+            metric("Total Bytes Written", info.totalBytesWritten.map(byteString), id: "totalBytesWritten")
+            metric("Total Bytes Read", info.totalBytesRead.map(byteString), id: "totalBytesRead")
+            metric("Available Spare", info.availableSparePercent.map { "\($0)%" }, id: "availableSpare")
+            metric("Media Errors", info.mediaErrorCount.map { "\($0)" }, id: "mediaErrors")
+            metric("Reallocated Sectors", reallocatedSectorNote(info), id: "reallocatedSectors")
+            metric("Pending Sectors", pendingSectorNote(info), id: "pendingSectors")
         }
     }
 
@@ -188,7 +191,7 @@ struct DriveHealthSection: View {
         return info.isSolidState == true ? "N/A on NVMe" : nil
     }
 
-    private func metric(_ label: String, _ value: String?) -> some View {
+    private func metric(_ label: String, _ value: String?, id: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label.uppercased())
                 .font(HaloFont.body(9, weight: .semibold))
@@ -197,6 +200,7 @@ struct DriveHealthSection: View {
                 .font(HaloFont.body(12, weight: value == nil ? .regular : .semibold))
                 .foregroundColor(value == nil ? .haloText3 : .haloText)
                 .italic(value == nil)
+                .accessibilityIdentifier("files.driveHealth.field.\(id)")
         }
     }
 

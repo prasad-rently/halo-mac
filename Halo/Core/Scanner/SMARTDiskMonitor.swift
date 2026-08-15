@@ -156,7 +156,7 @@ actor SMARTDiskMonitor {
     func scan(path: String, id: String) async -> SMARTDiskInfo {
         let plist = diskutilInfoPlist(forPath: path)
 
-        let busProtocol = nonEmpty(plist?["BusProtocol"] as? String)
+        let busProtocol = Self.nonEmpty(plist?["BusProtocol"] as? String)
         let isSolidState = plist?["SolidState"] as? Bool
         let capacityBytes = (plist?["TotalSize"] as? NSNumber)?.int64Value
             ?? (plist?["Size"] as? NSNumber)?.int64Value ?? 0
@@ -172,10 +172,10 @@ actor SMARTDiskMonitor {
         // (e.g. "disk0"). Both callers of this actor pass mount paths, so
         // without this fallback `model` (and therefore the IOKit serial
         // lookup below, which matches by model) would always come back nil.
-        var model = nonEmpty(plist?["MediaName"] as? String)
+        var model = Self.nonEmpty(plist?["MediaName"] as? String)
         if model == nil, wholeDiskID != "unknown" {
             let physicalPlist = diskutilInfoPlist(forPath: wholeDiskID)
-            model = nonEmpty(physicalPlist?["MediaName"] as? String)
+            model = Self.nonEmpty(physicalPlist?["MediaName"] as? String)
         }
 
         let temperatureCelsius: Double? = smartDict
@@ -283,7 +283,12 @@ actor SMARTDiskMonitor {
         return low | (high << 32)
     }
 
-    private func nonEmpty(_ s: String?) -> String? {
+    /// Empty-string → nil normalization used by the `MediaName` empty-string
+    /// fallback path (see file header). `static` + non-`private` (rather than
+    /// `private`) purely so `HaloTests` can exercise this deterministic logic
+    /// directly via `@testable import Halo` without shelling out to `diskutil`
+    /// — no behavior change, this is the same stateless check either way.
+    static func nonEmpty(_ s: String?) -> String? {
         guard let s, !s.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
         return s
     }

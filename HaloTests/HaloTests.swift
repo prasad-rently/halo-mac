@@ -189,3 +189,144 @@ struct ModelTests {
         #expect(cat.allBytes == 3000)
     }
 }
+
+// MARK: - SMARTDiskMonitor Tests (F-020)
+//
+// `classify(...)` and `nonEmpty(_:)` are pure/static, so these tests never
+// shell out to `diskutil` or touch IOKit (those depend on the real machine's
+// actual drives — see docs/MANUAL_TEST_PLAN.md for their manual coverage).
+
+@Suite("SMARTDiskMonitor")
+struct SMARTDiskMonitorTests {
+
+    private typealias Status = SMARTDiskMonitor.SMARTOverallStatus
+    private typealias Info = SMARTDiskMonitor.SMARTDiskInfo
+
+    // MARK: - classify(status:percentageUsed:mediaErrorCount:availableSpare:availableSpareThreshold:)
+
+    @Test("A failing SMART status is always .failing, regardless of every other signal")
+    func testClassifyFailingStatusOverridesEverything() {
+        let level = Info.classify(status: .failing, percentageUsed: 0, mediaErrorCount: 0,
+                                   availableSpare: 100, availableSpareThreshold: 10)
+        #expect(level == .failing)
+    }
+
+    @Test("Available spare at or below its threshold is a critical failing condition")
+    func testClassifyAvailableSpareAtThresholdIsFailing() {
+        let atThreshold = Info.classify(status: .verified, percentageUsed: 0, mediaErrorCount: 0,
+                                         availableSpare: 10, availableSpareThreshold: 10)
+        let belowThreshold = Info.classify(status: .verified, percentageUsed: 0, mediaErrorCount: 0,
+                                            availableSpare: 5, availableSpareThreshold: 10)
+        #expect(atThreshold == .failing)
+        #expect(belowThreshold == .failing)
+    }
+
+    @Test("Available spare comfortably above threshold does not fail on its own")
+    func testClassifySpareAboveThresholdIsNotFailingByItself() {
+        let level = Info.classify(status: .verified, percentageUsed: 0, mediaErrorCount: 0,
+                                   availableSpare: 50, availableSpareThreshold: 10)
+        #expect(level == .good)
+    }
+
+    @Test("100% or greater wear (percentageUsed) is failing")
+    func testClassifyFullWearIsFailing() {
+        let level = Info.classify(status: .verified, percentageUsed: 100, mediaErrorCount: 0,
+                                   availableSpare: nil, availableSpareThreshold: nil)
+        #expect(level == .failing)
+    }
+
+    @Test("Any non-zero media error count is a warning, not a failure")
+    func testClassifyMediaErrorsAreWarning() {
+        let level = Info.classify(status: .verified, percentageUsed: 0, mediaErrorCount: 1,
+                                   availableSpare: nil, availableSpareThreshold: nil)
+        #expect(level == .warning)
+    }
+
+    @Test("90-99% wear is a warning, not yet a failure")
+    func testClassifyHighWearIsWarning() {
+        let level = Info.classify(status: .verified, percentageUsed: 90, mediaErrorCount: 0,
+                                   availableSpare: nil, availableSpareThreshold: nil)
+        let level99 = Info.classify(status: .verified, percentageUsed: 99, mediaErrorCount: 0,
+                                     availableSpare: nil, availableSpareThreshold: nil)
+        #expect(level == .warning)
+        #expect(level99 == .warning)
+    }
+
+    @Test("An unrecognized (.other) SMART status string is treated as a warning")
+    func testClassifyOtherStatusIsWarning() {
+        let level = Info.classify(status: .other("Some Vendor String"), percentageUsed: 0, mediaErrorCount: 0,
+                                   availableSpare: nil, availableSpareThreshold: nil)
+        #expect(level == .warning)
+    }
+
+    @Test("Verified status with no red flags at all is good")
+    func testClassifyVerifiedWithNoIssuesIsGood() {
+        let level = Info.classify(status: .verified, percentageUsed: 10, mediaErrorCount: 0,
+                                   availableSpare: 90, availableSpareThreshold: 10)
+        #expect(level == .good)
+    }
+
+    @Test("Unavailable status with no other signal is unknown, never guessed as good")
+    func testClassifyUnavailableWithNoSignalsIsUnknown() {
+        let level = Info.classify(status: .unavailable, percentageUsed: nil, mediaErrorCount: nil,
+                                   availableSpare: nil, availableSpareThreshold: nil)
+        #expect(level == .unknown)
+    }
+
+    @Test("All-nil optional signals with a verified status still classify as good")
+    func testClassifyVerifiedWithAllNilOptionalsIsGood() {
+        let level = Info.classify(status: .verified, percentageUsed: nil, mediaErrorCount: nil,
+                                   availableSpare: nil, availableSpareThreshold: nil)
+        #expect(level == .good)
+    }
+
+    // MARK: - nonEmpty(_:)
+
+    @Test("nonEmpty returns nil for a nil input")
+    func testNonEmptyNilInput() {
+        #expect(SMARTDiskMonitor.nonEmpty(nil) == nil)
+    }
+
+    @Test("nonEmpty returns nil for an empty string — the diskutil MediaName-by-mount-path gotcha")
+    func testNonEmptyEmptyString() {
+        #expect(SMARTDiskMonitor.nonEmpty("") == nil)
+    }
+
+    @Test("nonEmpty returns nil for a whitespace-only string")
+    func testNonEmptyWhitespaceOnlyString() {
+        #expect(SMARTDiskMonitor.nonEmpty("   ") == nil)
+    }
+
+    @Test("nonEmpty passes through a real value unchanged")
+    func testNonEmptyRealValue() {
+        #expect(SMARTDiskMonitor.nonEmpty("APPLE SSD AP0512Z") == "APPLE SSD AP0512Z")
+    }
+
+    // MARK: - SMARTDiskInfo.lifespanRemainingPercent
+
+    private func makeInfo(percentageUsed: Int?) -> Info {
+        Info(id: "test", bsdWholeDiskID: "disk0", model: nil, serialNumber: nil, busProtocol: nil,
+             isSolidState: true, capacityBytes: 0, overallStatus: .verified,
+             temperatureCelsius: nil, powerOnHours: nil, powerCycles: nil, unsafeShutdowns: nil,
+             totalBytesWritten: nil, totalBytesRead: nil, availableSparePercent: nil,
+             availableSpareThresholdPercent: nil, percentageUsed: percentageUsed, mediaErrorCount: nil,
+             errorLogEntryCount: nil, reallocatedSectorCount: nil, pendingSectorCount: nil,
+             scannedAt: .distantPast)
+    }
+
+    @Test("lifespanRemainingPercent is nil when the drive never reported a wear percentage")
+    func testLifespanRemainingNilWhenNoWearReported() {
+        #expect(makeInfo(percentageUsed: nil).lifespanRemainingPercent == nil)
+    }
+
+    @Test("lifespanRemainingPercent is 100 minus the reported wear")
+    func testLifespanRemainingIsInverseOfWear() {
+        #expect(makeInfo(percentageUsed: 30).lifespanRemainingPercent == 70)
+        #expect(makeInfo(percentageUsed: 0).lifespanRemainingPercent == 100)
+    }
+
+    @Test("lifespanRemainingPercent never goes negative even if wear reports over 100%")
+    func testLifespanRemainingClampsAtZero() {
+        #expect(makeInfo(percentageUsed: 110).lifespanRemainingPercent == 0)
+    }
+}
