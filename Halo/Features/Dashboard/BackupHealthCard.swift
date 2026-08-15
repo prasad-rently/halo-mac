@@ -48,6 +48,7 @@ struct BackupHealthCard: View {
                 }
                 .padding(18)
             }
+            .accessibilityIdentifier("dashboard.backupHealth.card")
         }
     }
 
@@ -77,6 +78,7 @@ struct BackupHealthCard: View {
             HaloGhostButton("Set Up", icon: "gearshape") {
                 openTimeMachineSettings()
             }
+            .accessibilityIdentifier("dashboard.backupHealth.setup.button")
         }
     }
 
@@ -135,6 +137,7 @@ struct BackupHealthCard: View {
                     Task { await appState.startTimeMachineBackupNow() }
                 }
                 .disabled(status.isBackupRunning || appState.isStartingBackup)
+                .accessibilityIdentifier("dashboard.backupHealth.backupNow.button")
             }
 
             // Destination + free space
@@ -168,6 +171,7 @@ struct BackupHealthCard: View {
                     HeatmapLegend()
                 }
                 BackupHeatmapGrid(days: TimeMachineMonitor.heatmap(backupDates: status.backupDates))
+                    .accessibilityIdentifier("dashboard.backupHealth.heatmap")
             }
         }
     }

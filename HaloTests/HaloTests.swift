@@ -189,3 +189,141 @@ struct ModelTests {
         #expect(cat.allBytes == 3000)
     }
 }
+
+// MARK: - TimeMachineMonitor / TimeMachineStatus Tests (F-022)
+//
+// `heatmap(backupDates:days:referenceDate:)` is pure and synchronous (no
+// `await`, no shelling out to `tmutil`), so these tests exercise it directly
+// with synthetic backup dates and a fixed reference date. `isStale` and
+// `spaceUsedRatio` are plain computed properties on `TimeMachineStatus`,
+// also tested without any live `tmutil` process.
+
+@Suite("TimeMachineMonitor heatmap")
+struct TimeMachineMonitorHeatmapTests {
+
+    private var anchorNow: Date {
+        var comps = DateComponents()
+        comps.year = 2026; comps.month = 6; comps.day = 15; comps.hour = 12
+        return Calendar.current.date(from: comps)!
+    }
+
+    private func day(_ offset: Int, from now: Date) -> Date {
+        Calendar.current.date(byAdding: .day, value: -offset, to: Calendar.current.startOfDay(for: now))!
+    }
+
+    @Test("With no backup history at all, every day is .noData — never fabricated as missed")
+    func testHeatmapAllNoDataWithoutHistory() {
+        let now = anchorNow
+        let days = TimeMachineMonitor.heatmap(backupDates: [], days: 30, referenceDate: now)
+        #expect(days.count == 30)
+        #expect(days.allSatisfy { $0.state == .noData })
+    }
+
+    @Test("A day with a real snapshot is .backedUp")
+    func testHeatmapBackedUpDay() {
+        let now = anchorNow
+        let days = TimeMachineMonitor.heatmap(backupDates: [now], days: 7, referenceDate: now)
+        #expect(days.last?.state == .backedUp)
+    }
+
+    @Test("Days before the earliest known backup are .noData, not .missed")
+    func testHeatmapDaysBeforeEarliestBackupAreNoData() {
+        let now = anchorNow
+        // Only one backup, 2 days ago — days further back than that have no
+        // information to judge them by at all.
+        let days = TimeMachineMonitor.heatmap(backupDates: [day(2, from: now)], days: 7, referenceDate: now)
+        let sixDaysAgo = days.first { Calendar.current.isDate($0.date, inSameDayAs: day(6, from: now)) }
+        #expect(sixDaysAgo?.state == .noData)
+    }
+
+    @Test("A 1-day gap since the most recent backup on/before a day is .late")
+    func testHeatmapOneDayGapIsLate() {
+        let now = anchorNow
+        // Backup 1 day ago; today has no backup of its own -> 1-day gap.
+        let days = TimeMachineMonitor.heatmap(backupDates: [day(1, from: now)], days: 7, referenceDate: now)
+        #expect(days.last?.state == .late)
+    }
+
+    @Test("A 2+ day gap since the most recent backup on/before a day is .missed")
+    func testHeatmapTwoDayGapIsMissed() {
+        let now = anchorNow
+        // Backup 3 days ago; today has no backup -> 3-day gap.
+        let days = TimeMachineMonitor.heatmap(backupDates: [day(3, from: now)], days: 7, referenceDate: now)
+        #expect(days.last?.state == .missed)
+    }
+
+    @Test("Heatmap covers exactly the requested number of days, ending on the reference date")
+    func testHeatmapCoversRequestedWindow() {
+        let now = anchorNow
+        let days = TimeMachineMonitor.heatmap(backupDates: [now], days: 30, referenceDate: now)
+        #expect(days.count == 30)
+        #expect(Calendar.current.isDate(days.last!.date, inSameDayAs: now))
+        #expect(Calendar.current.isDate(days.first!.date, inSameDayAs: day(29, from: now)))
+    }
+
+    @Test("Multiple backups across the window each classify their own day as .backedUp")
+    func testHeatmapMultipleBackupDays() {
+        let now = anchorNow
+        let backups = [day(0, from: now), day(2, from: now), day(5, from: now)]
+        let days = TimeMachineMonitor.heatmap(backupDates: backups, days: 7, referenceDate: now)
+        for offset in [0, 2, 5] {
+            let cell = days.first { Calendar.current.isDate($0.date, inSameDayAs: day(offset, from: now)) }
+            #expect(cell?.state == .backedUp, "day offset \(offset) should be backed up")
+        }
+    }
+}
+
+@Suite("TimeMachineStatus")
+struct TimeMachineStatusTests {
+
+    @Test("A not-configured status is never stale, regardless of any stray date")
+    func testNotConfiguredNeverStale() {
+        var status = TimeMachineStatus.notConfigured
+        status.lastBackupDate = Date().addingTimeInterval(-100 * 3600)
+        #expect(status.isStale == false)
+    }
+
+    @Test("Configured with no known backup date at all is not stale — that's the notData case, not staleness")
+    func testConfiguredNoBackupDateIsNotStale() {
+        let status = TimeMachineStatus(isConfigured: true)
+        #expect(status.isStale == false)
+    }
+
+    @Test("A backup less than 48h old is not stale")
+    func testRecentBackupIsNotStale() {
+        var status = TimeMachineStatus(isConfigured: true)
+        status.lastBackupDate = Date().addingTimeInterval(-47 * 3600)
+        #expect(status.isStale == false)
+    }
+
+    @Test("A backup older than 48h is stale")
+    func testOldBackupIsStale() {
+        var status = TimeMachineStatus(isConfigured: true)
+        status.lastBackupDate = Date().addingTimeInterval(-49 * 3600)
+        #expect(status.isStale == true)
+    }
+
+    @Test("spaceUsedRatio computes 1 minus the available/total fraction")
+    func testSpaceUsedRatioComputation() {
+        var status = TimeMachineStatus(isConfigured: true)
+        status.availableBytes = 250
+        status.totalBytes = 1000
+        #expect(status.spaceUsedRatio == 0.75)
+    }
+
+    @Test("spaceUsedRatio is nil when capacity data is missing or the volume reports zero total")
+    func testSpaceUsedRatioNilWhenDataMissing() {
+        var noAvailable = TimeMachineStatus(isConfigured: true)
+        noAvailable.totalBytes = 1000
+        #expect(noAvailable.spaceUsedRatio == nil)
+
+        var noTotal = TimeMachineStatus(isConfigured: true)
+        noTotal.availableBytes = 250
+        #expect(noTotal.spaceUsedRatio == nil)
+
+        var zeroTotal = TimeMachineStatus(isConfigured: true)
+        zeroTotal.availableBytes = 250
+        zeroTotal.totalBytes = 0
+        #expect(zeroTotal.spaceUsedRatio == nil)
+    }
+}
