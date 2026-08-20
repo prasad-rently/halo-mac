@@ -41,6 +41,68 @@ struct DriveVolumeIdentityTests {
     }
 }
 
+// MARK: - DriveIndexCoordinator.walk (folder exclusion, category filter, resilience)
+
+@Suite("DriveIndexCoordinator.walk")
+struct DriveIndexCoordinatorWalkTests {
+
+    private func makeTempDir() throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HaloTests-Walk-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    @Test("Walking a real directory returns its files")
+    func testWalkFindsFiles() async throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try "hello".data(using: .utf8)!.write(to: dir.appendingPathComponent("hello.txt"))
+
+        let rows = await DriveIndexCoordinator.walk(
+            root: dir, excludedFolderNames: [], enabledCategories: Set(IndexedFileCategory.allCases))
+        #expect(rows?.count == 1)
+        #expect(rows?.first?.fileName == "hello.txt")
+    }
+
+    @Test("Excluded folder names are skipped entirely, not just their contents hidden")
+    func testExcludedFolders() async throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let excludedDir = dir.appendingPathComponent("node_modules", isDirectory: true)
+        try FileManager.default.createDirectory(at: excludedDir, withIntermediateDirectories: true)
+        try "x".data(using: .utf8)!.write(to: excludedDir.appendingPathComponent("buried.txt"))
+        try "y".data(using: .utf8)!.write(to: dir.appendingPathComponent("visible.txt"))
+
+        let rows = await DriveIndexCoordinator.walk(
+            root: dir, excludedFolderNames: ["node_modules"], enabledCategories: Set(IndexedFileCategory.allCases))
+        #expect(rows?.count == 1)
+        #expect(rows?.first?.fileName == "visible.txt")
+    }
+
+    @Test("A disabled category is skipped during the walk itself")
+    func testCategoryFilter() async throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try "x".data(using: .utf8)!.write(to: dir.appendingPathComponent("a.pdf"))
+        try "y".data(using: .utf8)!.write(to: dir.appendingPathComponent("b.mp3"))
+
+        let rows = await DriveIndexCoordinator.walk(root: dir, excludedFolderNames: [], enabledCategories: [.documents])
+        #expect(rows?.count == 1)
+        #expect(rows?.first?.fileName == "a.pdf")
+    }
+
+    @Test("A root that vanished mid-walk returns nil, not an empty (misleadingly 'all deleted') array")
+    func testVanishedRootReturnsNil() async throws {
+        let dir = try makeTempDir()
+        try FileManager.default.removeItem(at: dir)   // simulate the volume disappearing
+
+        let rows = await DriveIndexCoordinator.walk(
+            root: dir, excludedFolderNames: [], enabledCategories: Set(IndexedFileCategory.allCases))
+        #expect(rows == nil)
+    }
+}
+
 // MARK: - DriveIndexStore.applyDiff (inode-aware reindex)
 
 @Suite("DriveIndexStore reindex diff")

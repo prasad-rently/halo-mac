@@ -199,7 +199,18 @@ connected-state gating as the in-module Search tab. Builds clean.
 > successfully-committed batches just because a later batch failed).
 > Update roadmap + log.
 
-**Result:** _pending_
+**Result:** Done 2026-08-21. 3.1/3.2 had already landed in Phase 1 as part
+of `DriveIndexCoordinator.beginIndexing`/`DriveIndexStore.applyDiff` (the
+diff itself always ran as one transaction). This phase closed the
+remaining two: `walk` is now `async` and returns `[WalkedFileRow]?` — a
+`nil` result (root doesn't exist anymore once enumeration finishes) tells
+`beginIndexing` to bail out without touching the store, which is the fix
+for the exact bug this phase called out (a partial walk otherwise looks
+identical to "the user deleted everything"). Throttling reads
+`ProcessInfo.isLowPowerModeEnabled`/`.thermalState` directly — no
+`SystemMonitor` plumbing needed — since the walk has no concurrency to
+scale down, just a yield cadence to soften. 4 new unit tests exercise
+folder exclusion, category filtering, and the vanished-root contract.
 
 ---
 

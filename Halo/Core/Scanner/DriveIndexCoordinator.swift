@@ -269,10 +269,18 @@ final class DriveIndexCoordinator: ObservableObject {
         }
         defer { Task { await accessManager.stopAccessing(scopedURL) } }
 
-        let walked = DriveIndexCoordinator.walk(
+        guard let walked = await DriveIndexCoordinator.walk(
             root: scopedURL,
             excludedFolderNames: excludedFolderNames,
-            enabledCategories: enabledCategories)
+            enabledCategories: enabledCategories
+        ) else {
+            // The volume vanished mid-walk (drive yanked). Bailing out
+            // rather than diffing a partial result — otherwise every file
+            // the walk hadn't reached yet would look "removed" and wipe
+            // real index rows for a drive that's simply not fully scanned.
+            lastError = "\"\(volume.name)\" disconnected mid-index — nothing was changed. It will resume next time it's connected."
+            return
+        }
 
         guard let summary = try? await store.applyDiff(driveKey: volume.driveKey, walked: walked) else { return }
         lastDiffSummaries[volume.driveKey] = summary
@@ -432,16 +440,31 @@ final class DriveIndexCoordinator: ObservableObject {
     /// Walks a granted volume root, skipping excluded folder names entirely
     /// (not just hiding their contents) and skipping any file whose category
     /// isn't enabled — both per Settings (FR-17/FR-18).
-    nonisolated static func walk(root: URL, excludedFolderNames: Set<String>, enabledCategories: Set<IndexedFileCategory>) -> [WalkedFileRow] {
+    /// Returns `nil` — deliberately, not an empty array — if the volume
+    /// disappeared before the walk finished (detected via a post-walk
+    /// existence check on `root`). An empty array is a legitimate "this
+    /// drive has no files"; `nil` means "this walk didn't actually see the
+    /// whole drive," and the caller must not diff a partial result against
+    /// the stored index or every unvisited file would look deleted (3.4).
+    nonisolated static func walk(root: URL, excludedFolderNames: Set<String>, enabledCategories: Set<IndexedFileCategory>) async -> [WalkedFileRow]? {
         var rows: [WalkedFileRow] = []
         let keys: [URLResourceKey] = [.fileSizeKey, .creationDateKey, .contentModificationDateKey, .isDirectoryKey]
         guard let enumerator = FileManager.default.enumerator(
             at: root, includingPropertiesForKeys: keys,
             options: [.skipsHiddenFiles, .skipsPackageDescendants],
             errorHandler: { _, _ in true }
-        ) else { return rows }
+        ) else { return nil }
 
         let rootPathLength = root.path.count
+        var processedSinceYield = 0
+        // Courtesy throttle (3.3): cooperative yields always, an extra
+        // short pause when the system signals it's under real pressure —
+        // this is a single-threaded walk, so there's no concurrency knob
+        // to turn down, just how eagerly it monopolizes the thread.
+        let isUnderPressure = ProcessInfo.processInfo.isLowPowerModeEnabled
+            || ProcessInfo.processInfo.thermalState == .serious
+            || ProcessInfo.processInfo.thermalState == .critical
+
         for case let url as URL in enumerator {
             guard let values = try? url.resourceValues(forKeys: Set(keys)) else { continue }
 
@@ -466,7 +489,16 @@ final class DriveIndexCoordinator: ObservableObject {
                 inode: DriveIndexCoordinator.inode(for: url),
                 category: category
             ))
+
+            processedSinceYield += 1
+            if processedSinceYield >= 200 {
+                processedSinceYield = 0
+                await Task.yield()
+                if isUnderPressure { try? await Task.sleep(nanoseconds: 5_000_000) }
+            }
         }
+
+        guard FileManager.default.fileExists(atPath: root.path) else { return nil }
         return rows
     }
 
