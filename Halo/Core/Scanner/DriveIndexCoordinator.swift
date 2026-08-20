@@ -170,7 +170,7 @@ final class DriveIndexCoordinator: ObservableObject {
         case .declined, .notIndexed:
             return   // No auto-prompt; user can index manually from the Drives tab.
         case .indexed:
-            await beginIndexing(volume)
+            enqueueForIndexing(volume)
         }
     }
 
@@ -206,7 +206,7 @@ final class DriveIndexCoordinator: ObservableObject {
     /// Manual "Re-index" for an already-approved, currently connected drive.
     func manuallyReindex(driveKey: String) {
         guard let volume = connectedVolumesByKey[driveKey] else { return }
-        Task { await beginIndexing(volume) }
+        enqueueForIndexing(volume)
     }
 
     func forgetDrive(driveKey: String) {
@@ -250,7 +250,32 @@ final class DriveIndexCoordinator: ObservableObject {
             title: "Indexing \"\(volume.name)\"",
             body: "Halo is building a searchable index of this drive.",
             kindRaw: "drive_indexing_started")
-        await beginIndexing(volume)
+        enqueueForIndexing(volume)
+    }
+
+    // MARK: - Indexing queue (3.4/5.2 — several drives mounting at once, e.g.
+    // via a hub, must index one at a time rather than fighting each other
+    // for I/O and CPU with several unbounded full-drive walks in parallel)
+
+    private var pendingIndexQueue: [DriveVolume] = []
+    private var isDrainingIndexQueue = false
+
+    private func enqueueForIndexing(_ volume: DriveVolume) {
+        guard !pendingIndexQueue.contains(where: { $0.driveKey == volume.driveKey }) else { return }
+        pendingIndexQueue.append(volume)
+        drainIndexQueueIfNeeded()
+    }
+
+    private func drainIndexQueueIfNeeded() {
+        guard !isDrainingIndexQueue else { return }
+        isDrainingIndexQueue = true
+        Task {
+            while !pendingIndexQueue.isEmpty {
+                let next = pendingIndexQueue.removeFirst()
+                await beginIndexing(next)
+            }
+            isDrainingIndexQueue = false
+        }
     }
 
     // MARK: - Indexing

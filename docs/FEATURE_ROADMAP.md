@@ -67,6 +67,7 @@
 | [F-048](#f-048--personal-expenditure-tracker-nfeat-126) | Personal Expenditure Tracker (NFeat-126) | 🗓 Planned | TBD | F-044 |
 | [F-049](#f-049--halo-mobile-app-product-line) | Halo Mobile App (product line) | 🗓 Planned | TBD | F-044, F-045, F-050 |
 | [F-050](#f-050--haloshare-mobile--desktop-nfeat-127) | HaloShare Mobile ↔ Desktop (NFeat-127) | 🗓 Planned | TBD | HaloShare (LocalSend) |
+| [F-051](#f-051--external-drive-indexer--cross-drive-search) | External Drive Indexer & Cross-Drive Search | ✅ Done | ~10 d | none |
 
 > **Status legend:** ✅ Done · 📋 Queued (next up) · 🗓 Planned (user-requested, spec pending discussion) · 💡 Future Idea (unsolicited) · ⏭ Skipped
 
@@ -3022,3 +3023,27 @@ and mobile↔mobile).
 - Mobile discovery constraints (multicast/mDNS on iOS requires the Local Network entitlement; Android background limits).
 - Background transfer + power/foreground requirements on mobile.
 - Reuse of the existing `Core/LocalShare` protocol models across platforms.
+
+---
+
+## F-051 — External Drive Indexer & Cross-Drive Search
+
+**Status:** ✅ Done · **Effort:** ~10 d (across 5 phases + automation) · **Depends on:** none
+**Full spec:** [`docs/specs/F-051-external-drive-index.md`](specs/F-051-external-drive-index.md) · **Execution record:** [`docs/specs/F-051-roadmap.md`](specs/F-051-roadmap.md)
+
+### Intent
+Whenever an external drive connects, build (and keep fresh) a searchable index of every file on it — so a file can be found, and its drive identified, even while that drive is disconnected — plus flag duplicate/oversized files across multiple drives, not just within one folder.
+
+### What shipped
+- New **"Drive Index"** sidebar module: Drives / Search / Duplicates / Settings tabs.
+- `DriveMonitor` (mount/unmount detection) → ask-first prompt for a never-seen drive → `NSOpenPanel` grant → persisted security-scoped bookmark (`com.apple.security.files.bookmarks.app-scope`) → every later mount re-indexes silently, no repeat prompt.
+- `DriveIndexStore`: a SQLite-backed actor (no SPM dependency — links `libsqlite3.tbd` directly) storing per-file metadata; search works fully offline for a disconnected drive.
+- Inode-aware reindex diff (`DriveIndexStore.applyDiff`) — renames/moves update in place rather than looking like a delete + new duplicate; a volume disappearing mid-walk aborts the diff instead of misreading unvisited files as deleted.
+- Cross-drive duplicate detection: free size-grouping across every indexed drive, hash-confirms whichever candidates are currently connected via the existing `DuplicateDetector` (reused unmodified), splitting results into confirmed vs. awaiting-reconnect. Deletion goes through the same mark → confirmationDialog → `trashItem` flow as the existing Files → Duplicates tab.
+- Quick Search picker on **⌘⇧F**, mirroring the existing Quick Action (⌘⇧A) / Clipboard (⌘⇧V) picker pattern.
+- Settings: size threshold, file-type category filter (Documents/Images/Video/Audio/Archives/Code/Other), exclude-folders-by-name list (seeded `.git`/`node_modules`/`.Trashes`, DiskCatalogMaker-inspired), pause-indexing toggle, per-drive Forget.
+- Sequential indexing queue so several drives mounted at once (e.g. via a hub) don't compete for I/O with parallel unbounded walks.
+- Full test coverage: `HaloTests/DriveIndexTests.swift` (inode-diff classification, category mapping, walk resilience) and `HaloUITests/DriveIndexUITests.swift` (navigation, seeded search with connected/disconnected gating, settings, duplicate delete confirm/cancel, quick-search picker).
+
+### Mobile
+Assessed and deferred — see `docs/HALO_MOBILE_ROADMAP.md` §9. iOS is 🔵 Reimagine (document-picker-scoped only, no ambient auto-detect); Android is 🟡 Adapt (SAF persisted grant + foreground service, meaningfully closer to desktop parity). P3 — not built ahead of a demonstrated mobile OTG/USB-drive use case.

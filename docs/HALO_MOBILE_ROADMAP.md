@@ -116,6 +116,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | **SMS console (F-044)** | 🟡 | ✅ | Android sync source; iOS viewer only | P0 | Planned (F-044) |
 | **Expenditure (F-048)** | ✅ | ✅ | Parse device SMS (Android) / cloud (iOS) | P1 | Planned (F-048) |
 | **Clipboard sync (F-045)** | 🟡 | 🟡 | F-045 (AccessibilityService Android) | P1 | Planned (F-045) |
+| **External Drive Indexer (F-051)** | 🔵 | 🟡 | iOS: document-picker-scoped only, no ambient auto-detect; Android: SAF grant per device + foreground-service walk | P3 | Assessed ✓ (§9) |
 
 ---
 
@@ -148,6 +149,7 @@ Ordered build queue for Halo Mobile. **P0 = the already-specced first wave.**
 
 ### Tier 3 — Best-effort / low priority
 13. Applications list (Android), Launch-at-boot (Android), Cleanup guidance.
+14. External Drive Indexer (F-051) — Android only, SAF-scoped, once a real OTG/USB-drive mobile user base is identified (see §9 study; not built ahead of demand).
 
 ---
 
@@ -209,6 +211,7 @@ Copy this block into a study when assessing a feature for mobile.
 
 | Date | Change |
 |------|--------|
+| 2026-08 | F-051 (External Drive Indexer) feasibility study added (§9); §3 row + Tier 3 backlog line added. Verdict: iOS 🔵 Reimagine (picker-scoped, no ambient auto-detect) / Android 🟡 Adapt (SAF grant + foreground service) — P3, deferred pending demand. |
 | 2026-07 | Formal feasibility studies added (§9): Code Beautifier, Snippets, Speed Test, cloud AI. |
 | 2026-07 | Document created. Assessed all shipped desktop capabilities (F-001–F-043) + planned cloud features (F-044–F-048) for iOS/Android. Established governance rules. First wave specced: F-044/F-045/F-048/F-049/F-050. |
 
@@ -257,3 +260,14 @@ promote to `Planned` (spec) when scheduled.
 - **Scope on mobile:** full chat + context (clipboard/selection/share-sheet input); **trimmed** agent toolset.
 - **Effort:** iOS ~5 d · Android ~6 d (three providers + streaming + Keystore). **Dependencies:** F-049 shell; mirrors F-046 desktop architecture.
 - **Verdict:** **Port (chat) + Adapt (agentic)** → **P1**. **Recommendation:** high value on mobile; ship chat + context first, add the small mobile tool set incrementally. Consider sharing the Swift provider layer between macOS + iOS.
+
+### Feasibility — External Drive Indexer (from desktop F-051)
+- **Desktop capability:** detects external-drive mount/unmount (`NSWorkspace`), asks once per drive, persists a security-scoped bookmark, walks + indexes file metadata into SQLite (searchable even while disconnected), hashes same-size candidates across drives for cross-drive duplicate detection, quick-search picker (⌘⇧F).
+- **iOS mechanism:** no public API for ambient/background detection of a newly attached external drive, and no persistent unscoped filesystem access — a third-party app only ever sees what the user hands it through `UIDocumentPickerViewController` (backed by the Files app's own drivers for USB-C/Lightning storage), and that grant doesn't renew itself on remount the way a macOS security-scoped bookmark does without the user re-opening the picker in many iOS versions. There is no equivalent of `NSWorkspace.didMountNotification`. Verdict: 🔵 Reimagine (index only what's explicitly picked, no ask-first-on-connect, no guaranteed silent re-access) for a reduced feature; ❌ Blocked for the actual "auto-detect + ask once + silent forever after" promise this feature is built around.
+- **Android mechanism:** USB-OTG mass storage is reachable via the **Storage Access Framework** — `ACTION_OPEN_DOCUMENT_TREE` returns a tree Uri whose permission can be made **persistable** (`takePersistableUriPermission`), which is a real analogue to the macOS security-scoped bookmark and *does* survive reboots. New-device attachment can be observed via `UsbManager`/`ACTION_USB_DEVICE_ATTACHED` (broadcast intent), close in spirit to the ask-first mount prompt. A background/foreground service can then walk the granted tree and maintain a local index (Room/SQLite, same schema shape as desktop). Verdict: 🟡 Adapt — genuinely portable core idea, meaningfully more automation-capable than iOS, but every device still needs its own one-time SAF grant (can't silently pre-approve "any USB drive").
+- **OS blockers:** iOS — App Sandbox with no removable-storage entitlement equivalent, no reliable background execution for a long walk without the app being active; document-picker grants are typically single-session unless the user explicitly re-grants. Android — `FOREGROUND_SERVICE` needed for anything beyond a short walk (Play policy requires an accurate service type + user-visible notification), OEM background-execution limits vary, and OTG detection reliability varies by device/USB controller.
+- **Permissions required:** iOS — none beyond the document-picker's own per-use consent (no extra Info.plist usage string needed for that). Android — no dangerous runtime permission for SAF itself (the picker IS the consent), but the walk needs `FOREGROUND_SERVICE` (+ its type-specific companion permission on newer API levels) if it's to run longer than a foreground activity's lifetime; user sees a persistent notification while it runs.
+- **Store-policy risk:** iOS — low (no special entitlement requested, everything routes through the standard document picker). Android — low/moderate: foreground-service misuse is an active Play Store review focus, so the service's declared type and notification copy need to honestly describe "indexing an external drive," not something vaguer.
+- **Scope on mobile:** iOS — reduced: user explicitly picks a folder/drive via Files each time meaningful new access is needed; no ambient mount detection; search still works offline for anything already indexed. Android — closer to desktop parity: USB-attach broadcast → SAF grant (once per device, persisted) → background walk on every later attach, same ask-first ergonomics as macOS.
+- **Effort:** iOS ~3–4 d (reduced scope; the SQLite schema/diff logic is pure Swift and portable, the picker/grant flow is the new part). Android ~6–7 d (SAF flow, foreground service, Kotlin/Room port of the diff + duplicate-hashing logic, USB-attach broadcast receiver). **Dependencies:** F-049 (Halo Mobile App shell).
+- **Verdict:** **Reimagine (iOS) / Adapt (Android)** → **P3**. **Recommendation:** defer. A phone attaching external USB storage the way a Mac attaches drives is a comparatively rare workflow, and iOS's reduced ergonomics (no true ask-first-then-silent-forever) undercut the feature's core value proposition on that platform specifically. Revisit if a real Android OTG-drive user base is identified — the SAF-based Android path is genuinely buildable and would carry over the desktop's schema and diff logic largely unchanged.

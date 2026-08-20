@@ -287,7 +287,21 @@ regressions elsewhere.
 > F-051 done only once the mobile roadmap row exists (CLAUDE.md's mandatory
 > mobile-parity rule).
 
-**Result:** _pending_
+**Result:** Done 2026-08-21, items 1–3; item 4 needs a human with real
+external drives (this agent has no physical hardware access). Added the
+F-051 feasibility study to `docs/HALO_MOBILE_ROADMAP.md` §9 (iOS 🔵
+Reimagine — document-picker-scoped, no ambient auto-detect; Android 🟡
+Adapt — SAF persistable grant + foreground service, meaningfully closer
+to desktop parity than iOS), plus its §3 table row and a Tier 3 backlog
+line; verdict P3, deferred pending a demonstrated mobile OTG/USB-drive use
+case. Added a sequential indexing queue to `DriveIndexCoordinator`
+(`pendingIndexQueue` + `drainIndexQueueIfNeeded`) so simultaneous mounts
+via a hub process one at a time rather than racing for I/O — every
+`beginIndexing` call site now routes through `enqueueForIndexing`. Added
+the shipped entry to `docs/ROADMAP.md`'s checklist and a table row + brief
+card to `docs/FEATURE_ROADMAP.md` linking the full spec (matching the
+F-044–F-050 precedent of not duplicating spec content inline). Item 4
+(manual pass) is tracked as roadmap 5.4, explicitly left open.
 
 ---
 
