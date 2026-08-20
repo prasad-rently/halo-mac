@@ -99,15 +99,47 @@ final class DriveIndexUITests: HaloUITestCase {
                       "Exclude-folders-by-name editor should render")
     }
 
-    // TC-DRIVE-45 (partial) — the Duplicates tab and its threshold picker
-    // render. Real cross-drive duplicate rows depend on the Phase 4 hashing
-    // pipeline (`DriveIndexCoordinator.duplicates` is a documented stub
-    // returning `[]` as of this writing) — not asserted here yet; re-enable
-    // once F-051-roadmap.md Phase 4 lands.
-    func test_duplicates_tab_renders_threshold_picker() {
+    // TC-DRIVE-45 — the Duplicates tab and its threshold picker render, and
+    // the seeded same-size pair (one drive connected, one not) surfaces as
+    // an "awaiting reconnect" group per FR-10 — real hash-confirmed
+    // "Confirmed" groups need actual resolvable file bytes across two real
+    // drives, which this synthetic seed can't provide (same class of gap as
+    // the real-mount stretch goal, F-051-roadmap.md A.9).
+    func test_duplicates_tab_shows_awaiting_reconnect_group() {
         openDriveIndex(tab: "Duplicates")
         XCTAssertTrue(waitForID("driveIndex.duplicates.threshold", timeout: 5) != nil,
                       "Size-threshold picker should render on the Duplicates tab")
+        XCTAssertNotNil(element(labeled: "Awaiting reconnect", timeout: 10),
+                        "Seeded same-size pair across a connected + disconnected drive should surface as awaiting reconnect")
+    }
+
+    // TC-SAFE-02 (this feature's variant) — marking the connected copy in a
+    // duplicate group and tapping "Delete marked" must confirm before
+    // trashing; cancelling must leave every row exactly as it was.
+    func test_duplicates_delete_confirms_and_cancel_deletes_nothing() {
+        openDriveIndex(tab: "Duplicates")
+        guard waitForID("driveIndex.duplicates.item.row", timeout: 10) != nil else {
+            XCTFail("Expected the seeded same-size pair to render as a duplicate group"); return
+        }
+        // Only the connected drive's row is markable — the disconnected
+        // one is disabled so it can't be queued for a delete that can't
+        // actually happen right now.
+        let rows = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == %@", "driveIndex.duplicates.item.row"))
+        guard let markableRow = (0..<rows.count).map({ rows.element(boundBy: $0) }).first(where: \.isEnabled) else {
+            XCTFail("Expected at least one markable (connected-drive) duplicate row"); return
+        }
+        markableRow.click()
+
+        guard tapID("driveIndex.duplicates.deleteMarked.button", timeout: 5) else {
+            XCTFail("'Delete marked' should enable once a copy is marked"); return
+        }
+        XCTAssertTrue(confirmationSurfaceAppeared(),
+                      "Deleting a duplicate copy must confirm first (TC-SAFE-02)")
+        cancelConfirmation()
+        // Cancelling must leave the row in place — nothing was trashed.
+        XCTAssertNotNil(element(id: "driveIndex.duplicates.item.row"),
+                        "Cancelling the confirmation must not remove or delete anything")
     }
 
     // TC-DRIVE-20/21/22 — the quick search picker opens on ⌘⇧F from

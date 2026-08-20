@@ -317,17 +317,114 @@ final class DriveIndexCoordinator: ObservableObject {
         }
     }
 
-    // MARK: - Cross-drive duplicates (Phase 4 — intentionally not yet implemented)
-    //
-    // `DriveIndexStore.candidateDuplicateSizes`/`filesOfSize` already give the
-    // building blocks (a free size-grouping pass across every indexed drive);
-    // what's still needed is resolving each connected candidate's real URL
-    // through its bookmark and feeding those to `DuplicateDetector`, then
-    // splitting results into confirmed vs. awaiting-reconnect per F-051 §5/
-    // FR-10. Deferred to Phase 4 so it lands with real test coverage rather
-    // than a rushed, unverified hashing path bolted onto Phase 1.
+    // MARK: - Cross-drive duplicates (Phase 4)
+
+    /// Same-size candidates across every indexed drive (free — an index
+    /// lookup), then hash-confirmed via the existing `DuplicateDetector`
+    /// among whichever members are currently connected. A group is
+    /// `isConfirmed` only when ALL its same-size members were connected and
+    /// hash-matched; if any member's drive is offline, the whole group
+    /// surfaces as "awaiting reconnect" instead (F-051 FR-10) — the
+    /// connected members might already hash-match each other, but the
+    /// group as a whole can't be called a confirmed duplicate set until
+    /// every candidate has been checked.
     func duplicates(minSizeBytes: Int64) async -> [CrossDriveDuplicateGroup] {
-        []
+        guard let store, let accessManager else { return [] }
+        guard let sizes = try? await store.candidateDuplicateSizes(minSize: minSizeBytes) else { return [] }
+
+        var groups: [CrossDriveDuplicateGroup] = []
+
+        for size in sizes {
+            guard let entries = try? await store.filesOfSize(size), entries.count > 1 else { continue }
+            let connected = entries.filter { isConnected(driveKey: $0.driveKey) }
+            let disconnected = entries.filter { !isConnected(driveKey: $0.driveKey) }
+
+            guard connected.count > 1 else {
+                // Nothing connected to hash-compare — surface as a same-size
+                // candidate awaiting reconnect rather than silently dropping it.
+                groups.append(makeDuplicateGroup(entries, isConfirmed: false))
+                continue
+            }
+
+            var scopedRoots: [String: URL] = [:]
+            var resolved: [(entry: IndexedFileEntry, url: URL)] = []
+            for entry in connected {
+                let root: URL
+                if let cached = scopedRoots[entry.driveKey] {
+                    root = cached
+                } else if let scoped = await accessManager.resolveAndStartAccessing(driveKey: entry.driveKey) {
+                    root = scoped
+                    scopedRoots[entry.driveKey] = scoped
+                } else {
+                    continue
+                }
+                resolved.append((entry, root.appendingPathComponent(entry.relativePath)))
+            }
+            defer { for (_, root) in scopedRoots { Task { await accessManager.stopAccessing(root) } } }
+
+            guard resolved.count > 1,
+                  let hashGroups = try? await DuplicateDetector().detect(in: resolved.map(\.url), onProgress: { _ in }) else {
+                groups.append(makeDuplicateGroup(entries, isConfirmed: false))
+                continue
+            }
+
+            for hashGroup in hashGroups where hashGroup.items.count > 1 {
+                let matchedURLs = Set(hashGroup.items.map(\.url))
+                let matchedEntries = resolved.filter { matchedURLs.contains($0.url) }.map(\.entry)
+                guard matchedEntries.count > 1 else { continue }
+                groups.append(makeDuplicateGroup(matchedEntries + disconnected, isConfirmed: disconnected.isEmpty))
+            }
+        }
+
+        return groups
+    }
+
+    private func makeDuplicateGroup(_ entries: [IndexedFileEntry], isConfirmed: Bool) -> CrossDriveDuplicateGroup {
+        let items = entries.map { entry in
+            CrossDriveDuplicateItem(
+                driveKey: entry.driveKey,
+                driveName: knownDrives.first { $0.driveKey == entry.driveKey }?.name ?? "Unknown drive",
+                isDriveConnected: isConnected(driveKey: entry.driveKey),
+                relativePath: entry.relativePath,
+                sizeBytes: entry.size,
+                modifiedDate: entry.modifiedDate
+            )
+        }
+        return CrossDriveDuplicateGroup(items: items, isConfirmed: isConfirmed)
+    }
+
+    /// Trashes each marked item (never `removeItem`), resolving its
+    /// security-scoped root fresh. Only ever called after the UI's own
+    /// confirmation sheet — this method itself does not confirm.
+    @discardableResult
+    func deleteDuplicates(_ items: [CrossDriveDuplicateItem]) async -> (deleted: Int, failed: Int) {
+        guard let accessManager else { return (0, items.count) }
+        var deleted = 0
+        var failed = 0
+        var scopedRoots: [String: URL] = [:]
+
+        for item in items {
+            let root: URL
+            if let cached = scopedRoots[item.driveKey] {
+                root = cached
+            } else if let scoped = await accessManager.resolveAndStartAccessing(driveKey: item.driveKey) {
+                root = scoped
+                scopedRoots[item.driveKey] = scoped
+            } else {
+                failed += 1
+                continue
+            }
+            let url = root.appendingPathComponent(item.relativePath)
+            do {
+                try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+                deleted += 1
+            } catch {
+                failed += 1
+            }
+        }
+
+        for (_, root) in scopedRoots { await accessManager.stopAccessing(root) }
+        return (deleted, failed)
     }
 
     // MARK: - Walk

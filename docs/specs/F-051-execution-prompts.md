@@ -236,7 +236,22 @@ connected-state gating as the in-module Search tab. Builds clean.
 > `node_modules`, `.Trashes`).
 > Update roadmap + log.
 
-**Result:** _pending_
+**Result:** Done 2026-08-21, items 1–4 (item 5's settings landed earlier
+alongside Phases 1–2, since it was cheap to build with the coordinator).
+`DriveIndexCoordinator.duplicates(minSizeBytes:)` does the size-grouping →
+connected-only hashing → confirmed/awaiting-reconnect split exactly as
+specified — one correction from the original prompt: "every member's
+volume currently mounted" was too strict a gate (a size-cluster can have 3+
+members with only some connected); implemented instead as hash-confirming
+whichever members ARE connected (needs ≥2 to compare), and the group is
+only `isConfirmed` when there's no disconnected member left over — so a
+partially-online cluster still gets checked rather than skipped entirely.
+`CrossDriveDuplicateGroupCard` mirrors `DuplicateGroupCard` structurally
+(same mark/confirm/trash flow, same accessibility-identifier convention).
+Verified via `DriveIndexUITests` — `test_duplicates_delete_confirms_and_
+cancel_deletes_nothing` and `test_duplicates_tab_shows_awaiting_reconnect_
+group` — plus a full clean `HaloTests` run (all suites) to confirm no
+regressions elsewhere.
 
 ---
 

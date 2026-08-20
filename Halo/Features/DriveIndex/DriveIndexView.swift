@@ -309,7 +309,9 @@ struct DriveIndexDuplicatesTab: View {
             } else {
                 ScrollView {
                     VStack(spacing: 12) {
-                        ForEach(groups) { group in groupCard(group) }
+                        ForEach($groups) { $group in
+                            CrossDriveDuplicateGroupCard(group: $group, onDeleted: { Task { await reload() } })
+                        }
                     }
                     .padding(20)
                 }
@@ -324,33 +326,87 @@ struct DriveIndexDuplicatesTab: View {
         groups = await coordinator.duplicates(minSizeBytes: Int64(thresholdBytes))
         isLoading = false
     }
+}
 
-    private func groupCard(_ group: CrossDriveDuplicateGroup) -> some View {
+// MARK: - Cross-drive duplicate group card (mark → confirm → trash, TC-SAFE-02)
+
+struct CrossDriveDuplicateGroupCard: View {
+    @Binding var group: CrossDriveDuplicateGroup
+    let onDeleted: () -> Void
+    @State private var showDeleteConfirm = false
+    @ObservedObject private var coordinator = DriveIndexCoordinator.shared
+
+    private var markedCount: Int { group.items.filter(\.isMarkedForDeletion).count }
+
+    var body: some View {
         HaloCard(accentTop: group.isConfirmed ? .haloRed : .haloAmber) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     HaloBadge(text: group.isConfirmed ? "Confirmed" : "Awaiting reconnect",
                               color: group.isConfirmed ? .haloRed : .haloAmber)
-                    Spacer()
                     Text("Wastes \(group.wastedFormatted)")
                         .font(HaloFont.body(11, weight: .semibold))
                         .foregroundColor(.haloText2)
+                    Spacer()
+                    HaloGhostButton("Delete marked\(markedCount > 0 ? " (\(markedCount))" : "")", icon: "trash") {
+                        showDeleteConfirm = true   // ask first — never delete on tap
+                    }
+                    .disabled(markedCount == 0)
+                    .accessibilityIdentifier("driveIndex.duplicates.deleteMarked.button")
                 }
                 ForEach(group.items) { item in
-                    HStack {
-                        Image(systemName: item.isDriveConnected ? "externaldrive.fill" : "externaldrive")
-                            .foregroundColor(item.isDriveConnected ? .haloGreen : .haloText3)
-                        Text("\(item.driveName) · \(item.relativePath)")
-                            .font(HaloFont.body(11))
-                            .foregroundColor(.haloText2)
-                            .lineLimit(1)
-                        Spacer()
-                        Text(item.sizeFormatted).font(HaloFont.body(11)).foregroundColor(.haloText3)
-                    }
+                    itemRow(item)
                 }
             }
             .padding(14)
         }
+        // Mandatory confirmation before trashing marked copies (TC-SAFE-02).
+        .confirmationDialog(
+            "Move \(markedCount) marked \(markedCount == 1 ? "copy" : "copies") to Trash?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Move to Trash", role: .destructive) {
+                let items = group.items.filter(\.isMarkedForDeletion)
+                Task {
+                    await coordinator.deleteDuplicates(items)
+                    onDeleted()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    private func itemRow(_ item: CrossDriveDuplicateItem) -> some View {
+        Button {
+            guard item.isDriveConnected, let index = group.items.firstIndex(where: { $0.id == item.id }) else { return }
+            group.items[index].isMarkedForDeletion.toggle()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: item.isMarkedForDeletion ? "trash.fill"
+                        : (item.isDriveConnected ? "externaldrive.fill" : "externaldrive"))
+                    .font(.system(size: 13))
+                    .foregroundColor(item.isMarkedForDeletion ? .haloRed
+                                      : (item.isDriveConnected ? .haloGreen : .haloText3))
+                Text("\(item.driveName) · \(item.relativePath)")
+                    .font(HaloFont.mono(11))
+                    .foregroundColor(.haloText)
+                    .lineLimit(1)
+                Spacer()
+                Text(item.sizeFormatted)
+                    .font(HaloFont.body(11))
+                    .foregroundColor(.haloText2)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(item.isMarkedForDeletion ? Color.haloRed.opacity(0.05) : Color.haloSurface)
+            .cornerRadius(7)
+        }
+        .buttonStyle(.plain)
+        // A copy on a disconnected drive can't be verified or trashed right
+        // now — disabled rather than allowed to be marked and fail silently.
+        .disabled(!item.isDriveConnected)
+        .accessibilityIdentifier("driveIndex.duplicates.item.row")
     }
 }
 
