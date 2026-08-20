@@ -29,13 +29,20 @@ class HaloUITestCase: XCTestCase {
     /// Default time to wait for an element to appear before failing.
     let defaultTimeout: TimeInterval = 10
 
+    /// Override in a subclass to add launch arguments beyond the default
+    /// `-uiTesting YES` — e.g. `DriveIndexUITests` adds
+    /// `-uiTestingSeedDriveIndex` to get deterministic sample data since CI
+    /// can't plug in a real external drive. Empty by default, so existing
+    /// suites are unaffected.
+    var additionalLaunchArguments: [String] { [] }
+
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
         // Launch arguments the app can read to put itself in a deterministic
         // test state (e.g. skip onboarding, seed fixtures). The app does not
         // need to honour these for tests to run; they are forward-looking.
-        app.launchArguments += ["-uiTesting", "YES"]
+        app.launchArguments += ["-uiTesting", "YES"] + additionalLaunchArguments
         app.launch()
     }
 

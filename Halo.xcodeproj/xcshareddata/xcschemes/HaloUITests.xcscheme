@@ -28,7 +28,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "A9F6BED9499AC0DB2CD92F48"
+               BlueprintIdentifier = "1CB7F8ECD5EE85E1BDF3416E"
                BuildableName = "HaloUITests.xctest"
                BlueprintName = "HaloUITests"
                ReferencedContainer = "container:Halo.xcodeproj">
@@ -55,7 +55,7 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "A9F6BED9499AC0DB2CD92F48"
+               BlueprintIdentifier = "1CB7F8ECD5EE85E1BDF3416E"
                BuildableName = "HaloUITests.xctest"
                BlueprintName = "HaloUITests"
                ReferencedContainer = "container:Halo.xcodeproj">

@@ -62,7 +62,8 @@ struct DriveSpeedTesterTests {
             isInternal: true,
             isRemovable: false,
             totalBytes: 1_000_000,
-            freeBytes: 1_000
+            freeBytes: 1_000,
+            volumeUUID: nil
         )
         await #expect(throws: DriveSpeedError.self) {
             _ = try await tester.run(volume: tiny, size: .quick) { _ in }

@@ -304,4 +304,22 @@ connected-state gating as the in-module Search tab. Builds clean.
 > (new/moved/modified/removed) and size-threshold candidate gating. Update
 > roadmap + log.
 
-**Result:** _pending_
+**Result:** Done 2026-08-21, items (a)–(d); item (e) blocked on Phase 4 (no
+real duplicates to delete yet, so nothing to confirm/cancel). Added a
+generic `additionalLaunchArguments` override hook to `HaloUITestCase`
+(default `[]`, zero effect on other suites) rather than special-casing
+this one flag in the shared base class, so future suites can seed their
+own deterministic state the same way. `DriveIndexCoordinator
+.seedForUITesting()` inserts two fake drives via the *real* `applyDiff`
+path (not a separate seeding API) — one connected, one deliberately absent
+from `connectedVolumesByKey` so it reads as disconnected — sharing a
+same-size file for when Phase 4 lands. `DriveIndexStore.storeDirectory()`
+and the coordinator both check the launch flag to route to a temp
+directory, so seeded runs never touch a developer's real index.
+`HaloTests/DriveIndexTests.swift` covers insert/moved/modified/removed
+diff classification and duplicate-size grouping against a
+`directoryOverride`-isolated store (new init parameter, additive) —
+14/14 passing. Also fixed a real regression this feature had introduced:
+Phase 0's new required `DriveVolume.volumeUUID` field broke the
+pre-existing `DriveSpeedTesterTests.swift`. `build-for-testing -scheme
+HaloUITests` succeeds clean.

@@ -44,9 +44,12 @@ actor DriveIndexStore {
     private var db: OpaquePointer?
 
     /// Opens (creating if needed) the store at
-    /// `~/Library/Application Support/Halo/drive-index.sqlite3`.
-    init() throws {
-        let dir = try DriveIndexStore.storeDirectory()
+    /// `~/Library/Application Support/Halo/drive-index.sqlite3`, or under
+    /// `directoryOverride` when provided — used by `HaloTests` to get a
+    /// fully isolated, disposable store per test rather than touching the
+    /// real on-disk index.
+    init(directoryOverride: URL? = nil) throws {
+        let dir = try directoryOverride ?? DriveIndexStore.storeDirectory()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let path = dir.appendingPathComponent("drive-index.sqlite3").path
 
@@ -64,7 +67,15 @@ actor DriveIndexStore {
         if let db { sqlite3_close(db) }
     }
 
+    /// UI tests pass `-uiTestingSeedDriveIndex` to get deterministic sample
+    /// data (see `DriveIndexCoordinator.seedForUITesting()`) — routing the
+    /// whole store to a temp directory in that mode keeps test runs from
+    /// ever touching a developer's real drive index, mirroring
+    /// `HaloTestFixtures`'s sandboxed-temp-dir philosophy.
     nonisolated static func storeDirectory() throws -> URL {
+        if ProcessInfo.processInfo.arguments.contains("-uiTestingSeedDriveIndex") {
+            return FileManager.default.temporaryDirectory.appendingPathComponent("HaloUITestDriveIndex", isDirectory: true)
+        }
         let appSupport = try FileManager.default.url(
             for: .applicationSupportDirectory, in: .userDomainMask,
             appropriateFor: nil, create: true)

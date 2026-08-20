@@ -95,10 +95,58 @@ final class DriveIndexCoordinator: ObservableObject {
             lastError = "Drive Index couldn't open its store: \(error.localizedDescription)"
             return
         }
+        if ProcessInfo.processInfo.arguments.contains("-uiTestingSeedDriveIndex") {
+            await seedForUITesting()
+        }
         await refreshKnownDrives()
         await monitor.startMonitoring { [weak self] event in
             Task { @MainActor in self?.handle(event) }
         }
+    }
+
+    /// Deterministic sample data for `HaloUITests/DriveIndexUITests.swift` —
+    /// no real external drive is available in CI. One drive is marked
+    /// "connected" (so Reveal/Open enable), one is left out of
+    /// `connectedVolumesByKey` entirely (so it reads as "disconnected"), and
+    /// both share a same-size file to exercise the cross-drive duplicate
+    /// path once Phase 4 lands. Routed to a temp-dir store — see
+    /// `DriveIndexStore.storeDirectory()` — so this never touches a real
+    /// developer's index.
+    private func seedForUITesting() async {
+        guard let store else { return }
+
+        let driveA = DriveVolume(
+            id: "/Volumes/UITestDriveA", name: "Test Drive A",
+            url: URL(fileURLWithPath: "/Volumes/UITestDriveA"),
+            isInternal: false, isRemovable: true,
+            totalBytes: 500_000_000_000, freeBytes: 250_000_000_000,
+            volumeUUID: "UITEST-DRIVE-AAAA")
+        connectedVolumesByKey[driveA.driveKey] = driveA
+        let driveBKey = "UITEST-DRIVE-BBBB"
+
+        let sharedSize: Int64 = 150_000_000
+        let now = Date()
+        let rowsA: [WalkedFileRow] = [
+            WalkedFileRow(relativePath: "/Documents/report.pdf", fileName: "report.pdf",
+                          size: 2_000_000, createdDate: now, modifiedDate: now, inode: 1001, category: .documents),
+            WalkedFileRow(relativePath: "/Movies/vacation.mov", fileName: "vacation.mov",
+                          size: sharedSize, createdDate: now, modifiedDate: now, inode: 1002, category: .video)
+        ]
+        let rowsB: [WalkedFileRow] = [
+            WalkedFileRow(relativePath: "/Backups/vacation-copy.mov", fileName: "vacation-copy.mov",
+                          size: sharedSize, createdDate: now, modifiedDate: now, inode: 2001, category: .video)
+        ]
+
+        try? await store.applyDiff(driveKey: driveA.driveKey, walked: rowsA)
+        try? await store.applyDiff(driveKey: driveBKey, walked: rowsB)
+
+        try? await store.upsertKnownDrive(KnownDrive(
+            driveKey: driveA.driveKey, name: driveA.name, indexingState: .indexed,
+            lastIndexedDate: now, fileCount: rowsA.count, totalBytes: rowsA.reduce(0) { $0 + $1.size }))
+        try? await store.upsertKnownDrive(KnownDrive(
+            driveKey: driveBKey, name: "Test Drive B", indexingState: .indexed,
+            lastIndexedDate: now.addingTimeInterval(-86_400), fileCount: rowsB.count,
+            totalBytes: rowsB.reduce(0) { $0 + $1.size }))
     }
 
     private func handle(_ event: DriveMonitorEvent) {

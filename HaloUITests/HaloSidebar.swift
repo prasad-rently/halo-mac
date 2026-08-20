@@ -22,6 +22,7 @@ enum HaloModule: String, CaseIterable {
     case haloShare     = "HaloShare"
     case ports         = "Ports"
     case ai            = "AI Assistant"
+    case driveIndex    = "Drive Index"
     case menuBar       = "Menu Bar"
 
     /// The `AppModule.rawValue` this row maps to — the tail of its
@@ -29,9 +30,10 @@ enum HaloModule: String, CaseIterable {
     /// differ from the underlying case name, so the mapping is explicit.
     var appModuleRawValue: String {
         switch self {
-        case .haloShare: return "localShare"
-        case .menuBar:   return "menuBarPreview"
-        default:         return String(describing: self)
+        case .haloShare:  return "localShare"
+        case .menuBar:    return "menuBarPreview"
+        case .driveIndex: return "driveIndex"
+        default:          return String(describing: self)
         }
     }
 
