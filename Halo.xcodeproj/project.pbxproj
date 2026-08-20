@@ -147,6 +147,7 @@
 		AE6FACECB50C6D438440D382 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
 		AE9EC9A5F91D3B847ACC8455 /* AIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF3FA79DA36A45E06CF7D667 /* AIModels.swift */; };
 		B235974CEB652C09272B4499 /* FilesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB75AC7A8DBC58FFF8D8070B /* FilesUITests.swift */; };
+		B92044034F30D71B3527C304 /* DriveSearchQuickPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28B918E2F23FE424AC7639C0 /* DriveSearchQuickPickerView.swift */; };
 		BA9FD645BE8BBFDE284C58CA /* DriveMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D43A75381A8C8F043AE93A23 /* DriveMonitor.swift */; };
 		BC6CC8DD60AB3F804E646D2B /* AIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D2C02D89C828E5968F14081 /* AIProvider.swift */; };
 		C585CA872C09146972D4478C /* DriveIndexView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7832DE8BAA5701F702EE059 /* DriveIndexView.swift */; };
@@ -339,6 +340,7 @@
 		0CDCAD725F3EDB1AA147464F /* AIAssistantUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAssistantUITests.swift; sourceTree = "<group>"; };
 		1EA41949D8E2D368E6AFF7F6 /* AIAssistantTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAssistantTests.swift; sourceTree = "<group>"; };
 		256C0A5343A473D0D89FAB57 /* AlertsReportUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AlertsReportUITests.swift; sourceTree = "<group>"; };
+		28B918E2F23FE424AC7639C0 /* DriveSearchQuickPickerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSearchQuickPickerView.swift; sourceTree = "<group>"; };
 		32396161554FB75B93A0B169 /* AIAssistantViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAssistantViewModel.swift; sourceTree = "<group>"; };
 		3ED172401B83B65197881BFC /* SidebarReorderUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SidebarReorderUITests.swift; sourceTree = "<group>"; };
 		447CC440994885DF5CCA7A6A /* CodeBeautifierUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CodeBeautifierUITests.swift; sourceTree = "<group>"; };
@@ -656,6 +658,7 @@
 			isa = PBXGroup;
 			children = (
 				F7832DE8BAA5701F702EE059 /* DriveIndexView.swift */,
+				28B918E2F23FE424AC7639C0 /* DriveSearchQuickPickerView.swift */,
 			);
 			name = DriveIndex;
 			path = DriveIndex;
@@ -1027,6 +1030,7 @@
 				776890FE0DA229B2A269DA8C /* DriveAccessManager.swift in Sources */,
 				02D45F788B9EA5033D2E8BB6 /* DriveIndexCoordinator.swift in Sources */,
 				C585CA872C09146972D4478C /* DriveIndexView.swift in Sources */,
+				B92044034F30D71B3527C304 /* DriveSearchQuickPickerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

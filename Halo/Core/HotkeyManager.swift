@@ -24,6 +24,11 @@ final class HotkeyManager {
     private(set) var aiKeyCode:   UInt16                = 34                    // I (default)
     private(set) var aiModifiers: NSEvent.ModifierFlags = [.command, .shift]    // ⌘⇧
 
+    // Drive search shortcut — default ⌘⇧F (F-051 quick search picker)
+    var onDriveSearchShortcut: (() -> Void)?
+    private(set) var driveSearchKeyCode:   UInt16                = 3                     // F (default)
+    private(set) var driveSearchModifiers: NSEvent.ModifierFlags = [.command, .shift]    // ⌘⇧
+
     // MARK: - Public API
 
     func start(keyCode: UInt16 = 9, modifiers: NSEvent.ModifierFlags = [.command, .shift]) {
@@ -46,6 +51,10 @@ final class HotkeyManager {
                 DispatchQueue.main.async { self.onAIShortcut?() }
                 return nil
             }
+            if flags == self.driveSearchModifiers && event.keyCode == self.driveSearchKeyCode {
+                DispatchQueue.main.async { self.onDriveSearchShortcut?() }
+                return nil
+            }
             return event
         }
 
@@ -65,6 +74,8 @@ final class HotkeyManager {
                 DispatchQueue.main.async { self.onActionShortcut?() }
             } else if flags == self.aiModifiers && event.keyCode == self.aiKeyCode {
                 DispatchQueue.main.async { self.onAIShortcut?() }
+            } else if flags == self.driveSearchModifiers && event.keyCode == self.driveSearchKeyCode {
+                DispatchQueue.main.async { self.onDriveSearchShortcut?() }
             }
         }
     }

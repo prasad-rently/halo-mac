@@ -160,22 +160,20 @@ and on indexing start.
 > ⌘⇧A/⌘⇧V pickers, second-press-dismisses.
 > Build, fix errors, update roadmap + log.
 
-**Result:** Partially done 2026-08-21 (built together with Phase 1, items
-1–6; item 7 deferred). `AppModule.driveIndex` added exactly as corrected
-above. `DriveIndexView` tab shell + Drives/Search/Settings tabs are real;
-Duplicates tab is a working UI shell awaiting Phase 4's data. All listed
-accessibility identifiers wired, plus `driveIndex.ask.accept/decline.button`
-and `driveIndex.settings.*` for the settings controls that landed early.
-Quick Search picker (item 7) **not done** — tracked separately as roadmap
-item 2.7, to be executed as its own follow-up prompt:
-> Add `DriveSearchQuickPickerView` + `DriveSearchQuickPickerController`
-> (`NSPanel`) copying the exact structure of the existing
-> `QuickActionPickerController`/`ClipboardQuickPickerView` — read those two
-> files first for the precise pattern (panel styling, show/hide, second-
-> press-dismisses toggle). Register on **⌘⇧F** in `HotkeyManager.start()`.
-> The picker's content is a thin wrapper reusing
-> `DriveIndexCoordinator.search(query:)`/`revealInFinder`/`openFile` — same
-> data source as the in-module Search tab, so behavior stays identical.
+**Result:** Done 2026-08-21, all 7 items including the Quick Search picker.
+`AppModule.driveIndex` added exactly as corrected above. `DriveIndexView`
+tab shell + Drives/Search/Settings tabs are real; Duplicates tab is a
+working UI shell awaiting Phase 4's data. All listed accessibility
+identifiers wired, plus `driveIndex.ask.accept/decline.button` and
+`driveIndex.settings.*` for the settings controls that landed early.
+`DriveSearchQuickPickerView` + `DriveSearchQuickPickerController` copy
+`QuickActionPickerController`'s exact `NSPanel` pattern (non-activating
+panel, floating level, escape/resign-key dismiss, ↑/↓ selection, Enter
+opens). `HotkeyManager` gained a 4th shortcut slot (`driveSearchKeyCode` =
+3/"F", same local+global monitor pattern as the other three); `AppState
+.setupHotkeys()` wires ⌘⇧F to show/hide it. Reuses
+`DriveIndexCoordinator.search`/`openFile` — same data source and
+connected-state gating as the in-module Search tab. Builds clean.
 
 ---
 

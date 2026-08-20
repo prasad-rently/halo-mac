@@ -107,6 +107,7 @@ final class AppState: ObservableObject {
     private let quickPickerController  = ClipboardQuickPickerController()
     private let actionPickerController = QuickActionPickerController()
     private let aiQuickAskController   = AIQuickAskController()
+    private let driveSearchPickerController = DriveSearchQuickPickerController()
     private var wasAxTrusted = false
 
     // Phase 3
@@ -299,6 +300,15 @@ final class AppState: ObservableObject {
         // ⌘⇧I → AI quick-ask overlay (F-046 second surface)
         hotkeyManager.onAIShortcut = { [weak self] in
             self?.aiQuickAskController.toggle()
+        }
+        // ⌘⇧F → Drive Index quick search picker (F-051)
+        hotkeyManager.onDriveSearchShortcut = { [weak self] in
+            guard let self else { return }
+            if self.driveSearchPickerController.isVisible {
+                self.driveSearchPickerController.hide()
+            } else {
+                self.driveSearchPickerController.show()
+            }
         }
         wasAxTrusted = AXIsProcessTrusted()
         // Restore persisted action-picker shortcut from ActionSettingsStore
