@@ -116,6 +116,7 @@
 		000000000000000000009014 /* GetClipboardHistoryIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009013 /* GetClipboardHistoryIntent.swift */; };
 		000000000000000000009016 /* ExportReportIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009015 /* ExportReportIntent.swift */; };
 		000000000000000000009018 /* HaloShortcutsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009017 /* HaloShortcutsProvider.swift */; };
+		02D45F788B9EA5033D2E8BB6 /* DriveIndexCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAC6A20774D18602BEBE8528 /* DriveIndexCoordinator.swift */; };
 		0CBA4BAFF23A6F3013A747F9 /* HaloTestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04C24FA6FA6BE8B3F119901F /* HaloTestFixtures.swift */; };
 		0D95339BD7D85794863633C8 /* HaloUITestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */; };
 		0FD40DC13D3BACC88E9F5526 /* SmartScanUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 544F38735C12837D57FD1DA7 /* SmartScanUITests.swift */; };
@@ -133,6 +134,7 @@
 		5A7C4F83C5BA326CB63F0C5A /* AIKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4A92E8D0819BCF034A05DF2 /* AIKeyStore.swift */; };
 		66B4DA7D72433AB2318CE2CD /* ActionsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F44C9D0695A26A2333D149 /* ActionsUITests.swift */; };
 		728D4049D66F293C501E1419 /* AgentRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0878FD8BEBE06A3351E53E45 /* AgentRunner.swift */; };
+		776890FE0DA229B2A269DA8C /* DriveAccessManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C4801648B0CB02661BE4C29 /* DriveAccessManager.swift */; };
 		7FA28EC1DD42807C6EFD8148 /* SidebarReorderUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED172401B83B65197881BFC /* SidebarReorderUITests.swift */; };
 		8A4DFF3A40CA9ADDBF8405AE /* HaloTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C5BDF389221BADF1F31152C /* HaloTests.swift */; };
 		8A64A32F27E6245BD6EAEB93 /* CleanupUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8908A278C13A1F3B9E21BFE9 /* CleanupUITests.swift */; };
@@ -147,6 +149,7 @@
 		B235974CEB652C09272B4499 /* FilesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB75AC7A8DBC58FFF8D8070B /* FilesUITests.swift */; };
 		BA9FD645BE8BBFDE284C58CA /* DriveMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D43A75381A8C8F043AE93A23 /* DriveMonitor.swift */; };
 		BC6CC8DD60AB3F804E646D2B /* AIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D2C02D89C828E5968F14081 /* AIProvider.swift */; };
+		C585CA872C09146972D4478C /* DriveIndexView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7832DE8BAA5701F702EE059 /* DriveIndexView.swift */; };
 		C5FB28DC66873BB366B72244 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76EB7D00744BA3399A508E64 /* ConversationStore.swift */; };
 		D2BA4D7F84FA257B4490BEDF /* AIQuickAskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEF40F332D70A2AE5393A74C /* AIQuickAskView.swift */; };
 		D52607DADA626DF2FA479956 /* HelperClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00C37BFCA463AB410245B802 /* HelperClientTests.swift */; };
@@ -340,6 +343,7 @@
 		3ED172401B83B65197881BFC /* SidebarReorderUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SidebarReorderUITests.swift; sourceTree = "<group>"; };
 		447CC440994885DF5CCA7A6A /* CodeBeautifierUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CodeBeautifierUITests.swift; sourceTree = "<group>"; };
 		4555BA206584E6C688FD51F1 /* DriveSpeedTester.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedTester.swift; sourceTree = "<group>"; };
+		4C4801648B0CB02661BE4C29 /* DriveAccessManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveAccessManager.swift; sourceTree = "<group>"; };
 		4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloUITestCase.swift; sourceTree = "<group>"; };
 		4FC90BEA4B73BCF5211738E1 /* AIToolExecutor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIToolExecutor.swift; sourceTree = "<group>"; };
 		544F38735C12837D57FD1DA7 /* SmartScanUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SmartScanUITests.swift; sourceTree = "<group>"; };
@@ -358,6 +362,7 @@
 		8908A278C13A1F3B9E21BFE9 /* CleanupUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CleanupUITests.swift; sourceTree = "<group>"; };
 		945DE4D093874E6954B85774 /* MenuBarUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MenuBarUITests.swift; sourceTree = "<group>"; };
 		94E717DB998E0BBF1AE83F94 /* HaloTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AAC6A20774D18602BEBE8528 /* DriveIndexCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveIndexCoordinator.swift; sourceTree = "<group>"; };
 		B4A92E8D0819BCF034A05DF2 /* AIKeyStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIKeyStore.swift; sourceTree = "<group>"; };
 		BB2F16797B9D38C241FF4A19 /* DriveIndexStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveIndexStore.swift; sourceTree = "<group>"; };
 		BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloSidebar.swift; sourceTree = "<group>"; };
@@ -372,6 +377,7 @@
 		DF513D5DDD7399B797BE21F2 /* AnthropicProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AnthropicProvider.swift; sourceTree = "<group>"; };
 		E1F44C9D0695A26A2333D149 /* ActionsUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ActionsUITests.swift; sourceTree = "<group>"; };
 		EEF40F332D70A2AE5393A74C /* AIQuickAskView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIQuickAskView.swift; sourceTree = "<group>"; };
+		F7832DE8BAA5701F702EE059 /* DriveIndexView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveIndexView.swift; sourceTree = "<group>"; };
 		FD490E2DBBC937F29595E8B2 /* HaloUITestCase+Confirmation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "HaloUITestCase+Confirmation.swift"; sourceTree = "<group>"; };
 		FF3FA79DA36A45E06CF7D667 /* AIModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIModels.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -579,6 +585,8 @@
 				4555BA206584E6C688FD51F1 /* DriveSpeedTester.swift */,
 				D43A75381A8C8F043AE93A23 /* DriveMonitor.swift */,
 				BB2F16797B9D38C241FF4A19 /* DriveIndexStore.swift */,
+				4C4801648B0CB02661BE4C29 /* DriveAccessManager.swift */,
+				AAC6A20774D18602BEBE8528 /* DriveIndexCoordinator.swift */,
 			);
 			name = Scanner;
 			path = Scanner;
@@ -629,6 +637,7 @@
 			children = (
 				D2B9FF24DEEB6AD1B681E7B7 /* Files */,
 				FA2F9FDF43A7CCE26BAF24DD /* AIAssistant */,
+				C2F61B066FAAA0CD72E8AAB0 /* DriveIndex */,
 			);
 			name = Features;
 			path = Features;
@@ -641,6 +650,15 @@
 			);
 			name = Core;
 			path = Core;
+			sourceTree = "<group>";
+		};
+		C2F61B066FAAA0CD72E8AAB0 /* DriveIndex */ = {
+			isa = PBXGroup;
+			children = (
+				F7832DE8BAA5701F702EE059 /* DriveIndexView.swift */,
+			);
+			name = DriveIndex;
+			path = DriveIndex;
 			sourceTree = "<group>";
 		};
 		D2B9FF24DEEB6AD1B681E7B7 /* Files */ = {
@@ -1006,6 +1024,9 @@
 				D2BA4D7F84FA257B4490BEDF /* AIQuickAskView.swift in Sources */,
 				BA9FD645BE8BBFDE284C58CA /* DriveMonitor.swift in Sources */,
 				DCFA09205D810E6C824B7A3B /* DriveIndexStore.swift in Sources */,
+				776890FE0DA229B2A269DA8C /* DriveAccessManager.swift in Sources */,
+				02D45F788B9EA5033D2E8BB6 /* DriveIndexCoordinator.swift in Sources */,
+				C585CA872C09146972D4478C /* DriveIndexView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

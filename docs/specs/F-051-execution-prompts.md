@@ -108,7 +108,18 @@ quirk, not caused by this work.)
 > bookmark silently → coordinator walk, end to end.
 > Update roadmap + log.
 
-**Result:** _pending_
+**Result:** Done 2026-08-21. `DriveAccessManager` actor persists security-
+scoped bookmarks as JSON in Application Support, self-heals stale bookmarks,
+exposes start/stop-accessing. `DriveIndexCoordinator` ended up as a
+`@MainActor final class: ObservableObject`, not an actor — it has to drive
+`NSOpenPanel` and publish `@Published` state SwiftUI reads directly, which
+actor isolation doesn't fit. It wires mount events end to end: unknown drive
+→ `pendingAskDrive` → accept → grant panel → save bookmark → walk (own
+bounded `FileManager.enumerator`, not literally reusing
+`FileSystemScanner`, which has no inode/category collection) →
+`DriveIndexStore.applyDiff`. Known+approved drives resolve their bookmark
+and walk silently on every later mount. `AlertLog` entries fire on decline
+and on indexing start.
 
 ---
 
@@ -149,7 +160,22 @@ quirk, not caused by this work.)
 > ⌘⇧A/⌘⇧V pickers, second-press-dismisses.
 > Build, fix errors, update roadmap + log.
 
-**Result:** _pending_
+**Result:** Partially done 2026-08-21 (built together with Phase 1, items
+1–6; item 7 deferred). `AppModule.driveIndex` added exactly as corrected
+above. `DriveIndexView` tab shell + Drives/Search/Settings tabs are real;
+Duplicates tab is a working UI shell awaiting Phase 4's data. All listed
+accessibility identifiers wired, plus `driveIndex.ask.accept/decline.button`
+and `driveIndex.settings.*` for the settings controls that landed early.
+Quick Search picker (item 7) **not done** — tracked separately as roadmap
+item 2.7, to be executed as its own follow-up prompt:
+> Add `DriveSearchQuickPickerView` + `DriveSearchQuickPickerController`
+> (`NSPanel`) copying the exact structure of the existing
+> `QuickActionPickerController`/`ClipboardQuickPickerView` — read those two
+> files first for the precise pattern (panel styling, show/hide, second-
+> press-dismisses toggle). Register on **⌘⇧F** in `HotkeyManager.start()`.
+> The picker's content is a thin wrapper reusing
+> `DriveIndexCoordinator.search(query:)`/`revealInFinder`/`openFile` — same
+> data source as the in-module Search tab, so behavior stays identical.
 
 ---
 

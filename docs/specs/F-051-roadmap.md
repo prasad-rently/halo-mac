@@ -28,29 +28,29 @@ Do not rewrite history in the log — append only.
 
 | # | Task | Status |
 |---|------|--------|
-| 1.1 | `DriveAccessManager` actor — persist/resolve security-scoped bookmarks keyed by `volumeUUID` (JSON in Application Support) | ⬜ |
-| 1.2 | Ask-first prompt UI (banner) + `AlertLog.append(...)` entry on first-ever drive sighting | ⬜ |
-| 1.3 | `NSOpenPanel` grant flow scoped to the volume root; persist resulting bookmark on accept | ⬜ |
-| 1.4 | Decline path: mark `KnownDrive.indexingState = .declined`, no future auto-prompt for that UUID | ⬜ |
-| 1.5 | `DriveIndexCoordinator` actor — initial full walk (reuse `FileSystemScanner`-style bounded traversal) → `DriveIndexStore` | ⬜ |
+| 1.1 | `DriveAccessManager` actor — persist/resolve security-scoped bookmarks keyed by `driveKey` (JSON in Application Support) | ✅ |
+| 1.2 | Ask-first prompt UI (`.sheet`) + `AlertLog.append(...)` entry on first-ever drive sighting | ✅ |
+| 1.3 | `NSOpenPanel` grant flow scoped to the volume root; persist resulting bookmark on accept | ✅ |
+| 1.4 | Decline path: mark `KnownDrive.indexingState = .declined`, no future auto-prompt for that key | ✅ |
+| 1.5 | `DriveIndexCoordinator` (`@MainActor` class, not an actor — it drives `NSOpenPanel` and publishes `@Published` UI state) — initial full walk via `FileManager.enumerator` (own bounded walk, not literally `FileSystemScanner` — that scanner has no hashing/inode/category hooks and is tuned for cleanup, not indexing) → `DriveIndexStore.applyDiff` | ✅ |
 
 ## Phase 2 — Search & Drives UI
 
 | # | Task | Status |
 |---|------|--------|
-| 2.1 | `AppModule.driveIndex` case in `Models.swift`/`AppState.swift` (title/icon/gradientColors switch arms) + add to `static var reorderable` — no migration code needed, `moduleOrder`'s load-time diff auto-appends new cases | ⬜ |
-| 2.2 | `ContentView.DetailView`'s exhaustive `switch appState.selectedModule` — add `case .driveIndex: DriveIndexView()` (compiler enforces this, can't be skipped) | ⬜ |
-| 2.3 | `DriveIndexView` tab-bar shell (Drives / Search / Duplicates / Settings), mirrors `FilesView`'s `FilesTab` enum | ⬜ |
-| 2.4 | Drives tab — reuse `DriveSpeedView` row pattern; connected/disconnected badge, Index Now / Re-index / Forget actions | ⬜ |
-| 2.5 | Search tab — query field, result rows (drive name + badge, path, size, last-seen), Reveal/Open actions gated on connected state | ⬜ |
-| 2.6 | Accessibility identifiers wired (`driveIndex.*`, plus `sidebar.row.driveIndex` comes free from the existing `SidebarItem` pattern) per `HaloUITests/README.md` convention | ⬜ |
+| 2.1 | `AppModule.driveIndex` case in `AppState.swift` (title/icon/gradientColors switch arms) + added to `static var reorderable` | ✅ |
+| 2.2 | `ContentView.DetailView`'s exhaustive switch — `case .driveIndex: DriveIndexView()` | ✅ |
+| 2.3 | `DriveIndexView` tab-bar shell (Drives / Search / Duplicates / Settings), mirrors `FilesView`'s `FilesTab` enum | ✅ |
+| 2.4 | Drives tab — own row styling (`HaloCard`, connected/disconnected + state badges), Index Now / Re-index / Forget actions | ✅ |
+| 2.5 | Search tab — query field, result rows (drive name + badge, path, size, last-seen), Reveal/Open actions gated on connected state | ✅ |
+| 2.6 | Accessibility identifiers wired (`driveIndex.tab.*`, `driveIndex.drives.row`, `driveIndex.search.field/row/reveal.button/open.button`, `driveIndex.ask.accept/decline.button`, `driveIndex.settings.*`) | ✅ |
 | 2.7 | Quick Search picker (`DriveSearchQuickPickerView` + controller) on **⌘⇧F**, registered in `HotkeyManager.start()` alongside the existing ⌘⇧A/⌘⇧V pickers | ⬜ |
 
 ## Phase 3 — Incremental re-index & rename/move handling
 
 | # | Task | Status |
 |---|------|--------|
-| 3.1 | Diff-on-remount: inode-aware new / moved / modified / removed classification | 🔄 (`DriveIndexStore.applyDiff` implemented + committed in Phase 0; not yet called by a real coordinator/walk — see Phase 1) |
+| 3.1 | Diff-on-remount: inode-aware new / moved / modified / removed classification | ✅ (`DriveIndexCoordinator.beginIndexing` now walks + calls `applyDiff` for real, on both the initial grant and every silent re-mount) |
 | 3.2 | Batched SQLite transactions for large-drive performance | ✅ (`applyDiff` already runs in one `withTransaction`) |
 | 3.3 | Load-aware throttling/deferral via `SystemMonitor` (CPU pressure / Low Power Mode) | ⬜ |
 | 3.4 | Interrupted-scan resilience (unplug mid-index leaves store consistent) | ⬜ |
@@ -60,9 +60,9 @@ Do not rewrite history in the log — append only.
 | # | Task | Status |
 |---|------|--------|
 | 4.1 | Size-threshold-gated hashing pipeline feeding existing `DuplicateDetector` | ⬜ |
-| 4.2 | Duplicates tab UI — confirmed vs. awaiting-reconnect sections | ⬜ |
+| 4.2 | Duplicates tab UI — confirmed vs. awaiting-reconnect sections | 🔄 (UI shell + threshold picker built; renders real data once 4.1 lands — `coordinator.duplicates()` is still a documented stub returning `[]`) |
 | 4.3 | Confirm-before-trash flow (TC-SAFE-02 pattern) for cross-drive duplicate cleanup | ⬜ |
-| 4.4 | Settings tab — size threshold control, Forget Drive, pause-indexing toggle, file-type category filter (Documents/Images/Video/Audio/Archives/Code/Other), exclude-folders-by-name list (DiskCatalogMaker-inspired, seeded with `.git`/`node_modules`/`.Trashes`) | ⬜ |
+| 4.4 | Settings tab — size threshold control, pause-indexing toggle, file-type category filter (Documents/Images/Video/Audio/Archives/Code/Other), exclude-folders-by-name list (DiskCatalogMaker-inspired, seeded with `.git`/`node_modules`/`.Trashes`) | ✅ (Forget Drive lives on the Drives tab per-row instead of Settings — same capability, more discoverable there) |
 
 ## Phase 5 — Mobile governance, docs & hardening
 
@@ -94,4 +94,5 @@ Do not rewrite history in the log — append only.
 > Append-only. One entry per meaningful checkpoint: `YYYY-MM-DD — what happened`.
 
 - **2026-08-21** — Spec, roadmap, execution-prompt playbook, and manual test plan drafted and saved on `feat/f051-external-drive-indexer`. Research agent dispatched to confirm exact current signatures (`Models.swift`, `AppState.swift`, `ContentView.swift`, `DriveSpeedTester.swift`, `FileSystemScanner.swift`, `DuplicateDetector.swift`, `AlertLog`/`AlertManager`, `HaloSidebar`/`HaloTestFixtures` test helpers, and the `scripts/add_source_files.rb` / `add_uitest_target.rb` pbxproj-registration flow) before Phase 0 implementation begins. Mid-planning, scope grew: added Quick Search picker (⌘⇧F), file-type category filter, and exclude-folders-by-name settings (DiskCatalogMaker prior art) to the spec, roadmap, and prompts.
+- **2026-08-21** — Phases 1 and 2 complete (built together — the coordinator and its UI are easiest to verify against each other). `DriveAccessManager` (security-scoped bookmarks, JSON in Application Support, self-healing on staleness). `DriveIndexCoordinator` (`@MainActor` class): mount → ask-first-or-silent-resolve → grant panel → walk → `applyDiff` → refresh, plus manual Index Now/Re-index/Forget, search passthrough, and sandboxed reveal/open (resolves the security-scoped root fresh per call, not the plain mount-notification URL). New sidebar module wired end to end: `AppModule.driveIndex`, `ContentView` routing, `DriveIndexView` (Drives/Search/Duplicates/Settings tabs), `AskIndexDriveSheet`. Settings tab landed early since it was cheap alongside the coordinator: size threshold, per-category file-type toggles, exclude-folder-names editor, pause toggle — all `@AppStorage`-backed. `xcodebuild -target Halo build` succeeds clean (fixed one macOS-14-only `onChange` overload down to the 13.0-compatible form along the way). `coordinator.duplicates()` is a deliberate stub returning `[]` until Phase 4 lands the real hashing pipeline — the Duplicates tab UI already renders whatever it returns.
 - **2026-08-21** — Phase 0 complete. `DriveVolume` promoted to `Models.swift` with `volumeUUID`/`driveKey`; added `IndexedFileEntry`, `KnownDrive`, `DriveIndexingState`, `IndexedFileCategory`, `CrossDriveDuplicateGroup`/`Item`. New `DriveMonitor.swift` (NSWorkspace mount/unmount observer, mirrors `IdleAppMonitor`'s token pattern) and `DriveIndexStore.swift` (SQLite actor — schema, `applyDiff` inode-aware reconciliation in one transaction, `search`, duplicate-candidate queries, `forgetDrive`). Linked `libsqlite3.tbd` via a new `scripts/add_system_library.rb` (xcodeproj-gem based, mirrors the IOKit/SystemConfiguration pattern rather than hand-editing pbxproj). Added `com.apple.security.files.bookmarks.app-scope` to `Halo.entitlements`. `xcodebuild -target Halo build` (signing disabled) succeeds with no errors/warnings on the new files. Note: this checkout has no committed shared scheme for the `Halo` target (only `HaloTests`/`HaloUITests` are shared schemes; `Halo`'s scheme is normally Xcode-autocreated into gitignored `xcuserdata`) — used `-target Halo` instead of `-scheme Halo` for CLI verification; not a regression from this work, pre-existing environment quirk.

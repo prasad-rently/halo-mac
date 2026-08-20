@@ -22,6 +22,9 @@ struct MainLayout: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var celebrationManager = CelebrationManager.shared
     @ObservedObject private var actionRunner = ActionRunner.shared
+    // F-051: global so the ask-first prompt can appear no matter which
+    // module the user is currently viewing when a drive mounts.
+    @ObservedObject private var driveIndexCoordinator = DriveIndexCoordinator.shared
     @State private var columnVisibility = NavigationSplitViewVisibility.all
 
     var body: some View {
@@ -40,6 +43,10 @@ struct MainLayout: View {
         // F-038: Code Beautifier sheet — triggered from Actions module
         .sheet(isPresented: $actionRunner.showCodeBeautifier) {
             CodeBeautifierView()
+        }
+        // F-051: ask-first prompt when a never-seen drive mounts
+        .sheet(item: $driveIndexCoordinator.pendingAskDrive) { volume in
+            AskIndexDriveSheet(volume: volume)
         }
     }
 }
@@ -393,6 +400,7 @@ struct DetailView: View {
             case .ports:          PortManagerView()
             case .localShare:     LocalShareView()
             case .ai:             AIAssistantView()
+            case .driveIndex:     DriveIndexView()
             case .menuBarPreview: MenuBarPreviewView()
             }
         }

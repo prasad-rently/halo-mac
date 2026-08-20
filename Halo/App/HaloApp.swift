@@ -69,6 +69,8 @@ struct HaloApp: App {
                     AppState.shared = appState
                     // F-005: start background scan scheduler now that AppState is ready
                     ScanScheduler.shared.start(appState: appState)
+                    // F-051: start drive mount/unmount monitoring for the Drive Index module
+                    await DriveIndexCoordinator.shared.start()
                 }
                 // F-041: handle halo:// deep links for action sharing
                 .onOpenURL { url in
