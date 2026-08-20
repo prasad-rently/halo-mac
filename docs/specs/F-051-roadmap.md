@@ -16,13 +16,13 @@ Do not rewrite history in the log — append only.
 
 | # | Task | Status |
 |---|------|--------|
-| 0.1 | Promote `DriveVolume` from `DriveSpeedTester.swift` into `Models.swift`; add `volumeUUID: String?` | ⬜ |
-| 0.2 | Add `IndexedFileEntry`, `KnownDrive`, `CrossDriveDuplicateGroup`/`CrossDriveDuplicateItem` models | ⬜ |
-| 0.3 | `DriveMonitor` — `NSWorkspace.didMountNotification` / `.didUnmountNotification` observer, resolves `volumeUUIDStringKey` | ⬜ |
-| 0.4 | `DriveIndexStore` actor — SQLite schema (`volumes`, `files` tables + indexes), open/migrate on first use | ⬜ |
-| 0.5 | Link `libsqlite3.tbd` into the `Halo` target's Frameworks build phase via a small `xcodeproj`-gem Ruby script (mirror the IOKit/SystemConfiguration `.framework` pattern, but `lastKnownFileType = "sourcecode.text-based-dylib-definition"`, `path = usr/lib/libsqlite3.tbd`, `sourceTree = SDKROOT`) — the existing scripts don't touch Frameworks, so this is a new one-off script, not a hand pbxproj edit | ⬜ |
-| 0.6 | Register new app-target source files via `scripts/add_source_files.rb <paths...>` (Sources phase only — confirmed idempotent, basename-checked) | ⬜ |
-| 0.7 | Add `com.apple.security.files.bookmarks.app-scope = true` to `Halo/Halo.entitlements` (release only — confirmed missing; required for bookmarks to resolve across relaunches, not just within-process) | ⬜ |
+| 0.1 | Promote `DriveVolume` from `DriveSpeedTester.swift` into `Models.swift`; add `volumeUUID: String?` + `driveKey` identity helper | ✅ |
+| 0.2 | Add `IndexedFileEntry`, `KnownDrive`, `IndexedFileCategory`, `CrossDriveDuplicateGroup`/`CrossDriveDuplicateItem` models | ✅ |
+| 0.3 | `DriveMonitor` — `NSWorkspace.didMountNotification` / `.didUnmountNotification` observer, resolves `volumeUUIDStringKey` | ✅ |
+| 0.4 | `DriveIndexStore` actor — SQLite schema (`drives`, `files` tables + indexes), open/create on first use — implemented fuller than the Phase-0 minimum: also has working `applyDiff` (inode-aware diff), `search`, `candidateDuplicateSizes`/`filesOfSize`, `forgetDrive` (Phases 1/3/4 logic landed early since it was cheap to do alongside the schema) | ✅ |
+| 0.5 | Link `libsqlite3.tbd` into the `Halo` target's Frameworks build phase via a small `xcodeproj`-gem Ruby script (`scripts/add_system_library.rb`) | ✅ |
+| 0.6 | Register new app-target source files via `scripts/add_source_files.rb <paths...>` | ✅ |
+| 0.7 | Add `com.apple.security.files.bookmarks.app-scope = true` to `Halo/Halo.entitlements` (release only) | ✅ |
 
 ## Phase 1 — Access & first-index flow
 
@@ -50,8 +50,8 @@ Do not rewrite history in the log — append only.
 
 | # | Task | Status |
 |---|------|--------|
-| 3.1 | Diff-on-remount: inode-aware new / moved / modified / removed classification | ⬜ |
-| 3.2 | Batched SQLite transactions for large-drive performance | ⬜ |
+| 3.1 | Diff-on-remount: inode-aware new / moved / modified / removed classification | 🔄 (`DriveIndexStore.applyDiff` implemented + committed in Phase 0; not yet called by a real coordinator/walk — see Phase 1) |
+| 3.2 | Batched SQLite transactions for large-drive performance | ✅ (`applyDiff` already runs in one `withTransaction`) |
 | 3.3 | Load-aware throttling/deferral via `SystemMonitor` (CPU pressure / Low Power Mode) | ⬜ |
 | 3.4 | Interrupted-scan resilience (unplug mid-index leaves store consistent) | ⬜ |
 
@@ -93,4 +93,5 @@ Do not rewrite history in the log — append only.
 
 > Append-only. One entry per meaningful checkpoint: `YYYY-MM-DD — what happened`.
 
-- **2026-08-21** — Spec, roadmap, execution-prompt playbook, and manual test plan drafted and saved on `feat/f051-external-drive-indexer`. Research agent dispatched to confirm exact current signatures (`Models.swift`, `AppState.swift`, `ContentView.swift`, `DriveSpeedTester.swift`, `FileSystemScanner.swift`, `DuplicateDetector.swift`, `AlertLog`/`AlertManager`, `HaloSidebar`/`HaloTestFixtures` test helpers, and the `scripts/add_source_files.rb` / `add_uitest_target.rb` pbxproj-registration flow) before Phase 0 implementation begins.
+- **2026-08-21** — Spec, roadmap, execution-prompt playbook, and manual test plan drafted and saved on `feat/f051-external-drive-indexer`. Research agent dispatched to confirm exact current signatures (`Models.swift`, `AppState.swift`, `ContentView.swift`, `DriveSpeedTester.swift`, `FileSystemScanner.swift`, `DuplicateDetector.swift`, `AlertLog`/`AlertManager`, `HaloSidebar`/`HaloTestFixtures` test helpers, and the `scripts/add_source_files.rb` / `add_uitest_target.rb` pbxproj-registration flow) before Phase 0 implementation begins. Mid-planning, scope grew: added Quick Search picker (⌘⇧F), file-type category filter, and exclude-folders-by-name settings (DiskCatalogMaker prior art) to the spec, roadmap, and prompts.
+- **2026-08-21** — Phase 0 complete. `DriveVolume` promoted to `Models.swift` with `volumeUUID`/`driveKey`; added `IndexedFileEntry`, `KnownDrive`, `DriveIndexingState`, `IndexedFileCategory`, `CrossDriveDuplicateGroup`/`Item`. New `DriveMonitor.swift` (NSWorkspace mount/unmount observer, mirrors `IdleAppMonitor`'s token pattern) and `DriveIndexStore.swift` (SQLite actor — schema, `applyDiff` inode-aware reconciliation in one transaction, `search`, duplicate-candidate queries, `forgetDrive`). Linked `libsqlite3.tbd` via a new `scripts/add_system_library.rb` (xcodeproj-gem based, mirrors the IOKit/SystemConfiguration pattern rather than hand-editing pbxproj). Added `com.apple.security.files.bookmarks.app-scope` to `Halo.entitlements`. `xcodebuild -target Halo build` (signing disabled) succeeds with no errors/warnings on the new files. Note: this checkout has no committed shared scheme for the `Halo` target (only `HaloTests`/`HaloUITests` are shared schemes; `Halo`'s scheme is normally Xcode-autocreated into gitignored `xcuserdata`) — used `-target Halo` instead of `-scheme Halo` for CLI verification; not a regression from this work, pre-existing environment quirk.

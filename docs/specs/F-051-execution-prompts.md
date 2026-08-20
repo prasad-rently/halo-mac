@@ -69,7 +69,17 @@ executor must follow them):
 >    errors until it compiles clean.
 > Update `F-051-roadmap.md` Phase 0 checkboxes and Progress Log when done.
 
-**Result:** _pending_
+**Result:** Done 2026-08-21. `DriveVolume` moved to `Models.swift` (+`volumeUUID`,
+`driveKey`); `IndexedFileEntry`/`KnownDrive`/`DriveIndexingState`/
+`IndexedFileCategory`/`CrossDriveDuplicateGroup`/`Item` added.
+`DriveMonitor.swift` and `DriveIndexStore.swift` created — the store ended up
+with working `applyDiff`/`search`/duplicate-candidate queries rather than
+stubs, since the schema and the diff logic were cheap to write together.
+`libsqlite3.tbd` linked via new `scripts/add_system_library.rb`.
+`bookmarks.app-scope` entitlement added. `xcodebuild -target Halo build`
+succeeds clean. (Used `-target Halo`, not `-scheme Halo` — this checkout has
+no committed shared scheme for the app target; pre-existing environment
+quirk, not caused by this work.)
 
 ---
 

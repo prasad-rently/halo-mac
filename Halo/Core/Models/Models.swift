@@ -332,6 +332,147 @@ struct DuplicateItem: Identifiable {
     var sizeFormatted: String { ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file) }
 }
 
+// MARK: - Drive Index Models (F-051)
+
+/// A mounted volume eligible for benchmarking (F-043) or indexing (F-051).
+struct DriveVolume: Identifiable, Hashable, Sendable {
+    let id: String            // volume path (stable per mount, NOT across remounts)
+    let name: String
+    let url: URL
+    let isInternal: Bool
+    let isRemovable: Bool
+    let totalBytes: Int64
+    let freeBytes: Int64
+    /// Persistent volume UUID, when the filesystem supports one (APFS/HFS+).
+    /// exFAT/FAT32 volumes often lack this.
+    let volumeUUID: String?
+
+    var kindLabel: String { isInternal ? "Internal" : (isRemovable ? "External" : "Secondary") }
+    var iconName: String { isInternal ? "internaldrive" : "externaldrive" }
+
+    /// Stable identity for indexing: the volume UUID when available, else a
+    /// name+capacity fallback for filesystems without one. Not guaranteed
+    /// unique for two same-name, same-size, UUID-less drives — an accepted
+    /// limitation (see F-051 spec §11).
+    var driveKey: String { volumeUUID ?? "\(name)|\(totalBytes)" }
+}
+
+/// How Halo's relationship with a physical drive currently stands.
+enum DriveIndexingState: String, Codable, Sendable {
+    case notIndexed
+    case indexed
+    case declined
+}
+
+/// A drive Halo knows about, whether or not it's currently indexed or mounted.
+/// Identity is `driveKey` (see `DriveVolume.driveKey`).
+struct KnownDrive: Identifiable, Codable, Sendable {
+    var id: String { driveKey }
+    let driveKey: String
+    var name: String
+    var indexingState: DriveIndexingState
+    var lastIndexedDate: Date?
+    var fileCount: Int
+    var totalBytes: Int64
+
+    var totalFormatted: String { ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file) }
+}
+
+/// One indexed file's metadata row. Persisted in `DriveIndexStore` (SQLite);
+/// this struct is the in-memory shape for query results.
+struct IndexedFileEntry: Identifiable, Sendable {
+    let id: Int64                 // SQLite rowid
+    let driveKey: String
+    let relativePath: String      // path relative to the volume root
+    let fileName: String
+    let size: Int64
+    let createdDate: Date?
+    let modifiedDate: Date?
+    let inode: UInt64
+    let category: IndexedFileCategory
+    var partialHash: String?
+    var fullHash: String?
+    let lastSeenDate: Date
+
+    var sizeFormatted: String { ByteCountFormatter.string(fromByteCount: size, countStyle: .file) }
+}
+
+/// Search-relevant file-type grouping for the indexing filter (Settings).
+/// Deliberately distinct from `FileKind` above, which classifies files for
+/// *cleanup* — a different concern with a different taxonomy.
+enum IndexedFileCategory: String, CaseIterable, Codable, Sendable {
+    case documents = "Documents"
+    case images = "Images"
+    case video = "Video"
+    case audio = "Audio"
+    case archives = "Archives"
+    case code = "Code"
+    case other = "Other"
+
+    var icon: String {
+        switch self {
+        case .documents: return "doc.text"
+        case .images: return "photo"
+        case .video: return "film"
+        case .audio: return "waveform"
+        case .archives: return "archivebox"
+        case .code: return "chevron.left.forwardslash.chevron.right"
+        case .other: return "doc.questionmark"
+        }
+    }
+
+    private static let extensionMap: [String: IndexedFileCategory] = {
+        let table: [(IndexedFileCategory, [String])] = [
+            (.documents, ["pdf", "doc", "docx", "pages", "txt", "rtf", "md", "key", "ppt", "pptx", "numbers", "xls", "xlsx", "csv"]),
+            (.images, ["jpg", "jpeg", "png", "heic", "gif", "bmp", "tiff", "svg", "webp", "raw"]),
+            (.video, ["mp4", "mov", "m4v", "avi", "mkv", "wmv", "webm"]),
+            (.audio, ["mp3", "wav", "aac", "flac", "m4a", "aiff", "ogg"]),
+            (.archives, ["zip", "rar", "7z", "tar", "gz", "bz2", "dmg", "iso"]),
+            (.code, ["swift", "py", "js", "ts", "java", "c", "cpp", "h", "m", "go", "rs", "rb", "json", "yml", "yaml", "html", "css", "sh"])
+        ]
+        var map: [String: IndexedFileCategory] = [:]
+        for (category, exts) in table {
+            for ext in exts { map[ext] = category }
+        }
+        return map
+    }()
+
+    static func categorize(fileName: String) -> IndexedFileCategory {
+        let ext = (fileName as NSString).pathExtension.lowercased()
+        return extensionMap[ext] ?? .other
+    }
+}
+
+/// A candidate duplicate spanning one or more volumes. `isConfirmed` is true
+/// only once every member has been hash-confirmed identical (which requires
+/// every owning volume to have been connected during hashing) — otherwise
+/// it's a same-size candidate "awaiting reconnect."
+struct CrossDriveDuplicateGroup: Identifiable {
+    let id: UUID = UUID()
+    var items: [CrossDriveDuplicateItem]
+    var isConfirmed: Bool
+
+    var wastedBytes: Int64 {
+        guard items.count > 1 else { return 0 }
+        return items.dropFirst().reduce(0) { $0 + $1.sizeBytes }
+    }
+    var wastedFormatted: String { ByteCountFormatter.string(fromByteCount: wastedBytes, countStyle: .file) }
+}
+
+struct CrossDriveDuplicateItem: Identifiable {
+    let id: UUID = UUID()
+    let driveKey: String
+    let driveName: String
+    let isDriveConnected: Bool
+    let relativePath: String
+    let sizeBytes: Int64
+    let modifiedDate: Date?
+    var isMarkedForDeletion: Bool = false
+
+    var name: String { (relativePath as NSString).lastPathComponent }
+    var sizeFormatted: String { ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file) }
+}
+
 // MARK: - Clipboard Models
 
 struct ClipboardItem: Identifiable, Equatable {

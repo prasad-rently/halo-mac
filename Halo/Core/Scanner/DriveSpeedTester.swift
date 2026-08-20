@@ -23,20 +23,9 @@ import Darwin
 //   best observed peak.
 
 // MARK: - Models
-
-/// A mounted volume eligible for benchmarking.
-struct DriveVolume: Identifiable, Hashable, Sendable {
-    let id: String            // volume path (stable per mount)
-    let name: String
-    let url: URL
-    let isInternal: Bool
-    let isRemovable: Bool
-    let totalBytes: Int64
-    let freeBytes: Int64
-
-    var kindLabel: String { isInternal ? "Internal" : (isRemovable ? "External" : "Secondary") }
-    var iconName: String { isInternal ? "internaldrive" : "externaldrive" }
-}
+//
+// `DriveVolume` lives in Models.swift — it's shared with the Drive Index
+// feature (F-051), which also needs the volume's persistent UUID.
 
 /// The result of a completed benchmark. Speeds are in MB/s (decimal, 1 MB = 1e6 bytes).
 struct DriveSpeedResult: Sendable, Equatable {
@@ -120,7 +109,7 @@ actor DriveSpeedTester {
         let keys: [URLResourceKey] = [
             .volumeNameKey, .volumeIsInternalKey, .volumeIsRemovableKey,
             .volumeTotalCapacityKey, .volumeAvailableCapacityKey,
-            .volumeIsBrowsableKey, .volumeIsLocalKey
+            .volumeIsBrowsableKey, .volumeIsLocalKey, .volumeUUIDStringKey
         ]
         let urls = FileManager.default.mountedVolumeURLs(
             includingResourceValuesForKeys: keys,
@@ -139,7 +128,8 @@ actor DriveSpeedTester {
                 isInternal: rv.volumeIsInternal ?? true,
                 isRemovable: rv.volumeIsRemovable ?? false,
                 totalBytes: Int64(rv.volumeTotalCapacity ?? 0),
-                freeBytes: Int64(rv.volumeAvailableCapacity ?? 0)
+                freeBytes: Int64(rv.volumeAvailableCapacity ?? 0),
+                volumeUUID: rv.volumeUUIDString
             )
             volumes.append(vol)
         }

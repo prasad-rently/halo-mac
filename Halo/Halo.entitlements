@@ -18,6 +18,13 @@
     <key>com.apple.security.network.client</key>
     <true/>
 
+    <!-- App-scoped security bookmarks — F-051 Drive Index: a bookmark saved
+         after the user grants access to an external drive via NSOpenPanel
+         must still resolve after the app relaunches. Without this key a
+         bookmark only resolves within the process that created it. -->
+    <key>com.apple.security.files.bookmarks.app-scope</key>
+    <true/>
+
     <!-- Temporary exception: read ~/Library for cache/log scanning -->
     <!-- NOTE: Full Disk Access is requested at runtime via user prompt, not via entitlement -->
     <!-- The entitlement below covers the subset needed within sandbox -->
