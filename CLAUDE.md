@@ -562,7 +562,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 2. **Signing order** — dylibs → Sentry.framework → appex → outer app. Wrong order = TeamIdentifier mismatch crash.
 3. **Widget gallery** — macOS only discovers widgets from apps in `/Applications` or `~/Applications`.
 4. **`containerBackground` availability** — must be wrapped in `if #available(macOS 14.0, *)`.
-5. **Global NSEvent monitor** — requires Accessibility permission + sandbox off (debug) or XPC helper (release).
+5. **Global hotkeys use Carbon (`RegisterEventHotKey`), not `NSEvent.addGlobalMonitorForEvents`** — `HotkeyManager.swift` registers ⌘⇧V/⌘⇧A/⌘⇧I/⌘⇧F via the Carbon Event Manager. This fires regardless of which app is frontmost and needs **no Accessibility permission at all** — `NSEvent`'s global monitor variant only fires when `AXIsProcessTrusted()` is true, which was the cause of a real bug (pickers only worked while Halo itself was focused). Don't revert to `NSEvent` global monitors for new shortcuts; follow the existing `register(_:keyCode:modifiers:)` pattern instead. (Onboarding no longer has an Accessibility-permission step for this reason — removed along with the old mechanism.)
 6. **`HaloSharedData.swift`** — compiled into both targets. Changes must be backward-compatible JSON or versioned.
 7. **`await` in `??` / `||`** — both operators use `@autoclosure`; `await` cannot appear in their right-hand side. Use explicit `let` bindings.
 8. **`NSBackgroundActivityScheduler.Result`** — cases are `.finished` and `.deferred`, **not** `.success`.

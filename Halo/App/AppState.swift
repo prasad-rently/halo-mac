@@ -108,7 +108,6 @@ final class AppState: ObservableObject {
     private let actionPickerController = QuickActionPickerController()
     private let aiQuickAskController   = AIQuickAskController()
     private let driveSearchPickerController = DriveSearchQuickPickerController()
-    private var wasAxTrusted = false
 
     // Phase 3
     private let alertManager = AlertManager()
@@ -140,11 +139,6 @@ final class AppState: ObservableObject {
     }
 
     private func refreshMetrics() {
-        // Re-register global hotkey monitor the moment AX permission is granted.
-        let trusted = AXIsProcessTrusted()
-        if trusted && !wasAxTrusted { hotkeyManager.registerGlobalMonitor() }
-        wasAxTrusted = trusted
-
         guard let monitor = systemMonitor else { return }
         cpuUsage = monitor.cpuUsage()
         let ram = monitor.ramStats()
@@ -310,7 +304,6 @@ final class AppState: ObservableObject {
                 self.driveSearchPickerController.show()
             }
         }
-        wasAxTrusted = AXIsProcessTrusted()
         // Restore persisted action-picker shortcut from ActionSettingsStore
         let acs = ActionSettingsStore.shared
         hotkeyManager.updateActionShortcut(

@@ -1,13 +1,33 @@
 import AppKit
+import Carbon.HIToolbox
 
-// Registers a configurable global/local hotkey for the clipboard quick picker.
-// Local monitor fires when Halo is focused (no Accessibility needed).
-// Global monitor fires from any app — only registered when AXIsProcessTrusted() is true.
-// Call registerGlobalMonitor() again after the user grants Accessibility permission.
+// Registers Halo's global hotkeys via the Carbon Event Manager
+// (RegisterEventHotKey), NOT NSEvent local/global monitors.
+//
+// Why: NSEvent.addGlobalMonitorForEvents only fires while Halo is NOT the
+// focused app, but only if AXIsProcessTrusted() — i.e. the user has granted
+// Accessibility permission. Without it, only the local monitor fires,
+// which only catches the key while Halo itself is frontmost — exactly the
+// bug this replaces ("picker only works when Halo is focused"). Carbon
+// hotkeys are true system-wide key registrations: they fire regardless of
+// which app is frontmost and need no Accessibility permission at all —
+// this is the same mechanism long used by Spotlight-alternative launchers
+// (Alfred, Raycast-era tools) for exactly this reason.
 @MainActor
 final class HotkeyManager {
-    private var globalMonitor: Any?
-    private var localMonitor: Any?
+
+    private enum Slot: UInt32, CaseIterable {
+        case clipboard = 1
+        case action = 2
+        case ai = 3
+        case driveSearch = 4
+    }
+
+    /// Four-char-code signature identifying Halo's hotkeys to the system.
+    private static let signature: OSType = 0x48414C4F // 'HALO'
+
+    private var hotKeyRefs: [Slot: EventHotKeyRef] = [:]
+    private var eventHandlerRef: EventHandlerRef?
 
     // Clipboard shortcut — default ⌘⇧V
     var onClipboardShortcut: (() -> Void)?
@@ -32,76 +52,100 @@ final class HotkeyManager {
     // MARK: - Public API
 
     func start(keyCode: UInt16 = 9, modifiers: NSEvent.ModifierFlags = [.command, .shift]) {
-        stop()
         self.keyCode   = keyCode
         self.modifiers = modifiers
-
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self else { return event }
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            if flags == self.modifiers && event.keyCode == self.keyCode {
-                DispatchQueue.main.async { self.onClipboardShortcut?() }
-                return nil
-            }
-            if flags == self.actionModifiers && event.keyCode == self.actionKeyCode {
-                DispatchQueue.main.async { self.onActionShortcut?() }
-                return nil
-            }
-            if flags == self.aiModifiers && event.keyCode == self.aiKeyCode {
-                DispatchQueue.main.async { self.onAIShortcut?() }
-                return nil
-            }
-            if flags == self.driveSearchModifiers && event.keyCode == self.driveSearchKeyCode {
-                DispatchQueue.main.async { self.onDriveSearchShortcut?() }
-                return nil
-            }
-            return event
-        }
-
-        registerGlobalMonitor()
+        installEventHandlerIfNeeded()
+        registerAll()
     }
 
-    // Call this after the user grants Accessibility in System Settings.
+    /// Kept for call-site compatibility (AppState calls this after an
+    /// Accessibility-trust change) — now a harmless re-register, since
+    /// Carbon hotkeys never depended on that permission to begin with.
     func registerGlobalMonitor() {
-        if let m = globalMonitor { NSEvent.removeMonitor(m); globalMonitor = nil }
-        guard AXIsProcessTrusted() else { return }
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self else { return }
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            if flags == self.modifiers && event.keyCode == self.keyCode {
-                DispatchQueue.main.async { self.onClipboardShortcut?() }
-            } else if flags == self.actionModifiers && event.keyCode == self.actionKeyCode {
-                DispatchQueue.main.async { self.onActionShortcut?() }
-            } else if flags == self.aiModifiers && event.keyCode == self.aiKeyCode {
-                DispatchQueue.main.async { self.onAIShortcut?() }
-            } else if flags == self.driveSearchModifiers && event.keyCode == self.driveSearchKeyCode {
-                DispatchQueue.main.async { self.onDriveSearchShortcut?() }
-            }
-        }
+        registerAll()
     }
 
     /// Called when the user records a new AI quick-ask shortcut.
-    /// Re-registers monitors with the new key combination.
     func updateAIShortcut(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) {
         aiKeyCode   = keyCode
         aiModifiers = modifiers
-        start(keyCode: self.keyCode, modifiers: self.modifiers)
+        registerAll()
     }
 
     /// Called when the user records a new action-picker shortcut in Settings.
-    /// Re-registers monitors with the new key combination.
     func updateActionShortcut(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) {
         actionKeyCode   = keyCode
         actionModifiers = modifiers
-        // Re-register monitors so the new key takes effect immediately
-        start(keyCode: self.keyCode, modifiers: self.modifiers)
+        registerAll()
     }
 
     func stop() {
-        if let m = globalMonitor { NSEvent.removeMonitor(m) }
-        if let m = localMonitor  { NSEvent.removeMonitor(m) }
-        globalMonitor = nil
-        localMonitor  = nil
+        for (_, ref) in hotKeyRefs { UnregisterEventHotKey(ref) }
+        hotKeyRefs.removeAll()
+        if let eventHandlerRef {
+            RemoveEventHandler(eventHandlerRef)
+            self.eventHandlerRef = nil
+        }
+    }
+
+    // MARK: - Carbon plumbing
+
+    private func installEventHandlerIfNeeded() {
+        guard eventHandlerRef == nil else { return }
+        var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        let selfPointer = Unmanaged.passUnretained(self).toOpaque()
+        InstallEventHandler(GetApplicationEventTarget(), { _, eventRef, userData in
+            guard let eventRef, let userData else { return OSStatus(eventNotHandledErr) }
+            var hotKeyID = EventHotKeyID()
+            let status = GetEventParameter(
+                eventRef, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                nil, MemoryLayout<EventHotKeyID>.size, nil, &hotKeyID)
+            guard status == noErr else { return status }
+            let manager = Unmanaged<HotkeyManager>.fromOpaque(userData).takeUnretainedValue()
+            let id = hotKeyID.id
+            DispatchQueue.main.async { manager.handleHotKey(id: id) }
+            return noErr
+        }, 1, &eventType, selfPointer, &eventHandlerRef)
+    }
+
+    private func handleHotKey(id: UInt32) {
+        switch Slot(rawValue: id) {
+        case .clipboard:   onClipboardShortcut?()
+        case .action:      onActionShortcut?()
+        case .ai:          onAIShortcut?()
+        case .driveSearch: onDriveSearchShortcut?()
+        case nil:          break
+        }
+    }
+
+    private func registerAll() {
+        register(.clipboard, keyCode: keyCode, modifiers: modifiers)
+        register(.action, keyCode: actionKeyCode, modifiers: actionModifiers)
+        register(.ai, keyCode: aiKeyCode, modifiers: aiModifiers)
+        register(.driveSearch, keyCode: driveSearchKeyCode, modifiers: driveSearchModifiers)
+    }
+
+    private func register(_ slot: Slot, keyCode: UInt16, modifiers: NSEvent.ModifierFlags) {
+        if let existing = hotKeyRefs.removeValue(forKey: slot) {
+            UnregisterEventHotKey(existing)
+        }
+        let hotKeyID = EventHotKeyID(signature: Self.signature, id: slot.rawValue)
+        var hotKeyRef: EventHotKeyRef?
+        let status = RegisterEventHotKey(
+            UInt32(keyCode), carbonModifiers(from: modifiers), hotKeyID,
+            GetApplicationEventTarget(), 0, &hotKeyRef)
+        if status == noErr, let hotKeyRef {
+            hotKeyRefs[slot] = hotKeyRef
+        }
+    }
+
+    private func carbonModifiers(from flags: NSEvent.ModifierFlags) -> UInt32 {
+        var carbon: UInt32 = 0
+        if flags.contains(.command) { carbon |= UInt32(cmdKey) }
+        if flags.contains(.option)  { carbon |= UInt32(optionKey) }
+        if flags.contains(.shift)   { carbon |= UInt32(shiftKey) }
+        if flags.contains(.control) { carbon |= UInt32(controlKey) }
+        return carbon
     }
 
     // MARK: - Display helpers

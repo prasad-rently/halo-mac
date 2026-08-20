@@ -1,12 +1,17 @@
 import SwiftUI
 import AppKit
 
-// MARK: - Onboarding  (4 steps: Welcome → Full Disk → Accessibility → Done)
+// MARK: - Onboarding  (3 steps: Welcome → Full Disk → Done)
+//
+// A 4th "Accessibility" step used to live here for the global clipboard/
+// action/AI/drive-search shortcuts — removed because those hotkeys now
+// register via Carbon's RegisterEventHotKey (HotkeyManager.swift), which
+// works system-wide without Accessibility permission at all.
 
 struct OnboardingView: View {
     @EnvironmentObject var appState: AppState
     @State private var step = 0
-    private let totalSteps = 4
+    private let totalSteps = 3
 
     var body: some View {
         ZStack {
@@ -20,7 +25,6 @@ struct OnboardingView: View {
                     switch step {
                     case 0: OnboardingStep0(onNext: { step = 1 })
                     case 1: OnboardingStep1(onNext: { step = 2 })
-                    case 2: OnboardingStep2Accessibility(onNext: { step = 3 })
                     default: OnboardingStepDone(onDone: {
                         UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
                         appState.isOnboardingComplete = true
@@ -135,89 +139,6 @@ struct OnboardingStep1: View {
         }
         .padding(48)
         .frame(maxWidth: 460)
-    }
-}
-
-// MARK: - Step 2: Accessibility permission (global clipboard shortcut)
-
-struct OnboardingStep2Accessibility: View {
-    let onNext: () -> Void
-    @State private var isGranted = AXIsProcessTrusted()
-    @State private var pollTimer: Timer?
-
-    var body: some View {
-        VStack(spacing: 24) {
-            ZStack {
-                Circle()
-                    .fill(Color.haloAccent.opacity(0.15))
-                    .frame(width: 90, height: 90)
-                    .blur(radius: 16)
-                Image(systemName: "keyboard.fill")
-                    .font(.system(size: 38))
-                    .foregroundColor(.haloAccent)
-            }
-
-            VStack(spacing: 8) {
-                Text("Enable Global Shortcut")
-                    .font(HaloFont.display(24, weight: .bold))
-                    .foregroundColor(.haloText)
-                Text("Grant Accessibility access so ⌘⇧V opens your clipboard\npicker from any app — Safari, Xcode, Terminal, anywhere.")
-                    .font(HaloFont.body(14))
-                    .foregroundColor(.haloText2)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(3)
-            }
-
-            // Path hint
-            Text("System Settings → Privacy & Security → Accessibility → Enable Halo")
-                .font(HaloFont.mono(11))
-                .foregroundColor(.haloText2)
-                .padding(12)
-                .background(Color.haloSurface2)
-                .cornerRadius(10)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.haloBorder2, lineWidth: 1))
-
-            // Live status badge
-            HStack(spacing: 6) {
-                Image(systemName: isGranted ? "checkmark.circle.fill" : "circle.dotted")
-                    .foregroundColor(isGranted ? .haloGreen : .haloText3)
-                Text(isGranted ? "Accessibility granted" : "Waiting for permission…")
-                    .font(HaloFont.body(13))
-                    .foregroundColor(isGranted ? .haloGreen : .haloText3)
-            }
-            .animation(.easeInOut, value: isGranted)
-
-            HStack(spacing: 12) {
-                Button("Open System Settings") {
-                    NSWorkspace.shared.open(
-                        URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
-                    // Prompt the system dialog too
-                    let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
-                    AXIsProcessTrustedWithOptions(opts as CFDictionary)
-                }
-                .font(HaloFont.body(13, weight: .semibold))
-                .foregroundColor(.haloAccent)
-                .padding(.horizontal, 18).padding(.vertical, 10)
-                .background(Color.haloAccent.opacity(0.1))
-                .cornerRadius(10)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.haloAccent.opacity(0.3), lineWidth: 1))
-                .buttonStyle(.plain)
-
-                HaloPrimaryButton(isGranted ? "Continue" : "Skip for now", action: {
-                    pollTimer?.invalidate()
-                    onNext()
-                })
-            }
-        }
-        .padding(48)
-        .frame(maxWidth: 460)
-        .onAppear {
-            pollTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-                let trusted = AXIsProcessTrusted()
-                if trusted != isGranted { isGranted = trusted }
-            }
-        }
-        .onDisappear { pollTimer?.invalidate() }
     }
 }
 
