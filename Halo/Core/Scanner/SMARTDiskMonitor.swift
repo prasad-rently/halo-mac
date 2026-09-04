@@ -119,10 +119,47 @@ actor SMARTDiskMonitor {
             return max(0, 100 - used)
         }
 
+        /// Highest vendor-reported spare threshold we're willing to believe.
+        /// Apple Silicon's internal SSD reports `AVAILABLE_SPARE_THRESHOLD = 99`
+        /// (verified by hand on this Mac against `diskutil info -plist /`), which
+        /// is nothing like the ~10% the NVMe spec's own examples use. Trusting it
+        /// literally would declare the drive Failing the first time spare ticks
+        /// 100 → 99, i.e. on completely normal wear. Anything above this bound is
+        /// treated as a nonsense threshold and ignored in favour of
+        /// `criticalSparePercent` below.
+        static let maxCredibleSpareThreshold = 50
+        /// Threshold-independent low-spare backstop, for drives whose reported
+        /// threshold we discard (or that never report one).
+        static let criticalSparePercent = 10
+        /// Media/data-integrity errors are worth *showing* at any count — each one
+        /// is an unrecovered read — but a single lifetime occurrence is not
+        /// evidence of a failing drive, so it colours the card without escalating
+        /// to `.failing`. See `alertLevel` for why it also doesn't page the user.
+        static let mediaErrorWarnThreshold = 1
+
+        /// Drives the card's badge and accent colour.
         var healthLevel: DriveHealthLevel {
             SMARTDiskInfo.classify(status: overallStatus,
                                     percentageUsed: percentageUsed,
                                     mediaErrorCount: mediaErrorCount,
+                                    availableSpare: availableSparePercent,
+                                    availableSpareThreshold: availableSpareThresholdPercent)
+        }
+
+        /// What `AlertManager` should act on — deliberately stricter than
+        /// `healthLevel`.
+        ///
+        /// The card is a surface the user chose to look at, so it can afford to
+        /// surface anything notable. A system notification is pushed at someone
+        /// who didn't ask, so it has to clear a higher bar: it only fires for
+        /// conditions that are both real and actionable. Concretely, a non-zero
+        /// media-error count colours the badge but does not notify — there is no
+        /// action a repeated banner improves, and with `.diskSmartWarning`'s 24 h
+        /// cooldown a single lifetime error would otherwise nag daily forever.
+        var alertLevel: DriveHealthLevel {
+            SMARTDiskInfo.classify(status: overallStatus,
+                                    percentageUsed: percentageUsed,
+                                    mediaErrorCount: nil,   // informational only — see doc comment
                                     availableSpare: availableSparePercent,
                                     availableSpareThreshold: availableSpareThresholdPercent)
         }
@@ -133,15 +170,30 @@ actor SMARTDiskMonitor {
                               availableSpare: Int?,
                               availableSpareThreshold: Int?) -> DriveHealthLevel {
             if status == .failing { return .failing }
-            if let spare = availableSpare, let threshold = availableSpareThreshold, spare <= threshold {
-                // Per the NVMe spec, spare capacity at/below the manufacturer's
-                // threshold is itself a critical-warning condition.
+
+            // Spare capacity below the manufacturer's threshold is a critical
+            // condition per the NVMe spec — but only when the reported threshold
+            // is credible (see `maxCredibleSpareThreshold`). Note `<`, not `<=`:
+            // the spec's condition is spare falling *below* the threshold.
+            if let spare = availableSpare, let threshold = availableSpareThreshold,
+               threshold <= maxCredibleSpareThreshold, spare < threshold {
                 return .failing
             }
+            // Backstop that doesn't depend on the vendor's threshold at all.
+            if let spare = availableSpare, spare < criticalSparePercent { return .failing }
+
             if let used = percentageUsed, used >= 100 { return .failing }
-            if let errors = mediaErrorCount, errors > 0 { return .warning }
+            if let errors = mediaErrorCount, errors >= mediaErrorWarnThreshold { return .warning }
             if let used = percentageUsed, used >= 90 { return .warning }
-            if case .other = status { return .warning }
+
+            // An unrecognised SMARTStatus string is NOT a warning. Every USB and
+            // Thunderbolt bridge enclosure reports "Not Supported" (verified on
+            // this Mac against an external USB SSD), which is that hardware's
+            // normal, healthy state — flagging it amber would put a Warning badge
+            // on a perfectly good drive. "Can't tell" is `.unknown`, same
+            // discipline as F-019's security checks.
+            if case .other = status { return .unknown }
+
             if status == .verified { return .good }
             return .unknown
         }
@@ -297,9 +349,20 @@ actor SMARTDiskMonitor {
 
     /// diskutil never reports a serial number. Recovered separately by
     /// matching an `IONVMeController` service's "Model Number" against the
-    /// model diskutil already gave us. Only covers drives that publish an
-    /// IONVMeController (confirmed present for this Mac's internal SSD) —
-    /// external SATA/USB-UASP drives were not available to verify against.
+    /// model diskutil already gave us.
+    ///
+    /// Scope is deliberate, not merely unverified: only drives that publish an
+    /// `IONVMeController` are covered, which on Apple Silicon means the single
+    /// internal SSD. External SATA/USB-UASP enclosures publish no such service
+    /// at all, so they fall through to `nil` and the UI renders "Not available
+    /// on this drive" — the correct answer rather than a guess.
+    ///
+    /// Matching on the model string (rather than walking `IOMedia` up the
+    /// `kIOServicePlane` parent chain by BSD name) would mis-attribute a serial
+    /// if a Mac ever exposed two internal NVMe drives reporting an identical
+    /// "Model Number". That configuration does not exist on supported hardware,
+    /// and this field is display-only, so the simpler lookup is the deliberate
+    /// trade. Revisit if Halo ever targets Intel Mac Pro / multi-slot NVMe.
     private func serialNumber(matchingModel model: String) -> String? {
         var iter: io_iterator_t = 0
         let matching = IOServiceMatching("IONVMeController") as CFDictionary

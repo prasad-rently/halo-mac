@@ -231,7 +231,9 @@ final class AppState: ObservableObject {
         if let temp = info.temperatureCelsius {
             SMARTTemperatureHistory.shared.record(celsius: temp)
         }
-        alertManager.evaluateSMART(model: info.model ?? "your internal drive", healthLevel: info.healthLevel)
+        // `alertLevel`, not `healthLevel` — a notification has to clear a higher
+        // bar than the card does. See SMARTDiskInfo.alertLevel.
+        alertManager.evaluateSMART(model: info.model, healthLevel: info.alertLevel)
     }
 
     private func writeWidgetData() {

@@ -211,14 +211,66 @@ struct SMARTDiskMonitorTests {
         #expect(level == .failing)
     }
 
-    @Test("Available spare at or below its threshold is a critical failing condition")
-    func testClassifyAvailableSpareAtThresholdIsFailing() {
+    @Test("Available spare BELOW a credible threshold is a critical failing condition")
+    func testClassifyAvailableSpareBelowThresholdIsFailing() {
+        // The NVMe spec's condition is spare falling *below* the threshold, so
+        // spare == threshold is not yet critical.
         let atThreshold = Info.classify(status: .verified, percentageUsed: 0, mediaErrorCount: 0,
-                                         availableSpare: 10, availableSpareThreshold: 10)
+                                         availableSpare: 20, availableSpareThreshold: 20)
         let belowThreshold = Info.classify(status: .verified, percentageUsed: 0, mediaErrorCount: 0,
-                                            availableSpare: 5, availableSpareThreshold: 10)
-        #expect(atThreshold == .failing)
+                                            availableSpare: 19, availableSpareThreshold: 20)
+        #expect(atThreshold == .good)
         #expect(belowThreshold == .failing)
+    }
+
+    // MARK: - The Apple Silicon threshold trap
+    //
+    // Verified by hand on this Mac: `diskutil info -plist /` reports
+    // AVAILABLE_SPARE = 100 with AVAILABLE_SPARE_THRESHOLD = 99 — nothing like
+    // the ~10% the NVMe spec's own examples use. Trusting that literally would
+    // declare a healthy drive Failing the first time spare ticks 100 -> 99 and
+    // then fire "back up your data immediately" every hour, forever. These are
+    // the regression tests for that.
+
+    @Test("Apple's implausible 99% spare threshold never produces a Failing verdict on a healthy drive")
+    func testClassifyIgnoresImplausibleAppleSpareThreshold() {
+        // Real values read from this machine today.
+        let today = Info.classify(status: .verified, percentageUsed: 16, mediaErrorCount: 0,
+                                   availableSpare: 100, availableSpareThreshold: 99)
+        // The very next percentage point of entirely normal wear.
+        let tomorrow = Info.classify(status: .verified, percentageUsed: 16, mediaErrorCount: 0,
+                                      availableSpare: 99, availableSpareThreshold: 99)
+        // And well beyond it — still nowhere near a real problem.
+        let later = Info.classify(status: .verified, percentageUsed: 20, mediaErrorCount: 0,
+                                   availableSpare: 80, availableSpareThreshold: 99)
+        #expect(today == .good)
+        #expect(tomorrow == .good,
+                "A drive at 99% spare is healthy. Trusting Apple's threshold of 99 literally would page the user with a false 'drive is failing' alarm.")
+        #expect(later == .good)
+    }
+
+    @Test("A genuinely low spare still fails, even when the vendor threshold is discarded")
+    func testClassifyLowSpareFailsWithoutCredibleThreshold() {
+        // Threshold of 99 is discarded, so the backstop has to catch this.
+        let withNonsenseThreshold = Info.classify(status: .verified, percentageUsed: 50, mediaErrorCount: 0,
+                                                   availableSpare: 5, availableSpareThreshold: 99)
+        // No threshold reported at all.
+        let withNoThreshold = Info.classify(status: .verified, percentageUsed: 50, mediaErrorCount: 0,
+                                             availableSpare: 5, availableSpareThreshold: nil)
+        #expect(withNonsenseThreshold == .failing)
+        #expect(withNoThreshold == .failing)
+    }
+
+    @Test("Spare exactly at the backstop is not yet failing")
+    func testClassifySpareAtBackstopBoundary() {
+        let at = Info.classify(status: .verified, percentageUsed: 0, mediaErrorCount: 0,
+                                availableSpare: SMARTDiskMonitor.SMARTDiskInfo.criticalSparePercent,
+                                availableSpareThreshold: nil)
+        let below = Info.classify(status: .verified, percentageUsed: 0, mediaErrorCount: 0,
+                                   availableSpare: SMARTDiskMonitor.SMARTDiskInfo.criticalSparePercent - 1,
+                                   availableSpareThreshold: nil)
+        #expect(at == .good)
+        #expect(below == .failing)
     }
 
     @Test("Available spare comfortably above threshold does not fail on its own")
@@ -252,11 +304,99 @@ struct SMARTDiskMonitorTests {
         #expect(level99 == .warning)
     }
 
-    @Test("An unrecognized (.other) SMART status string is treated as a warning")
-    func testClassifyOtherStatusIsWarning() {
-        let level = Info.classify(status: .other("Some Vendor String"), percentageUsed: 0, mediaErrorCount: 0,
-                                   availableSpare: nil, availableSpareThreshold: nil)
-        #expect(level == .warning)
+    @Test("An unrecognized (.other) SMART status is Unknown, not Warning")
+    func testClassifyOtherStatusIsUnknown() {
+        // Verified on this Mac: every USB/Thunderbolt bridge enclosure reports
+        // SMARTStatus = "Not Supported" (the external SSD at /Volumes/SSDA does).
+        // That is the enclosure's normal, healthy state — an amber Warning badge
+        // on a perfectly good drive is a false positive, and "can't tell" is
+        // exactly what .unknown is for.
+        let notSupported = Info.classify(status: .other("Not Supported"), percentageUsed: nil, mediaErrorCount: nil,
+                                          availableSpare: nil, availableSpareThreshold: nil)
+        let vendorString = Info.classify(status: .other("Some Vendor String"), percentageUsed: 0, mediaErrorCount: 0,
+                                          availableSpare: nil, availableSpareThreshold: nil)
+        #expect(notSupported == .unknown)
+        #expect(vendorString == .unknown)
+    }
+
+    @Test("A real problem still outranks an unreadable status")
+    func testClassifyOtherStatusDoesNotMaskRealSignals() {
+        // .other must not swallow signals we *did* read — the status check sits
+        // after the wear/spare/error checks for this reason.
+        let worn = Info.classify(status: .other("Not Supported"), percentageUsed: 100, mediaErrorCount: nil,
+                                  availableSpare: nil, availableSpareThreshold: nil)
+        let lowSpare = Info.classify(status: .other("Not Supported"), percentageUsed: nil, mediaErrorCount: nil,
+                                      availableSpare: 2, availableSpareThreshold: nil)
+        #expect(worn == .failing)
+        #expect(lowSpare == .failing)
+    }
+
+    // MARK: - healthLevel vs alertLevel
+    //
+    // The card can afford to surface anything notable; a system notification is
+    // pushed at someone who didn't ask, so it has to clear a higher bar.
+
+    @Test("A single media error colours the card but never pages the user")
+    func testMediaErrorWarnsOnCardButNotInAlert() {
+        let info = Info(
+            id: "/", bsdWholeDiskID: "disk0", model: "APPLE SSD", serialNumber: nil,
+            busProtocol: "Apple Fabric", isSolidState: true, capacityBytes: 256_000_000_000,
+            overallStatus: .verified, temperatureCelsius: 52, powerOnHours: 3260, powerCycles: 364,
+            unsafeShutdowns: 26, totalBytesWritten: nil, totalBytesRead: nil,
+            availableSparePercent: 100, availableSpareThresholdPercent: 99, percentageUsed: 16,
+            mediaErrorCount: 1, errorLogEntryCount: 0,
+            reallocatedSectorCount: nil, pendingSectorCount: nil, scannedAt: Date()
+        )
+        #expect(info.healthLevel == .warning,
+                "One unrecovered read is worth showing on the card.")
+        #expect(info.alertLevel == .good,
+                "…but a single lifetime error must not fire a daily 'back up important files' banner forever.")
+    }
+
+    @Test("A genuinely failing drive still alerts")
+    func testFailingDriveAlerts() {
+        let info = Info(
+            id: "/", bsdWholeDiskID: "disk0", model: "APPLE SSD", serialNumber: nil,
+            busProtocol: "Apple Fabric", isSolidState: true, capacityBytes: 256_000_000_000,
+            overallStatus: .failing, temperatureCelsius: nil, powerOnHours: nil, powerCycles: nil,
+            unsafeShutdowns: nil, totalBytesWritten: nil, totalBytesRead: nil,
+            availableSparePercent: nil, availableSpareThresholdPercent: nil, percentageUsed: nil,
+            mediaErrorCount: nil, errorLogEntryCount: nil,
+            reallocatedSectorCount: nil, pendingSectorCount: nil, scannedAt: Date()
+        )
+        #expect(info.healthLevel == .failing)
+        #expect(info.alertLevel == .failing)
+    }
+
+    @Test("High wear alerts, since it is both real and actionable")
+    func testHighWearAlerts() {
+        let info = Info(
+            id: "/", bsdWholeDiskID: "disk0", model: "APPLE SSD", serialNumber: nil,
+            busProtocol: "Apple Fabric", isSolidState: true, capacityBytes: 256_000_000_000,
+            overallStatus: .verified, temperatureCelsius: nil, powerOnHours: nil, powerCycles: nil,
+            unsafeShutdowns: nil, totalBytesWritten: nil, totalBytesRead: nil,
+            availableSparePercent: nil, availableSpareThresholdPercent: nil, percentageUsed: 95,
+            mediaErrorCount: nil, errorLogEntryCount: nil,
+            reallocatedSectorCount: nil, pendingSectorCount: nil, scannedAt: Date()
+        )
+        #expect(info.healthLevel == .warning)
+        #expect(info.alertLevel == .warning)
+    }
+
+    @Test("An external enclosure that reports nothing never alerts")
+    func testUnsupportedExternalNeverAlerts() {
+        // The /Volumes/SSDA case: USB bridge, no SMART dict at all.
+        let info = Info(
+            id: "/Volumes/SSDA", bsdWholeDiskID: "disk4", model: nil, serialNumber: nil,
+            busProtocol: "USB", isSolidState: nil, capacityBytes: 2_000_000_000_000,
+            overallStatus: .other("Not Supported"), temperatureCelsius: nil, powerOnHours: nil,
+            powerCycles: nil, unsafeShutdowns: nil, totalBytesWritten: nil, totalBytesRead: nil,
+            availableSparePercent: nil, availableSpareThresholdPercent: nil, percentageUsed: nil,
+            mediaErrorCount: nil, errorLogEntryCount: nil,
+            reallocatedSectorCount: nil, pendingSectorCount: nil, scannedAt: Date()
+        )
+        #expect(info.healthLevel == .unknown)
+        #expect(info.alertLevel == .unknown)
     }
 
     @Test("Verified status with no red flags at all is good")

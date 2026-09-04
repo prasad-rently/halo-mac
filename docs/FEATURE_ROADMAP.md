@@ -1493,6 +1493,33 @@ only the always-present internal SSD gets a rolling 24h history.
 - Alert fires on Warning/Failing, never on Unknown (unreadable ≠ unhealthy)
 - Temperature sparkline persists across app restarts
 
+#### Amended during code review (2026-09-05)
+
+Three of the original rules turned out to be wrong against real hardware. All
+three are now regression-tested in `HaloTests`; see `CLAUDE.md` gotchas 22–24.
+
+- **Vendor spare thresholds are not trustworthy as reported.** Apple Silicon
+  reports `AVAILABLE_SPARE_THRESHOLD = 99` against `AVAILABLE_SPARE = 100`
+  (verified on the dev machine). A literal `spare <= threshold` comparison
+  declares a healthy drive **Failing** the first time spare ticks to 99 on
+  normal wear, then fires "back up your data immediately" hourly and
+  indefinitely. `classify` now ignores any threshold above
+  `maxCredibleSpareThreshold` (50), uses the spec's strict `<`, and keeps a
+  threshold-independent `criticalSparePercent` (10) backstop.
+- **An unrecognised `SMARTStatus` is Unknown, not Warning.** Every USB /
+  Thunderbolt bridge reports `"Not Supported"` — the healthy state for that
+  hardware, since enclosures don't pass the health log through. Flagging it
+  amber put a Warning badge on a working external SSD.
+- **The card and the notification are different bars.** Split into
+  `healthLevel` (drives the badge — surfaces anything notable, including a
+  non-zero media-error count) and `alertLevel` (what `AlertManager` acts on —
+  only conditions that are real *and* actionable). A single lifetime
+  unrecovered read is worth showing but must not nag daily forever.
+
+Also fixed: switching volumes while a scan was in flight left the previous
+drive's data on screen under the new drive's name, and the temperature chart
+was gated on `isInternal` rather than on the boot volume it actually samples.
+
 ---
 
 ## F-021 · App Usage & Screen Time Analytics

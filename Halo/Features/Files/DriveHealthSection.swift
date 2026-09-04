@@ -18,22 +18,41 @@ final class DriveHealthViewModel: ObservableObject {
     @Published var isScanning = false
 
     private let monitor = SMARTDiskMonitor()
-    private var scannedVolumeID: String?
+
+    /// The volume the *user* is currently looking at. Recorded before the
+    /// in-flight guard below, so a switch that arrives mid-scan is never lost.
+    private var requestedVolume: DriveVolume?
 
     func scanIfNeeded(volume: DriveVolume) {
-        guard scannedVolumeID != volume.id else { return }
+        guard requestedVolume?.id != volume.id else { return }
         scan(volume: volume)
     }
 
     func scan(volume: DriveVolume) {
+        // Record the request first. If a scan is already running we return
+        // below, but the completion handler re-dispatches against whatever
+        // the user has since selected — otherwise switching volumes mid-scan
+        // would leave the previous drive's S.M.A.R.T. data on screen under the
+        // new drive's name, which is worse than showing nothing.
+        let isSwitch = requestedVolume?.id != volume.id
+        requestedVolume = volume
+        if isSwitch { info = nil }
+
         guard !isScanning else { return }
         isScanning = true
-        scannedVolumeID = volume.id
-        Task {
+        Task { [weak self] in
             let result = await monitor.scan(volume: volume)
             await MainActor.run {
-                self.info = result
+                guard let self else { return }
                 self.isScanning = false
+                if self.requestedVolume?.id == volume.id {
+                    self.info = result
+                } else if let pending = self.requestedVolume {
+                    // Selection moved on while we were reading — discard this
+                    // result rather than mis-attributing it, and read the
+                    // volume the user is actually on.
+                    self.scan(volume: pending)
+                }
             }
         }
     }
@@ -43,6 +62,27 @@ struct DriveHealthSection: View {
     let volume: DriveVolume
     @StateObject private var vm = DriveHealthViewModel()
     @ObservedObject private var tempHistory = SMARTTemperatureHistory.shared
+
+    /// `SMARTTemperatureHistory` is fed exclusively by `AppState.runSMARTCheck()`,
+    /// which samples the boot volume (`path: "/"`). Gating the chart on
+    /// `volume.isInternal` would therefore render the boot drive's history under
+    /// a *different* internal volume on any Mac that has one (a second internal
+    /// drive, or a Fusion/multi-container setup). Match on the boot volume
+    /// itself so the chart can only ever appear beside the drive it describes.
+    ///
+    /// Matched on `volumeIdentifierKey` rather than `path == "/"`: on this Mac
+    /// `mountedVolumeURLs` happens to return the boot volume as `/` (verified),
+    /// but `/Volumes/Macintosh HD` is a firmlink to the same volume and a path
+    /// comparison would silently hide the chart if macOS ever reported it that
+    /// way instead. Falls back to the path check if either identifier is absent.
+    private var isBootVolume: Bool {
+        let bootID = (try? URL(fileURLWithPath: "/")
+            .resourceValues(forKeys: [.volumeIdentifierKey]))?.volumeIdentifier
+        let volumeID = (try? volume.url
+            .resourceValues(forKeys: [.volumeIdentifierKey]))?.volumeIdentifier
+        guard let bootID, let volumeID else { return volume.url.path == "/" }
+        return bootID.isEqual(volumeID)
+    }
 
     var body: some View {
         HaloCard(accentTop: vm.info.map(accentColor)) {
@@ -61,7 +101,7 @@ struct DriveHealthSection: View {
                     statusRow(info)
                     metricsGrid(info)
                     lifespanSection(info)
-                    if volume.isInternal { temperatureSection }
+                    if isBootVolume { temperatureSection }
                 } else {
                     Text("Tap “Check Drive Health” to read S.M.A.R.T. status for this drive.")
                         .font(HaloFont.body(12))
@@ -172,11 +212,22 @@ struct DriveHealthSection: View {
             metric("Power Cycles", info.powerCycles.map { "\($0)" }, id: "powerCycles")
             metric("Total Bytes Written", info.totalBytesWritten.map(byteString), id: "totalBytesWritten")
             metric("Total Bytes Read", info.totalBytesRead.map(byteString), id: "totalBytesRead")
-            metric("Available Spare", info.availableSparePercent.map { "\($0)%" }, id: "availableSpare")
+            metric("Available Spare", spareNote(info), id: "availableSpare")
             metric("Media Errors", info.mediaErrorCount.map { "\($0)" }, id: "mediaErrors")
             metric("Reallocated Sectors", reallocatedSectorNote(info), id: "reallocatedSectors")
             metric("Pending Sectors", pendingSectorNote(info), id: "pendingSectors")
         }
+    }
+
+    /// Available spare, with the drive's own threshold alongside it. The
+    /// threshold is what `SMARTDiskInfo.classify` compares against, so showing
+    /// the bare percentage on its own leaves the user unable to tell why a drive
+    /// is (or isn't) flagged. Apple Silicon reports a threshold of 99, which is
+    /// exactly why it's worth surfacing rather than hiding.
+    private func spareNote(_ info: SMARTDiskMonitor.SMARTDiskInfo) -> String? {
+        guard let spare = info.availableSparePercent else { return nil }
+        guard let threshold = info.availableSpareThresholdPercent else { return "\(spare)%" }
+        return "\(spare)% (threshold \(threshold)%)"
     }
 
     /// NVMe drives (all internal Apple Silicon SSDs) don't have this ATA-only
