@@ -185,17 +185,13 @@ actor NetworkDetailMonitor {
     }
 
     private func readSSIDViaWiFiInterface() -> String? {
-        // Read current SSID via networksetup if available (no entitlement needed in debug)
-        let pipe = Pipe()
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/sbin/networksetup")
-        proc.arguments = ["-getairportnetwork", "en0"]
-        proc.standardOutput = pipe
-        proc.standardError = Pipe()
-        guard (try? proc.run()) != nil else { return nil }
-        proc.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard let output = String(data: data, encoding: .utf8) else { return nil }
+        // Read current SSID via networksetup if available (no entitlement needed in debug).
+        // Bounded: `networksetup` can block for several seconds while the Wi-Fi
+        // interface is re-associating, and this is called from a monitor loop.
+        let result = ShellReader.run("/usr/sbin/networksetup",
+                                     ["-getairportnetwork", "en0"], timeout: 5)
+        guard result.launchFailure == nil, !result.didTimeOut else { return nil }
+        let output = result.standardOutput
         // Output format: "Current Wi-Fi Network: SSID Name"
         if let range = output.range(of: "Current Wi-Fi Network: ") {
             let ssid = String(output[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
