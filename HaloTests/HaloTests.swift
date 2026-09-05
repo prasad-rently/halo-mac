@@ -485,3 +485,99 @@ struct ShellReaderTests {
         #expect(result.standardOutput == hostile + "\n")
     }
 }
+
+// MARK: - Shared singletons (Phase 0 / P0.3)
+
+@Suite("AlertManager")
+struct AlertManagerTests {
+
+    // `AlertKind.rawValue` is a storage format, not an implementation detail:
+    // AlertLog persists it to UserDefaults, and AlertEntry.icon / .accentColor
+    // switch on those exact strings. Renaming a case silently strips the icon
+    // and colour from every alert already sitting in a user's history.
+    @Test("AlertKind raw values are persisted and must not change")
+    func testAlertKindRawValuesAreStable() {
+        let expected: [AlertManager.AlertKind: String] = [
+            .cpuHigh:          "cpu_high",
+            .ramHigh:          "ram_high",
+            .diskLow:          "disk_low",
+            .batteryLow:       "battery_low",
+            .batteryCritical:  "battery_critical",
+            .chargingDone:     "charging_done"
+        ]
+        for (kind, raw) in expected {
+            #expect(kind.rawValue == raw, "AlertKind.\(kind) raw value changed — old history entries lose their icon")
+        }
+    }
+
+    // Adding a case to AlertKind without adding the matching arm to
+    // AlertEntry.icon leaves the alert rendering as a generic bell in the
+    // history list. Three queued PRs add cases to this enum, so this is the
+    // check that keeps the two files in step.
+    @Test("Every AlertKind has its own icon in AlertEntry")
+    func testEveryAlertKindHasAnIcon() {
+        for kind in AlertManager.AlertKind.allCases {
+            let entry = AlertEntry(title: "t", body: "b", kindRaw: kind.rawValue)
+            #expect(
+                entry.icon != "bell.fill",
+                "AlertKind.\(kind.rawValue) falls through to the default icon — add a case to AlertEntry.icon (and .accentColor)"
+            )
+        }
+    }
+}
+
+// Serialized: every test here samples the one shared ProcessMonitor, so a
+// parallel sibling forcing a re-sample would break the coalescing assertion.
+@Suite("ProcessMonitor", .serialized)
+struct ProcessMonitorTests {
+
+    @Test("A snapshot sees the running process table")
+    func testSnapshotIsPopulated() async {
+        let procs = await ProcessMonitor.shared.snapshot()
+        #expect(!procs.isEmpty)
+        // This test process must be in its own process table.
+        #expect(procs.contains { $0.id == Foundation.ProcessInfo.processInfo.processIdentifier })
+    }
+
+    // The regression this guards: without coalescing, the second of two
+    // near-simultaneous calls re-enumerates and computes its CPU delta over a
+    // near-zero elapsed window, so every process reads ~0 %. Two independent
+    // samples agreeing on ~600 CPU percentages to the bit does not happen by
+    // chance — if this fails, the cache is gone.
+    @Test("Two snapshots inside the coalescing window are the same sample")
+    func testSnapshotsCoalesce() async {
+        let first  = await ProcessMonitor.shared.snapshot()
+        let second = await ProcessMonitor.shared.snapshot()
+
+        #expect(first.count == second.count)
+        #expect(zip(first, second).allSatisfy { $0.id == $1.id && $0.cpuPercent == $1.cpuPercent })
+    }
+
+    // Exercises the expiry path, and with it the CPU-delta arithmetic against a
+    // real previous baseline — including the PID-reuse guard, which would trap
+    // on UInt64 underflow if it were removed.
+    @Test("Re-sampling after the window stays well-formed")
+    func testResampleAfterWindow() async throws {
+        _ = await ProcessMonitor.shared.snapshot()
+        try await Task.sleep(for: .milliseconds(1_200))
+        let fresh = await ProcessMonitor.shared.snapshot()
+
+        #expect(!fresh.isEmpty)
+        #expect(fresh.allSatisfy { $0.cpuPercent >= 0 && $0.cpuPercent <= 100 })
+        #expect(fresh.allSatisfy { $0.ramMB >= 0 })
+        // PIDs are unique within a sample — a duplicate means the dictionary
+        // rebuild in resample() has regressed to appending.
+        #expect(Set(fresh.map(\.id)).count == fresh.count)
+    }
+
+    @Test("topProcesses honours the limit and sorts by the requested key")
+    func testTopProcessesSorting() async {
+        let byCPU = await ProcessMonitor.shared.topProcesses(sortBy: .cpu, limit: 5)
+        let byRAM = await ProcessMonitor.shared.topProcesses(sortBy: .ram, limit: 5)
+
+        #expect(byCPU.count <= 5)
+        #expect(byRAM.count <= 5)
+        #expect(zip(byCPU, byCPU.dropFirst()).allSatisfy { $0.cpuPercent >= $1.cpuPercent })
+        #expect(zip(byRAM, byRAM.dropFirst()).allSatisfy { $0.ramMB >= $1.ramMB })
+    }
+}

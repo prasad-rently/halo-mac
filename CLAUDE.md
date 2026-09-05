@@ -420,6 +420,47 @@ enum MenuBarDisplayStyle: String, CaseIterable, Identifiable {
 
 ---
 
+## Shared singletons — AlertManager & ProcessMonitor
+
+Both are `.shared` with a **private `init`**, matching `AlertLog.shared` beside them. The private
+init is the point: it is what stops a fourth instance reappearing in the next feature branch.
+
+**`AlertManager.shared`** — `Halo/Core/AlertManager.swift`
+The `lastFired` cooldown dictionary is per-instance state, so a second `AlertManager` starts with
+an empty one and the same alert fires twice inside its own cooldown window. Every `evaluate*`
+entry point must reach the same instance for "once per day" to mean once per day.
+
+`AlertKind.rawValue` is a **persisted format**, not an implementation detail: `AlertLog` writes it
+to `UserDefaults`, and `AlertEntry.icon` / `.accentColor` switch on those exact strings. Adding a
+case is fine; renaming one silently strips the icon and colour from every alert already in a
+user's history. **A new case needs a matching arm in both `AlertEntry.icon` and
+`AlertEntry.accentColor`** — otherwise the alert renders as a generic bell. `HaloTests` enforces
+this (`AlertManagerTests`).
+
+**`ProcessMonitor.shared`** — `Halo/Core/Scanner/ProcessMonitor.swift`
+One CPU baseline for the whole app. Per-caller instances each kept their own ~600-entry
+`previousCPUInfo`, reported 0 % CPU on their first call (no baseline to diff against), and made
+two surfaces quote different CPU numbers for the same process because their sampling windows
+differed.
+
+Three things in this actor are load-bearing — do not "tidy" them away:
+
+- **The 1 s coalescing window.** Sharing one instance means two callers can land milliseconds
+  apart. Without the cache the second call computes its CPU delta over a near-zero `elapsed` and
+  every process reads ~0 %. The window is well under the fastest real caller (the 3 s Top
+  Processes timer), so that caller still re-samples every tick.
+- **`previousCPUInfo` is rebuilt, not mutated.** It used to only ever gain entries, so it kept a
+  row for every PID the app had ever seen and grew without bound.
+- **The `total >= previous` guard.** macOS recycles PIDs, so a slot can come back pointing at a
+  younger process with a smaller cumulative counter. `total - previous` is `UInt64` subtraction,
+  which **traps on underflow** — an outright crash. A shared instance holds its baseline for the
+  whole app lifetime, so it meets PID reuse far more often than a per-view instance did.
+
+One `proc_pidinfo()` per PID per sample. The previous version called it twice — once to read the
+process, once to record the CPU snapshot — doubling the syscall count of every sample.
+
+---
+
 ## Entitlements
 
 | File | Sandbox | When |
