@@ -263,7 +263,11 @@ final class MemoryTrendTracker: ObservableObject {
     /// Photoshop, Docker Desktop) routinely need more than a couple of seconds
     /// to shut down cleanly even with nothing unsaved.
     private static let quitPollTimeout: TimeInterval = 20
-    private static let quitPollInterval: TimeInterval = 0.25
+    /// 1 s, not 0.25 s. Each poll is a full `NSWorkspace.runningApplications`
+    /// enumeration on the main thread, and at 0.25 s over a 20 s timeout that is
+    /// up to 80 of them to notice an event the user cannot perceive faster than
+    /// about a second anyway.
+    private static let quitPollInterval: TimeInterval = 1
 
     /// Politely quits the app and relaunches it **only once it has actually
     /// exited**.
@@ -280,6 +284,18 @@ final class MemoryTrendTracker: ObservableObject {
     /// and leaves it alone. A real force-quit would need its own confirmation
     /// naming the risk — a timeout is not consent.
     func restart(_ history: AppMemoryHistory, completion: @escaping (RestartOutcome) -> Void = { _ in }) {
+        // One restart per app at a time.
+        //
+        // The confirmation dialog clears `appPendingRestart` as soon as it is
+        // dismissed, while the poll runs for up to 20 s with nothing on screen
+        // to say so. Tapping Restart again in that window used to send a second
+        // `terminate()` and start a second independent chain — two relaunches
+        // racing each other, and two alerts.
+        guard !restartsInFlight.contains(history.bundleID) else {
+            completion(.failed("\(history.appName) is already being restarted."))
+            return
+        }
+
         guard let path = history.bundlePath else {
             completion(.failed("Halo doesn't know where this app is installed."))
             return
@@ -292,11 +308,17 @@ final class MemoryTrendTracker: ObservableObject {
             return
         }
 
+        restartsInFlight.insert(bundleID)
         runningApp.terminate()
         pollForExit(bundleID: bundleID, appName: history.appName, url: url,
-                    deadline: Date().addingTimeInterval(Self.quitPollTimeout),
-                    completion: completion)
+                    deadline: Date().addingTimeInterval(Self.quitPollTimeout)) { [weak self] outcome in
+            self?.restartsInFlight.remove(bundleID)
+            completion(outcome)
+        }
     }
+
+    /// Bundle IDs with a restart chain currently polling.
+    private var restartsInFlight: Set<String> = []
 
     private func pollForExit(
         bundleID: String,

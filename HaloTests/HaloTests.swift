@@ -202,6 +202,60 @@ struct ModelTests {
 // docs/MANUAL_TEST_PLAN.md TC-PERF-U11/U12 — rather than fired for real
 // during a unit test run).
 
+// A second Restart on an app already being restarted used to send a second
+// terminate() and start a second independent poll chain — two relaunches
+// racing, and two alerts — because the confirmation dialog clears its own state
+// immediately while the poll runs for up to 20s with nothing on screen.
+//
+// The tracker is a `.shared` singleton driven from the app host, so these use
+// bundle IDs that cannot match a running app: the guard is what is under test,
+// and it is reached before anything touches NSWorkspace.
+@Suite("MemoryTrendTracker restart guard", .serialized)
+struct MemoryTrendRestartGuardTests {
+
+    private func history(bundleID: String) -> AppMemoryHistory {
+        AppMemoryHistory(bundleID: bundleID, appName: "Fake",
+                         bundlePath: "/nonexistent/Fake.app", samples: [])
+    }
+
+    @Test("An app that is not running reports so rather than starting a chain")
+    @MainActor
+    func testNotRunningIsReported() async {
+        var outcome: RestartOutcome?
+        MemoryTrendTracker.shared.restart(history(bundleID: "com.halo.test.notrunning")) {
+            outcome = $0
+        }
+        if case .failed(let message) = outcome {
+            #expect(message.contains("doesn't appear to be running"))
+        } else {
+            Issue.record("expected .failed, got \(String(describing: outcome))")
+        }
+    }
+
+    // A restart that never claimed a slot must not leave one behind, or the app
+    // becomes permanently un-restartable for the rest of the session.
+    @Test("A failed restart does not leave the app blocked")
+    @MainActor
+    func testFailedRestartReleasesTheSlot() async {
+        let h = history(bundleID: "com.halo.test.repeat")
+
+        var first: RestartOutcome?
+        MemoryTrendTracker.shared.restart(h) { first = $0 }
+        var second: RestartOutcome?
+        MemoryTrendTracker.shared.restart(h) { second = $0 }
+
+        // Both reach the same "not running" answer; neither is refused as
+        // already-in-flight, because the first never got as far as terminate().
+        for outcome in [first, second] {
+            if case .failed(let message) = outcome {
+                #expect(!message.contains("already being restarted"))
+            } else {
+                Issue.record("expected .failed, got \(String(describing: outcome))")
+            }
+        }
+    }
+}
+
 @Suite("MemoryTrendTracker leak detection")
 @MainActor
 struct MemoryTrendTrackerLeakTests {
