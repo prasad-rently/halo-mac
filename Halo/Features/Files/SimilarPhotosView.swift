@@ -208,7 +208,16 @@ final class SimilarPhotosViewModel: ObservableObject {
         scannedLocation = label
         let detector = self.detector
         let threshold = hammingThreshold
-        scanTask = Task { [weak self] in
+        // Detached, because this class is @MainActor so a plain `Task {}`
+        // inherits the main actor — and `enumerateImageFiles` is a *synchronous*
+        // recursive walk over ~/Pictures, ~/Downloads and ~/Desktop (up to
+        // 20,000 files, each with a `resourceValues` stat) with no suspension
+        // point before it. It therefore ran entirely on the main thread: several
+        // seconds of beachball before the scan even started.
+        //
+        // `enumerateImageFiles` is already `static` and touches no instance
+        // state, so it is safe to run off the main actor.
+        scanTask = Task.detached(priority: .userInitiated) { [weak self] in
             let files = Self.enumerateImageFiles(in: dirs)
             do {
                 let found = try await detector.detect(in: files, hammingThreshold: threshold) { p in
@@ -232,7 +241,11 @@ final class SimilarPhotosViewModel: ObservableObject {
 
     /// Enumerate image files under the given directories, bounded so an
     /// accidental huge scan can't run away — mirrors `DuplicateFinderViewModel`.
-    private static func enumerateImageFiles(in dirs: [URL], cap: Int = 20_000) -> [URL] {
+    /// `nonisolated` so it can run off the main actor. It is a pure filesystem
+    /// walk over its arguments and touches no instance state — being
+    /// MainActor-isolated is what forced the beachball described in
+    /// `start(scanning:)`.
+    nonisolated private static func enumerateImageFiles(in dirs: [URL], cap: Int = 20_000) -> [URL] {
         let fm = FileManager.default
         var out: [URL] = []
         for dir in dirs {
@@ -259,13 +272,37 @@ final class SimilarPhotosViewModel: ObservableObject {
     }
 
     /// Trash every marked copy in a group (mandatory: only ever `trashItem`).
+    /// Trash every marked copy in a group (mandatory: only ever `trashItem`).
+    ///
+    /// Only the items that actually made it to the Trash are removed from the
+    /// list. `try?` used to discard every failure while the removal happened
+    /// unconditionally, so a locked file, a permission denial or a sandbox
+    /// violation made the photo vanish from the UI while it was still on disk —
+    /// the user believing it was deleted when it was not. A destructive action
+    /// reporting success it did not achieve is worse than one that fails loudly.
     func deleteMarked(in groupID: PhotoSimilarGroup.ID) {
         guard let gi = groups.firstIndex(where: { $0.id == groupID }) else { return }
+
+        var trashedIDs: Set<PhotoHashItem.ID> = []
+        var failures: [String] = []
+
         for item in groups[gi].items where item.isMarkedForDeletion {
-            try? FileManager.default.trashItem(at: item.url, resultingItemURL: nil)
+            do {
+                try FileManager.default.trashItem(at: item.url, resultingItemURL: nil)
+                trashedIDs.insert(item.id)
+            } catch {
+                failures.append("\(item.url.lastPathComponent): \(error.localizedDescription)")
+            }
         }
-        groups[gi].items.removeAll { $0.isMarkedForDeletion }
+
+        groups[gi].items.removeAll { trashedIDs.contains($0.id) }
         if groups[gi].items.count <= 1 { groups.remove(at: gi) }
+
+        if !failures.isEmpty {
+            scanError = failures.count == 1
+                ? "Couldn't move to Trash — \(failures[0])"
+                : "\(failures.count) photos couldn't be moved to the Trash. First: \(failures[0])"
+        }
     }
 
     // MARK: - Photos Library (experimental, stretch goal — see PR notes)

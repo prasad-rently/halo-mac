@@ -1,4 +1,5 @@
 import Foundation
+import os
 import ImageIO
 import CoreGraphics
 import UniformTypeIdentifiers
@@ -56,17 +57,38 @@ actor PerceptualDuplicateDetector {
         var hashed: [PhotoHashResult] = []
         let total = Double(files.count)
         var completed = 0
+        // Bounded concurrency window.
+        //
+        // This used to queue one child task per file up front — with
+        // `enumerateImageFiles` capped at 20,000, that is up to 20,000 tasks
+        // created and their captured state retained before any completes, each
+        // one opening a `CGImageSource` and decoding a thumbnail. Memory spikes
+        // hard, and this is the path the PR body describes as the tested v1
+        // scope.
+        //
+        // Prime the group to the window, then add one task per completed result.
+        let window = min(8, ProcessInfo.processInfo.activeProcessorCount)
         try await withThrowingTaskGroup(of: PhotoHashResult?.self) { group in
-            for url in files {
+            var next = 0
+
+            func addTask() {
+                guard next < files.count else { return }
+                let url = files[next]
+                next += 1
                 group.addTask {
                     try Task.checkCancellation()
                     return Self.computeHash(for: url)
                 }
             }
+
+            for _ in 0..<window { addTask() }
+
             for try await result in group {
                 completed += 1
                 onProgress(0.05 + 0.65 * (Double(completed) / max(total, 1)))
                 if let result { hashed.append(result) }
+                try Task.checkCancellation()
+                addTask()
             }
         }
 
@@ -167,15 +189,37 @@ actor PerceptualDuplicateDetector {
     }
 
     /// Render `cgImage` into a 32×32 8-bit grayscale grid.
+    /// Renders `cgImage` into a 32x32 8-bit grayscale grid.
+    ///
+    /// The buffer is an explicitly-allocated `UnsafeMutablePointer`, not `&array`.
+    ///
+    /// `&` on a Swift `Array` yields a pointer guaranteed valid only for the
+    /// duration of the call it is passed to — but `CGContext` *retains* that
+    /// pointer and `context.draw(...)` writes through it afterwards. That is
+    /// undefined behaviour, and the canonical Swift/CoreGraphics trap: it
+    /// usually appears to work, because the buffer is not actually relocated,
+    /// which is exactly what makes it dangerous. It can produce garbage hashes
+    /// or crash under memory pressure, and no unit test will reliably catch
+    /// either.
     nonisolated private static func grayscale32x32(_ cgImage: CGImage) -> [[Double]]? {
         let side = 32
-        var pixels = [UInt8](repeating: 0, count: side * side)
+        let count = side * side
+
         guard let colorSpace = CGColorSpace(name: CGColorSpace.linearGray) else { return nil }
+
+        let pixels = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
+        pixels.initialize(repeating: 0, count: count)
+        defer {
+            pixels.deinitialize(count: count)
+            pixels.deallocate()
+        }
+
         guard let context = CGContext(
-            data: &pixels, width: side, height: side,
+            data: pixels, width: side, height: side,
             bitsPerComponent: 8, bytesPerRow: side,
             space: colorSpace, bitmapInfo: CGImageAlphaInfo.none.rawValue
         ) else { return nil }
+
         context.interpolationQuality = .high
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
 
@@ -416,26 +460,67 @@ extension PerceptualDuplicateDetector {
         return PhotoAssetSimilarGroup(items: items)
     }
 
-    /// `.fastFormat` delivery calls its result handler exactly once, so a
-    /// checked continuation is safe here (no double-resume risk).
+    /// Hashes one Photos asset.
+    ///
+    /// The previous comment claimed `.fastFormat` "calls its result handler
+    /// exactly once, so a checked continuation is safe". PhotoKit's contract is
+    /// weaker than that: `requestImage` may invoke the handler more than once,
+    /// and with `isNetworkAccessAllowed = true` an iCloud-backed asset can
+    /// deliver a nil/error callback followed by a second, real result. A second
+    /// `resume` on a checked continuation is a hard `fatalError` — a crash, in a
+    /// path whose whole purpose is scanning a photo library that is usually
+    /// partly in iCloud.
+    ///
+    /// The mirror risk is worse and quieter: if the handler is *never* called
+    /// (asset unavailable, network drops) the continuation leaks and
+    /// `detectInPhotosLibrary` hangs forever with no timeout and no cancel.
+    ///
+    /// So: a one-shot guard makes any extra callback a no-op, and a timeout
+    /// resumes with nil so a missing callback cannot wedge the scan.
     nonisolated private static func requestHash(
         for asset: PHAsset, imageManager: PHImageManager, options: PHImageRequestOptions
     ) async -> UInt64? {
-        await withCheckedContinuation { continuation in
-            imageManager.requestImage(
-                for: asset, targetSize: CGSize(width: 64, height: 64),
-                contentMode: .aspectFit, options: options
-            ) { image, _ in
-                // NSImage (unlike UIImage) has no `.cgImage` property — it must be
-                // rendered via `cgImage(forProposedRect:context:hints:)`.
-                guard let image,
-                      let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
-                      let grid = grayscale32x32(cgImage) else {
-                    continuation.resume(returning: nil)
-                    return
+        let resumed = OSAllocatedUnfairLock(initialState: false)
+
+        return await withTaskGroup(of: UInt64?.self) { group in
+            group.addTask {
+                await withCheckedContinuation { (continuation: CheckedContinuation<UInt64?, Never>) in
+                    imageManager.requestImage(
+                        for: asset, targetSize: CGSize(width: 64, height: 64),
+                        contentMode: .aspectFit, options: options
+                    ) { image, _ in
+                        // Only the first delivery resumes; PhotoKit is free to
+                        // call this again and we must not crash when it does.
+                        let alreadyResumed = resumed.withLock { wasResumed -> Bool in
+                            if wasResumed { return true }
+                            wasResumed = true
+                            return false
+                        }
+                        guard !alreadyResumed else { return }
+
+                        // NSImage (unlike UIImage) has no `.cgImage` property — it must be
+                        // rendered via `cgImage(forProposedRect:context:hints:)`.
+                        guard let image,
+                              let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+                              let grid = grayscale32x32(cgImage) else {
+                            continuation.resume(returning: nil)
+                            return
+                        }
+                        continuation.resume(returning: perceptualHash(from: grid))
+                    }
                 }
-                continuation.resume(returning: perceptualHash(from: grid))
             }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(assetRequestTimeoutSeconds * 1_000_000_000))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
         }
     }
+
+    /// Ceiling on a single PhotoKit image request. An iCloud-backed asset that
+    /// never calls back would otherwise hang the whole scan.
+    nonisolated static let assetRequestTimeoutSeconds: TimeInterval = 10
 }
