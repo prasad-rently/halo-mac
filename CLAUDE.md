@@ -547,7 +547,8 @@ a branch that has not merged yet.
 | `8143`–`8146` | F-030 iCloud Drive Analyzer (#12) | claimed |
 | `8153`–`8154` | F-016 Permission Auditor (#9) | claimed — moved off `8031` |
 | `8163`–`8164` | `ShellReader` (Phase 0 / P0.2) | claimed |
-| `8171`+ | — | **free — take the next block from here** |
+| `8171`–`8172` | `AsyncTimeout` (Phase 0 / P0.5) | claimed |
+| `8181`+ | — | **free — take the next block from here** |
 
 Auditing the whole batch for collisions:
 
