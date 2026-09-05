@@ -38,29 +38,29 @@ final class MemoryTrendTracker: ObservableObject {
     /// "Possible memory leak" badge is shown — the spec's ">1 hour". Because a
     /// streak can never be longer than the time Halo has actually observed the
     /// app, this single check also satisfies "don't flag a just-launched app."
-    static let leakWindowSeconds: TimeInterval = 3600
+    nonisolated static let leakWindowSeconds: TimeInterval = 3600
     /// A drop of more than this fraction from the streak's local peak resets
     /// the growth streak. 15% was chosen as a concrete, sane threshold: it
     /// tolerates normal allocator/cache churn (typically a few percent of
     /// RSS) while still catching a real "user closed some tabs" drop.
-    static let significantDropFraction: Double = 0.15
+    nonisolated static let significantDropFraction: Double = 0.15
     /// If the gap between two consecutive samples exceeds this, the streak
     /// resets rather than counting as continued growth — the machine (or
     /// Halo) was very likely asleep/quit across the gap, so "monotonic
     /// growth" can't honestly be claimed through it. Set to 5x the sample
     /// interval to tolerate a couple of missed ticks without over-resetting.
-    static let maxSampleGapSeconds: TimeInterval = 5 * 60
+    nonisolated static let maxSampleGapSeconds: TimeInterval = 5 * 60
     /// Default per-app RAM alert threshold — the spec's "default 2 GB".
     /// User-configurable via UserDefaults["memoryLeakAlertThresholdGB"].
     static let defaultAlertThresholdGB: Double = 2.0
     /// Minimum total growth across a streak before it can be called a leak.
     /// 10% is comfortably outside allocator noise while being far less than any
     /// real leak accumulates over an hour.
-    static let minimumGrowthFraction: Double = 0.10
+    nonisolated static let minimumGrowthFraction: Double = 0.10
     /// The tail of the streak examined for "is it *still* growing". Half an
     /// hour is long enough that a few noisy samples cannot swing the slope,
     /// short enough that a plateau reached 30 minutes ago reads as flat.
-    static let slopeWindowSeconds: TimeInterval = 30 * 60
+    nonisolated static let slopeWindowSeconds: TimeInterval = 30 * 60
 
     /// Least-squares slope of RAM against time over the samples at or after
     /// `since`, in MB per second. Returns false unless there are enough points

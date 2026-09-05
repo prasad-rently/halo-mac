@@ -95,7 +95,7 @@ final class FocusSessionManager: ObservableObject {
 
     /// Minimum remaining time worth resuming for. Below this the session is
     /// treated as finished: the apps come back and nothing restarts.
-    static let minimumResumableSeconds: TimeInterval = 60
+    nonisolated static let minimumResumableSeconds: TimeInterval = 60
 
     private init() {
         recoverInterruptedSession()
