@@ -110,7 +110,7 @@ final class AppState: ObservableObject {
     private var wasAxTrusted = false
 
     // Phase 3
-    private let alertManager = AlertManager()
+    private let alertManager = AlertManager.shared
     private let networkMonitor = NetworkDetailMonitor()
 
     init() {
