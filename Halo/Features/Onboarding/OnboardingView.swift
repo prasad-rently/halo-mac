@@ -276,6 +276,8 @@ struct SettingsView: View {
     @AppStorage("enableMenuBar") private var enableMenuBar = true
     @AppStorage("scanFrequency") private var scanFrequency = "weekly"
     @AppStorage("enableAnalytics") private var enableAnalytics = false
+    // F-021: off by default (matches enableAnalytics convention) — privacy-respecting opt-in
+    @AppStorage(AppUsageTracker.enabledDefaultsKey) private var enableAppUsageTracking = false
     /// Why a "Share Weekly Report" attempt produced nothing on screen. These
     /// paths used to fail silently — the PDF was written and then no sheet
     /// appeared, with no error anywhere.
@@ -431,6 +433,25 @@ struct SettingsView: View {
                 }
                 Section("Privacy") {
                     Toggle("Share anonymous analytics to improve Halo", isOn: $enableAnalytics)
+                    // F-021: off by default, same opt-in convention as enableAnalytics.
+                    // Only tracks foreground time while Halo itself is running — see
+                    // AppUsageTracker.swift for why that's a hard OS limitation, not a choice.
+                    Toggle("Track app usage & screen time insights", isOn: Binding(
+                        get: { enableAppUsageTracking },
+                        set: { newValue in
+                            enableAppUsageTracking = newValue
+                            AppUsageTracker.shared.setTrackingEnabled(newValue)
+                        }
+                    ))
+                    .accessibilityIdentifier("settings.appUsageTracking.toggle")
+                    Text("Only counts time Halo itself is running — not a full Screen Time replacement.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    if enableAppUsageTracking {
+                        Button("Clear Usage History", role: .destructive) {
+                            AppUsageTracker.shared.clearHistory()
+                        }
+                        .accessibilityIdentifier("settings.appUsageTracking.clearHistory.button")
                     Toggle("Remember app memory history between launches", isOn: $memoryTrendPersistence)
                     Text("Memory trends always work while Halo is open. This also keeps the per-app history on disk, which records which apps you run and when.")
                         .font(HaloFont.body(11))
@@ -552,6 +573,8 @@ struct SettingsView: View {
         }
         .frame(width: 560, height: 520)
     }
+}
+
 }
 
 // MARK: - Shortcut Recorder

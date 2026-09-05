@@ -544,6 +544,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | Alert History | ✅ | AlertLog | AlertManager | — |
 | Report Export | ✅ | ReportGenerator | — | — |
 | Siri Shortcuts | ✅ | HaloShortcutsProvider | 8 AppIntents | — |
+| Dashboard — App Usage Insights | ✅ | AppUsageTracker | AppUsageTracker | — |
 | Performance (Memory Trends) | ✅ | MemoryTrendTracker (self-published) | ProcessMonitor.runningAppRAMSamples() | — |
 
 ---
@@ -602,6 +603,8 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `8073` / `8074` | MetricsHistory.swift file ref / sources build file |
 | `8075` / `8076` | WeeklyDigestGenerator.swift file ref / sources build file |
 | `8077` / `8078` | HealthTrendCard.swift file ref / sources build file |
+| `8103` / `8104` | AppUsageTracker.swift file ref / sources build file |
+| `8105` / `8106` | AppUsageInsightsSection.swift file ref / sources build file |
 | `8163` / `8164` | ShellReader.swift file ref / sources build file |
 | `9001` / `9002` | GetHealthScoreIntent.swift file ref / sources build file |
 | `9003` / `9004` | GetCPUUsageIntent.swift file ref / sources build file |
@@ -704,6 +707,26 @@ ancestor, so real collisions still print.
 - `PortEntry` model: `pid`, `processName`, `processPath`, `port`, `protocolType`, `state`, `friendlyName`
 - `NamedPort` model: user-assigned `port → name` mapping, persisted to `UserDefaults["haloNamedPorts"]`
 - `KillSignalPreference` enum: `.ask` / `.sigterm` / `.sigkill`, persisted to `UserDefaults["haloKillSignalPref"]`
+
+---
+
+## AppUsageTracker (F-021)
+
+`Halo/Core/AppUsageTracker.swift` + `Halo/Features/Dashboard/AppUsageInsightsSection.swift`
+
+- `@MainActor final class AppUsageTracker: ObservableObject` — singleton `AppUsageTracker.shared`, same singleton style as `AlertLog`
+- **Hard honesty limitation (do not paper over this):** there is no macOS API a third-party app can use to read OS-level Screen Time history. `FamilyControls`/`ManagedSettings` are parental-control frameworks gated behind an entitlement Halo does not have. This tracker only ever knows about time it personally observed **while Halo itself was running** — if the Mac was asleep or Halo wasn't launched, that time is not counted, never estimated or backfilled. Every UI surface says "Based on time Halo has been running."
+- Data source: `NSWorkspace.didActivateApplicationNotification` (same event `IdleAppMonitor` (F-039) already observes for its own purpose) for exact context-switch counts, plus a single repeating **30 s timer** as the source of truth for all durations (`observedRunningSeconds` for every running regular app, `foregroundSeconds` + one RAM sample for whichever app is frontmost at each tick).
+- **Why tick-based, not elapsed-since-activation:** a suspended `Timer` doesn't fire during sleep, so a Mac asleep for 5 hours with an app frontmost correctly adds zero foreground hours. Elapsed-time math (`Date().timeIntervalSince(activatedAt)`) would incorrectly count the whole sleep duration as usage.
+- RAM sampling reuses the same `ps -p <pid> -o rss=` technique as `IdleAppMonitor`'s `getProcessRAM`.
+- Persists `[AppUsageRecord]` (one record per app per day) as JSON to `UserDefaults["haloAppUsageHistory"]`, pruned to a rolling **14-day** window (7 days for the headline chart/background-hogs, 14 so a week-over-week comparison is possible once there's enough history — same cap-and-persist pattern as `AlertLog`, just date-windowed instead of count-capped).
+- `func topApps(limit:) -> [AppUsageSummary]` — top apps by foreground time, past 7 days
+- `func backgroundHogs(minObservedHours:maxForegroundRatio:) -> [BackgroundHogApp]` — apps observed running 8h+ with near-zero foreground ratio
+- `func contextSwitchesPerHour() -> Double?` — `nil` until ≥1 hour of real history exists (avoids a wild rate from a few minutes of data)
+- `func weekOverWeekChange() -> WeekOverWeek?` — `nil` until Halo has observed ≥14 days (otherwise "last week" would be silently zero and show a fake +100%)
+- `enabledDefaultsKey = "haloAppUsageTrackingEnabled"` — off by default, same opt-in convention as `enableAnalytics`; toggle lives in Settings → General → Privacy (`OnboardingView.swift`'s `SettingsView`)
+- `startIfEnabled()` called once from `HaloApp`'s `.task`; `setTrackingEnabled(_:)` called from the Settings toggle to start/stop live
+- `AppUsageInsightsSection` — expandable `HaloCard` on the Dashboard below `HealthAndMetrics()`: `Charts` `BarMark` bar chart of top 5 apps, Background Hogs list, context-switching + week-over-week stat tiles; shows a disabled/collecting-data state when tracking is off or there's no data yet
 
 ---
 
