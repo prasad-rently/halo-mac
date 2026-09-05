@@ -111,6 +111,8 @@
 		000000000000000000008026 /* SnippetEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008025 /* SnippetEditorView.swift */; };
 		000000000000000000008028 /* SnippetListSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008027 /* SnippetListSection.swift */; };
 		000000000000000000008030 /* ActionShareManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008029 /* ActionShareManager.swift */; };
+		000000000000000000008134 /* FocusSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008133 /* FocusSessionManager.swift */; };
+		000000000000000000008136 /* FocusSessionOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008135 /* FocusSessionOverlayView.swift */; };
 		000000000000000000008104 /* AppUsageTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008103 /* AppUsageTracker.swift */; };
 		000000000000000000008106 /* AppUsageInsightsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008105 /* AppUsageInsightsSection.swift */; };
 		000000000000000000008074 /* MetricsHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008073 /* MetricsHistory.swift */; };
@@ -357,6 +359,8 @@
 		000000000000000000008025 /* SnippetEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/SnippetEditorView.swift; sourceTree = "<group>"; };
 		000000000000000000008027 /* SnippetListSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/SnippetListSection.swift; sourceTree = "<group>"; };
 		000000000000000000008029 /* ActionShareManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/ActionShareManager.swift; sourceTree = "<group>"; };
+		000000000000000000008133 /* FocusSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/FocusSessionManager.swift; sourceTree = "<group>"; };
+		000000000000000000008135 /* FocusSessionOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/FocusSessionOverlayView.swift; sourceTree = "<group>"; };
 		000000000000000000008103 /* AppUsageTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AppUsageTracker.swift; sourceTree = "<group>"; };
 		000000000000000000008105 /* AppUsageInsightsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/AppUsageInsightsSection.swift; sourceTree = "<group>"; };
 		000000000000000000008073 /* MetricsHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/MetricsHistory.swift; sourceTree = "<group>"; };
@@ -551,6 +555,8 @@
 				000000000000000000008115 /* MemoryTrendsSection.swift */,
 				000000000000000000008021 /* IdleAppsSection.swift */,
 				000000000000000000008029 /* ActionShareManager.swift */,
+				000000000000000000008133 /* FocusSessionManager.swift */,
+				000000000000000000008135 /* FocusSessionOverlayView.swift */,
 				000000000000000000008013 /* CodeBeautifierView.swift */,
 				000000000000000000008015 /* CodeTheme.swift */,
 				000000000000000000008017 /* SyntaxHighlighter.swift */,
@@ -1002,6 +1008,8 @@
 				000000000000000000008026 /* SnippetEditorView.swift in Sources */,
 				000000000000000000008028 /* SnippetListSection.swift in Sources */,
 				000000000000000000008030 /* ActionShareManager.swift in Sources */,
+				000000000000000000008134 /* FocusSessionManager.swift in Sources */,
+				000000000000000000008136 /* FocusSessionOverlayView.swift in Sources */,
 				000000000000000000008104 /* AppUsageTracker.swift in Sources */,
 				000000000000000000008106 /* AppUsageInsightsSection.swift in Sources */,
 				000000000000000000008114 /* MemoryTrendTracker.swift in Sources */,

@@ -100,6 +100,7 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 |------------|-------|
 | `sidebar.row.<AppModule.rawValue>` | every sidebar row (drives all navigation) |
 | `dashboard.smartScan.button` / `dashboard.exportReport.button` / `dashboard.alertHistory` | Dashboard |
+| `dashboard.focusSession.start` · `.end` · `dashboard.focusHistory` | Dashboard → Focus Session (F-028) |
 | `dashboard.appUsageInsights` · `.disabledState` · `.collectingState` · `.chart` · `.backgroundHogs.list` | Dashboard → App Usage Insights (F-021) |
 | `settings.appUsageTracking.toggle` · `.clearHistory.button` | Settings → General → Privacy (F-021) |
 | `dashboard.backupHealth.card` · `.setup.button` · `.backupNow.button` · `.heatmap` | Dashboard → Backup Health / Time Machine (F-022) |

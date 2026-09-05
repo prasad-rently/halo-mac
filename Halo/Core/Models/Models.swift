@@ -476,6 +476,81 @@ enum ClipboardItemKind: String, CaseIterable {
     }
 }
 
+// MARK: - Focus Session Models (F-028)
+
+/// A single app configured (in Settings → Focus) to be auto-hidden when a
+/// Focus Session starts. Stored by bundle identifier so the configuration
+/// survives even when the target app isn't currently running.
+struct FocusAppConfig: Identifiable, Codable, Equatable, Hashable {
+    let bundleIdentifier: String
+    let name: String
+    var id: String { bundleIdentifier }
+}
+
+/// End-of-session report. `topRAMProcessName` / `topRAMProcessMB` and
+/// `maxCPUPercent` are sampled every 5s during the session from the real
+/// `ProcessMonitor` actor + `AppState.cpuUsage` — not synthetic placeholder data.
+struct FocusSessionSummary: Identifiable {
+    let id: UUID
+    let date: Date
+    let plannedMinutes: Int
+    /// Stored in seconds so a session ended 5 seconds in is not reported as
+    /// "1 minute" — `max(1, rounded())` rounded every sub-minute session up,
+    /// in the summary, the AlertLog entry and the Focus History row alike.
+    let actualSeconds: Int
+    let hiddenAppNames: [String]
+    let topRAMProcessName: String?
+    let topRAMProcessMB: Double?
+    let maxCPUPercent: Double
+    let endedEarly: Bool
+
+    init(id: UUID = UUID(), date: Date = Date(), plannedMinutes: Int, actualSeconds: Int,
+         hiddenAppNames: [String], topRAMProcessName: String?, topRAMProcessMB: Double?,
+         maxCPUPercent: Double, endedEarly: Bool) {
+        self.id = id
+        self.date = date
+        self.plannedMinutes = plannedMinutes
+        self.actualSeconds = actualSeconds
+        self.hiddenAppNames = hiddenAppNames
+        self.topRAMProcessName = topRAMProcessName
+        self.topRAMProcessMB = topRAMProcessMB
+        self.maxCPUPercent = maxCPUPercent
+        self.endedEarly = endedEarly
+    }
+
+    /// Minutes, rounded — except below a minute, which says so rather than
+    /// claiming one.
+    var actualMinutes: Int { max(1, Int((Double(actualSeconds) / 60).rounded())) }
+
+    var durationText: String {
+        actualSeconds < 60 ? "Under-a-minute" : "\(Int((Double(actualSeconds) / 60).rounded()))-minute"
+    }
+
+    /// e.g. "50-minute session. Top RAM consumer: Chrome (820 MB). CPU stayed below 55%."
+    var digestText: String {
+        var parts: [String] = ["\(durationText) session\(endedEarly ? " (ended early)" : "")."]
+        if let name = topRAMProcessName, let mb = topRAMProcessMB {
+            parts.append("Top RAM consumer: \(name) (\(Int(mb)) MB).")
+        }
+        if maxCPUPercent > 0 {
+            parts.append("CPU stayed below \(Int((maxCPUPercent / 5).rounded(.up) * 5))%.")
+        } else {
+            parts.append("CPU usage stayed minimal throughout.")
+        }
+        return parts.joined(separator: " ")
+    }
+}
+
+/// Duration presets shown on the Dashboard's Focus Session card. "Custom" is
+/// handled separately as a plain minute count (see `FocusSessionCard`).
+enum FocusDurationPreset: Int, CaseIterable, Identifiable {
+    case twentyFive = 25
+    case fifty = 50
+
+    var id: Int { rawValue }
+    var label: String { "\(rawValue) min" }
+}
+
 // MARK: - Activity Event
 
 struct ActivityEvent: Identifiable {

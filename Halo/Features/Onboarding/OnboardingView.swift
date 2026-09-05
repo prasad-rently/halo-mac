@@ -539,7 +539,7 @@ struct SettingsView: View {
                 Section("Display") {
                     // F-008: icon style picker
                     Picker("Status Item Style", selection: $displayStyle) {
-                        ForEach(MenuBarDisplayStyle.allCases) { style in
+                        ForEach(MenuBarDisplayStyle.selectable) { style in
                             Text(style.label).tag(style.rawValue)
                         }
                     }
@@ -554,6 +554,10 @@ struct SettingsView: View {
             // Quick Actions
             ActionSettingsTab()
                 .tabItem { Label("Quick Actions", systemImage: "bolt.circle.fill") }
+
+            // Focus (F-028)
+            FocusSessionSettingsTab()
+                .tabItem { Label("Focus", systemImage: "moon.stars.fill") }
 
             // About
             VStack(spacing: 16) {
@@ -625,6 +629,75 @@ struct ShortcutRecorderView: View {
     private func stopRecording() {
         isRecording = false
         if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
+    }
+}
+
+// MARK: - Focus Session Settings (F-028)
+//
+// Configures the list of apps FocusSessionManager hides (never quits) when a
+// session starts. Backed by FocusSessionSettingsStore, the same singleton the
+// Dashboard's FocusSessionCard reads before showing its confirmation dialog.
+
+struct FocusSessionSettingsTab: View {
+    @ObservedObject private var store = FocusSessionSettingsStore.shared
+    @State private var candidates: [FocusAppConfig] = []
+    @State private var selectedCandidate: FocusAppConfig?
+
+    var body: some View {
+        Form {
+            Section("Apps to Hide During a Session") {
+                if store.apps.isEmpty {
+                    Text("No apps configured yet. Add a currently running app below — Halo will hide it (never quit it) whenever you start a Focus Session, and restore it automatically when the session ends.")
+                        .font(.caption).foregroundColor(.secondary)
+                } else {
+                    ForEach(store.apps) { app in
+                        HStack {
+                            Text(app.name)
+                            Spacer()
+                            Button("Remove") {
+                                store.remove(app)
+                                refreshCandidates()
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundColor(.haloRed)
+                        }
+                    }
+                }
+            }
+
+            Section("Add App") {
+                if candidates.isEmpty {
+                    Text("No other running apps available to add right now.")
+                        .font(.caption).foregroundColor(.secondary)
+                } else {
+                    Picker("Running app", selection: $selectedCandidate) {
+                        Text("Choose…").tag(FocusAppConfig?.none)
+                        ForEach(candidates) { app in
+                            Text(app.name).tag(FocusAppConfig?.some(app))
+                        }
+                    }
+                    Button("Add") {
+                        guard let app = selectedCandidate else { return }
+                        store.add(app)
+                        selectedCandidate = nil
+                        refreshCandidates()
+                    }
+                    .disabled(selectedCandidate == nil)
+                }
+            }
+
+            Section("How it works") {
+                Text("Halo hides the selected apps (NSRunningApplication.hide()) when a session starts and restores them automatically when it ends or is stopped early — it never quits or force-closes anything.")
+                    .font(.caption).foregroundColor(.secondary)
+                Text("Halo cannot silence other apps' notifications on your behalf — no third-party app can toggle macOS Focus / Do Not Disturb system-wide. During a session, use the \"Turn on Focus Mode\" button to do that yourself in System Settings.")
+                    .font(.caption).foregroundColor(.secondary)
+            }
+        }
+        .onAppear { refreshCandidates() }
+    }
+
+    private func refreshCandidates() {
+        candidates = store.candidateRunningApps()
     }
 }
 

@@ -451,11 +451,12 @@ codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
 
 ```swift
 enum MenuBarDisplayStyle: String, CaseIterable, Identifiable {
-    case icon       // Halo icon only (default)
-    case textStats  // "CPU 42% · RAM 61%"
-    case miniBar    // 4px capsule progress bars for CPU and RAM
-    case dot        // coloured dot (green/amber/red) based on system pressure
-    case custom     // User-defined format string with tokens
+    case icon             // Halo icon only (default)
+    case textStats        // "CPU 42% · RAM 61%"
+    case miniBar          // 4px capsule progress bars for CPU and RAM
+    case dot              // coloured dot (green/amber/red) based on system pressure
+    case custom           // User-defined format string with tokens
+    case sessionCountdown // F-028: live Focus Session countdown — not user-selectable
 }
 ```
 
@@ -466,6 +467,21 @@ enum MenuBarDisplayStyle: String, CaseIterable, Identifiable {
   - 5 presets: Minimal (`{cpu}%`), Standard (`CPU {cpu}% · RAM {ram}%`), Full, Network (`↓{net_down} ↑{net_up}`), Battery Focus
   - `MenuBarFormatRenderer.render(format:values:)` — replaces tokens with live values from `MenuBarTokenValues`
   - `MenuBarStyleSelector` — in-app editor with live preview, preset buttons, clickable token grid
+- **`MenuBarDisplayStyle.selectable`** (F-028): `allCases` minus `.sessionCountdown` — the only list ever shown in a manual picker (Settings' segmented picker, `MenuBarStyleSelector`). `.sessionCountdown` is switched to automatically by `MenuBarIconView.effectiveStyle` whenever `FocusSessionManager.shared.isActive == true`, and reverts to the user's stored style the instant the session ends. Same "excluded from manual selection" pattern as `AppModule.reorderable` excluding the pinned `.dashboard`.
+
+---
+
+## Focus Session Manager (F-028)
+
+`Halo/Core/FocusSessionManager.swift` + `Halo/Features/Dashboard/FocusSessionOverlayView.swift`
+
+- `@MainActor final class FocusSessionManager: ObservableObject` — singleton `FocusSessionManager.shared`. Owns a 1 s countdown `Timer` + a 5 s sampling `Timer`.
+- `func start(minutes:bundleIDsToHide:)` — hides (never quits) every running app whose bundle ID is in the list via `NSRunningApplication.hide()`; every hidden app is `unhide()`-d in `finish(early:)`, win or lose. The Dashboard's `FocusSessionCard` confirms with the user first, listing the exact apps that will be hidden, before calling `start`.
+- Sampling reuses the existing `ProcessMonitor` actor (same one behind Performance → Top Processes) at `sortBy: .ram, limit: 3` every 5 s, tracking the session's peak-RAM process name/MB, plus `AppState.shared?.cpuUsage` for a peak-CPU read — the end-of-session summary (`FocusSessionSummary.digestText`) is built entirely from these real samples.
+- On end: fires a `UNUserNotificationCenter` notification and appends to the existing `AlertLog` with `kindRaw: "focus"` — no parallel history store. Dashboard's `FocusHistorySection` reads `AlertLog.entries.filter { $0.kindRaw == "focus" }`.
+- `FocusSessionOverlayController` — floating `NSPanel`, same non-activating/`.floating`-level pattern as `QuickActionPickerController`/`ClipboardQuickPickerController`. Unlike those pickers it does **not** hide on losing key status — it's meant to stay visible for the whole session. Its own close button calls `dismissOverlay()` (hides the panel only), never `endSession()`; the countdown keeps running in the menu bar and can be reopened via `reopenOverlay()`.
+- `FocusSessionSettingsStore` (same file) — persists the "apps to hide" list (`[FocusAppConfig]`, JSON in `UserDefaults["focusSessionAppConfigs"]`) edited from the new Settings → Focus tab (`FocusSessionSettingsTab` in `OnboardingView.swift`).
+- **Notification suppression — deliberately NOT implemented.** The original idea sheet said this feature should suppress macOS notification banners via `INFocusStatusCenter`. That API only lets an app report its *own* focus state for other apps to voluntarily respect; it cannot toggle system Focus/DND or silence other apps' notifications, and no public API can. `openSystemFocusSettings()` is the honest replacement — a one-click deep link (`x-apple.systempreferences:com.apple.Notifications-Settings.extension`) so the user turns on a Focus mode themselves. See the file-header comment in `FocusSessionManager.swift` for the full writeup.
 
 ---
 
@@ -544,6 +560,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | Alert History | ✅ | AlertLog | AlertManager | — |
 | Report Export | ✅ | ReportGenerator | — | — |
 | Siri Shortcuts | ✅ | HaloShortcutsProvider | 8 AppIntents | — |
+| Focus Session | ✅ | FocusSessionManager | ProcessMonitor (reused) | — |
 | Dashboard — App Usage Insights | ✅ | AppUsageTracker | AppUsageTracker | — |
 | Performance (Memory Trends) | ✅ | MemoryTrendTracker (self-published) | ProcessMonitor.runningAppRAMSamples() | — |
 
@@ -605,6 +622,8 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `8077` / `8078` | HealthTrendCard.swift file ref / sources build file |
 | `8103` / `8104` | AppUsageTracker.swift file ref / sources build file |
 | `8105` / `8106` | AppUsageInsightsSection.swift file ref / sources build file |
+| `8133` / `8134` | FocusSessionManager.swift file ref / sources build file |
+| `8135` / `8136` | FocusSessionOverlayView.swift file ref / sources build file |
 | `8163` / `8164` | ShellReader.swift file ref / sources build file |
 | `9001` / `9002` | GetHealthScoreIntent.swift file ref / sources build file |
 | `9003` / `9004` | GetCPUUsageIntent.swift file ref / sources build file |
