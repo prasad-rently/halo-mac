@@ -5,6 +5,7 @@
 <p align="center">
   <strong>Your Mac. Elevated.</strong><br/>
   A native macOS system utility — cleanup, protection, performance, clipboard history &amp; live widget.<br/><br/>
+  <a href="https://github.com/prasad-rently/halo-mac/actions/workflows/ci.yml"><img src="https://github.com/prasad-rently/halo-mac/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"/></a>
   <img src="https://img.shields.io/badge/macOS-13.0+-000000?logo=apple&logoColor=white" alt="macOS 13+"/>
   <img src="https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white" alt="Swift 5.9"/>
   <img src="https://img.shields.io/badge/SwiftUI-blue?logo=swift&logoColor=white" alt="SwiftUI"/>

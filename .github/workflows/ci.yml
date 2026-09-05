@@ -1,0 +1,135 @@
+name: CI
+
+# There was no CI on this repo until this workflow landed, so every
+# "BUILD SUCCEEDED" in a PR description was an unverifiable local claim — and
+# the F-016…F-030 batch needs a dozen rebases, each of which invalidates
+# whatever local run its author cited. This gates that.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# macOS runners bill at 10x, so don't leave superseded runs going.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Interleave xcodebuild's stdout/stderr correctly in the Actions log.
+  NSUnbufferedIO: "YES"
+
+jobs:
+  debug-build-and-test:
+    name: Debug build + HaloTests
+    runs-on: macos-26
+    # A cold build is ~8 min on an M-series laptop and slower on a hosted
+    # runner; HaloTests itself is ~30 s. The cap exists because a deadlocked
+    # subprocess (see ShellReader) hangs rather than fails, and an uncapped
+    # hang burns the full 6-hour job limit at the 10x macOS rate.
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select Xcode
+        # 26.4.1 is what the F-016…F-030 batch was developed and verified
+        # against. Runner images drop old patch releases, so fall back to the
+        # image default rather than failing the run outright.
+        run: |
+          if [ -d /Applications/Xcode_26.4.1.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.4.1.app
+          else
+            echo "::warning::Xcode 26.4.1 not on this image; using the default."
+            sudo xcode-select -s /Applications/Xcode.app
+          fi
+          xcodebuild -version
+          swift --version
+
+      - name: Build Halo.app, HaloWidget, HaloHelper and the UI-test bundle
+        # The HaloUITests scheme builds the Halo target, which depends on
+        # HaloWidget and HaloHelper — so this one invocation compiles all four
+        # products. Signing is off: the runner has no Developer ID keychain,
+        # and CI is checking that the code compiles, not that it ships.
+        run: |
+          xcodebuild \
+            -project Halo.xcodeproj \
+            -scheme HaloUITests \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Run HaloTests
+        # Same derived-data path, so Halo.app is already built and only the
+        # HaloTests bundle compiles here. HaloTests is hosted by Halo.app, so
+        # this does launch the app.
+        #
+        # HaloUITests is deliberately NOT run: XCUITest needs Accessibility
+        # permission, which a hosted runner cannot grant non-interactively.
+        # It is compiled above so it cannot silently rot.
+        run: |
+          xcodebuild \
+            -project Halo.xcodeproj \
+            -scheme HaloTests \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/HaloTests.xcresult" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            test
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: HaloTests-xcresult
+          path: ${{ runner.temp }}/HaloTests.xcresult
+          retention-days: 7
+          if-no-files-found: ignore
+
+  release-build:
+    name: Release build
+    # Release differs from Debug in two ways that matter: whole-module
+    # optimisation (which surfaces compile errors an incremental Debug build
+    # does not) and the `#if DEBUG` branches in HaloApp.swift / BuildToken.swift.
+    # Kept off the PR path so PRs pay for one build, not two; it runs after
+    # merge and on demand.
+    if: github.event_name != 'pull_request'
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select Xcode
+        run: |
+          if [ -d /Applications/Xcode_26.4.1.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.4.1.app
+          else
+            echo "::warning::Xcode 26.4.1 not on this image; using the default."
+            sudo xcode-select -s /Applications/Xcode.app
+          fi
+          xcodebuild -version
+
+      - name: Build (Release)
+        run: |
+          xcodebuild \
+            -project Halo.xcodeproj \
+            -scheme HaloUITests \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData-Release" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
