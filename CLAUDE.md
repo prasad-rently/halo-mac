@@ -512,6 +512,67 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 
 ---
 
+### Reserved ID blocks — claim one before adding a file
+
+Object IDs in `project.pbxproj` are written zero-padded to 24 characters
+(`000000000000000000008163`); the table above abbreviates them to the last four
+digits. Every new source file needs **two** — a `PBXFileReference` and a
+`PBXBuildFile` — and they must be unique across the whole project.
+
+Duplicate IDs **fail quietly**. Xcode does not error on two objects sharing an ID;
+it resolves the ID to one of them, and the other file silently drops out of its
+Sources phase. The symptom arrives later as a missing symbol with nothing obvious
+connecting it to the project file.
+
+That already happened once: #21, #13 and #9 each independently picked `8031`/`8032`
+for three different scanners, because each branched off `main` and took "the next
+free pair" without seeing the others. **Pick from a free block below and add your row
+before writing the file** — the table is the only thing that makes a claim visible to
+a branch that has not merged yet.
+
+| Block | Owner | Status |
+|-------|-------|--------|
+| `8001`–`8030` | shipped features (see the table above) | taken |
+| `8031`–`8032` | F-019 Security Posture (#21) | claimed |
+| `8043`–`8046` | F-020 S.M.A.R.T. Disk Health (#20) | claimed |
+| `8053`–`8056` | F-022 Time Machine Monitor (#16) | claimed |
+| `8063`–`8066` | F-024 Browser Cleaner (#15) | claimed |
+| `8073`–`8078` | F-029 Weekly Digest (#11) | claimed |
+| `8083`–`8088` | F-018 Privacy Exposure Scanner (#18) | claimed |
+| `8093`–`8098` | F-017 Network Traffic Monitor (#17) | claimed |
+| `8103`–`8106` | F-021 App Usage Analytics (#10) | claimed |
+| `8113`–`8116` | F-023 Memory Leak Tracker (#13) | claimed — moved off `8031` |
+| `8123`–`8126` | F-025 Duplicate Photos (#19) | claimed |
+| `8133`–`8136` | F-028 Focus Session (#14) | claimed |
+| `8143`–`8146` | F-030 iCloud Drive Analyzer (#12) | claimed |
+| `8153`–`8154` | F-016 Permission Auditor (#9) | claimed — moved off `8031` |
+| `8163`–`8164` | `ShellReader` (Phase 0 / P0.2) | claimed |
+| `8171`+ | — | **free — take the next block from here** |
+
+Auditing the whole batch for collisions:
+
+```bash
+git show main:Halo.xcodeproj/project.pbxproj | grep -oE '\b[0-9A-F]{24}\b' | sort -u > /tmp/main-ids
+for b in $(git branch --no-merged main --format='%(refname:short)'); do
+  git show "$b":Halo.xcodeproj/project.pbxproj 2>/dev/null \
+    | grep -oE '\b[0-9A-F]{24}\b' | sort -u \
+    | comm -13 /tmp/main-ids - | sed "s|$| $b|"
+done | sort > /tmp/pbx-claims
+awk '{print $1}' /tmp/pbx-claims | uniq -d | while read id; do
+  echo "$id  <-  $(grep "^$id " /tmp/pbx-claims | awk '{print $2}' | tr '\n' ' ')"
+done
+```
+
+Silence means no collisions. Anything printed is claimed by more than one
+unmerged branch, and the line names them.
+
+`--no-merged main` is load-bearing: without it the scan also reports branches that
+merely share lineage — `feature/upcoming-features` descends from the already-merged
+`feature/f-043-drive-speed-test`, so they hold eight IDs in common quite legitimately.
+A check that prints eight false positives every run is one people learn to ignore.
+
+---
+
 ## PortScanner
 
 `Halo/Core/Scanner/PortScanner.swift`
