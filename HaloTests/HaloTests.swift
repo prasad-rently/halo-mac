@@ -303,6 +303,58 @@ struct FocusDurationPresetTests {
 
 // MARK: - F-028 review fixes
 
+// MARK: - Focus session crash recovery
+//
+// Recovery used to call `start()` straight from `FocusSessionManager.init`.
+// `start()` builds the overlay, and the overlay view read
+// `FocusSessionManager.shared` in a stored property default — re-entering the
+// `static let` whose initializer was still running. That is a `swift_once`
+// deadlock: the thread parks in `_dispatch_once_wait` and the app hangs at
+// launch, on exactly the crash-recovery path recovery exists for.
+//
+// The structural half of that fix is not unit-testable (a test that reproduced
+// it would hang, and the singleton is constructed once per process). What is
+// pinned here is the decision logic, now pure and lifted out of `init`, plus
+// the boundary that governs whether `resumeInterruptedSession()` does anything
+// at all.
+@Suite("FocusSessionManager recovery")
+struct FocusSessionRecoveryTests {
+
+    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+    @Test("A session with time left is resumable")
+    func testResumable() {
+        #expect(FocusSessionManager.isResumable(endDate: now.addingTimeInterval(600), now: now))
+    }
+
+    // The threshold is "more than 60s", so 60 exactly must not resume: it would
+    // round to a 1-minute session that ends almost immediately.
+    @Test("The 60-second boundary is exclusive", arguments: [-300.0, -1.0, 0.0, 30.0, 60.0])
+    func testNotResumableAtOrBelowBoundary(remaining: TimeInterval) {
+        let end = now.addingTimeInterval(remaining)
+        #expect(FocusSessionManager.isResumable(endDate: end, now: now) == false)
+        #expect(FocusSessionManager.resumeMinutes(endDate: end, now: now) == nil)
+    }
+
+    @Test("Resume duration rounds up to whole minutes")
+    func testResumeMinutesRoundsUp() {
+        #expect(FocusSessionManager.resumeMinutes(endDate: now.addingTimeInterval(61), now: now) == 2)
+        #expect(FocusSessionManager.resumeMinutes(endDate: now.addingTimeInterval(120), now: now) == 2)
+        #expect(FocusSessionManager.resumeMinutes(endDate: now.addingTimeInterval(121), now: now) == 3)
+        #expect(FocusSessionManager.resumeMinutes(endDate: now.addingTimeInterval(1500), now: now) == 25)
+    }
+
+    // Recovery parks the session and `resumeInterruptedSession()` re-checks the
+    // deadline, because time passes between the two — a session recovered with
+    // 70s left is no longer worth resuming two minutes later.
+    @Test("A session that ages out between recovery and resume is dropped")
+    func testAgesOutBeforeResume() {
+        let end = now.addingTimeInterval(70)
+        #expect(FocusSessionManager.isResumable(endDate: end, now: now))
+        #expect(FocusSessionManager.isResumable(endDate: end, now: now.addingTimeInterval(120)) == false)
+    }
+}
+
 @Suite("FocusSessionSummary duration")
 struct FocusSessionDurationTests {
 

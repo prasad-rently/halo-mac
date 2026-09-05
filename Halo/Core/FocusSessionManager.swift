@@ -85,12 +85,42 @@ final class FocusSessionManager: ObservableObject {
         var endDate: Date
     }
 
+    /// A recovered session with enough time left to be worth continuing, parked
+    /// for `resumeInterruptedSession()`. Never resumed from `init` — see there.
+    private var pendingResume: PersistedSession?
+
+    /// Minimum remaining time worth resuming for. Below this the session is
+    /// treated as finished: the apps come back and nothing restarts.
+    static let minimumResumableSeconds: TimeInterval = 60
+
     private init() {
         recoverInterruptedSession()
     }
 
-    /// Called from `init`. Either resumes a session whose end date is still
-    /// ahead, or unhides whatever the last session hid and clears the record.
+    /// Called from `init`. Unhides whatever the last session hid, and parks the
+    /// session for resumption if enough of it is left.
+    ///
+    /// **This must not start the session, and nothing it calls may read
+    /// `FocusSessionManager.shared`.**
+    ///
+    /// It used to call `start()` directly. `start()` builds the overlay, and
+    /// `FocusSessionOverlayView` read `FocusSessionManager.shared` in a stored
+    /// property default — so constructing it re-entered the `static let` whose
+    /// initializer was still on the stack. Swift lowers that to `swift_once`,
+    /// which is not reentrant: the thread parks in `_dispatch_once_wait` and
+    /// never wakes. `init` is private and `shared` is the only construction
+    /// path, so once recovery decided to resume, the deadlock was unavoidable —
+    /// the app hung during startup, on the main actor, with no window and no
+    /// crash report.
+    ///
+    /// It triggered on exactly the case this recovery exists to serve: a clean
+    /// quit clears the record via `observeAppTermination()`, so recovery only
+    /// engages after a crash, force-quit or power loss.
+    ///
+    /// Unhiding is safe here — it touches only `NSWorkspace`.
+    ///
+    /// The overlay no longer reads `.shared` either (it is handed the manager),
+    /// so the cycle is closed at both ends rather than only at this one.
     private func recoverInterruptedSession() {
         guard let data = UserDefaults.standard.data(forKey: Self.activeSessionKey),
               let saved = try? JSONDecoder().decode(PersistedSession.self, from: data) else { return }
@@ -101,11 +131,35 @@ final class FocusSessionManager: ObservableObject {
         // apps are currently hidden because Halo hid them.
         unhide(bundleIDs: saved.bundleIDs)
 
-        let remaining = saved.endDate.timeIntervalSinceNow
-        guard remaining > 60 else { return }
-        // Enough of the session is left to be worth continuing; the user
-        // explicitly asked for it and never cancelled.
-        start(minutes: Int((remaining / 60).rounded(.up)), bundleIDsToHide: saved.bundleIDs)
+        guard Self.isResumable(endDate: saved.endDate, now: Date()) else { return }
+        pendingResume = saved
+    }
+
+    /// Whether a recovered session has enough time left to be worth resuming.
+    /// Pure, so the boundary can be tested without touching the singleton.
+    nonisolated static func isResumable(endDate: Date, now: Date) -> Bool {
+        endDate.timeIntervalSince(now) > minimumResumableSeconds
+    }
+
+    /// Whole minutes to resume for, rounded up. `nil` when the session has
+    /// aged out since it was recovered.
+    nonisolated static func resumeMinutes(endDate: Date, now: Date) -> Int? {
+        guard isResumable(endDate: endDate, now: now) else { return nil }
+        return Int((endDate.timeIntervalSince(now) / 60).rounded(.up))
+    }
+
+    /// Resumes a session that a crash or force-quit interrupted.
+    ///
+    /// Call once from `HaloApp` after launch — **not** from `init`; see
+    /// `recoverInterruptedSession()` for why. Idempotent, and re-checks the
+    /// deadline because time passes between recovery and this call.
+    func resumeInterruptedSession() {
+        guard let saved = pendingResume else { return }
+        pendingResume = nil
+
+        guard let minutes = Self.resumeMinutes(endDate: saved.endDate, now: Date()) else { return }
+        // The user explicitly asked for this session and never cancelled it.
+        start(minutes: minutes, bundleIDsToHide: saved.bundleIDs)
     }
 
     /// Idempotent. Safe to call from `finish`, from `willTerminate`, and from
@@ -166,7 +220,7 @@ final class FocusSessionManager: ObservableObject {
         isOverlayVisible = true
 
         if overlayController == nil { overlayController = FocusSessionOverlayController() }
-        overlayController?.show()
+        overlayController?.show(manager: self)
 
         countdownTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
@@ -189,7 +243,7 @@ final class FocusSessionManager: ObservableObject {
     func reopenOverlay() {
         guard isActive else { return }
         isOverlayVisible = true
-        overlayController?.show()
+        overlayController?.show(manager: self)
     }
 
     /// User-initiated early stop (from the overlay or the Dashboard card).

@@ -22,13 +22,20 @@ final class FocusSessionOverlayController: NSObject {
 
     private var panel: NSPanel?
 
-    func show() {
+    /// Takes the manager rather than reading `FocusSessionManager.shared`.
+    ///
+    /// The view used to hold `= FocusSessionManager.shared` as a stored
+    /// property default, so building it re-entered that singleton's `swift_once`
+    /// when recovery called `start()` from `init` — a launch deadlock. Recovery
+    /// no longer starts from `init`, and passing the manager in means this path
+    /// cannot reach `.shared` even if something else ever calls it that early.
+    func show(manager: FocusSessionManager) {
         if let existing = panel {
             existing.orderFront(nil)
             return
         }
 
-        let hosting = NSHostingController(rootView: FocusSessionOverlayView())
+        let hosting = NSHostingController(rootView: FocusSessionOverlayView(manager: manager))
         let size = NSSize(width: 300, height: 230)
         hosting.view.frame = NSRect(origin: .zero, size: size)
 
@@ -69,7 +76,13 @@ final class FocusSessionOverlayController: NSObject {
 // MARK: - SwiftUI content
 
 struct FocusSessionOverlayView: View {
-    @ObservedObject private var manager = FocusSessionManager.shared
+    @ObservedObject private var manager: FocusSessionManager
+
+    /// No `= .shared` default: a default argument is evaluated at the call site,
+    /// so it would reintroduce exactly the reentrancy this removes.
+    init(manager: FocusSessionManager) {
+        _manager = ObservedObject(wrappedValue: manager)
+    }
 
     var body: some View {
         VStack(spacing: 16) {
