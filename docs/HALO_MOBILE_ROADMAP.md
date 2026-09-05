@@ -96,6 +96,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | Files — Large files | 🟡 | 🟡 | Scoped | P3 | Assessed |
 | Files — Downloads manager | 🟡 | 🟡 | Downloads dir (Android) / Files (iOS) | P3 | Assessed |
 | Files — **Drive Speed (F-043)** | 🟡 | 🟡 | Benchmark internal storage; external limited (OTG Android) | P2 | Assessed |
+| Files — **Drive Health / S.M.A.R.T. (F-020)** | ❌ | ❌ | No public SMART/drive-health API on either OS — not a permission gap, a total API absence | — | Won't do |
 | **Clipboard history** | 🟡 | 🟡 | iOS current-only/foreground; Android 10+ limited → F-045 | P1 | Planned (F-045) |
 | **Snippets / text expansion** | ✅ | ✅ | **Strong on mobile** (keyboard extension / IME) | P1 | Assessed ✓ (§9) |
 | **Actions** — clipboard/text transforms | ✅ | ✅ | JSON/base64/hash/QR/case… pure compute | P1 | Assessed |
@@ -209,6 +210,7 @@ Copy this block into a study when assessing a feature for mobile.
 
 | Date | Change |
 |------|--------|
+| 2026-08 | F-020 (S.M.A.R.T. Disk Health Monitor) shipped on desktop. Feasibility study added (§9): both iOS and Android verdict ❌ Blocked — neither OS exposes SMART/drive-health data to third-party apps. Row added to §3; status `Won't do`. |
 | 2026-07 | Formal feasibility studies added (§9): Code Beautifier, Snippets, Speed Test, cloud AI. |
 | 2026-07 | Document created. Assessed all shipped desktop capabilities (F-001–F-043) + planned cloud features (F-044–F-048) for iOS/Android. Established governance rules. First wave specced: F-044/F-045/F-048/F-049/F-050. |
 
@@ -257,3 +259,15 @@ promote to `Planned` (spec) when scheduled.
 - **Scope on mobile:** full chat + context (clipboard/selection/share-sheet input); **trimmed** agent toolset.
 - **Effort:** iOS ~5 d · Android ~6 d (three providers + streaming + Keystore). **Dependencies:** F-049 shell; mirrors F-046 desktop architecture.
 - **Verdict:** **Port (chat) + Adapt (agentic)** → **P1**. **Recommendation:** high value on mobile; ship chat + context first, add the small mobile tool set incrementally. Consider sharing the Swift provider layer between macOS + iOS.
+
+### Feasibility — S.M.A.R.T. Disk Health Monitor (from desktop F-020)
+- **Desktop capability:** reads the NVMe S.M.A.R.T./Health-Info Log via `diskutil info -plist` (SMART status, temperature, power-on hours/cycles, total bytes written, available spare, NVMe's own percentage-used wear indicator, media errors) plus an `IONVMeController` IOKit lookup for serial number. Surfaces health status Good/Warning/Failing, a lifespan-remaining bar, and a 24h temperature sparkline; `AlertManager` rule on degradation.
+- **iOS mechanism:** none. iOS gives third-party apps zero access to the physical storage device — no IOKit-equivalent, no raw block-device path, no public SMART/NVMe framework of any kind. This isn't a scoped/permissioned gap like Files or Photos; there is no API surface to request access to at all. Verdict ❌
+- **Android mechanism:** none for a genuinely equivalent read. `StorageManager`/`StorageVolume` expose free/total space only; SMART-equivalent health data (`smartctl`-style) requires root or a system-signed app, unavailable to a normal installed app, and OEM storage variance (eMMC/UFS/removable SD) means there'd be no vendor-neutral path even if root were assumed. Verdict ❌
+- **OS blockers:** full sandbox on iOS (no IOKit-equivalent, no raw device access); Android requires root/system privilege that a distributed app cannot have.
+- **Permissions required:** none possible — there is no permission that unlocks this, on either OS.
+- **Store-policy risk:** n/a — nothing to request or submit.
+- **Scope on mobile:** none.
+- **Effort:** n/a. **Dependencies:** none.
+- **Verdict:** **Blocked** (both platforms) → **Won't do**.
+- **Recommendation:** do not build; the API absence is total, not a reduced/adapted case. If a phone-side "storage health" signal is ever wanted, the honest option is a *different*, clearly-labeled feature — e.g. surfacing Android's `StorageManager` cache-pressure/low-space signals, or iOS's on-device storage breakdown — not a SMART port, since there is nothing on either platform that corresponds to a physical drive's wear/failure telemetry.

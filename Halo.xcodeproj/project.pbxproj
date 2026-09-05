@@ -42,6 +42,8 @@
 		000000000000000000001083 /* SpeedTestService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001082 /* SpeedTestService.swift */; };
 		000000000000000000001085 /* DiskHealthMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001084 /* DiskHealthMonitor.swift */; };
 		000000000000000000001087 /* ProcessMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001086 /* ProcessMonitor.swift */; };
+		000000000000000000008044 /* SMARTDiskMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008043 /* SMARTDiskMonitor.swift */; };
+		000000000000000000008046 /* DriveHealthSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008045 /* DriveHealthSection.swift */; };
 		000000000000000000001089 /* CPUCoresSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001088 /* CPUCoresSection.swift */; };
 		000000000000000000001091 /* SensorsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001090 /* SensorsSection.swift */; };
 		000000000000000000001093 /* BatteryDetailSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001092 /* BatteryDetailSection.swift */; };
@@ -277,6 +279,8 @@
 		000000000000000000001082 /* SpeedTestService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SpeedTestService.swift; sourceTree = "<group>"; };
 		000000000000000000001084 /* DiskHealthMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/DiskHealthMonitor.swift; sourceTree = "<group>"; };
 		000000000000000000001086 /* ProcessMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ProcessMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000008043 /* SMARTDiskMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SMARTDiskMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000008045 /* DriveHealthSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/DriveHealthSection.swift; sourceTree = "<group>"; };
 		000000000000000000001088 /* CPUCoresSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/CPUCoresSection.swift; sourceTree = "<group>"; };
 		000000000000000000001090 /* SensorsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/SensorsSection.swift; sourceTree = "<group>"; };
 		000000000000000000001092 /* BatteryDetailSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/BatteryDetailSection.swift; sourceTree = "<group>"; };
@@ -486,6 +490,7 @@
 				000000000000000000001082 /* SpeedTestService.swift */,
 				000000000000000000001084 /* DiskHealthMonitor.swift */,
 				000000000000000000001086 /* ProcessMonitor.swift */,
+				000000000000000000008043 /* SMARTDiskMonitor.swift */,
 				000000000000000000008001 /* PortScanner.swift */,
 				000000000000000000008019 /* IdleAppMonitor.swift */,
 				000000000000000000001030 /* DesignSystem.swift */,
@@ -506,6 +511,7 @@
 				000000000000000000001040 /* FilesView.swift */,
 				000000000000000000008007 /* DownloadsView.swift */,
 				000000000000000000008009 /* DownloadsViewModel.swift */,
+				000000000000000000008045 /* DriveHealthSection.swift */,
 				000000000000000000001042 /* MenuBarView.swift */,
 				000000000000000000001044 /* OnboardingView.swift */,
 				000000000000000000001046 /* PerformanceView.swift */,
@@ -918,6 +924,7 @@
 				000000000000000000001083 /* SpeedTestService.swift in Sources */,
 				000000000000000000001085 /* DiskHealthMonitor.swift in Sources */,
 				000000000000000000001087 /* ProcessMonitor.swift in Sources */,
+				000000000000000000008044 /* SMARTDiskMonitor.swift in Sources */,
 				000000000000000000001031 /* DesignSystem.swift in Sources */,
 				000000000000000000001033 /* ApplicationsView.swift in Sources */,
 				000000000000000000001035 /* CleanupView.swift in Sources */,
@@ -949,6 +956,7 @@
 				000000000000000000008006 /* PortManagerViewModel.swift in Sources */,
 				000000000000000000008008 /* DownloadsView.swift in Sources */,
 				000000000000000000008010 /* DownloadsViewModel.swift in Sources */,
+				000000000000000000008046 /* DriveHealthSection.swift in Sources */,
 				000000000000000000008012 /* CelebrationOverlay.swift in Sources */,
 				000000000000000000008014 /* CodeBeautifierView.swift in Sources */,
 				000000000000000000008016 /* CodeTheme.swift in Sources */,
