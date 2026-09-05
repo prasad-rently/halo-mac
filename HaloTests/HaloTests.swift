@@ -52,23 +52,87 @@ struct FileSystemScannerTests {
         #expect(items.isEmpty)
     }
 
-    @Test("Cancellation stops scan")
-    func testCancellation() async throws {
-        let scanner = FileSystemScanner()
-        let homeURL = URL(fileURLWithPath: NSHomeDirectory())
+    // This test used to scan the real home directory to depth 10 and break
+    // after 5 `.item` events. Two things made that unbounded:
+    //
+    //   * `.item` events are only emitted *after* `traverse` returns, so the
+    //     early `break` could never fire until the entire home directory had
+    //     been walked; and
+    //   * nothing cancelled the producing task, so the walk ran to completion
+    //     regardless.
+    //
+    // On a developer machine that is minutes, not seconds, and the duration
+    // depends on whatever happens to be in `~` — so it passed most days and
+    // hung on others. It now runs against a fixture it owns.
+    @Test("Breaking out of the stream terminates it cleanly and promptly")
+    func testCancellationStopsScan() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HaloScanCancel-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        // Enough files, nested, that a runaway walk is measurably slower than
+        // an early exit.
+        for dir in 0..<20 {
+            let sub = root.appendingPathComponent("d\(dir)")
+            try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+            for file in 0..<50 {
+                try Data(repeating: 0x41, count: 2048)
+                    .write(to: sub.appendingPathComponent("f\(file).log"))
+            }
+        }
+
         var config = FileSystemScanner.ScanConfig()
         config.maxDepth = 10
+        config.minSizeBytes = 0
 
-        let task = Task {
-            var count = 0
-            for await event in await scanner.scanDirectory(homeURL, config: config) {
-                if case .item = event { count += 1 }
-                if count > 5 { break }
+        let scanner = FileSystemScanner()
+        let started = Date()
+
+        var progressSeen = 0
+        for await event in await scanner.scanDirectory(root, config: config) {
+            if case .progress = event {
+                progressSeen += 1
+                if progressSeen >= 5 { break }
             }
-            return count
         }
-        let result = await task.value
-        #expect(result >= 0) // Should have stopped cleanly
+
+        let elapsed = Date().timeIntervalSince(started)
+
+        #expect(progressSeen == 5)
+        // The real assertion is that this returns at all. Before the
+        // `onTermination` fix the producing task kept walking after the
+        // consumer left; the bound catches a regression to that.
+        #expect(elapsed < 20, "Stream took \(elapsed)s to release the consumer")
+    }
+
+    @Test("A completed scan reports every file in a fixture tree")
+    func testScanFindsFixtureFiles() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HaloScanFixture-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        for i in 0..<12 {
+            try Data(repeating: 0x42, count: 4096)
+                .write(to: root.appendingPathComponent("file\(i).log"))
+        }
+
+        var config = FileSystemScanner.ScanConfig()
+        config.minSizeBytes = 0
+
+        var items = 0
+        var completedCount: Int?
+        for await event in await FileSystemScanner().scanDirectory(root, config: config) {
+            switch event {
+            case .item:                       items += 1
+            case .completed(let count, _):    completedCount = count
+            default:                          break
+            }
+        }
+
+        #expect(items == 12)
+        #expect(completedCount == 12)
     }
 
     @Test("Returns completed event")
