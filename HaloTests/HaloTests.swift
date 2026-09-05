@@ -409,3 +409,68 @@ struct NetworkTrafficMonitorTests {
         #expect(count == 2)
     }
 }
+
+// MARK: - F-017 review fixes
+
+@Suite("NetworkTrafficMonitor lsof parsing")
+struct NetworkLsofParsingTests {
+
+    // lsof truncates COMMAND to 9 characters but does NOT strip embedded spaces,
+    // so "Google Chrome" arrives as "Google Ch". Assuming COMMAND was a single
+    // token made parts[1] a name fragment, Int32(...) returned nil, and the row
+    // was dropped silently — the browsers users most want to see were the ones
+    // most likely to vanish.
+    @Test("A COMMAND containing a space still yields the right PID and name")
+    func testCommandWithSpace() {
+        let output = """
+        COMMAND     PID USER   FD   TYPE  DEVICE SIZE/OFF NODE NAME
+        Google Ch  4321 user   45u  IPv4 0x1234      0t0  TCP 192.168.1.5:52000->142.250.183.14:443 (ESTABLISHED)
+        """
+        let entries = NetworkTrafficMonitor.parseLsofOutput(output)
+        #expect(entries.count == 1)
+        #expect(entries.first?.pid == 4321)
+        #expect(entries.first?.processName == "Google Ch")
+        #expect(entries.first?.remoteIP == "142.250.183.14")
+        #expect(entries.first?.remotePort == 443)
+    }
+
+    @Test("A single-token COMMAND still parses")
+    func testSingleTokenCommand() {
+        let output = """
+        COMMAND   PID USER   FD   TYPE  DEVICE SIZE/OFF NODE NAME
+        curl     9876 user    5u  IPv4 0x9999      0t0  TCP 10.0.0.2:51000->93.184.216.34:80 (ESTABLISHED)
+        """
+        let entries = NetworkTrafficMonitor.parseLsofOutput(output)
+        #expect(entries.first?.processName == "curl")
+        #expect(entries.first?.pid == 9876)
+    }
+
+    @Test("LISTEN sockets with no peer are skipped")
+    func testListenSocketsSkipped() {
+        let output = """
+        COMMAND   PID USER   FD   TYPE  DEVICE SIZE/OFF NODE NAME
+        nginx     100 user    6u  IPv4 0x1111      0t0  TCP *:8080 (LISTEN)
+        """
+        #expect(NetworkTrafficMonitor.parseLsofOutput(output).isEmpty)
+    }
+
+    // The identity fix: snapshot() rebuilds every entry each 2 s poll, so a
+    // fresh UUID made ForEach treat every row as new every tick.
+    @Test("Identity is the pid:ip:port:proto composite, stable across polls")
+    func testStableIdentityAcrossPolls() {
+        let output = """
+        COMMAND   PID USER   FD   TYPE  DEVICE SIZE/OFF NODE NAME
+        curl     9876 user    5u  IPv4 0x9999      0t0  TCP 10.0.0.2:51000->93.184.216.34:80 (ESTABLISHED)
+        """
+        let first = NetworkTrafficMonitor.parseLsofOutput(output)
+        let second = NetworkTrafficMonitor.parseLsofOutput(output)
+        #expect(first.first?.id == second.first?.id)
+        #expect(first.first?.id == "9876:93.184.216.34:80:TCP")
+    }
+
+    @Test("Reverse DNS is off by default")
+    func testReverseDNSDefaultsOff() {
+        UserDefaults.standard.removeObject(forKey: NetworkTrafficMonitor.reverseDNSEnabledKey)
+        #expect(NetworkTrafficMonitor.isReverseDNSEnabled == false)
+    }
+}

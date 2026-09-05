@@ -62,6 +62,38 @@ actor NetworkTrafficMonitor {
         let domains: [String]
     }
 
+    /// Reverse DNS is off by default.
+    ///
+    /// Expanding this section previously issued a PTR query to the user's
+    /// configured resolver for every remote IP their machine was talking to —
+    /// handing the full connection-endpoint list to that resolver, and usually
+    /// their ISP, as a side effect of opening a monitoring panel. The footnote
+    /// said hostnames were best-effort but never said a lookup was performed.
+    static let reverseDNSEnabledKey = "networkTrafficResolveHostnames"
+
+    static var isReverseDNSEnabled: Bool {
+        UserDefaults.standard.bool(forKey: reverseDNSEnabledKey)
+    }
+
+    /// Concurrent PTR lookups in flight at once.
+    static let maxConcurrentResolves = 8
+    /// Per-lookup ceiling. Timing out yields nil, which the design already
+    /// handles honestly as "unresolved".
+    static let resolveTimeoutSeconds: TimeInterval = 1.5
+
+    static func resolveHostWithTimeout(ip: String) async -> String? {
+        await withTaskGroup(of: String?.self) { group in
+            group.addTask { await performReverseDNS(ip: ip) }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(resolveTimeoutSeconds * 1_000_000_000))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+    }
+
     // MARK: - Public API
 
     /// Full snapshot: open outbound connections (via lsof) + per-app byte totals (via nettop).
@@ -74,11 +106,54 @@ actor NetworkTrafficMonitor {
         var connections = await connectionsTask
         let totals = await totalsTask
 
-        // Best-effort reverse DNS, cached, per unique remote IP in this snapshot.
+        // Reverse DNS is opt-in and bounded.
+        //
+        // It used to resolve every unique IP serially with no timeout, each
+        // await blocking the next. A PTR lookup against an unresponsive resolver
+        // sits for the system default (~5 s+), so ~150 unique IPs with a 10%
+        // non-responding rate took minutes — with the 2 s poll loop stuck
+        // awaiting it, so the table simply never updated. There was no
+        // cancellation check either, so leaving the tab didn't stop the work.
         var resolvedForIP: [String: String?] = [:]
-        for entry in connections {
-            if resolvedForIP[entry.remoteIP] == nil {
-                resolvedForIP[entry.remoteIP] = await resolveHost(ip: entry.remoteIP)
+        if Self.isReverseDNSEnabled, !Task.isCancelled {
+            // Serve cache hits without touching the network at all, and only
+            // send the misses to the task group.
+            var uniqueIPs: [String] = []
+            for ip in Set(connections.map(\.remoteIP)) {
+                if let cached = dnsCache[ip] {
+                    resolvedForIP[ip] = cached
+                } else {
+                    uniqueIPs.append(ip)
+                }
+            }
+            let resolved = await withTaskGroup(of: (String, String?).self) { group in
+                var inFlight = 0
+                var index = 0
+                var results: [String: String?] = [:]
+
+                func addNext() {
+                    guard index < uniqueIPs.count else { return }
+                    let ip = uniqueIPs[index]
+                    index += 1
+                    inFlight += 1
+                    group.addTask { (ip, await Self.resolveHostWithTimeout(ip: ip)) }
+                }
+
+                // Bounded concurrency — a resolver flooded with 150 simultaneous
+                // PTR queries is its own problem.
+                while inFlight < Self.maxConcurrentResolves { addNext() }
+
+                while let (ip, host) = await group.next() {
+                    inFlight -= 1
+                    results[ip] = host
+                    if Task.isCancelled { break }
+                    addNext()
+                }
+                return results
+            }
+            for (ip, host) in resolved {
+                resolvedForIP[ip] = host
+                cacheResult(ip: ip, host: host)
             }
         }
 
@@ -136,16 +211,25 @@ actor NetworkTrafficMonitor {
 
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()   // suppress stderr (permission-denied lines for other users' sockets)
+        process.standardError = FileHandle.nullDevice   // lsof writes permission-denied lines for other users' sockets here; an unread Pipe() fills and deadlocks exactly like stdout
 
         do {
             try process.run()
-            process.waitUntilExit()
         } catch {
             return []
         }
 
+        // Drain BEFORE waiting. `lsof -i -n -P` on a machine with a browser open
+        // routinely emits well over the 64 KB pipe buffer; once it fills, lsof
+        // blocks in write(2) while Halo blocks in waitUntilExit() and neither can
+        // progress. The actor wedges permanently — and because `startPolling()`
+        // awaits `snapshot()` on a 2 s loop, `pollTask.cancel()` cannot interrupt
+        // a thread parked in waitUntilExit(), so the zombie lsof stays resident.
+        //
+        // `readDataToEndOfFile()` returns when the child closes its end at exit,
+        // so this both collects the output and waits.
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
         guard let output = String(data: data, encoding: .utf8) else { return [] }
 
         return Self.parseLsofOutput(output)
@@ -162,8 +246,18 @@ actor NetworkTrafficMonitor {
             let parts = line.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
             guard parts.count >= 9 else { continue }
 
-            let processName = parts[0]
-            guard let pid = Int32(parts[1]) else { continue }
+            // `lsof` truncates COMMAND to 9 characters but does NOT remove
+            // embedded spaces — "Google Ch", "Microsoft", "Adobe Des". Assuming
+            // COMMAND is a single token made `parts[1]` a name fragment rather
+            // than the PID, so `Int32(parts[1])` returned nil and the row was
+            // dropped silently. The browsers users most want to see were the
+            // ones most likely to vanish.
+            //
+            // Scan forward to the first all-numeric token instead; everything
+            // before it is the name.
+            guard let pidIndex = parts.indices.first(where: { Int32(parts[$0]) != nil && $0 > 0 }),
+                  let pid = Int32(parts[pidIndex]) else { continue }
+            let processName = parts[0..<pidIndex].joined(separator: " ")
 
             guard let protoIndex = parts.firstIndex(where: { $0 == "TCP" || $0 == "UDP" }),
                   protoIndex + 1 < parts.count else { continue }
@@ -186,7 +280,12 @@ actor NetworkTrafficMonitor {
             }
 
             entries.append(NetworkConnectionEntry(
-                id: UUID(),
+                // Composite key, not a fresh UUID. `snapshot()` rebuilds every
+                // entry each poll, so a generated id made ForEach treat every
+                // row as new every 2 seconds — rows torn down and rebuilt,
+                // hover and selection state lost, diffing degenerate. This is
+                // the same key already used for deduplication.
+                id: "\(pid):\(ip):\(port):\(protocolType)",
                 pid: pid,
                 processName: processName,
                 remoteIP: ip,
@@ -245,16 +344,25 @@ actor NetworkTrafficMonitor {
 
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()
+        process.standardError = FileHandle.nullDevice   // an unread Pipe() fills and deadlocks exactly like stdout
 
         do {
             try process.run()
-            process.waitUntilExit()
         } catch {
             return []
         }
 
+        // Drain BEFORE waiting. `lsof -i -n -P` on a machine with a browser open
+        // routinely emits well over the 64 KB pipe buffer; once it fills, lsof
+        // blocks in write(2) while Halo blocks in waitUntilExit() and neither can
+        // progress. The actor wedges permanently — and because `startPolling()`
+        // awaits `snapshot()` on a 2 s loop, `pollTask.cancel()` cannot interrupt
+        // a thread parked in waitUntilExit(), so the zombie lsof stays resident.
+        //
+        // `readDataToEndOfFile()` returns when the child closes its end at exit,
+        // so this both collects the output and waits.
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
         guard let output = String(data: data, encoding: .utf8) else { return [] }
 
         return Self.parseNettopOutput(output)

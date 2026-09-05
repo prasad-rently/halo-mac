@@ -17,6 +17,11 @@ struct NetworkTrafficSection: View {
     @State private var snapshot: NetworkTrafficSnapshot?
     @State private var isExpanded = false
     @State private var filterText = ""
+    /// Off by default. Resolving hostnames hands the full list of remote
+    /// endpoints this Mac is talking to to the configured DNS resolver, which
+    /// should be the user's choice rather than a side effect of opening a
+    /// monitoring panel.
+    @AppStorage(NetworkTrafficMonitor.reverseDNSEnabledKey) private var resolveHostnames = false
     @State private var sortMode: TrafficSort = .recency
     @State private var pollTask: Task<Void, Never>?
 
@@ -128,7 +133,14 @@ struct NetworkTrafficSection: View {
                         .accessibilityIdentifier("performance.networkTraffic.list")
                     }
 
-                    Text("Remote Host is best-effort reverse DNS on the real IP address — many hosts (CDNs, load balancers) resolve to a generic infrastructure name rather than the domain you'd recognize, or don't resolve at all; unresolved hosts are never flagged as suspicious. Data totals are real per-app session figures from nettop — macOS doesn't expose per-connection byte counts to third-party apps.")
+                    Toggle("Resolve remote hostnames (sends DNS queries)", isOn: $resolveHostnames)
+                        .font(HaloFont.body(11))
+                        .foregroundColor(.haloText2)
+                        .toggleStyle(.switch)
+                        .controlSize(.mini)
+                        .accessibilityIdentifier("performance.networkTraffic.resolveHostnames")
+
+                    Text("Remote Host lookups are off by default. Turning them on sends a reverse-DNS query to your configured DNS resolver — usually your ISP's — for every remote address your Mac is connected to, so that resolver sees the list. Results are best-effort: many hosts (CDNs, load balancers) resolve to a generic infrastructure name rather than the domain you'd recognize, or don't resolve at all; unresolved hosts are never flagged as suspicious. Data totals are real per-app session figures from nettop — macOS doesn't expose per-connection byte counts to third-party apps.")
                         .font(HaloFont.body(10))
                         .foregroundColor(.haloText3)
                         .fixedSize(horizontal: false, vertical: true)
@@ -163,10 +175,13 @@ struct NetworkTrafficSection: View {
 // MARK: - Rows
 
 private struct TrafficHeaderRow: View {
+    @AppStorage(NetworkTrafficMonitor.reverseDNSEnabledKey) private var resolveHostnames = false
+
     var body: some View {
         HStack(spacing: 8) {
             Text("App").frame(width: 100, alignment: .leading)
-            Text("Remote Host (best-effort)").frame(maxWidth: .infinity, alignment: .leading)
+            Text(resolveHostnames ? "Remote Host (best-effort)" : "Remote Host (lookups off)")
+                .frame(maxWidth: .infinity, alignment: .leading)
             Text("Proto").frame(width: 36, alignment: .leading)
             Text("Data (session)").frame(width: 90, alignment: .trailing)
             Text("Last Seen").frame(width: 64, alignment: .trailing)

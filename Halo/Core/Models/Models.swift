@@ -229,7 +229,12 @@ enum PermissionKind: String, CaseIterable {
 // tracker-domain list — an unresolved IP is never flagged.
 
 struct NetworkConnectionEntry: Identifiable, Equatable, Sendable {
-    let id: UUID
+    /// Composite `pid:ip:port:proto`, not a fresh UUID. `snapshot()` rebuilds
+    /// every entry on each 2 s poll, so a generated id made `ForEach` treat every
+    /// row as new every tick — rows torn down and rebuilt, hover and selection
+    /// state lost, diffing degenerate. This is the same key already used for
+    /// deduplication.
+    let id: String
     let pid: Int32
     let processName: String
     let remoteIP: String
