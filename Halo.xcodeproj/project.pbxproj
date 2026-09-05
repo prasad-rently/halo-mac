@@ -115,6 +115,9 @@
 		000000000000000000008056 /* BackupHealthCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008055 /* BackupHealthCard.swift */; };
 		000000000000000000008114 /* MemoryTrendTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008113 /* MemoryTrendTracker.swift */; };
 		000000000000000000008116 /* MemoryTrendsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008115 /* MemoryTrendsSection.swift */; };
+		000000000000000000008074 /* MetricsHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008073 /* MetricsHistory.swift */; };
+		000000000000000000008076 /* WeeklyDigestGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008075 /* WeeklyDigestGenerator.swift */; };
+		000000000000000000008078 /* HealthTrendCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008077 /* HealthTrendCard.swift */; };
 		000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009001 /* GetHealthScoreIntent.swift */; };
 		000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009003 /* GetCPUUsageIntent.swift */; };
 		000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009005 /* GetBatteryHealthIntent.swift */; };
@@ -151,6 +154,7 @@
 		E1840428A8042147E382FE52 /* CodeBeautifierUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 447CC440994885DF5CCA7A6A /* CodeBeautifierUITests.swift */; };
 		211137AACE082EA316D20732 /* AIAssistantUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CDCAD725F3EDB1AA147464F /* AIAssistantUITests.swift */; };
 		48D9F268088D85186495AD71 /* AlertsReportUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 256C0A5343A473D0D89FAB57 /* AlertsReportUITests.swift */; };
+		90D2886A43D44B6BA1D45C98 /* WeeklyDigestUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFC9913365F4432A9F96CD69 /* WeeklyDigestUITests.swift */; };
 		97FC4C5E35CB7030A2F01C9C /* HaloSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */; };
 		A159238AFAAA0D1EF722C664 /* ToolRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB7849370C86E175D74B077 /* ToolRegistry.swift */; };
 		A3253DC631055540204F574D /* AnthropicProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF513D5DDD7399B797BE21F2 /* AnthropicProvider.swift */; };
@@ -355,6 +359,9 @@
 		000000000000000000008055 /* BackupHealthCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/BackupHealthCard.swift; sourceTree = "<group>"; };
 		000000000000000000008113 /* MemoryTrendTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/MemoryTrendTracker.swift; sourceTree = "<group>"; };
 		000000000000000000008115 /* MemoryTrendsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/MemoryTrendsSection.swift; sourceTree = "<group>"; };
+		000000000000000000008073 /* MetricsHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/MetricsHistory.swift; sourceTree = "<group>"; };
+		000000000000000000008075 /* WeeklyDigestGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/WeeklyDigestGenerator.swift; sourceTree = "<group>"; };
+		000000000000000000008077 /* HealthTrendCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/HealthTrendCard.swift; sourceTree = "<group>"; };
 		000000000000000000009001 /* GetHealthScoreIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetHealthScoreIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009003 /* GetCPUUsageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetCPUUsageIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009005 /* GetBatteryHealthIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetBatteryHealthIntent.swift; sourceTree = "<group>"; };
@@ -397,6 +404,7 @@
 		447CC440994885DF5CCA7A6A /* CodeBeautifierUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CodeBeautifierUITests.swift; sourceTree = "<group>"; };
 		0CDCAD725F3EDB1AA147464F /* AIAssistantUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAssistantUITests.swift; sourceTree = "<group>"; };
 		256C0A5343A473D0D89FAB57 /* AlertsReportUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AlertsReportUITests.swift; sourceTree = "<group>"; };
+		FFC9913365F4432A9F96CD69 /* WeeklyDigestUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WeeklyDigestUITests.swift; sourceTree = "<group>"; };
 		94E717DB998E0BBF1AE83F94 /* HaloTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B4A92E8D0819BCF034A05DF2 /* AIKeyStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIKeyStore.swift; sourceTree = "<group>"; };
 		BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloSidebar.swift; sourceTree = "<group>"; };
@@ -490,6 +498,8 @@
 				000000000000000000008171 /* AsyncTimeout.swift */,
 				000000000000000000004013 /* ReportGenerator.swift */,
 				000000000000000000004005 /* ScanScheduler.swift */,
+				000000000000000000008073 /* MetricsHistory.swift */,
+				000000000000000000008075 /* WeeklyDigestGenerator.swift */,
 				000000000000000000003006 /* HelperClient.swift */,
 				000000000000000000001074 /* CPUDetailMonitor.swift */,
 				000000000000000000001076 /* SMCReader.swift */,
@@ -517,6 +527,7 @@
 				000000000000000000001065 /* HotkeyManager.swift */,
 				000000000000000000001038 /* DashboardView.swift */,
 				000000000000000000001098 /* NetworkSparklineCard.swift */,
+				000000000000000000008077 /* HealthTrendCard.swift */,
 				000000000000000000001102 /* GPUDashboardCard.swift */,
 				000000000000000000008055 /* BackupHealthCard.swift */,
 				000000000000000000001040 /* FilesView.swift */,
@@ -640,6 +651,7 @@
 				447CC440994885DF5CCA7A6A /* CodeBeautifierUITests.swift */,
 				0CDCAD725F3EDB1AA147464F /* AIAssistantUITests.swift */,
 				256C0A5343A473D0D89FAB57 /* AlertsReportUITests.swift */,
+				FFC9913365F4432A9F96CD69 /* WeeklyDigestUITests.swift */,
 				BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */,
 				4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */,
 				3ED172401B83B65197881BFC /* SidebarReorderUITests.swift */,
@@ -929,6 +941,8 @@
 				000000000000000000008172 /* AsyncTimeout.swift in Sources */,
 				000000000000000000004014 /* ReportGenerator.swift in Sources */,
 				000000000000000000004006 /* ScanScheduler.swift in Sources */,
+				000000000000000000008074 /* MetricsHistory.swift in Sources */,
+				000000000000000000008076 /* WeeklyDigestGenerator.swift in Sources */,
 				000000000000000000001075 /* CPUDetailMonitor.swift in Sources */,
 				000000000000000000001077 /* SMCReader.swift in Sources */,
 				000000000000000000001079 /* GPUMonitor.swift in Sources */,
@@ -947,6 +961,7 @@
 				000000000000000000001066 /* HotkeyManager.swift in Sources */,
 				000000000000000000001039 /* DashboardView.swift in Sources */,
 				000000000000000000001099 /* NetworkSparklineCard.swift in Sources */,
+				000000000000000000008078 /* HealthTrendCard.swift in Sources */,
 				000000000000000000001103 /* GPUDashboardCard.swift in Sources */,
 				000000000000000000008056 /* BackupHealthCard.swift in Sources */,
 				000000000000000000006002 /* ActionModels.swift in Sources */,
@@ -1081,6 +1096,7 @@
 				E1840428A8042147E382FE52 /* CodeBeautifierUITests.swift in Sources */,
 				211137AACE082EA316D20732 /* AIAssistantUITests.swift in Sources */,
 				48D9F268088D85186495AD71 /* AlertsReportUITests.swift in Sources */,
+				90D2886A43D44B6BA1D45C98 /* WeeklyDigestUITests.swift in Sources */,
 				97FC4C5E35CB7030A2F01C9C /* HaloSidebar.swift in Sources */,
 				0D95339BD7D85794863633C8 /* HaloUITestCase.swift in Sources */,
 				7FA28EC1DD42807C6EFD8148 /* SidebarReorderUITests.swift in Sources */,

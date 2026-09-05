@@ -348,6 +348,21 @@ codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
 
 ---
 
+## MetricsHistory / WeeklyDigestGenerator (F-029)
+
+`Halo/Core/MetricsHistory.swift` + `Halo/Core/WeeklyDigestGenerator.swift` + `Halo/Features/Dashboard/HealthTrendCard.swift`
+
+- `@MainActor final class MetricsHistory: ObservableObject` — singleton `MetricsHistory.shared`
+- Rolling store of **hourly** samples (`MetricsSample`: healthScore, diskFreeGB, top-5 RAM processes), capped at 168 (7 days), persisted to `UserDefaults["haloMetricsHistory"]` as JSON
+- Sampled by `AppState.metricsHistoryTimer` — a **dedicated 3600 s timer**, deliberately separate from the existing 2 s `metricsTimer`. Do **not** hook history sampling into the 2 s tick — same class of mistake the widget pipeline's 60 s reload timer avoids (see Widget Pipeline section above), just at a different order of magnitude (would be ~1,800x too much data for a week).
+- `AppState.recordMetricsHistorySample()` calls `ProcessMonitor.topProcesses(sortBy: .ram, limit: 5)` (already used by Performance's Top Processes section) to get real per-app RAM at sample time
+- `HealthTrendCard` — new Dashboard card (mirrors `NetworkSparklineCard`'s Swift Charts pattern) rendering the 7-day health-score sparkline from `MetricsHistory.shared.recent(days: 7)`
+- `WeeklyDigestGenerator` — `@MainActor enum`, stateless: `composeSummary(from:)` builds a `WeeklyDigestSummary` from `MetricsHistory` + `AlertLog`; `postDigestNotification(summary:)` fires the local notification with a "View Report" `UNNotificationAction`; `exportAndPresentReport(appState:)` and `shareReportPDF(appState:)` reuse `ReportGenerator` for the PDF (save panel / `NSSharingServicePicker` respectively)
+- `WeeklyDigestScheduler` — `@MainActor final class`, singleton `.shared` — `NSBackgroundActivityScheduler` wrapper, exact same pattern as `ScanScheduler` but with its own `com.halo.mac.weeklydigest` identifier so it's fully independent of the Smart Scan schedule. `start(appState:)` called once from `HaloApp`'s `.task`, right after `ScanScheduler.shared.start(appState:)`.
+- `DigestNotificationDelegate: NSObject, UNUserNotificationCenterDelegate` — handles the "View Report" action tap; uses `AppState.shared` rather than holding its own reference (UNUserNotificationCenterDelegate requires NSObjectProtocol, so this is a small dedicated class rather than making `AppState` itself `NSObject`-based)
+- UserDefaults keys: `"weeklyDigestEnabled"` (Bool, default `false`), `"weeklyDigestFrequency"` (`"daily"`/`"weekly"`, default `"weekly"`), `"weeklyDigestWeekday"` (Int, default `2` = Monday), `"weeklyDigestHour"` (Int, default `9`)
+- **Honesty scope (see `docs/FEATURE_ROADMAP.md` F-029 "As actually built"):** "top storage growers" is a real week-over-week disk-free delta, not a file-growth audit; "high-RAM apps" is real but hourly-sampled (not continuous); "backup status" is omitted entirely (no Time Machine integration yet — that's F-022)
+
 ## LoginItemScanner / LaunchAtLoginManager
 
 `Halo/Core/Scanner/LoginItemScanner.swift`
@@ -584,6 +599,9 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `8045` / `8046` | DriveHealthSection.swift file ref / sources build file |
 | `8053` / `8054` | TimeMachineMonitor.swift file ref / sources build file |
 | `8055` / `8056` | BackupHealthCard.swift file ref / sources build file |
+| `8073` / `8074` | MetricsHistory.swift file ref / sources build file |
+| `8075` / `8076` | WeeklyDigestGenerator.swift file ref / sources build file |
+| `8077` / `8078` | HealthTrendCard.swift file ref / sources build file |
 | `8163` / `8164` | ShellReader.swift file ref / sources build file |
 | `9001` / `9002` | GetHealthScoreIntent.swift file ref / sources build file |
 | `9003` / `9004` | GetCPUUsageIntent.swift file ref / sources build file |

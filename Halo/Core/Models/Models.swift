@@ -514,6 +514,100 @@ enum ActivityKind {
     }
 }
 
+// MARK: - Metrics History & Weekly Digest (F-029)
+
+/// One hourly snapshot used to build the 7-day health-score sparkline and the
+/// Weekly Digest. Sampled by `AppState`'s dedicated hourly timer — NOT the
+/// existing 2 s metrics timer, which would produce ~1,800x too much data for a
+/// week-long rolling history. See `MetricsHistory.swift`.
+struct MetricsSample: Codable, Identifiable {
+    let id: UUID
+    let date: Date
+    let healthScore: Int
+    let diskFreeGB: Double
+    /// Top RAM-consuming user apps at the moment of this sample — real data
+    /// from `ProcessMonitor`, sampled at the same hourly cadence (not the
+    /// continuous per-second tracking a true "top RAM apps this week" ranking
+    /// would need). Empty if the read failed.
+    let topRAMProcesses: [ProcessRAMSample]
+
+    init(id: UUID = UUID(), date: Date = Date(), healthScore: Int, diskFreeGB: Double, topRAMProcesses: [ProcessRAMSample] = []) {
+        self.id = id
+        self.date = date
+        self.healthScore = healthScore
+        self.diskFreeGB = diskFreeGB
+        self.topRAMProcesses = topRAMProcesses
+    }
+}
+
+/// A single process's RAM usage at sample time.
+struct ProcessRAMSample: Codable {
+    let name: String
+    let ramMB: Double
+}
+
+/// An app ranked by its average RAM usage across the sampled window.
+struct RankedApp: Identifiable {
+    /// The app name, not a fresh UUID — this is re-derived on every digest
+    /// composition, and the name is already the unique key it was grouped by.
+    var id: String { name }
+    let name: String
+    /// Mean RSS across the whole period, counting hours the app was not in the
+    /// top 5 as zero. See WeeklyDigestGenerator.composeSummary for why the
+    /// divisor is the period and not the hours observed.
+    let avgRAMMB: Double
+    /// How many of the period's samples actually contained this app. Lets the
+    /// UI show a one-hour spike as a spike rather than presenting it as a
+    /// weekly average.
+    var hoursObserved: Int = 0
+    var hoursInPeriod: Int = 0
+
+    /// True when the app was present for less than a quarter of the period —
+    /// its average is dominated by a short burst.
+    var isSpike: Bool {
+        guard hoursInPeriod > 0 else { return false }
+        return Double(hoursObserved) / Double(hoursInPeriod) < 0.25
+    }
+}
+
+/// Composed once per digest delivery from `MetricsHistory` + `AlertLog` +
+/// live `AppState` metrics. Every field is backed by real, on-device data —
+/// see F-029's "As actually built" note in `docs/FEATURE_ROADMAP.md` for what
+/// was deliberately simplified or omitted rather than fabricated.
+struct WeeklyDigestSummary {
+    let generatedDate: Date
+    let periodDays: Int
+
+    // Health score trend (real — MetricsHistory hourly samples)
+    let healthScoreStart: Int?
+    let healthScoreEnd: Int
+    let healthSamples: [MetricsSample]
+
+    // "Top storage growers" simplified to a real week-over-week disk-free
+    // delta rather than a fabricated file-growth audit.
+    let diskFreeStartGB: Double?
+    let diskFreeEndGB: Double
+
+    // Real per-app average RAM aggregated from hourly ProcessMonitor samples.
+    // Empty when fewer than 2 samples exist yet (fresh install).
+    let topAverageRAMApps: [RankedApp]
+
+    // AlertLog-derived event summary (real)
+    let alertsInPeriod: [AlertEntry]
+    let threatsDetectedCount: Int
+    let scansCompletedCount: Int
+
+    var healthScoreDelta: Int? {
+        guard let start = healthScoreStart else { return nil }
+        return healthScoreEnd - start
+    }
+
+    var diskFreeDeltaGB: Double? {
+        guard let start = diskFreeStartGB else { return nil }
+        return diskFreeEndGB - start
+    }
+}
+
 // MARK: - Sample Data
 
 extension ActivityEvent {
