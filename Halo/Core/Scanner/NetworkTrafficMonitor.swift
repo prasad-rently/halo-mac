@@ -81,6 +81,60 @@ actor NetworkTrafficMonitor {
     /// handles honestly as "unresolved".
     static let resolveTimeoutSeconds: TimeInterval = 1.5
 
+    /// Applies `work` to every input, with at most `limit` running at once,
+    /// keyed by input.
+    ///
+    /// Extracted from `snapshot()` so the scheduling can be tested without a
+    /// resolver. The version this replaces tracked an `inFlight` counter and
+    /// primed the group with
+    ///
+    /// ```swift
+    /// while inFlight < limit { addNext() }
+    /// ```
+    ///
+    /// where `addNext()` returned early — *without* touching `inFlight` — once
+    /// `index` reached the end of the inputs. With fewer inputs than `limit`
+    /// the condition could then never become false, so the loop spun forever on
+    /// the actor: one core at 100%, `snapshot()` never returning, and no
+    /// suspension point for `pollTask.cancel()` to act on. Both triggers were
+    /// ordinary: fewer than `limit` unique remote IPs, or — once `dnsCache` had
+    /// warmed — zero uncached IPs, which is the steady state from the second
+    /// poll onwards.
+    ///
+    /// `index` alone is the invariant here; there is no second counter to fall
+    /// out of step with it, and every loop is bounded by `inputs.count`.
+    static func mapConcurrently<Value: Sendable>(
+        _ inputs: [String],
+        limit: Int,
+        work: @escaping @Sendable (String) async -> Value
+    ) async -> [String: Value] {
+        guard !inputs.isEmpty, limit > 0 else { return [:] }
+
+        return await withTaskGroup(of: (String, Value).self) { group in
+            var results: [String: Value] = [:]
+            var index = 0
+
+            func addNext() {
+                guard index < inputs.count else { return }
+                let input = inputs[index]
+                index += 1
+                group.addTask { (input, await work(input)) }
+            }
+
+            while index < min(limit, inputs.count) { addNext() }
+
+            while let (input, value) = await group.next() {
+                // `updateValue` rather than `results[input] = value`: when
+                // `Value` is itself optional, the subscript's argument is
+                // doubly optional and the intent is easier to misread.
+                results.updateValue(value, forKey: input)
+                if Task.isCancelled { break }
+                addNext()
+            }
+            return results
+        }
+    }
+
     static func resolveHostWithTimeout(ip: String) async -> String? {
         await withTaskGroup(of: String?.self) { group in
             group.addTask { await performReverseDNS(ip: ip) }
@@ -126,30 +180,12 @@ actor NetworkTrafficMonitor {
                     uniqueIPs.append(ip)
                 }
             }
-            let resolved = await withTaskGroup(of: (String, String?).self) { group in
-                var inFlight = 0
-                var index = 0
-                var results: [String: String?] = [:]
-
-                func addNext() {
-                    guard index < uniqueIPs.count else { return }
-                    let ip = uniqueIPs[index]
-                    index += 1
-                    inFlight += 1
-                    group.addTask { (ip, await Self.resolveHostWithTimeout(ip: ip)) }
-                }
-
-                // Bounded concurrency — a resolver flooded with 150 simultaneous
-                // PTR queries is its own problem.
-                while inFlight < Self.maxConcurrentResolves { addNext() }
-
-                while let (ip, host) = await group.next() {
-                    inFlight -= 1
-                    results[ip] = host
-                    if Task.isCancelled { break }
-                    addNext()
-                }
-                return results
+            // Bounded concurrency — a resolver flooded with 150 simultaneous
+            // PTR queries is its own problem.
+            let resolved = await Self.mapConcurrently(
+                uniqueIPs, limit: Self.maxConcurrentResolves
+            ) { ip in
+                await Self.resolveHostWithTimeout(ip: ip)
             }
             for (ip, host) in resolved {
                 resolvedForIP[ip] = host

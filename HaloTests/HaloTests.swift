@@ -474,3 +474,88 @@ struct NetworkLsofParsingTests {
         #expect(NetworkTrafficMonitor.isReverseDNSEnabled == false)
     }
 }
+
+// MARK: - Bounded-concurrency scheduler
+//
+// The scheduler used to prime its task group from an `inFlight` counter that
+// stopped being incremented once the inputs ran out, so with fewer inputs than
+// the concurrency cap the priming loop never terminated — an actor pinned at
+// 100% CPU with no suspension point to cancel at. The only fixture anyone had
+// tried was "more inputs than the cap", which is the one case that worked.
+//
+// Every count at and below the cap is pinned here for that reason. Note these
+// are hang-detectors rather than assertion failures: a regression stalls the
+// suite instead of reddening it, which is an argument for a per-suite timeout
+// in CI (see P0.1).
+@Suite("NetworkTrafficMonitor bounded concurrency")
+struct NetworkTrafficMonitorConcurrencyTests {
+
+    @Test("Zero inputs returns empty rather than spinning",
+          arguments: [1, 2, 8, 64])
+    func testEmptyInputs(limit: Int) async {
+        let out = await NetworkTrafficMonitor.mapConcurrently([], limit: limit) { $0 }
+        #expect(out.isEmpty)
+    }
+
+    /// The regression case: counts strictly below the cap, plus the boundary.
+    @Test("Fewer inputs than the cap still completes",
+          arguments: [1, 2, 3, 7, 8, 9, 20])
+    func testFewerInputsThanCap(count: Int) async {
+        let inputs = (0..<count).map { "10.0.0.\($0)" }
+        let out = await NetworkTrafficMonitor.mapConcurrently(inputs, limit: 8) { "host-\($0)" }
+
+        #expect(out.count == count)
+        for ip in inputs { #expect(out[ip] == "host-\(ip)") }
+    }
+
+    @Test("Never exceeds the concurrency limit")
+    func testRespectsLimit() async {
+        let tracker = ConcurrencyTracker()
+        let inputs = (0..<40).map { "ip-\($0)" }
+
+        let out = await NetworkTrafficMonitor.mapConcurrently(inputs, limit: 5) { ip in
+            await tracker.enter()
+            // Yield so overlapping tasks actually get a chance to overlap;
+            // without this the peak could be 1 and the test would pass vacuously.
+            await Task.yield()
+            await tracker.leave()
+            return ip
+        }
+
+        #expect(out.count == 40)
+        #expect(await tracker.peak <= 5)
+        #expect(await tracker.peak > 1, "no overlap observed — the test would not detect a cap regression")
+    }
+
+    /// A nil result must be *stored* as "resolved, no hostname" rather than
+    /// dropped, otherwise the caller re-resolves it on every poll and the
+    /// negative cache never warms.
+    @Test("Optional values keep their key when nil")
+    func testNilValuesRetainKeys() async {
+        let out: [String: String?] = await NetworkTrafficMonitor.mapConcurrently(
+            ["a", "b"], limit: 4
+        ) { $0 == "a" ? "host-a" : nil }
+
+        #expect(out.count == 2)
+        #expect(out.index(forKey: "b") != nil)
+        #expect(out["b"] == .some(nil))
+    }
+
+    @Test("A non-positive limit returns empty rather than spinning")
+    func testNonPositiveLimit() async {
+        let out = await NetworkTrafficMonitor.mapConcurrently(["a", "b"], limit: 0) { $0 }
+        #expect(out.isEmpty)
+    }
+}
+
+private actor ConcurrencyTracker {
+    private var current = 0
+    private(set) var peak = 0
+
+    func enter() {
+        current += 1
+        peak = max(peak, current)
+    }
+
+    func leave() { current -= 1 }
+}
