@@ -40,6 +40,7 @@ struct AlertEntry: Identifiable, Codable {
         case "disk_smart_failing": return "xmark.octagon.fill"              // F-020
         case "backup_stale":      return "clock.badge.exclamationmark"   // F-022
         case "backup_never":      return "externaldrive.badge.questionmark"  // F-022
+        case "app_memory_high":   return "memorychip.fill"   // F-023
         default:                  return "bell.fill"
         }
     }
@@ -53,6 +54,7 @@ struct AlertEntry: Identifiable, Codable {
         case "disk_smart_warning":           return .haloAmber   // F-020
         case "disk_smart_failing":           return .haloRed     // F-020
         case "backup_stale", "backup_never": return .haloAmber   // F-022
+        case "app_memory_high":              return .haloAmber   // F-023
         default:                             return .haloAccent
         }
     }

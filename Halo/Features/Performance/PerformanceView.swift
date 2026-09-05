@@ -15,6 +15,8 @@ struct PerformanceView: View {
                 CPUCoresSection()
                 // P3-11: Top processes
                 TopProcessesSection()
+                // F-023: Memory leak & app bloat tracker
+                MemoryTrendsSection()
                 // F-039: Idle app monitor
                 IdleAppsSection()
                 // P3-04: Battery deep intel

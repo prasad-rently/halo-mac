@@ -42,6 +42,8 @@
 | [F-021](#f-021--app-usage--screen-time-analytics) | App Usage & Screen Time Analytics | 💡 Future Idea | ~3 d | none |
 | [F-022](#f-022--time-machine-backup-health-monitor) | Time Machine Backup Health Monitor | ✅ Done | ~1.5 d | AlertManager |
 | [F-023](#f-023--memory-leak--app-bloat-tracker) | Memory Leak & App Bloat Tracker | 💡 Future Idea | ~3 d | ProcessMonitor |
+| [F-022](#f-022--time-machine-backup-health-monitor) | Time Machine Backup Health Monitor | 💡 Future Idea | ~1.5 d | AlertManager |
+| [F-023](#f-023--memory-leak--app-bloat-tracker) | Memory Leak & App Bloat Tracker | ✅ Done | ~3 d | ProcessMonitor |
 | [F-024](#f-024--browser-cleaner) | Browser Cleaner | 💡 Future Idea | ~2 d | none |
 | [F-025](#f-025--duplicate-photos-finder-perceptual-hash) | Duplicate Photos Finder (pHash) | 💡 Future Idea | ~5 d | DuplicateDetector |
 | [F-026](#f-026--downloads-folder-organiser--manager) | Downloads Folder Organiser & Manager | ✅ Done | 2.5 d | AppScanner, FileSystemScanner |
@@ -1589,7 +1591,7 @@ Data sourcing deviated from the original plan for reliability: rather than parsi
 
 ## F-023 · Memory Leak & App Bloat Tracker
 
-**Status:** 💡 Future Idea  
+**Status:** ✅ Done — `feat/f023-memory-leak-tracker` branch (2026-08)  
 **Effort estimate:** 3 days  
 **Theme:** Intelligent Insights  
 **Branch naming (when ready):** `feat/f023-memory-leak-tracker`  
@@ -1612,6 +1614,30 @@ Memory leaks in long-running apps — Slack, Chrome, Electron apps, Adobe suite 
 
 ### Integration point
 New sub-section in the **Performance** module, directly below the existing Top Processes section. A "Memory Trends" tab alongside "CPU" and "RAM" in the existing picker.
+
+### As actually built
+Two deviations from the spec, both for honesty/consistency with the existing codebase rather than scope-cutting:
+
+- **JSON file, not SQLite.** This codebase has no SQLite/CoreData dependency anywhere (`AlertLog` persists its 50-item history as JSON in `UserDefaults`, following the same pattern). Introducing SQLite for one feature's ~240-samples-per-app history would be a new dependency for no real benefit at this scale, so persistence is a JSON file at `Application Support/Halo/memoryTrendHistory.json` (a dedicated file rather than `UserDefaults`, unlike `AlertLog`, because several tracked apps × 240 samples grows past what a single plist should comfortably carry in memory).
+- **Separate new section, not a picker tab.** The existing `TopProcessesSection` CPU/RAM `Picker` toggles between two views of the *same* top-10 list; Memory Trends tracks a materially different, persisted data set (all regular apps over 2 hours, not the top 10 by instantaneous CPU/RAM). Bolting a third picker option onto that control would have made it toggle between two different underlying data sources under one switch, which is more confusing than a clearly-separated sub-section directly below it — which is also literally what the spec's "Integration point" says first, before offering the tab as an alternative framing.
+
+**Leak-detection algorithm (`MemoryTrendTracker.leakStatus(for:)`)** — walks the persisted samples oldest→newest tracking a "growth streak":
+- A streak's local peak only ever moves up; a sample **more than 15% below the streak's peak** (`significantDropFraction = 0.15`) resets the streak to start at that sample. 15% was chosen as a threshold that survives normal allocator/cache churn (typically a few percent of RSS) while still catching a real "user closed some tabs" drop.
+- A gap between two consecutive samples **greater than 5× the 30 s sample interval** (`maxSampleGapSeconds = 300`) also resets the streak — across a gap that size the Mac (or Halo) was very likely asleep or quit, so "monotonic growth" can't honestly be claimed through it.
+- The **"Possible memory leak"** badge only shows once the surviving streak has lasted **more than 1 hour** (`leakWindowSeconds = 3600`) of real, densely-sampled data. Because a streak can never be older than how long Halo has actually observed the app, this single duration check also satisfies the spec's "don't flag a just-launched app" requirement — no separate "has it been running long enough" guard was needed.
+- The result is **recomputed fresh on every read**, never itself persisted or cached, so a stale "leak" flag can never survive a real RAM drop on the next sample.
+- Badge and alert copy consistently say "possible" / "consider restarting" — never "confirmed leak" — since this is a heuristic on a rolling window, not a diagnosis.
+
+**Alert threshold** — default **2 GB**, exposed as a `Stepper` (0.5 GB steps, 0.5–16 GB range) in the Memory Trends section header, persisted to `UserDefaults["memoryLeakAlertThresholdGB"]`. Wired into `AlertManager` via a new `checkAppMemory(appName:bundleID:ramMB:)` entry point (distinct from the existing `evaluate()`, which only handles one system-wide metric per kind) with its own per-bundle-ID cooldown dictionary so one app crossing the threshold doesn't suppress another's alert; a new `AlertKind.appMemoryHigh` case feeds the existing `AlertLog`.
+
+**Restart** — `NSRunningApplication.terminate()`, a 1.5 s grace period (falling back to `forceTerminate()` if the app is still around), then `NSWorkspace.shared.openApplication(at:configuration:)` using the app's persisted bundle path. Gated behind a `.confirmationDialog` per CLAUDE.md's "disruptive actions require confirmation" rule, and only offered on apps the leak badge has already flagged (not a general-purpose restart button).
+
+- `Halo/Core/Scanner/ProcessMonitor.swift` — extended (not replaced) with `AppRAMSample` + `runningAppRAMSamples()`, reusing the existing `proc_taskinfo` resident-size read, re-keyed by bundle ID instead of PID
+- `Halo/Core/Scanner/MemoryTrendTracker.swift` — `@MainActor final class`, singleton, started once from `AppState.init()`
+- `Halo/Core/Models/Models.swift` — `MemorySample`, `AppMemoryHistory`, `MemoryLeakStatus`
+- `Halo/Core/AlertManager.swift` — `checkAppMemory(appName:bundleID:ramMB:)`, `AlertKind.appMemoryHigh`
+- `Halo/Core/AlertLog.swift` — icon/color for `app_memory_high`
+- `Halo/Features/Performance/MemoryTrendsSection.swift` — new sub-section below `TopProcessesSection`
 
 ---
 

@@ -276,6 +276,7 @@ struct SettingsView: View {
     @AppStorage("enableMenuBar") private var enableMenuBar = true
     @AppStorage("scanFrequency") private var scanFrequency = "weekly"
     @AppStorage("enableAnalytics") private var enableAnalytics = false
+    @AppStorage(MemoryTrendTracker.persistenceEnabledKey) private var memoryTrendPersistence = false
     @AppStorage("clipboardHistoryLimit") private var clipboardLimit = 200
     // P3-12: thresholds
     @AppStorage("alertCPUThreshold")    private var alertCPUThreshold: Double = 0.85
@@ -354,6 +355,13 @@ struct SettingsView: View {
                 }
                 Section("Privacy") {
                     Toggle("Share anonymous analytics to improve Halo", isOn: $enableAnalytics)
+                    Toggle("Remember app memory history between launches", isOn: $memoryTrendPersistence)
+                    Text("Memory trends always work while Halo is open. This also keeps the per-app history on disk, which records which apps you run and when.")
+                        .font(HaloFont.body(11))
+                        .foregroundColor(.haloText3)
+                    Button("Clear Memory History Now", role: .destructive) {
+                        MemoryTrendTracker.shared.clearHistory()
+                    }
                 }
             }
             .tabItem { Label("General", systemImage: "gearshape") }

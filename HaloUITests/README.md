@@ -104,6 +104,7 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 | `cleanup.cleanAll.button` · `fileListView` | Cleanup |
 | `protection.scan.button` | Protection |
 | `performance.idleApp.quit.button` | Performance → Idle Apps |
+| `performance.memoryTrends.tab` · `performance.memoryTrends.row.<bundleID>` · `performance.memoryTrends.sparkline.<bundleID>` · `performance.memoryTrends.restart.<bundleID>` | Performance → Memory Trends (F-023) |
 | `applications.row.<bundleId>` · `applications.uninstall.button` · `applications.leftover.<kind>` | Applications |
 | `files.tab.<TabTitle>` | Files tab bar |
 | `files.duplicates.deleteMarked.button` | Files → Duplicates |
