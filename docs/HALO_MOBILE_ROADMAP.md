@@ -86,6 +86,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | **Cleanup** (caches/logs/trash) | ❌ | 🟡 | Sandbox: own-cache only; Android → guide to Storage settings | P3 | Assessed |
 | **Protection** (malware scan) | ❌ | 🟡 | iOS blocks scanning; Android limited pkg/file heuristics | P3 | Assessed |
 | **Performance — top processes** | ❌ | ❌ | No public live-process enumeration | — | Won't do |
+| Performance — **memory leak tracker (F-023)** | ❌ | ❌ | Extends top-processes' per-app RAM sampling — same blocked capability (no public API on either OS to read another app's resident memory over time) | — | Won't do |
 | Performance — login items | ❌ | ❌ | No equivalent concept | — | Won't do |
 | Performance — VPN detection | ✅ | ✅ | NetworkExtension / ConnectivityManager | P2 | Assessed |
 | Performance — **speed test** | ✅ | ✅ | Socket-based; fully portable | P1 | Assessed |
@@ -212,6 +213,7 @@ Copy this block into a study when assessing a feature for mobile.
 
 | Date | Change |
 |------|--------|
+| 2026-08 | Desktop F-023 (Memory Leak & App Bloat Tracker) shipped. Feasibility study added (§9): Won't do — inherits the same "no public live-process enumeration" blocker as Performance — top processes, on both iOS and Android. |
 | 2026-08 | Desktop F-022 (Time Machine Backup Health Monitor) shipped. Feasibility study added (§9): Won't do / Reimagine → Time Machine has no mobile equivalent; the mobile-exclusive "iCloud Backup Health" idea (§5) is a distinct, much coarser reimagining, not a port. |
 | 2026-08 | F-020 (S.M.A.R.T. Disk Health Monitor) shipped on desktop. Feasibility study added (§9): both iOS and Android verdict ❌ Blocked — neither OS exposes SMART/drive-health data to third-party apps. Row added to §3; status `Won't do`. |
 | 2026-07 | Formal feasibility studies added (§9): Code Beautifier, Snippets, Speed Test, cloud AI. |
@@ -263,6 +265,16 @@ promote to `Planned` (spec) when scheduled.
 - **Effort:** iOS ~5 d · Android ~6 d (three providers + streaming + Keystore). **Dependencies:** F-049 shell; mirrors F-046 desktop architecture.
 - **Verdict:** **Port (chat) + Adapt (agentic)** → **P1**. **Recommendation:** high value on mobile; ship chat + context first, add the small mobile tool set incrementally. Consider sharing the Swift provider layer between macOS + iOS.
 
+### Feasibility — Memory Leak & App Bloat Tracker (from desktop F-023)
+- **Desktop capability:** `MemoryTrendTracker` samples every regular running app's RAM every 30 s via `ProcessMonitor.runningAppRAMSamples()` (macOS `proc_pidinfo`/`proc_taskinfo`), keeps a persisted rolling 2-hour history per bundle ID, flags apps with >1 hour of monotonic growth as a "possible memory leak," and offers a confirmed terminate+relaunch.
+- **iOS mechanism:** no public API lets one app read another app's resident memory — `proc_pidinfo` and friends are macOS-only, and iOS's per-process sandboxing treats "how much RAM is Slack using" as exactly the kind of cross-app introspection Apple blocks. `os_proc_available_memory()` only reports the *calling* app's own budget. Verdict ❌.
+- **Android mechanism:** `ActivityManager.getRunningAppProcesses()` has been restricted to the calling app's own processes since Android 5.0 (Lollipop) — there is no more `getProcessMemoryInfo()` cross-app query without a system/signature permission no third-party app can hold. `UsageStatsManager` reports foreground *time*, not memory. Verdict ❌.
+- **OS blockers:** identical to `Performance — top processes` (§3), which this feature is a time-series extension of — both mobile OSes consider "another app's live memory footprint" a sandbox boundary, not a permission that can be requested. There is no reduced/coarse fallback worth reimagining (unlike, say, Security Posture's one Android signal) — there is no data source at all.
+- **Permissions required:** none exist that would unlock this — not a permission gap, an API gap.
+- **Store-policy risk:** n/a — nothing to submit against a policy that could be built.
+- **Scope on mobile:** none. Reimagining this as "track my *own* app's memory" would be a different, far less useful feature (a phone can't leak Slack's memory into the user's awareness the way desktop Halo can) and isn't worth the engineering cost of a self-monitoring dashboard.
+- **Effort:** n/a. **Dependencies:** n/a.
+- **Verdict:** **Blocked** → **Won't do**. **Recommendation:** do not build a mobile equivalent — the exact same OS-level blocker as `Performance — top processes`, which this feature is layered on top of on desktop. Revisit only if a future OS version ships a legitimate cross-app memory-attribution API (none currently planned on either platform).
 ### Feasibility — Time Machine Backup Health Monitor (from desktop F-022)
 - **Desktop capability:** `TimeMachineMonitor` actor parses `tmutil destinationinfo` / `latestbackup` / `listbackups` / `status` (all read-only shell calls) into last-backup time, destination free space, and a 30-day backup-frequency heatmap; alerts when a configured destination goes 48h+ without a backup; "Back Up Now" triggers `tmutil startbackup`.
 - **iOS mechanism:** Time Machine is a macOS-only technology — there is no concept of a local/network backup destination, no `tmutil`-equivalent CLI, and no API exposing backup snapshot history to a third-party app. Verdict ❌.

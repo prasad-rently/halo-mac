@@ -398,6 +398,22 @@ codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
 
 ---
 
+## MemoryTrendTracker (F-023)
+
+`Halo/Core/Scanner/MemoryTrendTracker.swift` + `Halo/Features/Performance/MemoryTrendsSection.swift`
+
+- `@MainActor final class MemoryTrendTracker: ObservableObject` — singleton `MemoryTrendTracker.shared`, started once via `MemoryTrendTracker.shared.start()` from `AppState.init()` (same pattern as `ScanScheduler.shared.start(appState:)`). Runs continuously regardless of whether the Performance view is visible — unlike `TopProcessesSection`'s view-lifetime timer, leak detection needs an uninterrupted sample history.
+- **EXTENDS, not replaces**, the existing `ProcessMonitor` — adds `ProcessMonitor.AppRAMSample` + `func runningAppRAMSamples() -> [AppRAMSample]`, which reuses the same `proc_taskinfo` resident-size read as the Top Processes list but re-keys by **bundle ID** (via `NSRunningApplication`) instead of PID, and skips the CPU-delta bookkeeping F-023 doesn't need.
+- Samples every **30 s**, rolling **2-hour** window per app (`AppMemoryHistory.samples: [MemorySample]`, ~240 samples/app at steady state).
+- **Persistence:** JSON file at `Application Support/Halo/memoryTrendHistory.json` — **not** UserDefaults, because ~240 samples × several tracked apps grows past what a single plist should carry (UserDefaults is loaded entirely into memory as one plist; a dedicated file scales better). Not SQLite either — this codebase has no SQLite/CoreData dependency (see `AlertLog` for the same JSON-in-UserDefaults precedent this pattern extends to a file).
+- **Leak detection — `func leakStatus(for:) -> MemoryLeakStatus`:** walks samples oldest→newest tracking a monotonic-growth "streak". Concrete thresholds (documented in-source and in `docs/FEATURE_ROADMAP.md`'s F-023 "As actually built"):
+  - `significantDropFraction = 0.15` — a **>15% drop from the streak's local peak** resets the streak.
+  - `maxSampleGapSeconds = 300` (5× the sample interval) — an observation gap bigger than this also resets the streak (Halo/the Mac was very likely asleep across it, so "monotonic" can't be claimed through it).
+  - `leakWindowSeconds = 3600` — the surviving streak must span **more than 1 hour of real data** before the "Possible memory leak" badge shows. Because a streak can never outlast how long the app has actually been observed, this single check also satisfies "don't flag a just-launched app" — no separate guard needed.
+  - Result is **always recomputed fresh** from persisted samples — never cached/persisted itself — so a stale flag can never survive a real RAM drop.
+- **Alert:** `AlertManager.checkAppMemory(appName:bundleID:ramMB:)` — a **new** entry point (distinct from `evaluate()`) called after every 30 s sample round, with its own `lastFiredPerApp: [String: Date]` cooldown dictionary keyed by bundle ID so one app crossing the threshold doesn't suppress another's alert. Default threshold **2 GB**, user-configurable via `UserDefaults["memoryLeakAlertThresholdGB"]` (exposed as a `Stepper` in `MemoryTrendsSection`). New `AlertManager.AlertKind.appMemoryHigh` case; `AlertLog` icon `memorychip.fill` / color `.haloAmber`.
+- **Restart:** `MemoryTrendTracker.restart(_:)` — `NSRunningApplication.terminate()` then, after a 1.5 s grace period (falling back to `forceTerminate()` if still running), `NSWorkspace.shared.openApplication(at:configuration:)` using the persisted `bundlePath`. **Always gated behind a `.confirmationDialog`** in `MemoryTrendsSection` (CLAUDE.md's "disruptive actions require confirmation" rule — terminating another app counts, even when the goal is to relaunch it), and only offered on apps the badge has flagged.
+- `MemoryTrendsSection` — sub-section directly below `TopProcessesSection` in `PerformanceView`; per-app sparkline via Swift `Charts` (same `AreaMark`/`LineMark` pattern as `NetworkSparklineCard`), badge + "Restart App" button only on flagged rows, filters out sub-50 MB helper processes as noise.
 ## SMARTDiskMonitor (F-020)
 
 `Halo/Core/Scanner/SMARTDiskMonitor.swift` + `Halo/Features/Files/DriveHealthSection.swift`
@@ -513,6 +529,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | Alert History | ✅ | AlertLog | AlertManager | — |
 | Report Export | ✅ | ReportGenerator | — | — |
 | Siri Shortcuts | ✅ | HaloShortcutsProvider | 8 AppIntents | — |
+| Performance (Memory Trends) | ✅ | MemoryTrendTracker (self-published) | ProcessMonitor.runningAppRAMSamples() | — |
 
 ---
 
@@ -561,6 +578,8 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `8025` / `8026` | SnippetEditorView.swift file ref / sources build file |
 | `8027` / `8028` | SnippetListSection.swift file ref / sources build file |
 | `8029` / `8030` | ActionShareManager.swift file ref / sources build file |
+| `8031` / `8032` | MemoryTrendTracker.swift file ref / sources build file |
+| `8033` / `8034` | MemoryTrendsSection.swift file ref / sources build file |
 | `8043` / `8044` | SMARTDiskMonitor.swift file ref / sources build file |
 | `8045` / `8046` | DriveHealthSection.swift file ref / sources build file |
 | `8053` / `8054` | TimeMachineMonitor.swift file ref / sources build file |

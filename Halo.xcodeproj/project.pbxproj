@@ -111,6 +111,8 @@
 		000000000000000000008026 /* SnippetEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008025 /* SnippetEditorView.swift */; };
 		000000000000000000008028 /* SnippetListSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008027 /* SnippetListSection.swift */; };
 		000000000000000000008030 /* ActionShareManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008029 /* ActionShareManager.swift */; };
+		000000000000000000008114 /* MemoryTrendTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008113 /* MemoryTrendTracker.swift */; };
+		000000000000000000008116 /* MemoryTrendsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008115 /* MemoryTrendsSection.swift */; };
 		000000000000000000008054 /* TimeMachineMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008053 /* TimeMachineMonitor.swift */; };
 		000000000000000000008056 /* BackupHealthCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008055 /* BackupHealthCard.swift */; };
 		000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009001 /* GetHealthScoreIntent.swift */; };
@@ -349,6 +351,8 @@
 		000000000000000000008025 /* SnippetEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/SnippetEditorView.swift; sourceTree = "<group>"; };
 		000000000000000000008027 /* SnippetListSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/SnippetListSection.swift; sourceTree = "<group>"; };
 		000000000000000000008029 /* ActionShareManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/ActionShareManager.swift; sourceTree = "<group>"; };
+		000000000000000000008113 /* MemoryTrendTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/MemoryTrendTracker.swift; sourceTree = "<group>"; };
+		000000000000000000008115 /* MemoryTrendsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/MemoryTrendsSection.swift; sourceTree = "<group>"; };
 		000000000000000000008053 /* TimeMachineMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/TimeMachineMonitor.swift; sourceTree = "<group>"; };
 		000000000000000000008055 /* BackupHealthCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/BackupHealthCard.swift; sourceTree = "<group>"; };
 		000000000000000000009001 /* GetHealthScoreIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetHealthScoreIntent.swift; sourceTree = "<group>"; };
@@ -497,6 +501,7 @@
 				000000000000000000008043 /* SMARTDiskMonitor.swift */,
 				000000000000000000008001 /* PortScanner.swift */,
 				000000000000000000008019 /* IdleAppMonitor.swift */,
+				000000000000000000008113 /* MemoryTrendTracker.swift */,
 				000000000000000000008053 /* TimeMachineMonitor.swift */,
 				000000000000000000001030 /* DesignSystem.swift */,
 				000000000000000000008011 /* CelebrationOverlay.swift */,
@@ -526,6 +531,7 @@
 				000000000000000000001092 /* BatteryDetailSection.swift */,
 				000000000000000000001094 /* NetworkDetailSection.swift */,
 				000000000000000000001096 /* TopProcessesSection.swift */,
+				000000000000000000008115 /* MemoryTrendsSection.swift */,
 				000000000000000000008021 /* IdleAppsSection.swift */,
 				000000000000000000008029 /* ActionShareManager.swift */,
 				000000000000000000008013 /* CodeBeautifierView.swift */,
@@ -975,6 +981,7 @@
 				000000000000000000008026 /* SnippetEditorView.swift in Sources */,
 				000000000000000000008028 /* SnippetListSection.swift in Sources */,
 				000000000000000000008030 /* ActionShareManager.swift in Sources */,
+				000000000000000000008114 /* MemoryTrendTracker.swift in Sources */,
 				000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */,
 				000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */,
 				000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */,
@@ -998,6 +1005,7 @@
 				000000000000000000001093 /* BatteryDetailSection.swift in Sources */,
 				000000000000000000001095 /* NetworkDetailSection.swift in Sources */,
 				000000000000000000001097 /* TopProcessesSection.swift in Sources */,
+				000000000000000000008116 /* MemoryTrendsSection.swift in Sources */,
 				000000000000000000001049 /* ProtectionView.swift in Sources */,
 				000000000000000000001055 /* SmartScanView.swift in Sources */,
 				000000000000000000002021 /* HaloSharedData.swift in Sources */,

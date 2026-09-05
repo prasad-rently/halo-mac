@@ -28,6 +28,7 @@ struct AlertEntry: Identifiable, Codable {
         case "battery_low":       return "battery.25"
         case "battery_critical":  return "battery.0"
         case "charging_done":     return "bolt.fill"
+        case "app_memory_high":   return "memorychip.fill"   // F-023
         case "backup_stale":      return "clock.badge.exclamationmark"   // F-022
         case "backup_never":      return "externaldrive.badge.questionmark"  // F-022
         // Severity-shaped rather than drive-shaped, deliberately. The obvious
@@ -50,6 +51,7 @@ struct AlertEntry: Identifiable, Codable {
         case "disk_low", "battery_low":      return .haloAmber
         case "battery_critical":             return .haloRed
         case "charging_done":                return .haloGreen
+        case "app_memory_high":              return .haloAmber   // F-023
         case "backup_stale", "backup_never": return .haloAmber   // F-022
         case "disk_smart_warning":           return .haloAmber   // F-020
         case "disk_smart_failing":           return .haloRed     // F-020

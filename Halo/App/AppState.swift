@@ -145,6 +145,10 @@ final class AppState: ObservableObject {
         startTimeMachineMonitoring()
         startSMARTMonitoring()
         AlertManager.requestPermission()
+        // F-023: per-app RAM history sampling — runs continuously (not tied to
+        // the Performance view's lifetime) since leak detection needs an
+        // uninterrupted sample history.
+        MemoryTrendTracker.shared.start()
     }
 
     // MARK: - Metrics Polling
