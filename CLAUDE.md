@@ -60,6 +60,7 @@ Halo/
 │   │       ├── PrivacyExposureScanner.swift  actor; scans Downloads/Documents/Desktop for exposed secrets (F-018)
 │   │       └── PrivacyPatternDatabase.swift  actor; loads privacy-patterns.json, matches + redacts (F-018)
 │   │       └── ICloudDriveScanner.swift   actor; local ~/Library/Mobile Documents/ analyzer (F-030)
+│   │       └── PerceptualDuplicateDetector.swift  actor; DCT pHash near-duplicate photo finder (F-025)
 │   ├── DesignSystem/DesignSystem.swift   colours, components, typography
 │   ├── Intents/
 │   │   ├── GetHealthScoreIntent.swift
@@ -81,6 +82,9 @@ Halo/
 │   │   ├── Files/DriveSpeedView.swift          drive read/write benchmark screen (F-043)
 │   │   ├── Files/DriveHealthSection.swift      S.M.A.R.T. drive health card, shown in Drive Speed tab (F-020)
 │   │   ├── Files/ICloudDriveView.swift         iCloud Drive local folder analyzer screen (F-030)
+│   │   ├── Files/FilesView.swift              SpaceLens + Exact Duplicates + Similar Photos + LargeFiles + Downloads + Drive Speed tabs
+│   │   ├── Files/DriveSpeedView.swift          drive read/write benchmark screen (F-043)
+│   │   ├── Files/SimilarPhotosView.swift       perceptual-hash near-duplicate photo finder (F-025)
 │   │   ├── Clipboard/
 │   │   │   ├── ClipboardView.swift
 │   │   │   ├── ClipboardMonitor.swift
@@ -469,6 +473,19 @@ codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
 - **Real per-item sync status** via `URLResourceKey.ubiquitousItemDownloadingStatusKey` + `isUploading`/`isDownloading` — populated by the OS for any URL under a ubiquity container, no entitlement needed. Deliberately not `NSMetadataQuery`: the resource-key read is synchronous per-URL with no run-loop/notification machinery, and is equally real for this use case.
 - `func trash(_ item:) -> (success: Bool, errorMessage: String?)` — `trashItem` only, called after the mandatory confirmation dialog in `ICloudDriveView`.
 - `ICloudDriveViewModel` — breadcrumb drill-down mirrors `SpaceLensViewModel`'s navigation model (container picker instead of `NSOpenPanel`, since containers are fixed OS locations, not user-chosen folders).
+## PerceptualDuplicateDetector (F-025)
+
+`Halo/Core/Scanner/PerceptualDuplicateDetector.swift` + `Halo/Features/Files/SimilarPhotosView.swift`
+
+- `actor PerceptualDuplicateDetector` — finds *visually* similar images (near-duplicates), unlike `DuplicateDetector` which is bit-exact SHA-256. Surfaced as the **"Similar Photos"** tab in the Files module (the old "Duplicates" tab is renamed **"Exact Duplicates"**).
+- **Algorithm (standard DCT-based pHash):** 64px `ImageIO` thumbnail → 32×32 8-bit grayscale (`CGContext`) → naive separable 2-D DCT-II → top-left 8×8 low-frequency block → threshold each of the 64 AC coefficients (DC term excluded) against their median → 64-bit fingerprint.
+- `func detect(in:hammingThreshold:onProgress:) async throws -> [PhotoSimilarGroup]` — loose-file path; default threshold ≤8 of 64 bits (UI-adjustable 1–20).
+- Clustering is union-find over pairwise Hamming distance, via a generic `clusterByHash<T>` helper shared with the Photos Library path.
+- "Recommended keep": highest resolution (`megapixels`) wins; ties broken by most recent `modifiedDate`.
+- Loose-file deletion is `FileManager.trashItem` only, behind a `confirmationDialog` — never `removeItem`.
+- **Photos Library path (stretch goal, real code but NOT runtime-tested — see F-025 PR):** `photosLibraryAuthorizationStatus`, `requestPhotosLibraryAuthorization()` (real `PHPhotoLibrary.requestAuthorization(for: .readWrite)`), `detectInPhotosLibrary(hammingThreshold:assetCap:onProgress:)` (up to 3,000 most-recent `PHAsset`s via `PHImageManager`), `deletePhotosLibraryAssets(localIdentifiers:)` (`PHAssetChangeRequest.deleteAssets` → Photos "Recently Deleted", the PhotoKit equivalent of `trashItem`). Requires `com.apple.security.personal-information.photos-library` entitlement (both entitlement files) + `NSPhotoLibraryUsageDescription` (Info.plist) — all wired, but needs a real permission-grant test pass before being considered verified.
+- Models in `Models.swift`: `PhotoHashItem` / `PhotoSimilarGroup` (loose files), `PhotoAssetHashItem` / `PhotoAssetSimilarGroup` (Photos Library — no `URL`, so their own lightweight types).
+- `@MainActor SimilarPhotosViewModel` scans `~/Pictures`, `~/Downloads`, `~/Desktop` by default (or a user-chosen folder via `NSOpenPanel`), bounded to 20,000 files — same cap policy as `DuplicateFinderViewModel`.
 
 ---
 
@@ -579,6 +596,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | Files (Drive Speed) | ✅ | DriveSpeedViewModel | DriveSpeedTester + SMARTDiskMonitor (F-020) | ✅ |
 | Files (Drive Speed) | ✅ | DriveSpeedViewModel | DriveSpeedTester | ✅ |
 | Files (iCloud Drive) | ✅ | ICloudDriveViewModel | ICloudDriveScanner | — |
+| Files (Similar Photos) | ✅ | SimilarPhotosViewModel | PerceptualDuplicateDetector | — |
 | Clipboard | ✅ | ClipboardViewModel | ClipboardMonitor | ✅ |
 | Actions | ✅ | ActionsViewModel | ActionRunner + ActionLibrary | — |
 | Ports | ✅ | PortManagerViewModel | PortScanner | — |
@@ -656,6 +674,8 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `8087` / `8088` | privacy-patterns.json file ref / resource build file |
 | `8103` / `8104` | AppUsageTracker.swift file ref / sources build file |
 | `8105` / `8106` | AppUsageInsightsSection.swift file ref / sources build file |
+| `8123` / `8124` | PerceptualDuplicateDetector.swift file ref / sources build file |
+| `8125` / `8126` | SimilarPhotosView.swift file ref / sources build file |
 | `8133` / `8134` | FocusSessionManager.swift file ref / sources build file |
 | `8135` / `8136` | FocusSessionOverlayView.swift file ref / sources build file |
 | `8143` / `8144` | ICloudDriveScanner.swift file ref / sources build file |

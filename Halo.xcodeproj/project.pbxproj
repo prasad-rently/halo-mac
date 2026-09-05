@@ -129,6 +129,8 @@
 		000000000000000000008154 /* PermissionAuditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008153 /* PermissionAuditor.swift */; };
 		000000000000000000008144 /* ICloudDriveScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008143 /* ICloudDriveScanner.swift */; };
 		000000000000000000008146 /* ICloudDriveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008145 /* ICloudDriveView.swift */; };
+		000000000000000000008124 /* PerceptualDuplicateDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008123 /* PerceptualDuplicateDetector.swift */; };
+		000000000000000000008126 /* SimilarPhotosView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008125 /* SimilarPhotosView.swift */; };
 		000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009001 /* GetHealthScoreIntent.swift */; };
 		000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009003 /* GetCPUUsageIntent.swift */; };
 		000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009005 /* GetBatteryHealthIntent.swift */; };
@@ -384,6 +386,8 @@
 		000000000000000000008153 /* PermissionAuditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PermissionAuditor.swift; sourceTree = "<group>"; };
 		000000000000000000008143 /* ICloudDriveScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ICloudDriveScanner.swift; sourceTree = "<group>"; };
 		000000000000000000008145 /* ICloudDriveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/ICloudDriveView.swift; sourceTree = "<group>"; };
+		000000000000000000008123 /* PerceptualDuplicateDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PerceptualDuplicateDetector.swift; sourceTree = "<group>"; };
+		000000000000000000008125 /* SimilarPhotosView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/SimilarPhotosView.swift; sourceTree = "<group>"; };
 		000000000000000000009001 /* GetHealthScoreIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetHealthScoreIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009003 /* GetCPUUsageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetCPUUsageIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009005 /* GetBatteryHealthIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetBatteryHealthIntent.swift; sourceTree = "<group>"; };
@@ -577,6 +581,8 @@
 				000000000000000000008135 /* FocusSessionOverlayView.swift */,
 				000000000000000000008143 /* ICloudDriveScanner.swift */,
 				000000000000000000008145 /* ICloudDriveView.swift */,
+				000000000000000000008123 /* PerceptualDuplicateDetector.swift */,
+				000000000000000000008125 /* SimilarPhotosView.swift */,
 				000000000000000000008013 /* CodeBeautifierView.swift */,
 				000000000000000000008015 /* CodeTheme.swift */,
 				000000000000000000008017 /* SyntaxHighlighter.swift */,
@@ -1039,6 +1045,8 @@
 				000000000000000000008154 /* PermissionAuditor.swift in Sources */,
 				000000000000000000008144 /* ICloudDriveScanner.swift in Sources */,
 				000000000000000000008146 /* ICloudDriveView.swift in Sources */,
+				000000000000000000008124 /* PerceptualDuplicateDetector.swift in Sources */,
+				000000000000000000008126 /* SimilarPhotosView.swift in Sources */,
 				000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */,
 				000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */,
 				000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */,

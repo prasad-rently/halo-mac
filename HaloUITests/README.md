@@ -119,6 +119,7 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 | `files.downloads.row` · `files.downloads.trash.button` · `files.downloads.cleanStale.button` | Files → Downloads |
 | `files.largeFiles.row` · `files.largeFiles.trash.button` | Files → Large Files |
 | `files.driveHealth.card` · `.check.button` · `.status` · `.field.<id>` | Files → Drive Speed → Drive Health (F-020) |
+| `files.similarPhotos.scan.button` · `.scanLibrary.button` · `.deleteMarked.button` · `.deleteMarkedAssets.button` | Files → Similar Photos (F-025) |
 | `ports.row.<port>` · `ports.kill.<port>` · `ports.refresh.button` · `ports.search` | Ports |
 | `actions.newCustom.button` | Actions |
 | `ai.providerPicker` · `ai.modelPicker` · `ai.composer` · `ai.send.button` · `ai.keySetup.title` | AI Assistant |

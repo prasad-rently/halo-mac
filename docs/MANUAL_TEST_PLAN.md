@@ -558,6 +558,30 @@ Read-only S.M.A.R.T./NVMe health reader via `diskutil info -plist` + an `IONVMeC
 | **Unit** TC-FILE-U10 | P2 | `ICloudContainer.displayName` | `com~apple~CloudDocs`, `com~apple~Pages`, third-party `com~...` | "iCloud Drive" override; Apple/third-party prefixes stripped correctly |
 | **Unit** TC-FILE-U11 | P2 | `ICloudSyncStatus` presentation | Each case | Correct label/icon/color mapping |
 | **Unit** TC-FILE-U12 | P2 | `ICloudDriveItem.icon` | Various extensions + directory | Extension-based icon; directories always `folder.fill` |
+### 7.6 Similar Photos (F-025 — Duplicate Photos Finder, perceptual hash)
+
+**Files:** `PerceptualDuplicateDetector.swift`, `SimilarPhotosView.swift`
+
+Unlike Exact Duplicates (bit-exact SHA-256), this tab finds *visually* similar images — the same photo re-saved at a different compression level, cropped, or resized still "looks" the same but hashes completely differently under SHA-256. Algorithm: 64px thumbnail → 32×32 grayscale → 2-D DCT → top-left 8×8 low-frequency block, thresholded against its median → 64-bit fingerprint; near-duplicates are images whose fingerprints differ by ≤ the configured Hamming-distance threshold (default 8 of 64 bits). Loose-file deletion is `trashItem`-only, behind a confirmation dialog. The Photos Library scan path is real PhotoKit code but has **not been runtime-verified** this pass (needs a live permission-grant walkthrough) — treat it as "needs a real permission-grant test pass," not "known broken."
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-FILE-60 | P0 | Scan default locations | Open Files → Similar Photos → "Scan Pictures" | Scans `~/Pictures`, `~/Downloads`, `~/Desktop`; progress bar animates; settles into clusters or the empty state |
+| TC-FILE-61 | P1 | Choose a specific folder | Click "Choose Folder", pick a folder with known near-duplicates | Scans only that folder; clusters correctly group visually-similar images |
+| TC-FILE-62 | P1 | Similarity threshold is adjustable | Change the Stepper (1–20) | Lower = stricter (fewer/tighter matches); higher = looser (catches more, more false-positive risk) |
+| TC-FILE-63 | P0 | Recommended keep | View a cluster with mixed resolutions | Highest-resolution item is marked "recommended keep"; others marked for deletion |
+| TC-FILE-64 | P0 / TC-SAFE-02 | Delete marked requires confirmation | Click "Delete marked" on a cluster | `.confirmationDialog` ("Move N marked photos to Trash?") appears before anything happens |
+| TC-FILE-65 | P0 / TC-SAFE-02 | Cancel deletes nothing | From the dialog in TC-FILE-64, click Cancel | No files trashed; cluster and marks unchanged |
+| TC-FILE-66 | P0 | Deletion uses Trash | Confirm "Move to Trash" on a disposable test cluster | Files moved to Trash (recoverable) — never `removeItem` |
+| TC-FILE-67 | P2 | Non-image files ignored | Folder contains non-image files (docs, videos) | Only recognized image extensions (jpg/jpeg/png/heic/heif/tiff/tif/bmp/gif/webp) are hashed |
+| TC-FILE-68 | P2 | Bounded scan | Folder with >20,000 files | Scan caps at 20,000 files, same policy as Exact Duplicates |
+| TC-FILE-69 | P3 | Photos Library scan (experimental, unverified) | Click "Scan Photos Library" | System permission prompt appears; after granting, up to 3,000 most-recent assets are hashed; deleting moves assets to Photos' "Recently Deleted" |
+| **Unit** TC-FILE-U8 | P0 | `hammingDistance` counts differing bits exactly | Identical hashes; single-bit diff; all-bits-different | 0; 1; 64 |
+| **Unit** TC-FILE-U9 | P0 | `detect(in:)` — empty input, non-image files, single image | `[]`; a `.txt` file; one real image | `[]`, `[]`, `[]` respectively (never a 1-item "group") |
+| **Unit** TC-FILE-U10 | P0 | `detect(in:)` — clusters identical copies, excludes a distinct image | Two byte-identical file copies + one visually distinct image | One group containing only the identical pair |
+| **Unit** TC-FILE-U11 | P0 | `makeGroup` recommends the highest-resolution item | Two synthetic hash results, different pixel dimensions | Higher-resolution item `isRecommendedKeep`; the other `isMarkedForDeletion` |
+| **Unit** TC-FILE-U12 | P1 | `makeGroup` breaks a same-resolution tie by most recent | Two synthetic hash results, equal resolution, different `modifiedDate` | The more recently modified item is recommended to keep |
+| **Unit** TC-FILE-U13 | P1 | `PhotoSimilarGroup.wastedBytes` excludes the recommended keep | Group of 3 items, one recommended keep | Sum equals the total of the non-kept items only |
 
 ---
 
