@@ -97,6 +97,32 @@
 | **Unit** TC-DASH-U1 | P0 | `calculateHealthScore()` | Feed known CPU/RAM/disk/battery | Returns expected score; clamps 0–100 |
 | **Unit** TC-DASH-U2 | P1 | Health thresholds boundary | Values at each threshold edge | Correct deduction at boundaries (off-by-one safe) |
 
+### 2.1 Backup Health / Time Machine Monitor (F-022)
+
+**Files:** `TimeMachineMonitor.swift`, `BackupHealthCard.swift`, `AppState.startTimeMachineMonitoring()` / `refreshTimeMachineStatus()` / `startTimeMachineBackupNow()`, `AlertManager.evaluateBackup(status:)`
+
+Read-only checks via the public `tmutil` CLI (`destinationinfo`, `status`, `listbackups`, `latestbackup`) — no entitlements, no elevation. "Back Up Now" is a normal `tmutil startbackup`, identical to the menu bar icon's own action. If Time Machine has never been configured, the card must show an explicit empty state — never a fabricated "healthy" card or heatmap.
+
+| ID | Priority | Title | Preconditions | Steps | Expected |
+|----|----------|-------|---------------|-------|----------|
+| TC-DASH-09 | P0 | Not configured — honest empty state | Time Machine never set up | Open Dashboard | "Time Machine isn't set up" state; "Set Up" opens System Settings' Time Machine pane; no heatmap shown |
+| TC-DASH-10 | P0 | Configured + reachable | TM set up, destination mounted | Open Dashboard | Last backup relative time, destination name, free/total space bar, and 30-day heatmap all render |
+| TC-DASH-11 | P0 | Configured but unreachable | TM set up, backup drive unplugged | Open Dashboard | "Not currently reachable" state; last known backup date shown if any; no heatmap fabricated |
+| TC-DASH-12 | P0 | Stale backup visual + alert | Last backup > 48h ago | View card / wait for the 15-min poll | Last-backup text in red; `AlertManager.evaluateBackup` fires "Time Machine Backup Overdue" (24h cooldown) |
+| TC-DASH-13 | P1 | Recent backup is not flagged stale | Last backup < 48h ago | View card | Last-backup text in normal color; no stale alert fires |
+| TC-DASH-14 | P0 | Back Up Now | Configured + reachable | Click "Back Up Now" | Button shows "Backing Up…"/disabled while running; `tmutil startbackup` invoked; status re-polled after |
+| TC-DASH-15 | P1 | Backup already running | A TM backup is in progress (menu bar spinning) | View card | "Backing Up…" state shown; Back Up Now disabled, not double-triggerable |
+| TC-DASH-16 | P1 | Heatmap — backed-up day | A snapshot exists for a given day | View 30-day grid | That day's cell is green ("Backed up") |
+| TC-DASH-17 | P1 | Heatmap — late vs missed | 1-day gap vs 2+ day gap since the nearest prior snapshot | View grid | 1-day gap → amber ("Late"); 2+ day gap → red ("Missed") |
+| TC-DASH-18 | P0 | Heatmap — no fabricated history | Days before Halo's earliest known snapshot, or no backup history at all | View grid | Those cells are neutral gray ("No data") — never red as if a backup was missed |
+| TC-DASH-19 | P2 | 15-minute poll cadence | Leave Dashboard open | Wait / inspect | Status re-checked every 15 min (900s timer), not on the 2s metrics tick — `tmutil` is too heavy for that |
+| **Unit** TC-DASH-U3 | P0 | `heatmap()` — no history at all | Empty backup-dates array | Every day in the window is `.noData` |
+| **Unit** TC-DASH-U4 | P0 | `heatmap()` — backed-up / late / missed classification | Backup today; 1-day gap; 3-day gap | `.backedUp`, `.late`, `.missed` respectively |
+| **Unit** TC-DASH-U5 | P0 | `heatmap()` — days before earliest backup are `.noData`, not `.missed` | One backup 2 days ago, 7-day window | Day 6 (before the backup) is `.noData` |
+| **Unit** TC-DASH-U6 | P1 | `heatmap()` — window size and end date | 30-day window, referenceDate = today | Exactly 30 entries; last = today, first = 29 days ago |
+| **Unit** TC-DASH-U7 | P0 | `TimeMachineStatus.isStale` | Not configured (any date); configured + no date; configured + 47h; configured + 49h | false, false, false, true respectively |
+| **Unit** TC-DASH-U8 | P1 | `TimeMachineStatus.spaceUsedRatio` | 250/1000 bytes; missing available; missing total; zero total | 0.75; nil; nil; nil |
+
 ---
 
 ## 3. Cleanup
@@ -335,6 +361,32 @@ Concrete thresholds under test (all constants on `MemoryTrendTracker`):
 > `unlink`-ed (not trashed) immediately — the only sanctioned exception to
 > `TC-SAFE-01`. Verify no `.HaloSpeedTest` residue remains on external drives
 > after any run, cancel, or error.
+
+### 7.6 Drive Health / S.M.A.R.T. Monitor (F-020)
+
+**Files:** `SMARTDiskMonitor.swift`, `DriveHealthSection.swift` (shown in the same Drive Speed tab, below the volume picker)
+
+Read-only S.M.A.R.T./NVMe health reader via `diskutil info -plist` + an `IONVMeController` IOKit lookup for the serial number only. Every field diskutil/IOKit doesn't report renders "Not available on this drive" — never a guessed or zeroed value.
+
+| ID | Priority | Title | Preconditions | Steps | Expected |
+|----|----------|-------|---------------|-------|----------|
+| TC-FILE-50 | P0 | On-demand only | Open Drive Speed tab | View Drive Health card before tapping anything | No scan has run yet — "Tap 'Check Drive Health'..." prompt shown, not a spinner |
+| TC-FILE-51 | P0 | Run a health check | Tap "Check Drive Health" | Status settles to Good/Warning/Failing/Unknown with an icon + colored badge |
+| TC-FILE-52 | P0 | Metrics grid renders | After a scan | View the 12-field grid | Each field shows a real value or "Not available on this drive" — never blank or a guess |
+| TC-FILE-53 | P1 | NVMe sector fields | Internal Apple Silicon SSD | View Reallocated/Pending Sectors | Shows "N/A on NVMe" (not "Not available") since these are genuinely ATA-only concepts |
+| TC-FILE-54 | P0 | Lifespan bar | Drive reports a wear percentage | View "Estimated Lifespan Remaining" | Bar + percentage = 100 − NVMe's `PERCENTAGE_USED`; color: red <10%, amber <25%, else green |
+| TC-FILE-55 | P1 | Lifespan unavailable | Drive doesn't report wear % | View lifespan section | "Lifespan estimate unavailable" text, not a fabricated bar |
+| TC-FILE-56 | P1 | Temperature sparkline (internal only) | Internal boot volume selected, Halo running a while | View card | 24h chart once ≥2 samples exist; external volumes never show this section |
+| TC-FILE-57 | P1 | Re-check | Tap "Re-Check" after an initial scan | Re-runs the scan | Spinner shown briefly, values refresh |
+| TC-FILE-58 | P1 | Switching volumes re-scans | Select a different volume in the picker | Drive Health card | Auto re-scans for the newly selected volume (`scanIfNeeded`) |
+| TC-FILE-59 | P2 | Failing status alerts | Force/simulate a failing SMART status | — | `AlertManager.evaluateSMART` fires `.diskSmartFailing` (1h cooldown); `.good`/`.unknown` never fire |
+| **Unit** TC-FILE-U8 | P0 | classify() — failing status overrides everything | status=.failing + healthy-looking counters | Returns `.failing` |
+| **Unit** TC-FILE-U9 | P0 | classify() — available spare at/below threshold | spare=10, threshold=10; spare=5, threshold=10 | Both return `.failing` (NVMe spec: at-or-below threshold is critical) |
+| **Unit** TC-FILE-U10 | P0 | classify() — 100%+ wear is failing, 90-99% is only a warning | percentageUsed=100 vs 90/99 | 100 → `.failing`; 90 and 99 → `.warning` |
+| **Unit** TC-FILE-U11 | P1 | classify() — media errors and unrecognized status are warnings | mediaErrorCount=1; status=.other(...) | Both → `.warning` |
+| **Unit** TC-FILE-U12 | P0 | classify() — verified with no red flags is good; unavailable with no signal is unknown, never guessed | status=.verified, all clean vs status=.unavailable, all nil | `.good` and `.unknown` respectively |
+| **Unit** TC-FILE-U13 | P0 | nonEmpty() — the diskutil MediaName-by-mount-path gotcha | nil / "" / "   " / real value | nil, nil, nil, passthrough respectively |
+| **Unit** TC-FILE-U14 | P1 | lifespanRemainingPercent | percentageUsed nil/30/0/110 | nil / 70 / 100 / 0 (clamped, never negative) |
 
 ---
 

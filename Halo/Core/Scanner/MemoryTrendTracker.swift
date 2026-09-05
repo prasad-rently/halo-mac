@@ -88,8 +88,14 @@ final class MemoryTrendTracker: ObservableObject {
 
     // MARK: - Private
 
-    private let monitor = ProcessMonitor()
-    private let alertManager = AlertManager()
+    // `.shared`, not fresh instances (P0.3). `AlertManager`'s cooldown table is
+    // per-instance, so a private copy here would have given F-023's alerts their
+    // own cooldown independent of every other kind — the contract is meant to be
+    // global. `ProcessMonitor` coalesces sampling across callers, which only
+    // works if there is one; a private copy would also have been a third
+    // concurrent process enumeration alongside Top Processes and Focus Session.
+    private let monitor = ProcessMonitor.shared
+    private let alertManager = AlertManager.shared
     private var timer: Timer?
     private var didStart = false
     private var persistWorkItem: DispatchWorkItem?

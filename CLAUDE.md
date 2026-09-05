@@ -44,6 +44,7 @@ Halo/
 │   │   ├── AlertManager.swift       UNUserNotification + AlertLog bridge
 │   │   ├── ReportGenerator.swift    PDFKit 4-page PDF report export
 │   │   ├── ScanScheduler.swift      NSBackgroundActivityScheduler wrapper
+│   │   ├── ShellReader.swift        the ONLY place Halo spawns a Process — see gotcha 20
 │   │   └── Scanner/
 │   │       ├── SystemMonitor.swift       CPU/RAM/disk/battery/network
 │   │       ├── FileSystemScanner.swift   async actor, AsyncStream
@@ -54,7 +55,8 @@ Halo/
 │   │       ├── ProtectionScanner.swift   async; uses SignatureDatabase for threat detection
 │   │       ├── LoginItemScanner.swift    actor; enumerates LaunchAgent/Daemon plists
 │   │       ├── AppScanner.swift          actor; enumerates apps + leftover detection
-│   │       └── DriveSpeedTester.swift     actor; internal/external drive read+write benchmark (F-043)
+│   │       ├── DriveSpeedTester.swift     actor; internal/external drive read+write benchmark (F-043)
+│   │       └── SMARTDiskMonitor.swift     actor; diskutil-backed S.M.A.R.T./NVMe health reader (F-020)
 │   ├── DesignSystem/DesignSystem.swift   colours, components, typography
 │   ├── Intents/
 │   │   ├── GetHealthScoreIntent.swift
@@ -74,6 +76,7 @@ Halo/
 │   │   ├── Applications/ApplicationsView.swift AppScanner + deep uninstall
 │   │   ├── Files/FilesView.swift              SpaceLens + Duplicates + LargeFiles + Downloads + Drive Speed tabs
 │   │   ├── Files/DriveSpeedView.swift          drive read/write benchmark screen (F-043)
+│   │   ├── Files/DriveHealthSection.swift      S.M.A.R.T. drive health card, shown in Drive Speed tab (F-020)
 │   │   ├── Clipboard/
 │   │   │   ├── ClipboardView.swift
 │   │   │   ├── ClipboardMonitor.swift
@@ -411,6 +414,19 @@ codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
 - **Alert:** `AlertManager.checkAppMemory(appName:bundleID:ramMB:)` — a **new** entry point (distinct from `evaluate()`) called after every 30 s sample round, with its own `lastFiredPerApp: [String: Date]` cooldown dictionary keyed by bundle ID so one app crossing the threshold doesn't suppress another's alert. Default threshold **2 GB**, user-configurable via `UserDefaults["memoryLeakAlertThresholdGB"]` (exposed as a `Stepper` in `MemoryTrendsSection`). New `AlertManager.AlertKind.appMemoryHigh` case; `AlertLog` icon `memorychip.fill` / color `.haloAmber`.
 - **Restart:** `MemoryTrendTracker.restart(_:)` — `NSRunningApplication.terminate()` then, after a 1.5 s grace period (falling back to `forceTerminate()` if still running), `NSWorkspace.shared.openApplication(at:configuration:)` using the persisted `bundlePath`. **Always gated behind a `.confirmationDialog`** in `MemoryTrendsSection` (CLAUDE.md's "disruptive actions require confirmation" rule — terminating another app counts, even when the goal is to relaunch it), and only offered on apps the badge has flagged.
 - `MemoryTrendsSection` — sub-section directly below `TopProcessesSection` in `PerformanceView`; per-app sparkline via Swift `Charts` (same `AreaMark`/`LineMark` pattern as `NetworkSparklineCard`), badge + "Restart App" button only on flagged rows, filters out sub-50 MB helper processes as noise.
+## SMARTDiskMonitor (F-020)
+
+`Halo/Core/Scanner/SMARTDiskMonitor.swift` + `Halo/Features/Files/DriveHealthSection.swift`
+
+- `actor SMARTDiskMonitor` — read-only S.M.A.R.T./NVMe health reader. Surfaced as a **"Drive Health"** card in the Files → **Drive Speed** tab, below the volume picker (same tab as F-043, not Dashboard/Performance).
+- **Primary data path is `diskutil info -plist <path>` (a `Process` shell-out), NOT raw IOKit.** On Apple Silicon, `IOServiceMatching("IOBlockStorageDriver")` only exposes aggregate I/O `Statistics` (no SMART data), and `IONVMeBlockDevice`/`IOAHCIBlockDevice` (what the existing P3-07 `DiskHealthMonitor` in Cleanup matches against) don't resolve to any service at all — confirmed by hand with a standalone IOKit probe, this is why P3-07's panel always shows "N/A" here.
+- `IOServiceMatching("IONVMeController")` **does** work on Apple Silicon and is used only to recover the serial number (diskutil never reports one) — matched by "Model Number" against the model diskutil already gave us.
+- **Gotcha — `MediaName` is empty when queried by mount path.** `diskutil info -plist /` (or any volume mount path) returns SMART data fine but an **empty string** for `MediaName`; it's only populated when diskutil is queried by the physical whole-disk BSD id (e.g. `disk0`). `scan(path:id:)` computes `bsdWholeDiskID` anyway (for display) and now falls back to a second diskutil query against it whenever the first `MediaName` is empty — without this, `model` (and therefore the IOKit serial lookup, which matches by model) would always be `nil`.
+- **NVMe vs ATA:** reallocated/pending sector counts (ATA SMART attrs 5/197) are permanently `nil` — not a failed read, NVMe's Health Info Log has no equivalent concept. `AVAILABLE_SPARE`/`AVAILABLE_SPARE_THRESHOLD` and `MEDIA_ERRORS` are the NVMe analogs, surfaced instead. No manufacturer TBW-rating lookup table — NVMe's own `PERCENTAGE_USED` wear indicator is used directly for the lifespan-remaining bar (`100 - percentageUsed`).
+- Every field diskutil/IOKit doesn't report renders **"Not available on this drive"** in the UI — never a zeroed or guessed value.
+- `SMARTTemperatureHistory` — `@MainActor` singleton, rolling 24h sample store (max 288 samples @ 5-min cadence), persisted to `UserDefaults["haloSMARTTemperatureHistory"]`. Internal boot drive only — external drives aren't guaranteed to stay connected.
+- `AppState.startSMARTMonitoring()` — one check at launch + a 300s timer against the boot volume (`path: "/"`); feeds `SMARTTemperatureHistory.record(celsius:)` and `AlertManager.evaluateSMART(model:healthLevel:)`. `diskutil info` is cheap but there's no reason to run it on the 2s metrics loop.
+- `AlertManager.evaluateSMART` — fires `.diskSmartFailing` (1h cooldown) or `.diskSmartWarning` (24h cooldown); `.good`/`.unknown` never fire (an unreadable status isn't evidence of a problem).
 
 ---
 
@@ -438,6 +454,47 @@ enum MenuBarDisplayStyle: String, CaseIterable, Identifiable {
 
 ---
 
+## Shared singletons — AlertManager & ProcessMonitor
+
+Both are `.shared` with a **private `init`**, matching `AlertLog.shared` beside them. The private
+init is the point: it is what stops a fourth instance reappearing in the next feature branch.
+
+**`AlertManager.shared`** — `Halo/Core/AlertManager.swift`
+The `lastFired` cooldown dictionary is per-instance state, so a second `AlertManager` starts with
+an empty one and the same alert fires twice inside its own cooldown window. Every `evaluate*`
+entry point must reach the same instance for "once per day" to mean once per day.
+
+`AlertKind.rawValue` is a **persisted format**, not an implementation detail: `AlertLog` writes it
+to `UserDefaults`, and `AlertEntry.icon` / `.accentColor` switch on those exact strings. Adding a
+case is fine; renaming one silently strips the icon and colour from every alert already in a
+user's history. **A new case needs a matching arm in both `AlertEntry.icon` and
+`AlertEntry.accentColor`** — otherwise the alert renders as a generic bell. `HaloTests` enforces
+this (`AlertManagerTests`).
+
+**`ProcessMonitor.shared`** — `Halo/Core/Scanner/ProcessMonitor.swift`
+One CPU baseline for the whole app. Per-caller instances each kept their own ~600-entry
+`previousCPUInfo`, reported 0 % CPU on their first call (no baseline to diff against), and made
+two surfaces quote different CPU numbers for the same process because their sampling windows
+differed.
+
+Three things in this actor are load-bearing — do not "tidy" them away:
+
+- **The 1 s coalescing window.** Sharing one instance means two callers can land milliseconds
+  apart. Without the cache the second call computes its CPU delta over a near-zero `elapsed` and
+  every process reads ~0 %. The window is well under the fastest real caller (the 3 s Top
+  Processes timer), so that caller still re-samples every tick.
+- **`previousCPUInfo` is rebuilt, not mutated.** It used to only ever gain entries, so it kept a
+  row for every PID the app had ever seen and grew without bound.
+- **The `total >= previous` guard.** macOS recycles PIDs, so a slot can come back pointing at a
+  younger process with a smaller cumulative counter. `total - previous` is `UInt64` subtraction,
+  which **traps on underflow** — an outright crash. A shared instance holds its baseline for the
+  whole app lifetime, so it meets PID reuse far more often than a per-view instance did.
+
+One `proc_pidinfo()` per PID per sample. The previous version called it twice — once to read the
+process, once to record the CPU snapshot — doubling the syscall count of every sample.
+
+---
+
 ## Entitlements
 
 | File | Sandbox | When |
@@ -461,7 +518,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | Applications | ✅ | ApplicationsViewModel | AppScanner | — |
 | Files (SpaceLens) | ✅ | SpaceLensViewModel | — | — |
 | Files (Duplicates) | ✅ | DuplicateFinderViewModel | DuplicateDetector | ✅ |
-| Files (Drive Speed) | ✅ | DriveSpeedViewModel | DriveSpeedTester | ✅ |
+| Files (Drive Speed) | ✅ | DriveSpeedViewModel | DriveSpeedTester + SMARTDiskMonitor (F-020) | ✅ |
 | Clipboard | ✅ | ClipboardViewModel | ClipboardMonitor | ✅ |
 | Actions | ✅ | ActionsViewModel | ActionRunner + ActionLibrary | — |
 | Ports | ✅ | PortManagerViewModel | PortScanner | — |
@@ -496,6 +553,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `4009` / `4010` | AppScanner.swift file ref / sources build file |
 | `4011` / `4012` | AlertLog.swift file ref / sources build file |
 | `4013` / `4014` | ReportGenerator.swift file ref / sources build file |
+| `8171` / `8172` | AsyncTimeout.swift file ref / sources build file |
 | `5001` | Sentry in Frameworks build file |
 | `5002` | XCSwiftPackageProductDependency (Sentry) |
 | `5003` | XCRemoteSwiftPackageReference (sentry-cocoa) |
@@ -522,6 +580,11 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `8029` / `8030` | ActionShareManager.swift file ref / sources build file |
 | `8031` / `8032` | MemoryTrendTracker.swift file ref / sources build file |
 | `8033` / `8034` | MemoryTrendsSection.swift file ref / sources build file |
+| `8043` / `8044` | SMARTDiskMonitor.swift file ref / sources build file |
+| `8045` / `8046` | DriveHealthSection.swift file ref / sources build file |
+| `8053` / `8054` | TimeMachineMonitor.swift file ref / sources build file |
+| `8055` / `8056` | BackupHealthCard.swift file ref / sources build file |
+| `8163` / `8164` | ShellReader.swift file ref / sources build file |
 | `9001` / `9002` | GetHealthScoreIntent.swift file ref / sources build file |
 | `9003` / `9004` | GetCPUUsageIntent.swift file ref / sources build file |
 | `9005` / `9006` | GetBatteryHealthIntent.swift file ref / sources build file |
@@ -531,6 +594,84 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `9013` / `9014` | GetClipboardHistoryIntent.swift file ref / sources build file |
 | `9015` / `9016` | ExportReportIntent.swift file ref / sources build file |
 | `9017` / `9018` | HaloShortcutsProvider.swift file ref / sources build file |
+
+---
+
+### Reserved ID blocks — claim one before adding a file
+
+Object IDs in `project.pbxproj` are written zero-padded to 24 characters
+(`000000000000000000008163`); the table above abbreviates them to the last four
+digits. Every new source file needs **two** — a `PBXFileReference` and a
+`PBXBuildFile` — and they must be unique across the whole project.
+
+Duplicate IDs **fail quietly**. Xcode does not error on two objects sharing an ID;
+it resolves the ID to one of them, and the other file silently drops out of its
+Sources phase. The symptom arrives later as a missing symbol with nothing obvious
+connecting it to the project file.
+
+That already happened once: #21, #13 and #9 each independently picked `8031`/`8032`
+for three different scanners, because each branched off `main` and took "the next
+free pair" without seeing the others. **Pick from a free block below and add your row
+before writing the file** — the table is the only thing that makes a claim visible to
+a branch that has not merged yet.
+
+| Block | Owner | Status |
+|-------|-------|--------|
+| `8001`–`8030` | shipped features (see the table above) | taken |
+| `8031`–`8032` | F-019 Security Posture (#21) | claimed |
+| `8043`–`8046` | F-020 S.M.A.R.T. Disk Health (#20) | claimed |
+| `8053`–`8056` | F-022 Time Machine Monitor (#16) | claimed |
+| `8063`–`8066` | F-024 Browser Cleaner (#15) | claimed |
+| `8073`–`8078` | F-029 Weekly Digest (#11) | claimed |
+| `8083`–`8088` | F-018 Privacy Exposure Scanner (#18) | claimed |
+| `8093`–`8098` | F-017 Network Traffic Monitor (#17) | claimed |
+| `8103`–`8106` | F-021 App Usage Analytics (#10) | claimed |
+| `8113`–`8116` | F-023 Memory Leak Tracker (#13) | claimed — moved off `8031` |
+| `8123`–`8126` | F-025 Duplicate Photos (#19) | claimed |
+| `8133`–`8136` | F-028 Focus Session (#14) | claimed |
+| `8143`–`8146` | F-030 iCloud Drive Analyzer (#12) | claimed |
+| `8153`–`8154` | F-016 Permission Auditor (#9) | claimed — moved off `8031` |
+| `8163`–`8164` | `ShellReader` (Phase 0 / P0.2) | claimed |
+| `8171`–`8172` | `AsyncTimeout` (Phase 0 / P0.5) | claimed |
+| `8181`+ | — | **free — take the next block from here** |
+
+Auditing the whole batch for collisions:
+
+```bash
+git show main:Halo.xcodeproj/project.pbxproj | grep -oE '\b[0-9A-F]{24}\b' | sort -u > /tmp/main-ids
+for b in $(git branch --no-merged main --format='%(refname:short)'); do
+  git show "$b":Halo.xcodeproj/project.pbxproj 2>/dev/null \
+    | grep -oE '\b[0-9A-F]{24}\b' | sort -u \
+    | comm -13 /tmp/main-ids - | sed "s|$| $b|"
+done | sort > /tmp/pbx-claims
+awk '{print $1}' /tmp/pbx-claims | uniq -d | while read id; do
+  branches=($(grep "^$id " /tmp/pbx-claims | awk '{print $2}'))
+  # Inherited, not claimed twice: if the branches share an ancestor that already
+  # carries the ID, they are all looking at one object.
+  base=$(git merge-base --octopus $branches 2>/dev/null)
+  if [ -n "$base" ] && git show "$base":Halo.xcodeproj/project.pbxproj 2>/dev/null \
+       | grep -q "$id"; then
+    continue
+  fi
+  echo "$id  <-  ${branches[*]}"
+done
+```
+
+Silence means no collisions. Anything printed is claimed by more than one
+unmerged branch, and the line names them.
+
+`--no-merged main` is load-bearing: without it the scan also reports branches that
+merely share lineage — `feature/upcoming-features` descends from the already-merged
+`feature/f-043-drive-speed-test`, so they hold eight IDs in common quite legitimately.
+A check that prints eight false positives every run is one people learn to ignore.
+
+The `merge-base --octopus` step is there for the same reason, one level up. A Phase 0
+branch that adds a file and is then *merged* into feature branches puts its IDs on all
+of them legitimately — P0.5 (`AsyncTimeout`, `8171`/`8172`) is merged into both #17 and
+#19, so a naive scan reports a three-way collision on a single object. Checking whether
+the claimants share an ancestor that already carries the ID tells inheritance from a
+genuine double-claim. Two branches that independently picked the same ID have no such
+ancestor, so real collisions still print.
 
 ---
 
@@ -599,8 +740,30 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 17. **VPN detection** — use two-rule strategy: (1) definitive protocol prefixes (`ppp`, `ipsec`, `tap`), then (2) `utun` with active IPv4 AND `path.usesInterfaceType(.other)`. iCloud Private Relay uses `utun` but `.cellular`/`.wifi` path type, so rule 2 correctly excludes it.
 18. **Battery health label** — factor cycle count FIRST, then capacity ratio. Cycles < 100 → "Excellent"; < 300 → "Good"; only fall back to capacity ratio for older batteries with known cycles.
 19. **Drive speed benchmark accuracy** — the scratch fd MUST set `fcntl(fd, F_NOCACHE, 1)` (else reads measure RAM) and `fcntl(fd, F_FULLFSYNC)` after writes (else writes measure the SSD's DRAM cache). Write buffer must be random (`arc4random_buf`), not zeros — zeros let compressing controllers report fake speeds. The scratch file is `unlink`-ed (not trashed) — the only sanctioned exception to the trashItem rule, because it's Halo's own temp data that must vanish immediately.
+20. **Never hand-roll a `Process`. Use `ShellReader`.** `Halo/Core/ShellReader.swift` is the only place in the app that should spawn a subprocess, because three separate traps have to be handled together and each one was live in shipped code before it was extracted:
+    - **Pipe deadlock.** `waitUntilExit()` *before* `readDataToEndOfFile()` hangs forever once the child writes past the 64 KB pipe buffer — the child blocks in `write(2)`, the parent is parked in `waitUntilExit()`, and `Task.cancel()` cannot interrupt a thread blocked there. Measured: `lsof -i -n -P` is ~10 KB across 87 connections, so ~550 connections reaches the limit — a loaded machine, not a typical one, but unrecoverable when it happens. Reading before waiting fixes stdout only; an undrained stderr (`process.standardError = Pipe()` that nothing reads) deadlocks identically.
+    - **No timeout.** The hazard that survives fixing the pipe order. `waitUntilExit()` takes no deadline, so `lsof` on a dead NFS mount or `diskutil` on a failing drive blocks the caller forever. Every `ShellReader` call is bounded and escalates SIGTERM → SIGKILL.
+    - **Thread-pool starvation.** The natural fix — one blocking read dispatched per pipe onto `DispatchQueue.global()`, joined with a `DispatchGroup` — *also* deadlocks, and this one is subtle: each call parks two pool threads on a blocking read while a third waits on them, so once enough calls overlap the pool has no thread left to run a drain block and `leave()` is never reached. Halo genuinely has several in flight at once (AppState's SMART timer, `SystemControlsManager`'s poll loop, an AI tool call), and a parallel test run reproduced it in seconds. `ShellReader` therefore multiplexes both descriptors with `poll(2)` **on the calling thread** — no worker threads, nothing to starve. Do not "tidy" this back into a worker-per-pipe design; `HaloTests`' ShellReader suite has explicit regression tests for all three traps.
+
+    Also: `ShellReader` is synchronous and blocking by design (callers are already inside an `actor` or a detached `Task`) — **never call it from the main actor**. It reports a denied `posix_spawn` as `launchFailure`, which is how every call behaves under the release App Sandbox, so callers can distinguish "we were not allowed to ask" from "the tool found nothing". The one sanctioned exception is `ActionRunner`'s live-output path, which needs `readabilityHandler` streaming to relay stdout line-by-line to the UI and so cannot use a batch reader.
+21. **Timing out callback work** — never race a `Task.sleep` sibling inside a
+   `withTaskGroup` and take `group.next()`. It bounds the returned *value* but not
+   the *time*: `withTaskGroup` joins every child before returning, and
+   `group.cancelAll()` cannot interrupt a `withCheckedContinuation` around a
+   blocking call or a framework callback, so the group waits on the work you just
+   abandoned. Measured: a 1.5 s "ceiling" over 5 s of work returns nil after
+   5.01 s, and work that never calls back blocks forever. Use `AsyncTimeout.run`
+   (or `.runBlocking`), which resumes one continuation from whichever of the
+   callback or the deadline arrives first. Note it bounds the *caller*, not the
+   work — the abandoned operation still runs to completion.
 
 ---
+
+22. **`diskutil info -plist` by mount path returns an empty `MediaName`** — only populated when queried by the physical whole-disk BSD id (e.g. `disk0`). `SMARTDiskMonitor.scan(path:id:)` must fall back to a second `diskutil` query against the resolved whole-disk id whenever the first `MediaName` is empty, or `model` (and the IOKit serial-number lookup, which matches by model) silently comes back `nil` for every scan.
+23. **NVMe vs ATA SMART fields** — `IOBlockStorageDriver`/`IONVMeBlockDevice`/`IOAHCIBlockDevice` do not expose SMART data on Apple Silicon (confirmed via IOKit probe); only `diskutil info -plist` and `IONVMeController` (for serial number only) do. Reallocated/pending sector counts (ATA attrs 5/197) don't exist for NVMe — always `nil`, never fake a value.
+24. **`AVAILABLE_SPARE_THRESHOLD` is 99 on Apple Silicon — never compare against it literally.** Verified on this Mac: `diskutil info -plist /` reports `AVAILABLE_SPARE = 100` with `AVAILABLE_SPARE_THRESHOLD = 99`, nothing like the ~10% the NVMe spec's own examples use. A literal `spare <= threshold` check therefore declares a perfectly healthy drive **Failing** the first time spare ticks 100 → 99 on normal wear, which then fires `.diskSmartFailing` ("back up your data immediately") every hour indefinitely. `SMARTDiskInfo.classify` guards this two ways: it ignores any threshold above `maxCredibleSpareThreshold` (50) and uses the spec's strict `<` rather than `<=`, with a threshold-independent `criticalSparePercent` (10) backstop for genuinely low spare. Regression-tested in `HaloTests`.
+25. **`SMARTStatus = "Not Supported"` is the healthy state for USB/Thunderbolt enclosures, not a warning.** Verified on this Mac: an external USB SSD reports `"Not Supported"` and publishes no SMART dictionary at all, because bridge chipsets don't pass the health log through. Mapping an unrecognised status to `.warning` puts an amber badge on a perfectly good drive — `.other` must classify as `.unknown` ("can't tell"), the same discipline F-019's security checks use for values Halo cannot verify. The status check must also sit *after* the wear/spare/error checks so it can't mask a signal that was successfully read.
+26. **Card badge vs system notification are different bars.** `SMARTDiskInfo.healthLevel` drives the Drive Health card (a surface the user chose to open, so it can surface anything notable); `SMARTDiskInfo.alertLevel` is what `AlertManager.evaluateSMART` acts on and is deliberately stricter. A non-zero `MEDIA_ERRORS` count colours the badge but does **not** notify — one unrecovered read over a drive's lifetime isn't evidence of failure, and with `.diskSmartWarning`'s 24 h cooldown it would otherwise nag daily forever with no action the user can take. Pass `alertLevel`, never `healthLevel`, to `evaluateSMART`.
 
 ## Reorderable Sidebar Modules
 

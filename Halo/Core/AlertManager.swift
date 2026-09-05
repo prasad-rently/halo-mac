@@ -10,6 +10,22 @@ import UserNotifications
 @MainActor
 final class AlertManager {
 
+    // MARK: - Singleton
+    //
+    // One instance, app-wide — matching `AlertLog.shared` beside it, which this
+    // class already writes every alert into.
+    //
+    // The cooldowns in `lastFired` are the whole point of this type, and they
+    // are per-instance state: a second `AlertManager` carries its own empty
+    // dictionary, so the same alert can fire from both within the cooldown
+    // window and the user gets it twice. Features queued behind this one add
+    // their own `evaluate*` entry points (SMART disk health, Time Machine
+    // staleness, per-app memory), each called from a different subsystem — so
+    // they must all reach the same instance for "once per hour" to mean once
+    // per hour. `init` is private so it stays that way.
+    static let shared = AlertManager()
+    private init() {}
+
     // MARK: - Alert kinds
 
     enum AlertKind: String, CaseIterable {
@@ -20,6 +36,10 @@ final class AlertManager {
         case batteryCritical = "battery_critical"
         case chargingDone   = "charging_done"
         case appMemoryHigh  = "app_memory_high"   // F-023
+        case backupStale    = "backup_stale"   // F-022
+        case backupNever    = "backup_never"   // F-022
+        case diskSmartWarning = "disk_smart_warning"
+        case diskSmartFailing = "disk_smart_failing"
     }
 
     // MARK: - State
@@ -142,6 +162,71 @@ final class AlertManager {
     }
 
     // MARK: - Fire helpers
+    // MARK: - Time Machine backup health (F-022)
+
+    /// Called separately from `evaluate()` — Time Machine status comes from
+    /// `tmutil` shell calls (tens of ms each), far too heavy for the 2 s
+    /// metrics tick. `AppState` polls this on its own longer-interval timer
+    /// and passes the result in here. A 24 h cooldown makes this a genuinely
+    /// "persistent" alert — it keeps recurring daily until a backup runs,
+    /// rather than firing once and going silent.
+    func evaluateBackup(status: TimeMachineStatus) {
+        guard status.isConfigured else { return }
+
+        // Configured but nothing has ever completed. `isStale` structurally
+        // cannot catch this — it needs a lastBackupDate to measure against, so
+        // it reads `false` and the app stayed silent in exactly the case where
+        // the user is most likely to believe they are protected and not be.
+        if status.hasNeverBackedUp {
+            fire(.backupNever,
+                 title: "Time Machine Has Never Backed Up",
+                 body: "Time Machine is set up, but no backup has ever finished. Connect your backup drive to run the first one.",
+                 cooldown: 86400)
+            return
+        }
+
+        guard status.isStale, let last = status.lastBackupDate else { return }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        fire(.backupStale,
+             title: "Time Machine Backup Overdue",
+             body: "Your last backup was \(formatter.localizedString(for: last, relativeTo: Date())). Connect your backup drive or run one now.",
+             cooldown: 86400) // once per day until resolved
+    }
+
+    // MARK: - S.M.A.R.T. disk health (F-020)
+
+    /// Called from AppState's 5-minute SMART poll (not the 2 s metrics loop —
+    /// `diskutil info` is cheap but there's no reason to shell out that often).
+    /// Only ever fires for health levels Halo actually verified; `.unknown`
+    /// (SMART data unreadable) never fires an alert — an unreadable status
+    /// isn't evidence of a problem.
+    ///
+    /// Callers should pass `SMARTDiskInfo.alertLevel`, not `healthLevel` — the
+    /// former is deliberately stricter, so a condition that merely colours the
+    /// Drive Health card doesn't also push a banner at the user.
+    ///
+    /// `model` is nil when diskutil reported no MediaName; the title then omits
+    /// the dash rather than reading "Drive Health Critical — your internal drive".
+    func evaluateSMART(model: String?, healthLevel: SMARTDiskMonitor.DriveHealthLevel) {
+        let suffix = model.map { " — \($0)" } ?? ""
+        switch healthLevel {
+        case .failing:
+            fire(.diskSmartFailing,
+                 title: "Drive Health Critical\(suffix)",
+                 body: "S.M.A.R.T. reports a failing condition on your drive. Back up your data immediately.",
+                 cooldown: 3600)
+        case .warning:
+            fire(.diskSmartWarning,
+                 title: "Drive Health Warning\(suffix)",
+                 body: "S.M.A.R.T. attributes show early signs of wear. Consider backing up important files soon.",
+                 cooldown: 86400)
+        case .good, .unknown:
+            break
+        }
+    }
+
+    // MARK: - Fire helper
 
     private func fire(_ kind: AlertKind, title: String, body: String, cooldown: TimeInterval) {
         if let last = lastFired[kind], Date().timeIntervalSince(last) < cooldown { return }
