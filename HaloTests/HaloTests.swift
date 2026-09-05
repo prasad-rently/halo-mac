@@ -193,86 +193,6 @@ struct ModelTests {
     }
 }
 
-// MARK: - PhotoKit request timeout (F-025)
-//
-// The timeout used to race the PhotoKit request against a `Task.sleep` sibling
-// inside a `withTaskGroup` and return `group.next()`. That bounds the value but
-// not the time: the group waits for every child before returning, and
-// `cancelAll()` cannot interrupt a `withCheckedContinuation` waiting on a
-// callback. If PhotoKit never called back — an unavailable asset, a dropped
-// network — the caller blocked forever, which is precisely the wedge the
-// timeout was added to prevent.
-//
-// `requestHash` itself needs a real PHAsset and a photo library, so what is
-// pinned here is `withTimeout`, which carries all of the logic. The assertions
-// are on ELAPSED TIME: a value-only test passes against the broken version,
-// because both shapes return nil.
-@Suite("PerceptualDuplicateDetector request timeout")
-struct PerceptualDuplicateTimeoutTests {
-
-    /// The case that used to hang forever: PhotoKit never calls back at all.
-    @Test("A callback that never fires returns nil at the deadline")
-    func testNeverDelivered() async {
-        let started = Date()
-        let value: UInt64? = await PerceptualDuplicateDetector.withTimeout(seconds: 0.3) { _ in }
-
-        #expect(value == nil)
-        #expect(Date().timeIntervalSince(started) < 2.0)
-    }
-
-    @Test("A callback slower than the deadline releases the caller at the deadline")
-    func testSlowDeliveryDoesNotBlock() async {
-        let slowWork: TimeInterval = 3.0
-        let started = Date()
-        let value: UInt64? = await PerceptualDuplicateDetector.withTimeout(seconds: 0.3) { done in
-            DispatchQueue.global().async {
-                Thread.sleep(forTimeInterval: slowWork)
-                done(99)
-            }
-        }
-        let elapsed = Date().timeIntervalSince(started)
-
-        #expect(value == nil)
-        #expect(elapsed < slowWork / 2, "waited \(elapsed)s for an abandoned request")
-    }
-
-    @Test("A prompt result is returned immediately, not held until the deadline")
-    func testFastPathIsNotDelayed() async {
-        let started = Date()
-        let value: UInt64? = await PerceptualDuplicateDetector.withTimeout(seconds: 10) { done in
-            done(0xDEAD_BEEF)
-        }
-        #expect(value == 0xDEAD_BEEF)
-        #expect(Date().timeIntervalSince(started) < 1.0)
-    }
-
-    // PhotoKit may invoke its handler more than once — with
-    // isNetworkAccessAllowed an iCloud asset can deliver nil then a real image.
-    // A second resume on a checked continuation is a fatalError, so the process
-    // surviving these is the assertion.
-    @Test("Repeated deliveries resolve to the first and do not crash")
-    func testDoubleDeliveryTakesFirst() async {
-        let value: UInt64? = await PerceptualDuplicateDetector.withTimeout(seconds: 10) { done in
-            done(nil)
-            done(7)
-            done(8)
-        }
-        #expect(value == nil)   // the first delivery wins, even when it is nil
-    }
-
-    @Test("A delivery after the deadline is ignored rather than crashing")
-    func testLateDeliveryIgnored() async {
-        let value: UInt64? = await PerceptualDuplicateDetector.withTimeout(seconds: 0.2) { done in
-            DispatchQueue.global().async {
-                Thread.sleep(forTimeInterval: 0.5)
-                done(1)
-            }
-        }
-        #expect(value == nil)
-        try? await Task.sleep(nanoseconds: 600_000_000)   // let the late delivery land
-    }
-}
-
 // MARK: - PerceptualDuplicateDetector Tests (F-025)
 //
 // `hammingDistance` is already `nonisolated static` and directly testable.
@@ -462,5 +382,109 @@ struct PerceptualDuplicateDetectorTests {
                                    isMarkedForDeletion: true, isRecommendedKeep: false)
         let group = PhotoSimilarGroup(items: [keep, dupe1, dupe2])
         #expect(group.wastedBytes == 700)
+    }
+}
+
+
+// MARK: - AsyncTimeout
+//
+// Every assertion here is on ELAPSED TIME, deliberately. The idiom this helper
+// replaces — racing a `Task.sleep` sibling inside a `withTaskGroup` — returned
+// the correct *value* and the wrong *time*, so a test that only checked the
+// returned value passed against the broken version. Timing is the property that
+// was actually missing.
+@Suite("AsyncTimeout")
+struct AsyncTimeoutTests {
+
+    /// Bounds are generous: the gap between "released at the deadline" and
+    /// "joined the abandoned work" is seconds, not milliseconds, so there is no
+    /// need to measure tightly and invite flakiness.
+    private static let slowWork: TimeInterval = 3.0
+
+    // The case that used to hang the caller for the full duration of work it
+    // had already given up on.
+    @Test("Work slower than the deadline releases the caller at the deadline")
+    func testBoundsWallClock() async {
+        let started = Date()
+        let value: String? = await AsyncTimeout.run(seconds: 0.3) { deliver in
+            DispatchQueue.global().async {
+                Thread.sleep(forTimeInterval: Self.slowWork)   // uninterruptible
+                deliver("too-late")
+            }
+        }
+        let elapsed = Date().timeIntervalSince(started)
+
+        #expect(value == nil)
+        #expect(elapsed < Self.slowWork / 2, "waited \(elapsed)s for abandoned work")
+    }
+
+    // The worse case: no delivery ever. Under the old shape the group waited on
+    // a child that would never finish, so the caller blocked forever.
+    @Test("A callback that never fires still returns at the deadline")
+    func testNeverDelivered() async {
+        let started = Date()
+        let value: String? = await AsyncTimeout.run(seconds: 0.3) { _ in }
+
+        #expect(value == nil)
+        #expect(Date().timeIntervalSince(started) < 2.0)
+    }
+
+    @Test("A prompt result is returned immediately, not held until the deadline")
+    func testFastPathNotDelayed() async {
+        let started = Date()
+        let value: String? = await AsyncTimeout.run(seconds: 10) { $0("quick") }
+
+        #expect(value == "quick")
+        #expect(Date().timeIntervalSince(started) < 1.0)
+    }
+
+    // A second resume on a checked continuation is a fatalError, so the test
+    // process surviving is itself the assertion.
+    @Test("Repeated deliveries resolve to the first and do not crash")
+    func testRepeatedDeliveryTakesFirst() async {
+        let value: Int? = await AsyncTimeout.run(seconds: 10) { deliver in
+            deliver(1)
+            deliver(2)
+            deliver(3)
+        }
+        #expect(value == 1)
+    }
+
+    // PhotoKit delivers a placeholder then a real image; the first delivery
+    // wins even when it is nil, which is the documented behaviour of `.run`.
+    @Test("A first delivery of nil wins over a later real value")
+    func testFirstNilWins() async {
+        let value: Int? = await AsyncTimeout.run(seconds: 10) { deliver in
+            deliver(nil)
+            deliver(42)
+        }
+        #expect(value == nil)
+    }
+
+    @Test("A delivery arriving after the deadline is ignored rather than crashing")
+    func testLateDeliveryIgnored() async {
+        let value: Int? = await AsyncTimeout.run(seconds: 0.2) { deliver in
+            DispatchQueue.global().async {
+                Thread.sleep(forTimeInterval: 0.5)
+                deliver(7)
+            }
+        }
+        #expect(value == nil)
+        // Let the late delivery land while the test is still running, so a
+        // double-resume would take this process down rather than a later one.
+        try? await Task.sleep(nanoseconds: 600_000_000)
+    }
+
+    @Test("runBlocking returns a prompt value and bounds a slow one")
+    func testRunBlocking() async {
+        #expect(await AsyncTimeout.runBlocking(seconds: 10) { "done" } == "done")
+
+        let started = Date()
+        let slow: String? = await AsyncTimeout.runBlocking(seconds: 0.3) {
+            Thread.sleep(forTimeInterval: Self.slowWork)
+            return "too-late"
+        }
+        #expect(slow == nil)
+        #expect(Date().timeIntervalSince(started) < Self.slowWork / 2)
     }
 }

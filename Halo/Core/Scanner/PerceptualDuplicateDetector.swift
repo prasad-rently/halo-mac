@@ -1,5 +1,4 @@
 import Foundation
-import os
 import ImageIO
 import CoreGraphics
 import UniformTypeIdentifiers
@@ -477,12 +476,12 @@ extension PerceptualDuplicateDetector {
     ///
     /// So: a one-shot gate makes any extra callback a no-op, and the deadline
     /// resumes the *same* continuation with nil so a missing callback cannot
-    /// wedge the scan. Both live in `withTimeout` — see there for why racing a
-    /// sibling task, which is what this used to do, bounded neither.
+    /// wedge the scan. Both live in `AsyncTimeout` (P0.5) — see there for why
+    /// racing a sibling task, which is what this used to do, bounded neither.
     nonisolated private static func requestHash(
         for asset: PHAsset, imageManager: PHImageManager, options: PHImageRequestOptions
     ) async -> UInt64? {
-        await withTimeout(seconds: assetRequestTimeoutSeconds) { done in
+        await AsyncTimeout.run(seconds: assetRequestTimeoutSeconds) { done in
             imageManager.requestImage(
                 for: asset, targetSize: CGSize(width: 64, height: 64),
                 contentMode: .aspectFit, options: options
@@ -500,53 +499,6 @@ extension PerceptualDuplicateDetector {
                 }
                 done(perceptualHash(from: grid))
             }
-        }
-    }
-
-    /// Bounds `start` in wall-clock time: whichever of the callback or the
-    /// deadline arrives first wins, and the loser is ignored.
-    ///
-    /// The version this replaces raced the PhotoKit request against a
-    /// `Task.sleep` sibling inside a `withTaskGroup` and returned
-    /// `group.next()`. That bounds the *value* but not the *time*, because
-    /// `withTaskGroup` waits for every child before it returns and
-    /// `group.cancelAll()` cannot interrupt a `withCheckedContinuation` waiting
-    /// on a callback. So the timeout produced nil and the group then blocked on
-    /// the sibling — and if PhotoKit never called back at all, blocked forever.
-    /// That is the exact wedge the timeout was added to prevent: *"a timeout
-    /// resumes with nil so a missing callback cannot wedge the scan"* — it did
-    /// not resume the continuation, it resumed a sibling.
-    ///
-    /// Resuming the *same* continuation from both sides is what actually bounds
-    /// it. The one-shot gate is what makes that safe: `start` may fire any
-    /// number of times, including zero, and every call after the first is a
-    /// no-op — so a late delivery cannot double-resume (a hard trap on a checked
-    /// continuation) and a delivery that never comes cannot wedge the caller.
-    ///
-    /// The same shape exists on `NetworkTrafficMonitor` (F-017), which had the
-    /// identical defect. Worth lifting into one place once both have landed;
-    /// duplicated for now so these two PRs stay independently mergeable.
-    nonisolated static func withTimeout<Value: Sendable>(
-        seconds: TimeInterval,
-        _ start: @escaping @Sendable (@escaping @Sendable (Value?) -> Void) -> Void
-    ) async -> Value? {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Value?, Never>) in
-            let resumed = OSAllocatedUnfairLock(initialState: false)
-
-            @Sendable func resumeOnce(_ value: Value?) {
-                let alreadyResumed = resumed.withLock { wasResumed -> Bool in
-                    if wasResumed { return true }
-                    wasResumed = true
-                    return false
-                }
-                guard !alreadyResumed else { return }
-                continuation.resume(returning: value)
-            }
-
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + seconds) {
-                resumeOnce(nil)
-            }
-            start(resumeOnce)
         }
     }
 

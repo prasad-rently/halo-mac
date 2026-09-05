@@ -69,6 +69,7 @@
 		000000000000000000004008 /* LoginItemScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004007 /* LoginItemScanner.swift */; };
 		000000000000000000004010 /* AppScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004009 /* AppScanner.swift */; };
 		000000000000000000004012 /* AlertLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004011 /* AlertLog.swift */; };
+		000000000000000000008172 /* AsyncTimeout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008171 /* AsyncTimeout.swift */; };
 		000000000000000000004014 /* ReportGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004013 /* ReportGenerator.swift */; };
 		000000000000000000005001 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000005002 /* Sentry */; };
 		000000000000000000006002 /* ActionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006001 /* ActionModels.swift */; };
@@ -304,6 +305,7 @@
 		000000000000000000004007 /* LoginItemScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/LoginItemScanner.swift; sourceTree = "<group>"; };
 		000000000000000000004009 /* AppScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/AppScanner.swift; sourceTree = "<group>"; };
 		000000000000000000004011 /* AlertLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AlertLog.swift; sourceTree = "<group>"; };
+		000000000000000000008171 /* AsyncTimeout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AsyncTimeout.swift; sourceTree = "<group>"; };
 		000000000000000000004013 /* ReportGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/ReportGenerator.swift; sourceTree = "<group>"; };
 		000000000000000000006001 /* ActionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionModels.swift; sourceTree = "<group>"; };
 		000000000000000000006003 /* ActionLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionLibrary.swift; sourceTree = "<group>"; };
@@ -474,6 +476,7 @@
 				000000000000000000004009 /* AppScanner.swift */,
 				000000000000000000001072 /* AlertManager.swift */,
 				000000000000000000004011 /* AlertLog.swift */,
+				000000000000000000008171 /* AsyncTimeout.swift */,
 				000000000000000000004013 /* ReportGenerator.swift */,
 				000000000000000000004005 /* ScanScheduler.swift */,
 				000000000000000000003006 /* HelperClient.swift */,
@@ -907,6 +910,7 @@
 				000000000000000000004010 /* AppScanner.swift in Sources */,
 				000000000000000000001073 /* AlertManager.swift in Sources */,
 				000000000000000000004012 /* AlertLog.swift in Sources */,
+				000000000000000000008172 /* AsyncTimeout.swift in Sources */,
 				000000000000000000004014 /* ReportGenerator.swift in Sources */,
 				000000000000000000004006 /* ScanScheduler.swift in Sources */,
 				000000000000000000001075 /* CPUDetailMonitor.swift in Sources */,

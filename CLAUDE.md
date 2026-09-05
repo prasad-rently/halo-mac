@@ -495,6 +495,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `4009` / `4010` | AppScanner.swift file ref / sources build file |
 | `4011` / `4012` | AlertLog.swift file ref / sources build file |
 | `4013` / `4014` | ReportGenerator.swift file ref / sources build file |
+| `8171` / `8172` | AsyncTimeout.swift file ref / sources build file |
 | `5001` | Sentry in Frameworks build file |
 | `5002` | XCSwiftPackageProductDependency (Sentry) |
 | `5003` | XCRemoteSwiftPackageReference (sentry-cocoa) |
@@ -598,6 +599,17 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 17. **VPN detection** — use two-rule strategy: (1) definitive protocol prefixes (`ppp`, `ipsec`, `tap`), then (2) `utun` with active IPv4 AND `path.usesInterfaceType(.other)`. iCloud Private Relay uses `utun` but `.cellular`/`.wifi` path type, so rule 2 correctly excludes it.
 18. **Battery health label** — factor cycle count FIRST, then capacity ratio. Cycles < 100 → "Excellent"; < 300 → "Good"; only fall back to capacity ratio for older batteries with known cycles.
 19. **Drive speed benchmark accuracy** — the scratch fd MUST set `fcntl(fd, F_NOCACHE, 1)` (else reads measure RAM) and `fcntl(fd, F_FULLFSYNC)` after writes (else writes measure the SSD's DRAM cache). Write buffer must be random (`arc4random_buf`), not zeros — zeros let compressing controllers report fake speeds. The scratch file is `unlink`-ed (not trashed) — the only sanctioned exception to the trashItem rule, because it's Halo's own temp data that must vanish immediately.
+
+20. **Timing out callback work** — never race a `Task.sleep` sibling inside a
+   `withTaskGroup` and take `group.next()`. It bounds the returned *value* but not
+   the *time*: `withTaskGroup` joins every child before returning, and
+   `group.cancelAll()` cannot interrupt a `withCheckedContinuation` around a
+   blocking call or a framework callback, so the group waits on the work you just
+   abandoned. Measured: a 1.5 s "ceiling" over 5 s of work returns nil after
+   5.01 s, and work that never calls back blocks forever. Use `AsyncTimeout.run`
+   (or `.runBlocking`), which resumes one continuation from whichever of the
+   callback or the deadline arrives first. Note it bounds the *caller*, not the
+   work — the abandoned operation still runs to completion.
 
 ---
 
