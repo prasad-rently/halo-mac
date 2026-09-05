@@ -131,6 +131,8 @@
 		000000000000000000008146 /* ICloudDriveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008145 /* ICloudDriveView.swift */; };
 		000000000000000000008124 /* PerceptualDuplicateDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008123 /* PerceptualDuplicateDetector.swift */; };
 		000000000000000000008126 /* SimilarPhotosView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008125 /* SimilarPhotosView.swift */; };
+		000000000000000000008064 /* BrowserCleanerScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008063 /* BrowserCleanerScanner.swift */; };
+		000000000000000000008066 /* BrowserCleanerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008065 /* BrowserCleanerView.swift */; };
 		000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009001 /* GetHealthScoreIntent.swift */; };
 		000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009003 /* GetCPUUsageIntent.swift */; };
 		000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009005 /* GetBatteryHealthIntent.swift */; };
@@ -388,6 +390,8 @@
 		000000000000000000008145 /* ICloudDriveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/ICloudDriveView.swift; sourceTree = "<group>"; };
 		000000000000000000008123 /* PerceptualDuplicateDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PerceptualDuplicateDetector.swift; sourceTree = "<group>"; };
 		000000000000000000008125 /* SimilarPhotosView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/SimilarPhotosView.swift; sourceTree = "<group>"; };
+		000000000000000000008063 /* BrowserCleanerScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/BrowserCleanerScanner.swift; sourceTree = "<group>"; };
+		000000000000000000008065 /* BrowserCleanerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Cleanup/BrowserCleanerView.swift; sourceTree = "<group>"; };
 		000000000000000000009001 /* GetHealthScoreIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetHealthScoreIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009003 /* GetCPUUsageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetCPUUsageIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009005 /* GetBatteryHealthIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetBatteryHealthIntent.swift; sourceTree = "<group>"; };
@@ -515,6 +519,7 @@
 				000000000000000000001028 /* SystemMonitor.swift */,
 				000000000000000000001050 /* DuplicateDetector.swift */,
 				000000000000000000001070 /* ProtectionScanner.swift */,
+				000000000000000000008063 /* BrowserCleanerScanner.swift */,
 				000000000000000000004003 /* SignatureDatabase.swift */,
 				000000000000000000004007 /* LoginItemScanner.swift */,
 				000000000000000000004009 /* AppScanner.swift */,
@@ -548,6 +553,7 @@
 				000000000000000000008011 /* CelebrationOverlay.swift */,
 				000000000000000000001032 /* ApplicationsView.swift */,
 				000000000000000000001034 /* CleanupView.swift */,
+				000000000000000000008065 /* BrowserCleanerView.swift */,
 				000000000000000000001100 /* DiskHealthSection.swift */,
 				000000000000000000001052 /* ClipboardMonitor.swift */,
 				000000000000000000001067 /* ClipboardQuickPickerView.swift */,
@@ -972,6 +978,7 @@
 				000000000000000000001029 /* SystemMonitor.swift in Sources */,
 				000000000000000000001051 /* DuplicateDetector.swift in Sources */,
 				000000000000000000001071 /* ProtectionScanner.swift in Sources */,
+				000000000000000000008064 /* BrowserCleanerScanner.swift in Sources */,
 				000000000000000000004004 /* SignatureDatabase.swift in Sources */,
 				000000000000000000004008 /* LoginItemScanner.swift in Sources */,
 				000000000000000000004010 /* AppScanner.swift in Sources */,
@@ -994,6 +1001,7 @@
 				000000000000000000001031 /* DesignSystem.swift in Sources */,
 				000000000000000000001033 /* ApplicationsView.swift in Sources */,
 				000000000000000000001035 /* CleanupView.swift in Sources */,
+				000000000000000000008066 /* BrowserCleanerView.swift in Sources */,
 				000000000000000000001101 /* DiskHealthSection.swift in Sources */,
 				000000000000000000001053 /* ClipboardMonitor.swift in Sources */,
 				000000000000000000001068 /* ClipboardQuickPickerView.swift in Sources */,

@@ -105,6 +105,7 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 | `settings.appUsageTracking.toggle` · `.clearHistory.button` | Settings → General → Privacy (F-021) |
 | `dashboard.focusSession.start` · `.end` · `dashboard.focusHistory` | Dashboard → Focus Session (F-028) |
 | `cleanup.cleanAll.button` · `fileListView` | Cleanup |
+| `cleanup.category.browsers.button` · `browserCleaner.cleanAll.button` · `browserCleaner.clearSelected.button` | Cleanup → Browsers (F-024) |
 | `protection.scan.button` | Protection |
 | `protection.securityPosture.score` · `protection.securityPosture.list` · `protection.securityPosture.check.<slug>` (`.state` / `.fix`) | Protection → Security Posture (F-019) |
 | `protection.privacyscan.button` · `.icloudToggle` · `.status` · `.findings.list` · `.emptyState` · `.row.<id>` · `.reveal.<id>` | Protection → Sensitive Data Scanner (F-018) |

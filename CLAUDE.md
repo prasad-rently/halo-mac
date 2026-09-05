@@ -61,6 +61,7 @@ Halo/
 │   │       └── PrivacyPatternDatabase.swift  actor; loads privacy-patterns.json, matches + redacts (F-018)
 │   │       └── ICloudDriveScanner.swift   actor; local ~/Library/Mobile Documents/ analyzer (F-030)
 │   │       └── PerceptualDuplicateDetector.swift  actor; DCT pHash near-duplicate photo finder (F-025)
+│   │       └── BrowserCleanerScanner.swift actor; per-category browser data detect/measure/clear (F-024)
 │   ├── DesignSystem/DesignSystem.swift   colours, components, typography
 │   ├── Intents/
 │   │   ├── GetHealthScoreIntent.swift
@@ -75,6 +76,7 @@ Halo/
 │   ├── Features/
 │   │   ├── Dashboard/DashboardView.swift      health score, metrics, AlertHistorySection, Export Report
 │   │   ├── Cleanup/CleanupView.swift
+│   │   ├── Cleanup/BrowserCleanerView.swift    "Browsers" tab (F-024)
 │   │   ├── Protection/ProtectionView.swift
 │   │   ├── Performance/PerformanceView.swift  login items via LoginItemScanner
 │   │   ├── Applications/ApplicationsView.swift AppScanner + deep uninstall
@@ -156,6 +158,7 @@ actor ScanCoordinator { ... }
 actor SignatureDatabase { ... }
 actor LoginItemScanner { ... }
 actor AppScanner { ... }
+actor BrowserCleanerScanner { ... }
 ```
 
 ### File deletion — mandatory rule
@@ -486,6 +489,21 @@ codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
 - **Photos Library path (stretch goal, real code but NOT runtime-tested — see F-025 PR):** `photosLibraryAuthorizationStatus`, `requestPhotosLibraryAuthorization()` (real `PHPhotoLibrary.requestAuthorization(for: .readWrite)`), `detectInPhotosLibrary(hammingThreshold:assetCap:onProgress:)` (up to 3,000 most-recent `PHAsset`s via `PHImageManager`), `deletePhotosLibraryAssets(localIdentifiers:)` (`PHAssetChangeRequest.deleteAssets` → Photos "Recently Deleted", the PhotoKit equivalent of `trashItem`). Requires `com.apple.security.personal-information.photos-library` entitlement (both entitlement files) + `NSPhotoLibraryUsageDescription` (Info.plist) — all wired, but needs a real permission-grant test pass before being considered verified.
 - Models in `Models.swift`: `PhotoHashItem` / `PhotoSimilarGroup` (loose files), `PhotoAssetHashItem` / `PhotoAssetSimilarGroup` (Photos Library — no `URL`, so their own lightweight types).
 - `@MainActor SimilarPhotosViewModel` scans `~/Pictures`, `~/Downloads`, `~/Desktop` by default (or a user-chosen folder via `NSOpenPanel`), bounded to 20,000 files — same cap policy as `DuplicateFinderViewModel`.
+## BrowserCleanerScanner (F-024)
+
+`Halo/Core/Scanner/BrowserCleanerScanner.swift` + `Halo/Features/Cleanup/BrowserCleanerView.swift`
+
+- `actor BrowserCleanerScanner` — per-category browser data detect/measure/clear. Surfaced as the **"Browsers"** tab in the Cleanup module. More granular sibling to `ProtectionScanner.detectInstalledBrowsers()`'s whole-browser "clear everything" model (that model is untouched).
+- `func detectBrowsers() -> [BrowserProfile]` — filters candidates to only browsers actually installed at their `/Applications/<Name>.app` path.
+- `func measure(_ profile: BrowserProfile) -> BrowserProfile` — fills in real on-disk sizes per category.
+- `func clear(_ profile:categories:) -> (cleared: Int, freed: Int64, error: String?)` — `trashItem`-only; only called after the review sheet is confirmed.
+- **Browsers covered:** Safari, Google Chrome, Arc, Brave, Microsoft Edge, Opera, Vivaldi, Firefox — detection is dynamic (`FileManager.fileExists`), not hardcoded to what's on the dev machine.
+- **Chromium profile discovery is dynamic** (`chromiumProfileDirs`) — real installs commonly have several (`Default`, `Profile 1`, `Profile 2`, …); falls back to `["Default"]` if the user-data root can't be read yet.
+- **Firefox profile discovery is dynamic** (`firefoxProfileDirs`) — profile folder names are randomized (`<hash>.default-release`), so they're listed rather than assumed.
+- **Path confidence levels (see source comments):** Chrome + Arc paths verified live via `ls`/`find` on the dev machine; Safari paths reused verbatim from `ProtectionScanner`; Brave/Edge/Opera/Vivaldi/Firefox paths are long-stable, documented vendor file names but **unverified live** (not installed on the dev machine) — do not assume they're wrong, but don't assume they're bug-for-bug verified either.
+- `BrowserDataCategory` cases in `Models.swift`: `.httpCache`, `.gpuCache`, `.history`, `.cookies`, `.sessions`, `.crashReports`, `.webStorage`, `.downloadHistory` — not every browser gets every category (e.g. Safari has no `.gpuCache` or `.webStorage`; only created when a verified real path exists).
+- `CleanupKind.browsers.dataPaths` intentionally returns `[]` — Browsers uses its own actor/pipeline, not `FileSystemScanner`/`ScanCoordinator`.
+- `@MainActor BrowserCleanerViewModel` — `loadAll()` detects + measures concurrently via `withTaskGroup`, then restores original detection order (task-group completion order is nondeterministic); pre-selects only categories that `hasData`.
 
 ---
 
@@ -589,6 +607,8 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | Dashboard | ✅ | AppState | SystemMonitor | — |
 | Cleanup | ✅ | CleanupViewModel | FileSystemScanner | — |
 | Protection | ✅ | ProtectionViewModel | SignatureDatabase ✅ + PrivacyExposureScanner ✅ | — |
+| Cleanup (Browsers) | ✅ | BrowserCleanerViewModel | BrowserCleanerScanner | — |
+| Protection | ✅ | ProtectionViewModel | SignatureDatabase ✅ | — |
 | Performance | ✅ | PerformanceViewModel | SystemMonitor + LoginItemScanner | — |
 | Applications | ✅ | ApplicationsViewModel | AppScanner | — |
 | Files (SpaceLens) | ✅ | SpaceLensViewModel | — | — |
@@ -666,6 +686,8 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `8045` / `8046` | DriveHealthSection.swift file ref / sources build file |
 | `8053` / `8054` | TimeMachineMonitor.swift file ref / sources build file |
 | `8055` / `8056` | BackupHealthCard.swift file ref / sources build file |
+| `8063` / `8064` | BrowserCleanerScanner.swift file ref / sources build file |
+| `8065` / `8066` | BrowserCleanerView.swift file ref / sources build file |
 | `8073` / `8074` | MetricsHistory.swift file ref / sources build file |
 | `8075` / `8076` | WeeklyDigestGenerator.swift file ref / sources build file |
 | `8077` / `8078` | HealthTrendCard.swift file ref / sources build file |
