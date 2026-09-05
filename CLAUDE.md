@@ -44,6 +44,7 @@ Halo/
 │   │   ├── AlertManager.swift       UNUserNotification + AlertLog bridge
 │   │   ├── ReportGenerator.swift    PDFKit 4-page PDF report export
 │   │   ├── ScanScheduler.swift      NSBackgroundActivityScheduler wrapper
+│   │   ├── ShellReader.swift        the ONLY place Halo spawns a Process — see gotcha 20
 │   │   └── Scanner/
 │   │       ├── SystemMonitor.swift       CPU/RAM/disk/battery/network
 │   │       ├── FileSystemScanner.swift   async actor, AsyncStream
@@ -419,6 +420,47 @@ enum MenuBarDisplayStyle: String, CaseIterable, Identifiable {
 
 ---
 
+## Shared singletons — AlertManager & ProcessMonitor
+
+Both are `.shared` with a **private `init`**, matching `AlertLog.shared` beside them. The private
+init is the point: it is what stops a fourth instance reappearing in the next feature branch.
+
+**`AlertManager.shared`** — `Halo/Core/AlertManager.swift`
+The `lastFired` cooldown dictionary is per-instance state, so a second `AlertManager` starts with
+an empty one and the same alert fires twice inside its own cooldown window. Every `evaluate*`
+entry point must reach the same instance for "once per day" to mean once per day.
+
+`AlertKind.rawValue` is a **persisted format**, not an implementation detail: `AlertLog` writes it
+to `UserDefaults`, and `AlertEntry.icon` / `.accentColor` switch on those exact strings. Adding a
+case is fine; renaming one silently strips the icon and colour from every alert already in a
+user's history. **A new case needs a matching arm in both `AlertEntry.icon` and
+`AlertEntry.accentColor`** — otherwise the alert renders as a generic bell. `HaloTests` enforces
+this (`AlertManagerTests`).
+
+**`ProcessMonitor.shared`** — `Halo/Core/Scanner/ProcessMonitor.swift`
+One CPU baseline for the whole app. Per-caller instances each kept their own ~600-entry
+`previousCPUInfo`, reported 0 % CPU on their first call (no baseline to diff against), and made
+two surfaces quote different CPU numbers for the same process because their sampling windows
+differed.
+
+Three things in this actor are load-bearing — do not "tidy" them away:
+
+- **The 1 s coalescing window.** Sharing one instance means two callers can land milliseconds
+  apart. Without the cache the second call computes its CPU delta over a near-zero `elapsed` and
+  every process reads ~0 %. The window is well under the fastest real caller (the 3 s Top
+  Processes timer), so that caller still re-samples every tick.
+- **`previousCPUInfo` is rebuilt, not mutated.** It used to only ever gain entries, so it kept a
+  row for every PID the app had ever seen and grew without bound.
+- **The `total >= previous` guard.** macOS recycles PIDs, so a slot can come back pointing at a
+  younger process with a smaller cumulative counter. `total - previous` is `UInt64` subtraction,
+  which **traps on underflow** — an outright crash. A shared instance holds its baseline for the
+  whole app lifetime, so it meets PID reuse far more often than a per-view instance did.
+
+One `proc_pidinfo()` per PID per sample. The previous version called it twice — once to read the
+process, once to record the CPU snapshot — doubling the syscall count of every sample.
+
+---
+
 ## Entitlements
 
 | File | Sandbox | When |
@@ -501,6 +543,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `8025` / `8026` | SnippetEditorView.swift file ref / sources build file |
 | `8027` / `8028` | SnippetListSection.swift file ref / sources build file |
 | `8029` / `8030` | ActionShareManager.swift file ref / sources build file |
+| `8163` / `8164` | ShellReader.swift file ref / sources build file |
 | `9001` / `9002` | GetHealthScoreIntent.swift file ref / sources build file |
 | `9003` / `9004` | GetCPUUsageIntent.swift file ref / sources build file |
 | `9005` / `9006` | GetBatteryHealthIntent.swift file ref / sources build file |
@@ -510,6 +553,84 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `9013` / `9014` | GetClipboardHistoryIntent.swift file ref / sources build file |
 | `9015` / `9016` | ExportReportIntent.swift file ref / sources build file |
 | `9017` / `9018` | HaloShortcutsProvider.swift file ref / sources build file |
+
+---
+
+### Reserved ID blocks — claim one before adding a file
+
+Object IDs in `project.pbxproj` are written zero-padded to 24 characters
+(`000000000000000000008163`); the table above abbreviates them to the last four
+digits. Every new source file needs **two** — a `PBXFileReference` and a
+`PBXBuildFile` — and they must be unique across the whole project.
+
+Duplicate IDs **fail quietly**. Xcode does not error on two objects sharing an ID;
+it resolves the ID to one of them, and the other file silently drops out of its
+Sources phase. The symptom arrives later as a missing symbol with nothing obvious
+connecting it to the project file.
+
+That already happened once: #21, #13 and #9 each independently picked `8031`/`8032`
+for three different scanners, because each branched off `main` and took "the next
+free pair" without seeing the others. **Pick from a free block below and add your row
+before writing the file** — the table is the only thing that makes a claim visible to
+a branch that has not merged yet.
+
+| Block | Owner | Status |
+|-------|-------|--------|
+| `8001`–`8030` | shipped features (see the table above) | taken |
+| `8031`–`8032` | F-019 Security Posture (#21) | claimed |
+| `8043`–`8046` | F-020 S.M.A.R.T. Disk Health (#20) | claimed |
+| `8053`–`8056` | F-022 Time Machine Monitor (#16) | claimed |
+| `8063`–`8066` | F-024 Browser Cleaner (#15) | claimed |
+| `8073`–`8078` | F-029 Weekly Digest (#11) | claimed |
+| `8083`–`8088` | F-018 Privacy Exposure Scanner (#18) | claimed |
+| `8093`–`8098` | F-017 Network Traffic Monitor (#17) | claimed |
+| `8103`–`8106` | F-021 App Usage Analytics (#10) | claimed |
+| `8113`–`8116` | F-023 Memory Leak Tracker (#13) | claimed — moved off `8031` |
+| `8123`–`8126` | F-025 Duplicate Photos (#19) | claimed |
+| `8133`–`8136` | F-028 Focus Session (#14) | claimed |
+| `8143`–`8146` | F-030 iCloud Drive Analyzer (#12) | claimed |
+| `8153`–`8154` | F-016 Permission Auditor (#9) | claimed — moved off `8031` |
+| `8163`–`8164` | `ShellReader` (Phase 0 / P0.2) | claimed |
+| `8171`–`8172` | `AsyncTimeout` (Phase 0 / P0.5) | claimed |
+| `8181`+ | — | **free — take the next block from here** |
+
+Auditing the whole batch for collisions:
+
+```bash
+git show main:Halo.xcodeproj/project.pbxproj | grep -oE '\b[0-9A-F]{24}\b' | sort -u > /tmp/main-ids
+for b in $(git branch --no-merged main --format='%(refname:short)'); do
+  git show "$b":Halo.xcodeproj/project.pbxproj 2>/dev/null \
+    | grep -oE '\b[0-9A-F]{24}\b' | sort -u \
+    | comm -13 /tmp/main-ids - | sed "s|$| $b|"
+done | sort > /tmp/pbx-claims
+awk '{print $1}' /tmp/pbx-claims | uniq -d | while read id; do
+  branches=($(grep "^$id " /tmp/pbx-claims | awk '{print $2}'))
+  # Inherited, not claimed twice: if the branches share an ancestor that already
+  # carries the ID, they are all looking at one object.
+  base=$(git merge-base --octopus $branches 2>/dev/null)
+  if [ -n "$base" ] && git show "$base":Halo.xcodeproj/project.pbxproj 2>/dev/null \
+       | grep -q "$id"; then
+    continue
+  fi
+  echo "$id  <-  ${branches[*]}"
+done
+```
+
+Silence means no collisions. Anything printed is claimed by more than one
+unmerged branch, and the line names them.
+
+`--no-merged main` is load-bearing: without it the scan also reports branches that
+merely share lineage — `feature/upcoming-features` descends from the already-merged
+`feature/f-043-drive-speed-test`, so they hold eight IDs in common quite legitimately.
+A check that prints eight false positives every run is one people learn to ignore.
+
+The `merge-base --octopus` step is there for the same reason, one level up. A Phase 0
+branch that adds a file and is then *merged* into feature branches puts its IDs on all
+of them legitimately — P0.5 (`AsyncTimeout`, `8171`/`8172`) is merged into both #17 and
+#19, so a naive scan reports a three-way collision on a single object. Checking whether
+the claimants share an ancestor that already carries the ID tells inheritance from a
+genuine double-claim. Two branches that independently picked the same ID have no such
+ancestor, so real collisions still print.
 
 ---
 
@@ -579,7 +700,13 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 18. **Battery health label** — factor cycle count FIRST, then capacity ratio. Cycles < 100 → "Excellent"; < 300 → "Good"; only fall back to capacity ratio for older batteries with known cycles.
 19. **Drive speed benchmark accuracy** — the scratch fd MUST set `fcntl(fd, F_NOCACHE, 1)` (else reads measure RAM) and `fcntl(fd, F_FULLFSYNC)` after writes (else writes measure the SSD's DRAM cache). Write buffer must be random (`arc4random_buf`), not zeros — zeros let compressing controllers report fake speeds. The scratch file is `unlink`-ed (not trashed) — the only sanctioned exception to the trashItem rule, because it's Halo's own temp data that must vanish immediately.
 
-20. **Timing out callback work** — never race a `Task.sleep` sibling inside a
+20. **Never hand-roll a `Process`. Use `ShellReader`.** `Halo/Core/ShellReader.swift` is the only place in the app that should spawn a subprocess, because three separate traps have to be handled together and each one was live in shipped code before it was extracted:
+    - **Pipe deadlock.** `waitUntilExit()` *before* `readDataToEndOfFile()` hangs forever once the child writes past the 64 KB pipe buffer — the child blocks in `write(2)`, the parent is parked in `waitUntilExit()`, and `Task.cancel()` cannot interrupt a thread blocked there. Measured: `lsof -i -n -P` is ~10 KB across 87 connections, so ~550 connections reaches the limit — a loaded machine, not a typical one, but unrecoverable when it happens. Reading before waiting fixes stdout only; an undrained stderr (`process.standardError = Pipe()` that nothing reads) deadlocks identically.
+    - **No timeout.** The hazard that survives fixing the pipe order. `waitUntilExit()` takes no deadline, so `lsof` on a dead NFS mount or `diskutil` on a failing drive blocks the caller forever. Every `ShellReader` call is bounded and escalates SIGTERM → SIGKILL.
+    - **Thread-pool starvation.** The natural fix — one blocking read dispatched per pipe onto `DispatchQueue.global()`, joined with a `DispatchGroup` — *also* deadlocks, and this one is subtle: each call parks two pool threads on a blocking read while a third waits on them, so once enough calls overlap the pool has no thread left to run a drain block and `leave()` is never reached. Halo genuinely has several in flight at once (AppState's SMART timer, `SystemControlsManager`'s poll loop, an AI tool call), and a parallel test run reproduced it in seconds. `ShellReader` therefore multiplexes both descriptors with `poll(2)` **on the calling thread** — no worker threads, nothing to starve. Do not "tidy" this back into a worker-per-pipe design; `HaloTests`' ShellReader suite has explicit regression tests for all three traps.
+
+    Also: `ShellReader` is synchronous and blocking by design (callers are already inside an `actor` or a detached `Task`) — **never call it from the main actor**. It reports a denied `posix_spawn` as `launchFailure`, which is how every call behaves under the release App Sandbox, so callers can distinguish "we were not allowed to ask" from "the tool found nothing". The one sanctioned exception is `ActionRunner`'s live-output path, which needs `readabilityHandler` streaming to relay stdout line-by-line to the UI and so cannot use a batch reader.
+21. **Timing out callback work** — never race a `Task.sleep` sibling inside a
    `withTaskGroup` and take `group.next()`. It bounds the returned *value* but not
    the *time*: `withTaskGroup` joins every child before returning, and
    `group.cancelAll()` cannot interrupt a `withCheckedContinuation` around a
