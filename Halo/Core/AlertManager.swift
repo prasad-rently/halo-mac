@@ -10,6 +10,22 @@ import UserNotifications
 @MainActor
 final class AlertManager {
 
+    // MARK: - Singleton
+    //
+    // One instance, app-wide — matching `AlertLog.shared` beside it, which this
+    // class already writes every alert into.
+    //
+    // The cooldowns in `lastFired` are the whole point of this type, and they
+    // are per-instance state: a second `AlertManager` carries its own empty
+    // dictionary, so the same alert can fire from both within the cooldown
+    // window and the user gets it twice. Features queued behind this one add
+    // their own `evaluate*` entry points (SMART disk health, Time Machine
+    // staleness, per-app memory), each called from a different subsystem — so
+    // they must all reach the same instance for "once per hour" to mean once
+    // per hour. `init` is private so it stays that way.
+    static let shared = AlertManager()
+    private init() {}
+
     // MARK: - Alert kinds
 
     enum AlertKind: String, CaseIterable {
@@ -21,6 +37,8 @@ final class AlertManager {
         case chargingDone   = "charging_done"
         case backupStale    = "backup_stale"   // F-022
         case backupNever    = "backup_never"   // F-022
+        case diskSmartWarning = "disk_smart_warning"
+        case diskSmartFailing = "disk_smart_failing"
     }
 
     // MARK: - State
@@ -145,6 +163,38 @@ final class AlertManager {
              title: "Time Machine Backup Overdue",
              body: "Your last backup was \(formatter.localizedString(for: last, relativeTo: Date())). Connect your backup drive or run one now.",
              cooldown: 86400) // once per day until resolved
+    }
+
+    // MARK: - S.M.A.R.T. disk health (F-020)
+
+    /// Called from AppState's 5-minute SMART poll (not the 2 s metrics loop —
+    /// `diskutil info` is cheap but there's no reason to shell out that often).
+    /// Only ever fires for health levels Halo actually verified; `.unknown`
+    /// (SMART data unreadable) never fires an alert — an unreadable status
+    /// isn't evidence of a problem.
+    ///
+    /// Callers should pass `SMARTDiskInfo.alertLevel`, not `healthLevel` — the
+    /// former is deliberately stricter, so a condition that merely colours the
+    /// Drive Health card doesn't also push a banner at the user.
+    ///
+    /// `model` is nil when diskutil reported no MediaName; the title then omits
+    /// the dash rather than reading "Drive Health Critical — your internal drive".
+    func evaluateSMART(model: String?, healthLevel: SMARTDiskMonitor.DriveHealthLevel) {
+        let suffix = model.map { " — \($0)" } ?? ""
+        switch healthLevel {
+        case .failing:
+            fire(.diskSmartFailing,
+                 title: "Drive Health Critical\(suffix)",
+                 body: "S.M.A.R.T. reports a failing condition on your drive. Back up your data immediately.",
+                 cooldown: 3600)
+        case .warning:
+            fire(.diskSmartWarning,
+                 title: "Drive Health Warning\(suffix)",
+                 body: "S.M.A.R.T. attributes show early signs of wear. Consider backing up important files soon.",
+                 cooldown: 86400)
+        case .good, .unknown:
+            break
+        }
     }
 
     // MARK: - Fire helper

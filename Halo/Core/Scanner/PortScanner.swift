@@ -64,49 +64,35 @@ actor PortScanner {
     /// Kill a process by PID.
     func killProcess(pid: Int32, force: Bool) async -> (Bool, String) {
         let signal = force ? "KILL" : "TERM"
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/kill")
-        process.arguments = ["-\(signal)", String(pid)]
+        let result = ShellReader.run("/bin/kill", ["-\(signal)", String(pid)])
 
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8) ?? ""
-            if process.terminationStatus == 0 {
-                return (true, "Process \(pid) killed with SIG\(signal).")
-            } else {
-                return (false, output.isEmpty ? "Failed to kill process \(pid)." : output)
-            }
-        } catch {
-            return (false, error.localizedDescription)
+        if let failure = result.launchFailure {
+            return (false, failure)
         }
+        if result.didTimeOut {
+            return (false, "Timed out trying to signal process \(pid).")
+        }
+        guard result.exitCode == 0 else {
+            // `kill` reports the reason on stderr ("No such process",
+            // "Operation not permitted"), which is exactly what the user needs
+            // to see — previously it shared one pipe with stdout.
+            let reason = result.standardError.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (false, reason.isEmpty ? "Failed to kill process \(pid)." : reason)
+        }
+        return (true, "Process \(pid) killed with SIG\(signal).")
     }
 
     // MARK: - Private
 
     private func parseLsof(args: [String]) async -> [PortEntry] {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        process.arguments = args
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()  // suppress stderr
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-        } catch {
-            return []
-        }
-
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard let output = String(data: data, encoding: .utf8) else { return [] }
+        // `lsof` is the highest-volume tool Halo invokes: ~10 KB across 87 open
+        // connections on the dev machine, so a heavily loaded Mac can approach
+        // the 64 KB pipe buffer. It also writes permission-denied warnings to
+        // stderr for other users' sockets. ShellReader drains both streams
+        // concurrently and bounds the whole call — see its header.
+        let result = ShellReader.run("/usr/sbin/lsof", args)
+        guard result.launchFailure == nil else { return [] }
+        let output = result.standardOutput
 
         var entries: [PortEntry] = []
         let lines = output.components(separatedBy: "\n")
@@ -167,22 +153,13 @@ actor PortScanner {
     }
 
     private func getProcessPath(pid: Int32) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/ps")
-        process.arguments = ["-p", String(pid), "-o", "comm="]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return (path?.isEmpty ?? true) ? nil : path
-        } catch {
+        // `ps` exits non-zero when the pid is already gone, which is a normal
+        // race here (the process can exit between the lsof scan and this
+        // lookup) — so a nil return is the right answer, not an error.
+        guard let raw = ShellReader.output("/bin/ps", ["-p", String(pid), "-o", "comm="]) else {
             return nil
         }
+        let path = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return path.isEmpty ? nil : path
     }
 }

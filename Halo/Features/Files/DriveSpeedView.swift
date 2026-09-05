@@ -106,6 +106,9 @@ struct DriveSpeedView: View {
             VStack(alignment: .leading, spacing: 20) {
                 header
                 volumePicker
+                if let vol = vm.selectedVolume {
+                    DriveHealthSection(volume: vol)
+                }
                 sizePicker
                 controls
                 if let err = vm.errorMessage { errorBanner(err) }

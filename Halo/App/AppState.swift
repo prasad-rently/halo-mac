@@ -118,12 +118,18 @@ final class AppState: ObservableObject {
     private var wasAxTrusted = false
 
     // Phase 3
-    private let alertManager = AlertManager()
+    private let alertManager = AlertManager.shared
     private let networkMonitor = NetworkDetailMonitor()
 
     // F-022
     private let timeMachineMonitor = TimeMachineMonitor()
     private var timeMachineTimer: AnyCancellable?
+    // F-020: S.M.A.R.T. disk health — boot volume only, on a 5-minute cadence
+    // (a `diskutil info` shell-out is cheap, but there's no reason to run it
+    // on the 2 s metrics loop). Feeds the temperature sparkline history and
+    // AlertManager's failing/warning rule.
+    private let smartMonitor = SMARTDiskMonitor()
+    private var smartMonitorTimer: AnyCancellable?
 
     init() {
         systemMonitor = SystemMonitor()
@@ -137,6 +143,7 @@ final class AppState: ObservableObject {
         setupHotkeys()
         startNetworkMonitoring()
         startTimeMachineMonitoring()
+        startSMARTMonitoring()
         AlertManager.requestPermission()
     }
 
@@ -255,6 +262,29 @@ final class AppState: ObservableObject {
         }
         await refreshTimeMachineStatus()
         isStartingBackup = false
+    }
+
+    // MARK: - S.M.A.R.T. disk health monitoring (F-020)
+
+    private func startSMARTMonitoring() {
+        Task { await runSMARTCheck() }   // one check at launch
+        smartMonitorTimer = Timer.publish(every: 300.0, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                Task { await self?.runSMARTCheck() }
+            }
+    }
+
+    private func runSMARTCheck() async {
+        // Boot volume only — see SMARTTemperatureHistory's header comment for why.
+        // AppState is itself @MainActor, so no extra hop is needed after the await.
+        let info = await smartMonitor.scan(path: "/", id: "/")
+        if let temp = info.temperatureCelsius {
+            SMARTTemperatureHistory.shared.record(celsius: temp)
+        }
+        // `alertLevel`, not `healthLevel` — a notification has to clear a higher
+        // bar than the card does. See SMARTDiskInfo.alertLevel.
+        alertManager.evaluateSMART(model: info.model, healthLevel: info.alertLevel)
     }
 
     private func writeWidgetData() {

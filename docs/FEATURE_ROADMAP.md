@@ -38,7 +38,7 @@
 | [F-017](#f-017--network-traffic-monitor-app-level-firewall-companion) | Network Traffic Monitor | 💡 Future Idea | ~5 d | none |
 | [F-018](#f-018--privacy-data-exposure-scanner) | Privacy Data Exposure Scanner | 💡 Future Idea | ~3 d | none |
 | [F-019](#f-019--security-posture-dashboard) | Security Posture Dashboard | 💡 Future Idea | ~1.5 d | none |
-| [F-020](#f-020--smart-disk-health-monitor) | S.M.A.R.T. Disk Health Monitor | 💡 Future Idea | ~3 d | none |
+| [F-020](#f-020--smart-disk-health-monitor) | S.M.A.R.T. Disk Health Monitor | ✅ Done | 3 d | none |
 | [F-021](#f-021--app-usage--screen-time-analytics) | App Usage & Screen Time Analytics | 💡 Future Idea | ~3 d | none |
 | [F-022](#f-022--time-machine-backup-health-monitor) | Time Machine Backup Health Monitor | ✅ Done | ~1.5 d | AlertManager |
 | [F-023](#f-023--memory-leak--app-bloat-tracker) | Memory Leak & App Bloat Tracker | 💡 Future Idea | ~3 d | ProcessMonitor |
@@ -1336,33 +1336,189 @@ New **"Security Posture"** card in the existing **Protection** module's main vie
 
 ## F-020 · S.M.A.R.T. Disk Health Monitor
 
-**Status:** 💡 Future Idea  
-**Effort estimate:** 3 days  
-**Theme:** Intelligent Insights  
-**Branch naming (when ready):** `feat/f020-smart-disk-health`  
-**Depends on:** none (IOKit is already used in the codebase)
+**Status:** ✅ Done · **Effort:** 3 d · **Depends on:** none
 
-### Why
-Drive failure is the most catastrophic unrecoverable event that can happen to a Mac. Most users have no warning until the drive fails completely. S.M.A.R.T. data from the drive's internal sensors gives advance warning days or weeks before failure. The commercial tool DriveDx charges $19.99 for this single feature. It aligns directly with Halo's health-monitoring identity and would be a compelling differentiator.
+### Summary
+Read-only S.M.A.R.T./NVMe health monitor for internal & external drives. Health
+status (Good / Warning / Failing), drive model/serial/capacity, temperature,
+power-on hours/cycles, total bytes written, available spare, NVMe's own
+percentage-used wear indicator, media errors, and a 24-hour temperature
+sparkline (internal drive only, sampled every 5 minutes). Surfaced as a
+**"Drive Health"** card in the Files → **Drive Speed** tab (not Dashboard —
+see "Integration point" below for why). `AlertManager` fires a Warning/Failing
+notification whenever health degrades.
 
-### What it delivers
-- Drive health status: Good / Warning / Failing — based on official S.M.A.R.T. attribute thresholds
-- Key metrics displayed: drive model and serial, capacity, health percentage, current temperature, total bytes written (TBW), power-on hours, reallocated sector count, pending sector count, and uncorrectable error count
-- A **lifespan remaining** progress bar based on TBW vs the manufacturer-rated endurance for the detected model
-- Automatic alert when any critical attribute enters the warning zone (feeds into `AlertManager`)
-- Historical temperature sparkline (sampled every 5 minutes, rolling 24-hour window)
+### As actually built — Apple Silicon data-availability findings
 
-### Data sources
-- `IOKit` — `IOServiceMatching("IOBlockStorageDriver")` to enumerate physical drives, then `IORegistryEntryCreateCFProperties` to read S.M.A.R.T. attribute dictionaries from the IORegistry
-- Model-to-TBW-rating lookup table (bundled JSON — major SSD models and their rated endurance)
+The original spec (above, preserved for context in git history) assumed
+`IOServiceMatching("IOBlockStorageDriver")` + `IORegistryEntryCreateCFProperties`
+would expose S.M.A.R.T. attributes directly from the IORegistry, the same
+pattern the existing `DiskHealthMonitor` (P3-07, Cleanup module) already uses.
+**That assumption doesn't hold on Apple Silicon** — independently re-verified
+on this machine (Apple Silicon, macOS 26.2, internal `APPLE SSD AP0512Z`) with
+a standalone `IOServiceMatching` probe before trusting any of the
+implementation:
 
-### Integration point
-New **"Drive Health"** card on Dashboard (alongside CPU, RAM, battery cards). Expanded detail view as a new section in the Performance module. Alert rule in `AlertManager` for failing attributes.
+| Path tried | Result on this machine |
+|---|---|
+| `IOServiceMatching("IOBlockStorageDriver")` → `IORegistryEntryCreateCFProperties` | Only an aggregate I/O `Statistics` dict (bytes/ops/errors/latency read+write). **No S.M.A.R.T. data at all.** This is exactly why P3-07's existing SMART panel in Cleanup always shows "N/A" here. |
+| `IOServiceMatching("IONVMeBlockDevice")` / `IOServiceMatching("IOAHCIBlockDevice")` | **No matching service at all** on Apple Silicon (0 instances returned). |
+| `IOServiceMatching("IONVMeController")` | **Real data** — `Model Number`, `Serial Number`, `Firmware Revision`, `Vendor Name`. No SMART log fields, but this is where the serial number comes from (diskutil never reports one). |
+| `diskutil info -plist <path>` (a `Process` shell-out) | **Real S.M.A.R.T./NVMe Health Info Log data** — confirmed against `system_profiler SPNVMeDataType` as a second, independent source. This became the primary data path instead of raw IOKit. |
 
-### Key design decisions to resolve before implementation
-- NVMe drives on Apple Silicon expose limited S.M.A.R.T. data compared to SATA/Intel Macs — graceful degradation needed
-- TBW lookup table needs curation and a maintenance/update strategy
-- Sandboxed build will require IOKit entitlement addition
+Given that, the implementation pivots to `diskutil info -plist` as the
+primary read path, with an `IONVMeController` IOKit lookup only for the
+serial number diskutil omits.
+
+**Confirmed available on this machine** (via `diskutil info -plist`):
+`SMARTStatus` (Verified/Failing), temperature (Kelvin → converted to °C),
+power-on hours, power cycles, unsafe shutdown count, data units read/written
+(→ real total bytes written, i.e. TBW), available spare %, available spare
+threshold %, NVMe's own `PERCENTAGE_USED` wear indicator, media error count,
+error-log entry count, bus protocol, solid-state flag, capacity. Plus serial
+number and model, via IOKit, once resolved (see gotcha below).
+
+**Confirmed NOT available on this machine — rendered as "Not available on
+this drive", never faked:**
+- **Reallocated / pending sector counts** (ATA SMART attributes 5 and 197) —
+  these are ATA-only concepts. NVMe's Health Information Log page has no
+  equivalent counter; it isn't a failed read, the concept doesn't exist for
+  NVMe. `Available Spare` / `Available Spare Threshold` and `Media Errors`
+  are the nearest NVMe analogs, and both are surfaced instead of faking the
+  ATA fields.
+- **Uncorrectable error count** as a distinct SATA-style metric — NVMe
+  surfaces `Media Errors` and an error-log entry count instead; there's no
+  separate "uncorrectable" counter to report.
+- **A manufacturer TBW-rating lookup table** — dropped entirely from the
+  design. NVMe drives report their own firmware wear assessment
+  (`PERCENTAGE_USED`, the drive's own view of consumed endurance against its
+  rated spec) directly in the SMART log, which is more accurate than a
+  bundled JSON table of SSD models could be and needs no maintenance. The
+  lifespan-remaining bar is `100 - PERCENTAGE_USED`.
+
+**A real bug caught by on-machine verification, not just code review:**
+querying `diskutil info -plist` by *mount path* (what both callers pass — the
+boot volume's `"/"` from the periodic `AppState` check, and a volume's
+`.url.path` from the Drive Health card) returns an **empty string** for
+`MediaName`, even though the SMART log itself comes through fine at that
+level. `MediaName` is only populated when diskutil is queried by the
+*physical whole-disk BSD identifier* (e.g. `disk0`) — confirmed by hand:
+`diskutil info -plist /` → `MediaName ""` vs `diskutil info -plist disk0` →
+`MediaName "APPLE SSD AP0512Z"`, same physical drive. Left unfixed, this
+would have silently shown "Unknown drive" for every scan, and — since the
+IOKit serial-number lookup matches by model string — would have also
+silently blocked the serial number from ever resolving. `SMARTDiskMonitor.scan(path:id:)`
+now falls back to a second `diskutil` query against the already-computed
+whole-disk id whenever the first `MediaName` comes back empty.
+
+**External drives:** the model-to-serial IOKit match and the empty-`MediaName`
+fallback above were both verified against the internal NVMe SSD only — no
+external SATA/USB-UASP drive was available to test against on this machine.
+Treat external-drive serial/model resolution as architecturally sound but
+unverified until tested against a real external drive.
+
+### Files
+| File | Role |
+|------|------|
+| `Halo/Core/Scanner/SMARTDiskMonitor.swift` | `actor SMARTDiskMonitor` — `diskutil`-backed scan + IOKit serial lookup; `SMARTDiskInfo` model with `healthLevel` classification; `SMARTTemperatureHistory` — `@MainActor` rolling 24h sample store, persisted to `UserDefaults` |
+| `Halo/Features/Files/DriveHealthSection.swift` | `DriveHealthSection` view + `DriveHealthViewModel` — on-demand ("Check Drive Health" button) card: status row, metrics grid, lifespan bar, temperature sparkline (`Charts`) |
+| `Halo/Features/Files/DriveSpeedView.swift` | Adds `DriveHealthSection(volume:)` below the volume picker |
+| `Halo/App/AppState.swift` | `startSMARTMonitoring()` — one check at launch + a 300s (5-minute) timer against the boot volume only; feeds `SMARTTemperatureHistory` and `AlertManager.evaluateSMART` |
+| `Halo/Core/AlertManager.swift` | `evaluateSMART(model:healthLevel:)` — fires `.diskSmartWarning` (24h cooldown) / `.diskSmartFailing` (1h cooldown); `.good`/`.unknown` never fire |
+
+### API
+```swift
+actor SMARTDiskMonitor {
+    func scan(volume: DriveVolume) async -> SMARTDiskInfo
+    func scan(path: String, id: String) async -> SMARTDiskInfo
+
+    enum DriveHealthLevel { case good, warning, failing, unknown }
+    struct SMARTDiskInfo {
+        let model, serialNumber, busProtocol: String?
+        let overallStatus: SMARTOverallStatus   // .verified / .failing / .other(String) / .unavailable
+        let temperatureCelsius: Double?
+        let powerOnHours, powerCycles, unsafeShutdowns: Int?
+        let totalBytesWritten, totalBytesRead: Int64?
+        let availableSparePercent, availableSpareThresholdPercent, percentageUsed: Int?
+        let mediaErrorCount, errorLogEntryCount: Int?
+        let reallocatedSectorCount, pendingSectorCount: Int?   // always nil — ATA-only, see above
+        var healthLevel: DriveHealthLevel { get }
+        var lifespanRemainingPercent: Int? { get }             // 100 - percentageUsed
+    }
+}
+```
+
+### Why the boot-volume-only, 5-minute cadence
+`diskutil info -plist` is a `Process` shell-out — cheap, but there's no reason
+to run it on the 2 s metrics loop. The temperature history is deliberately
+internal-drive-only: external drives aren't guaranteed to stay connected, so
+only the always-present internal SSD gets a rolling 24h history.
+
+### Known constraints
+- No manufacturer TBW-rating table — intentionally dropped (see above); the
+  lifespan bar uses the drive's own `PERCENTAGE_USED` instead.
+- Reallocated/pending sector counts and a distinct "uncorrectable errors"
+  metric are permanently `nil` on NVMe drives — this is a real NVMe-vs-ATA
+  protocol difference, not a missing read, and the UI/metrics grid renders
+  them accordingly ("N/A on NVMe" / "Not available on this drive").
+- External-drive serial/model resolution is unverified (no external drive
+  available to test against on this machine).
+- Integration point differs from the original spec: the health card lives in
+  Files → Drive Speed (alongside the related F-043 benchmark), not as a new
+  Dashboard card or Performance section — this keeps all "drive-related"
+  surfaces in one tab rather than splitting drive info across three modules.
+
+### Test plan
+- [ ] Files → Drive Speed → select internal volume → Drive Health card
+      appears below the volume picker
+- [ ] Tap "Check Drive Health" → status resolves to Good, model/serial/
+      capacity/temperature/power-on-hours/TBW populate
+- [ ] Reallocated/Pending Sectors show "N/A on NVMe" (not blank, not "0")
+- [ ] Lifespan bar renders and matches `100 - PERCENTAGE_USED`
+- [ ] Wait 24h+ (or seed `haloSMARTTemperatureHistory` in UserDefaults) →
+      temperature sparkline renders for the internal drive
+- [ ] Switch to an external volume (if available) → card re-scans; confirm
+      serial number behavior against a real external bridge
+- [ ] Force a Warning/Failing health level (simulate via a modified plist in
+      a debug build, since a real failing drive isn't available for testing)
+      → confirm `AlertManager` notification fires with correct cooldown
+- [ ] Confirm the 5-minute `AppState` timer doesn't fire more than once per
+      5 minutes (Console log or breakpoint count)
+
+### Acceptance criteria
+- Health status computed from official S.M.A.R.T./NVMe attribute thresholds,
+  never fabricated
+- Every field diskutil/IOKit doesn't report renders "Not available on this
+  drive" — never a zeroed or guessed value
+- Alert fires on Warning/Failing, never on Unknown (unreadable ≠ unhealthy)
+- Temperature sparkline persists across app restarts
+
+#### Amended during code review (2026-09-05)
+
+Three of the original rules turned out to be wrong against real hardware. All
+three are now regression-tested in `HaloTests`; see `CLAUDE.md` gotchas 22–24.
+
+- **Vendor spare thresholds are not trustworthy as reported.** Apple Silicon
+  reports `AVAILABLE_SPARE_THRESHOLD = 99` against `AVAILABLE_SPARE = 100`
+  (verified on the dev machine). A literal `spare <= threshold` comparison
+  declares a healthy drive **Failing** the first time spare ticks to 99 on
+  normal wear, then fires "back up your data immediately" hourly and
+  indefinitely. `classify` now ignores any threshold above
+  `maxCredibleSpareThreshold` (50), uses the spec's strict `<`, and keeps a
+  threshold-independent `criticalSparePercent` (10) backstop.
+- **An unrecognised `SMARTStatus` is Unknown, not Warning.** Every USB /
+  Thunderbolt bridge reports `"Not Supported"` — the healthy state for that
+  hardware, since enclosures don't pass the health log through. Flagging it
+  amber put a Warning badge on a working external SSD.
+- **The card and the notification are different bars.** Split into
+  `healthLevel` (drives the badge — surfaces anything notable, including a
+  non-zero media-error count) and `alertLevel` (what `AlertManager` acts on —
+  only conditions that are real *and* actionable). A single lifetime
+  unrecovered read is worth showing but must not nag daily forever.
+
+Also fixed: switching volumes while a scan was in flight left the previous
+drive's data on screen under the new drive's name, and the temperature chart
+was gated on `isInternal` rather than on the boot volume it actually samples.
 
 ---
 
