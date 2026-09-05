@@ -69,6 +69,10 @@ struct HaloApp: App {
                     AppState.shared = appState
                     // F-005: start background scan scheduler now that AppState is ready
                     ScanScheduler.shared.start(appState: appState)
+                    // F-028: get hidden apps back on a clean quit. The persisted
+                    // session covers crashes and force-quits; this covers ⌘Q,
+                    // which is the common case and shouldn't wait for a relaunch.
+                    FocusSessionManager.shared.observeAppTermination()
                 }
                 // F-041: handle halo:// deep links for action sharing
                 .onOpenURL { url in

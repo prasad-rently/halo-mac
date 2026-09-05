@@ -209,7 +209,7 @@ struct FocusSessionSummaryTests {
     @Test("digestText — full data, not ended early, matches the documented example exactly")
     func testDigestTextFullData() {
         let summary = FocusSessionSummary(
-            plannedMinutes: 50, actualMinutes: 50, hiddenAppNames: ["Slack", "Mail"],
+            plannedMinutes: 50, actualSeconds: 50 * 60, hiddenAppNames: ["Slack", "Mail"],
             topRAMProcessName: "Chrome", topRAMProcessMB: 820.4, maxCPUPercent: 42, endedEarly: false)
         #expect(summary.digestText == "50-minute session. Top RAM consumer: Chrome (820 MB). CPU stayed below 45%.")
     }
@@ -217,7 +217,7 @@ struct FocusSessionSummaryTests {
     @Test("digestText — ended early, no RAM data, zero CPU")
     func testDigestTextEndedEarlyNoData() {
         let summary = FocusSessionSummary(
-            plannedMinutes: 25, actualMinutes: 10, hiddenAppNames: [],
+            plannedMinutes: 25, actualSeconds: 10 * 60, hiddenAppNames: [],
             topRAMProcessName: nil, topRAMProcessMB: nil, maxCPUPercent: 0, endedEarly: true)
         #expect(summary.digestText == "10-minute session (ended early). CPU usage stayed minimal throughout.")
     }
@@ -225,7 +225,7 @@ struct FocusSessionSummaryTests {
     @Test("digestText — CPU percent rounds up to the nearest multiple of 5")
     func testDigestTextCPURounding() {
         func cpuLine(_ pct: Double) -> String {
-            FocusSessionSummary(plannedMinutes: 25, actualMinutes: 25, hiddenAppNames: [],
+            FocusSessionSummary(plannedMinutes: 25, actualSeconds: 25 * 60, hiddenAppNames: [],
                                  topRAMProcessName: nil, topRAMProcessMB: nil,
                                  maxCPUPercent: pct, endedEarly: false).digestText
         }
@@ -238,7 +238,7 @@ struct FocusSessionSummaryTests {
     @Test("digestText omits the RAM line entirely when no process data was sampled")
     func testDigestTextOmitsRAMLineWhenMissing() {
         let summary = FocusSessionSummary(
-            plannedMinutes: 25, actualMinutes: 25, hiddenAppNames: [],
+            plannedMinutes: 25, actualSeconds: 25 * 60, hiddenAppNames: [],
             topRAMProcessName: nil, topRAMProcessMB: nil, maxCPUPercent: 12, endedEarly: false)
         #expect(!summary.digestText.contains("Top RAM consumer"))
     }
@@ -298,5 +298,45 @@ struct FocusDurationPresetTests {
     func testPresetLabels() {
         #expect(FocusDurationPreset.twentyFive.label == "25 min")
         #expect(FocusDurationPreset.fifty.label == "50 min")
+    }
+}
+
+// MARK: - F-028 review fixes
+
+@Suite("FocusSessionSummary duration")
+struct FocusSessionDurationTests {
+
+    private func summary(seconds: Int, early: Bool = true) -> FocusSessionSummary {
+        FocusSessionSummary(plannedMinutes: 25, actualSeconds: seconds, hiddenAppNames: [],
+                            topRAMProcessName: nil, topRAMProcessMB: nil,
+                            maxCPUPercent: 0, endedEarly: early)
+    }
+
+    // `max(1, rounded())` rounded every sub-minute session up to "1 minute" —
+    // in the summary, the AlertLog entry and the Focus History row alike.
+    @Test("A session ended after a few seconds does not claim a minute")
+    func testSubMinuteIsHonest() {
+        #expect(summary(seconds: 5).durationText == "Under-a-minute")
+        #expect(summary(seconds: 59).durationText == "Under-a-minute")
+        #expect(summary(seconds: 5).digestText.contains("Under-a-minute"))
+    }
+
+    @Test("A full minute and above reports minutes")
+    func testMinutesReported() {
+        #expect(summary(seconds: 60).durationText == "1-minute")
+        #expect(summary(seconds: 1500).durationText == "25-minute")
+    }
+
+    @Test("Rounding is to the nearest minute, not always up")
+    func testRoundsToNearest() {
+        #expect(summary(seconds: 100).durationText == "2-minute")   // 1.67 -> 2
+        #expect(summary(seconds: 80).durationText == "1-minute")    // 1.33 -> 1
+    }
+
+    @Test("A completed session still reads correctly")
+    func testCompletedSession() {
+        let s = summary(seconds: 1500, early: false)
+        #expect(s.digestText.contains("25-minute session."))
+        #expect(s.digestText.contains("ended early") == false)
     }
 }

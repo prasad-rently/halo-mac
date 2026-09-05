@@ -57,11 +57,76 @@ final class FocusSessionManager: ObservableObject {
     private let processMonitor = ProcessMonitor()
     private var endDate: Date?
     private var hiddenApps: [NSRunningApplication] = []
+    /// Bundle IDs of everything hidden this session. Survives an
+    /// `NSRunningApplication` going away, and is what gets persisted.
+    private var hiddenBundleIDs: [String] = []
     private var maxCPUUsage: Double = 0
     private var peakRAMByProcess: [String: Double] = [:]
     private var overlayController: FocusSessionOverlayController?
+    /// Set when the end-of-session notification could not be delivered, so the
+    /// Dashboard card can show the completed state prominently instead.
+    @Published var notificationFailure: String?
 
-    private init() {}
+    /// Bundle IDs hidden by the currently-active session, plus its end date.
+    ///
+    /// `hide()` is reversible, and the reversal has to be *guaranteed* — that is
+    /// the whole reason hiding was acceptable here rather than terminating. It
+    /// was not guaranteed: `unhide()` ran only from `finish(early:)`, so quitting
+    /// Halo mid-session, crashing (Sentry is wired up precisely because that
+    /// happens), or losing power left the user's apps hidden with nothing in
+    /// Halo able to bring them back. On relaunch the manager started with
+    /// `isActive == false` and an empty `hiddenApps`, so no state even recorded
+    /// that anything had been hidden — leaving the user hunting through ⌘-Tab
+    /// wondering where Slack went.
+    private static let activeSessionKey = "haloFocusActiveSession"
+
+    private struct PersistedSession: Codable {
+        var bundleIDs: [String]
+        var endDate: Date
+    }
+
+    private init() {
+        recoverInterruptedSession()
+    }
+
+    /// Called from `init`. Either resumes a session whose end date is still
+    /// ahead, or unhides whatever the last session hid and clears the record.
+    private func recoverInterruptedSession() {
+        guard let data = UserDefaults.standard.data(forKey: Self.activeSessionKey),
+              let saved = try? JSONDecoder().decode(PersistedSession.self, from: data) else { return }
+
+        UserDefaults.standard.removeObject(forKey: Self.activeSessionKey)
+
+        // Always unhide first. Whether or not the session is resumable, those
+        // apps are currently hidden because Halo hid them.
+        unhide(bundleIDs: saved.bundleIDs)
+
+        let remaining = saved.endDate.timeIntervalSinceNow
+        guard remaining > 60 else { return }
+        // Enough of the session is left to be worth continuing; the user
+        // explicitly asked for it and never cancelled.
+        start(minutes: Int((remaining / 60).rounded(.up)), bundleIDsToHide: saved.bundleIDs)
+    }
+
+    /// Idempotent. Safe to call from `finish`, from `willTerminate`, and from
+    /// recovery on the next launch.
+    private func unhide(bundleIDs: [String]) {
+        guard !bundleIDs.isEmpty else { return }
+        for app in NSWorkspace.shared.runningApplications {
+            guard let bid = app.bundleIdentifier, bundleIDs.contains(bid), app.isHidden else { continue }
+            app.unhide()
+        }
+    }
+
+    /// Restores everything the active session hid and forgets it. Shared by
+    /// `finish` and the terminate handler so the two cannot drift.
+    func restoreHiddenApps() {
+        for app in hiddenApps where app.isHidden { app.unhide() }
+        unhide(bundleIDs: hiddenBundleIDs)
+        hiddenApps = []
+        hiddenBundleIDs = []
+        UserDefaults.standard.removeObject(forKey: Self.activeSessionKey)
+    }
 
     // MARK: - Session control
 
@@ -88,9 +153,14 @@ final class FocusSessionManager: ObservableObject {
                   !app.isHidden else { continue }
             if app.hide() {
                 hiddenApps.append(app)
+                hiddenBundleIDs.append(bid)
                 hiddenAppNames.append(app.localizedName ?? bid)
             }
         }
+
+        // Written before the session begins, so a crash one second later is
+        // still recoverable on the next launch.
+        persistActiveSession()
 
         isActive = true
         isOverlayVisible = true
@@ -143,7 +213,7 @@ final class FocusSessionManager: ObservableObject {
         if let cpu = AppState.shared?.cpuUsage {
             maxCPUUsage = max(maxCPUUsage, cpu)
         }
-        let top = await processMonitor.topProcesses(sortBy: .ram, limit: 3)
+        let top = await processMonitor.topProcesses(sortBy: .ram, limit: 10)
         for proc in top where proc.isUserApp {
             let prev = peakRAMByProcess[proc.name] ?? 0
             if proc.ramMB > prev { peakRAMByProcess[proc.name] = proc.ramMB }
@@ -156,14 +226,14 @@ final class FocusSessionManager: ObservableObject {
 
         // Restore every app we hid — hide() is always paired with unhide(),
         // never terminate(). Nothing this feature does is destructive.
-        for app in hiddenApps { app.unhide() }
+        restoreHiddenApps()
 
         let actualSeconds = totalSeconds - remainingSeconds
         let topEntry = peakRAMByProcess.max(by: { $0.value < $1.value })
 
         let summary = FocusSessionSummary(
             plannedMinutes: totalSeconds / 60,
-            actualMinutes: max(1, Int((Double(actualSeconds) / 60).rounded())),
+            actualSeconds: actualSeconds,
             hiddenAppNames: hiddenAppNames,
             topRAMProcessName: topEntry?.key,
             topRAMProcessMB: topEntry?.value,
@@ -180,7 +250,6 @@ final class FocusSessionManager: ObservableObject {
         isActive = false
         isOverlayVisible = false
         endDate = nil
-        hiddenApps = []
         overlayController?.hide()
     }
 
@@ -194,7 +263,34 @@ final class FocusSessionManager: ObservableObject {
             content: content,
             trigger: nil // deliver immediately
         )
-        UNUserNotificationCenter.current().add(request)
+        // For a Pomodoro timer the end-of-session notification *is* the primary
+        // output, so a silent failure is the feature not working. The summary
+        // still reaches AlertLog either way, but the user gets told when macOS
+        // refused to show it.
+        UNUserNotificationCenter.current().add(request) { error in
+            guard let error else { return }
+            Task { @MainActor in
+                FocusSessionManager.shared.notificationFailure =
+                    "Your focus session finished, but macOS wouldn't show the notification: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func persistActiveSession() {
+        guard let endDate, !hiddenBundleIDs.isEmpty else { return }
+        let saved = PersistedSession(bundleIDs: hiddenBundleIDs, endDate: endDate)
+        guard let data = try? JSONEncoder().encode(saved) else { return }
+        UserDefaults.standard.set(data, forKey: Self.activeSessionKey)
+    }
+
+    /// Belt and braces alongside the persisted record: a clean ⌘Q gets the apps
+    /// back immediately rather than on next launch. Call once from HaloApp.
+    func observeAppTermination() {
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { FocusSessionManager.shared.restoreHiddenApps() }
+        }
     }
 
     // MARK: - Manual Focus-mode nudge

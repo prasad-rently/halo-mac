@@ -441,20 +441,23 @@ struct FocusSessionSummary: Identifiable {
     let id: UUID
     let date: Date
     let plannedMinutes: Int
-    let actualMinutes: Int
+    /// Stored in seconds so a session ended 5 seconds in is not reported as
+    /// "1 minute" — `max(1, rounded())` rounded every sub-minute session up,
+    /// in the summary, the AlertLog entry and the Focus History row alike.
+    let actualSeconds: Int
     let hiddenAppNames: [String]
     let topRAMProcessName: String?
     let topRAMProcessMB: Double?
     let maxCPUPercent: Double
     let endedEarly: Bool
 
-    init(id: UUID = UUID(), date: Date = Date(), plannedMinutes: Int, actualMinutes: Int,
+    init(id: UUID = UUID(), date: Date = Date(), plannedMinutes: Int, actualSeconds: Int,
          hiddenAppNames: [String], topRAMProcessName: String?, topRAMProcessMB: Double?,
          maxCPUPercent: Double, endedEarly: Bool) {
         self.id = id
         self.date = date
         self.plannedMinutes = plannedMinutes
-        self.actualMinutes = actualMinutes
+        self.actualSeconds = actualSeconds
         self.hiddenAppNames = hiddenAppNames
         self.topRAMProcessName = topRAMProcessName
         self.topRAMProcessMB = topRAMProcessMB
@@ -462,9 +465,17 @@ struct FocusSessionSummary: Identifiable {
         self.endedEarly = endedEarly
     }
 
+    /// Minutes, rounded — except below a minute, which says so rather than
+    /// claiming one.
+    var actualMinutes: Int { max(1, Int((Double(actualSeconds) / 60).rounded())) }
+
+    var durationText: String {
+        actualSeconds < 60 ? "Under-a-minute" : "\(Int((Double(actualSeconds) / 60).rounded()))-minute"
+    }
+
     /// e.g. "50-minute session. Top RAM consumer: Chrome (820 MB). CPU stayed below 55%."
     var digestText: String {
-        var parts: [String] = ["\(actualMinutes)-minute session\(endedEarly ? " (ended early)" : "")."]
+        var parts: [String] = ["\(durationText) session\(endedEarly ? " (ended early)" : "")."]
         if let name = topRAMProcessName, let mb = topRAMProcessMB {
             parts.append("Top RAM consumer: \(name) (\(Int(mb)) MB).")
         }
