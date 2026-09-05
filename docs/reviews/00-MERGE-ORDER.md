@@ -55,6 +55,21 @@ done here rather than thirteen times afterwards.
 | **P0.2** | Extract one `ShellReader` helper: `run(_ path:_ args:) -> (stdout: String, exitCode: Int32)`, reading the pipe **before** `waitUntilExit()` and sending stderr to `FileHandle.nullDevice` | B5 | The same `waitUntilExit()`-before-read bug appears in five PRs (#21, #17 ×2, #16, #9, #10). Three of those deadlock for real. Several cite `SecurityPostureScanner` as the reference implementation, so fixing the shape once and having the others adopt it turns five fixes into one. |
 | **P0.3** | Promote `AlertManager` and `ProcessMonitor` to `.shared` singletons (matching `AlertLog.shared` beside them) | B6 | #13/#16/#20 each add an `evaluate*` method reached through a *different* `AlertManager` instance, so the cooldown contract is per-instance rather than global. #11/#13/#14 each construct their own `ProcessMonitor`, giving four overlapping process enumerations. Much cheaper before all four land. |
 | **P0.4** | Reserve pbxproj UUID blocks in `CLAUDE.md` and reassign the collisions | B1 | #21, #13 and #9 all claim `8031`/`8032`. Whichever two merge second produce duplicate object IDs — Xcode may accept them while mapping a `PBXBuildFile` to the wrong `fileRef`, which fails quietly. Suggest: #21 keeps `8031`/`8032`, #13 → `8113`–`8116`, #9 → `8153`/`8154`. |
+| **P0.5** | Extract `AsyncTimeout` — one wall-clock ceiling for callback work that cannot be cancelled | R3/R4 | F-017 and F-025 independently wrote the same timeout and it was wrong the same way in both: racing a `Task.sleep` sibling inside a `withTaskGroup` bounds the returned *value* and not the *time*, because the group joins every child before returning and `cancelAll()` cannot interrupt a `withCheckedContinuation`. Measured, a 1.5 s "ceiling" over 5 s of work returned nil after 5.01 s; where the work may never call back, the caller blocked forever. Both branches now merge P0.5 and use it. Off `main` rather than on P0.2, so adopting it does not also drag in `ShellReader`'s eight call-site changes. **Note P0.5 and P0.2 both number their CLAUDE.md gotcha 20** — whichever merges second renumbers to 21. |
+
+> **⚠️ P0.3 breaks #13 and #14 without a merge conflict.** `phase0/shared-singletons` gives
+> `AlertManager` and `ProcessMonitor` a `private init()`. `AppState.swift` and
+> `TopProcessesSection.swift` construct them directly and are in the universal-eight hot set, so
+> those call sites surface as ordinary conflicts during rebase. These two do not:
+>
+> ```
+> feat/f023-memory-leak-tracker  MemoryTrendTracker.swift:91  ProcessMonitor()
+> feat/f023-memory-leak-tracker  MemoryTrendTracker.swift:92  AlertManager()
+> feat/f028-focus-session        FocusSessionManager.swift:57 ProcessMonitor()
+> ```
+>
+> Phase 0 never touches either file, so git merges them cleanly and the result does not compile.
+> Expect it when rebasing #13 and #14 — a clean merge is not a signal here.
 
 Also worth settling in Phase 0, though it is a decision rather than a commit:
 
@@ -170,7 +185,9 @@ so its real remaining work is the serial reverse-DNS loop.
 
 ```
 Phase 0   P0.1 CI  →  P0.2 ShellReader  →  P0.3 shared singletons  →  P0.4 UUID blocks
+          →  P0.5 AsyncTimeout
           (+ decide B4 sandbox scope, and close #1)
+          P0.3 breaks #13/#14 compilation with no conflict — see the warning above
 
 Phase 1   #20  →  #16  →  #13          AppState + AlertManager
 Phase 2   #11  →  #10  →  #14          Dashboard + Settings   (settle B7 here)
