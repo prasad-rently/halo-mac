@@ -7,7 +7,7 @@ import AppKit
 // "Force Quit" requires confirmation before calling NSWorkspace.
 
 struct TopProcessesSection: View {
-    @State private var monitor = ProcessMonitor()
+    private let monitor = ProcessMonitor.shared
     @State private var processes: [ProcessMonitor.ProcessInfo] = []
     @State private var sortBy: ProcessMonitor.SortKey = .cpu
     @State private var timer: Timer?
