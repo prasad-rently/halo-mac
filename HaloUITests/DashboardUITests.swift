@@ -56,4 +56,115 @@ final class DashboardUITests: HaloUITestCase {
         HaloSidebar(test: self).navigate(to: .dashboard)
         assertID("dashboard.alertHistory", "Dashboard should show the Alert History section")
     }
+
+    // MARK: - Focus Session (F-028) — TC-DASH-09…19
+    //
+    // Starting a real session hides other running apps and starts real
+    // timers/notifications, so every test here stays at (or cancels out of)
+    // the confirmation gate — never actually starting a session.
+
+    // TC-DASH-09/10 — starting a focus session (which hides other apps) must
+    // confirm first; cancelling starts nothing.
+    func test_focusSession_start_requires_confirmation_and_cancel_starts_nothing() {
+        HaloSidebar(test: self).navigate(to: .dashboard)
+        guard tapID("dashboard.focusSession.start", timeout: 10) else {
+            XCTFail("Expected a 'Start Focus Session' button on the Dashboard")
+            return
+        }
+        XCTAssertTrue(confirmationSurfaceAppeared(),
+                      "Starting a focus session hides other apps — it must confirm first (TC-SAFE-02)")
+        cancelConfirmation()
+        XCTAssertTrue(element(id: "dashboard.focusSession.start").waitForExistence(timeout: 5),
+                      "Card should remain in idle state after cancelling — no session started")
+        XCTAssertFalse(element(id: "dashboard.focusSession.end").exists,
+                       "No session should be active after cancelling the start confirmation")
+    }
+
+    // TC-DASH-17 — the Focus History section only renders once at least one
+    // session has completed (it reads AlertLog filtered to kindRaw == "focus").
+    func test_focusHistory_section_renders_when_history_exists() throws {
+        HaloSidebar(test: self).navigate(to: .dashboard)
+        guard waitForID("dashboard.focusHistory", timeout: 5) != nil else {
+            throw XCTSkip("No completed Focus Sessions are recorded on this test machine yet — " +
+                          "the Focus History section is conditionally hidden when there's no history.")
+        }
+        XCTAssertTrue(element(id: "dashboard.focusHistory").exists)
+    }
+
+    // MARK: - App Usage Insights (F-021) — TC-DASH-09…19
+    //
+    // Usage tracking is off by default (opt-in only), so on a fresh test run
+    // the section should render in its disabled state — never a crash and
+    // never fabricated data.
+
+    // TC-DASH-09 — the section renders (in whichever state — disabled by
+    // default, collecting, or populated — depending on this machine's prior
+    // opt-in state).
+    func test_appUsageInsights_section_renders() {
+        HaloSidebar(test: self).navigate(to: .dashboard)
+        XCTAssertTrue(assertID("dashboard.appUsageInsights",
+                                "Dashboard should show the App Usage Insights header", timeout: 10).exists)
+    }
+
+    // TC-DASH-09 — when tracking has never been enabled on this machine, the
+    // disabled state (not a chart, not "collecting") is what's shown.
+    func test_appUsageInsights_shows_disabled_state_when_tracking_off() throws {
+        HaloSidebar(test: self).navigate(to: .dashboard)
+        guard waitForID("dashboard.appUsageInsights.disabledState", timeout: 5) != nil else {
+            throw XCTSkip("Usage tracking is already enabled on this test machine — " +
+                          "disabled-state expectation only applies to a fresh opt-in.")
+        }
+        XCTAssertFalse(element(id: "dashboard.appUsageInsights.chart").exists,
+                       "The Top Apps chart must not render while tracking is off")
+    }
+
+    // MARK: - Backup Health / Time Machine Monitor (F-022) — TC-DASH-09…18
+    //
+    // Entirely read-only status via `tmutil` (Back Up Now is the one write
+    // action, and it's a normal user-initiated backup identical to the menu
+    // bar icon — no confirmation gate needed, but we never block on it
+    // actually completing).
+
+    // TC-DASH-09 / TC-DASH-10 / TC-DASH-11 — the card always renders exactly
+    // one of its three honest states, never a crash and never a blank space.
+    func test_backupHealth_card_renders() {
+        HaloSidebar(test: self).navigate(to: .dashboard)
+        XCTAssertTrue(assertID("dashboard.backupHealth.card",
+                                "Backup Health card should render on the Dashboard", timeout: 10).exists)
+    }
+
+    // TC-DASH-09 — when Time Machine has never been configured, the "Set Up"
+    // deep link is present and no heatmap is rendered as if data existed.
+    func test_backupHealth_notConfigured_shows_setup_button() throws {
+        HaloSidebar(test: self).navigate(to: .dashboard)
+        guard waitForID("dashboard.backupHealth.setup.button", timeout: 10) != nil else {
+            throw XCTSkip("Time Machine is already configured on this test machine — " +
+                          "not-configured expectation only applies to a fresh setup.")
+        }
+        XCTAssertFalse(element(id: "dashboard.backupHealth.heatmap").exists,
+                       "No heatmap should render when Time Machine isn't configured")
+    }
+
+    // TC-DASH-10 / TC-DASH-16 — when a destination is configured and
+    // reachable, the 30-day heatmap renders.
+    func test_backupHealth_configured_shows_heatmap() throws {
+        HaloSidebar(test: self).navigate(to: .dashboard)
+        guard waitForID("dashboard.backupHealth.heatmap", timeout: 15) != nil else {
+            throw XCTSkip("Time Machine isn't configured/reachable on this test machine — " +
+                          "heatmap expectation only applies once a destination is set up.")
+        }
+        XCTAssertTrue(app.windows.firstMatch.exists)
+    }
+
+    // TC-DASH-14 — "Back Up Now" is tappable when a destination is
+    // configured. We don't wait for the backup itself to complete — just
+    // that tapping it doesn't crash and the app stays responsive.
+    func test_backupHealth_backupNow_does_not_crash() throws {
+        HaloSidebar(test: self).navigate(to: .dashboard)
+        guard tapID("dashboard.backupHealth.backupNow.button", timeout: 10) else {
+            throw XCTSkip("Time Machine isn't configured on this test machine — " +
+                          "no 'Back Up Now' button to exercise.")
+        }
+        XCTAssertTrue(app.windows.firstMatch.exists)
+    }
 }

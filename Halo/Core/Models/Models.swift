@@ -1,6 +1,5 @@
 import Foundation
 import SwiftUI
-
 // MARK: - File System Models
 
 struct ScannedItem: Identifiable, Sendable {
@@ -320,6 +319,113 @@ struct PrivacyScanLocation: Identifiable, Hashable {
     static let defaultLocations: [PrivacyScanLocation] = [.downloads, .documents, .desktop]
 }
 
+// MARK: - Security Posture (F-019)
+
+struct SecurityCheck: Identifiable {
+    /// The kind, not a fresh UUID. `loadSecurityPosture()` replaces the whole
+    /// array on every Refresh, so a generated id made all eight rows look brand
+    /// new to `ForEach` — a full teardown and rebuild rather than a diff, visible
+    /// as a flicker. One kind is one row.
+    var id: SecurityCheckKind { kind }
+    let kind: SecurityCheckKind
+    let state: SecurityCheckState
+    /// One-line, human-readable statement of the current value (not a description of the setting).
+    let detail: String
+}
+
+enum SecurityCheckState {
+    case pass, warn, fail
+    /// Halo has no reliable, sandbox-safe way to read this setting — never guessed, never faked.
+    case unknown
+
+    var color: Color {
+        switch self {
+        case .pass: return .haloGreen
+        case .warn: return .haloAmber
+        case .fail: return .haloRed
+        case .unknown: return .haloText3
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .pass: return "checkmark.circle.fill"
+        case .warn: return "exclamationmark.triangle.fill"
+        case .fail: return "xmark.circle.fill"
+        case .unknown: return "questionmark.circle.fill"
+        }
+    }
+}
+
+enum SecurityCheckKind: String, CaseIterable {
+    case fileVault = "FileVault Encryption"
+    case gatekeeper = "Gatekeeper"
+    case firewall = "Application Firewall"
+    case automaticUpdates = "Automatic Security Updates"
+    case sip = "System Integrity Protection"
+    case secureBoot = "Secure Boot"
+    case findMy = "Find My Mac"
+    case loginWindow = "Login Window Security"
+
+    var icon: String {
+        switch self {
+        case .fileVault: return "lock.doc.fill"
+        case .gatekeeper: return "checkmark.shield.fill"
+        case .firewall: return "flame.fill"
+        case .automaticUpdates: return "arrow.triangle.2.circlepath"
+        case .sip: return "lock.shield.fill"
+        case .secureBoot: return "bolt.shield.fill"
+        case .findMy: return "location.magnifyingglass"
+        case .loginWindow: return "person.badge.key.fill"
+        }
+    }
+
+    /// Stable, non-localized slug for accessibility identifiers (`protection.securityPosture.check.<idSlug>`).
+    /// Deliberately independent of `rawValue` (the display title) so UI tests
+    /// don't break if copy changes.
+    var idSlug: String {
+        switch self {
+        case .fileVault: return "fileVault"
+        case .gatekeeper: return "gatekeeper"
+        case .firewall: return "firewall"
+        case .automaticUpdates: return "automaticUpdates"
+        case .sip: return "sip"
+        case .secureBoot: return "secureBoot"
+        case .findMy: return "findMy"
+        case .loginWindow: return "loginWindow"
+        }
+    }
+
+    var explanation: String {
+        switch self {
+        case .fileVault: return "Encrypts your entire disk so it's unreadable without your password."
+        case .gatekeeper: return "Blocks apps that aren't signed by an identified developer."
+        case .firewall: return "Blocks unsolicited incoming network connections."
+        case .automaticUpdates: return "Installs critical macOS security patches without waiting for you."
+        case .sip: return "Prevents even root processes from modifying protected system files."
+        case .secureBoot: return "Verifies the OS hasn't been tampered with at startup. Only changeable in Recovery Mode."
+        case .findMy: return "Lets you locate, lock, or erase this Mac remotely if it's lost or stolen."
+        case .loginWindow: return "Controls whether the login screen shows a user list or requires typing a name."
+        }
+    }
+
+    /// nil when there's no direct System Settings toggle (e.g. SIP/Secure Boot require Recovery Mode).
+    var settingsURL: URL? {
+        switch self {
+        case .fileVault, .gatekeeper, .firewall:
+            return URL(string: "x-apple.systempreferences:com.apple.preference.security")
+        case .automaticUpdates:
+            return URL(string: "x-apple.systempreferences:com.apple.preferences.softwareupdate")
+        case .sip, .secureBoot:
+            return nil
+        case .findMy:
+            return URL(string: "x-apple.systempreferences:com.apple.preferences.AppleIDPrefPane")
+        case .loginWindow:
+            return URL(string: "x-apple.systempreferences:com.apple.preferences.users")
+        }
+    }
+}
+
 // MARK: - Performance Models
 
 struct LoginItem: Identifiable {
@@ -356,6 +462,60 @@ struct SystemMaintenanceTask: Identifiable {
         let formatter = RelativeDateTimeFormatter()
         return formatter.localizedString(for: date, relativeTo: Date())
     }
+}
+
+// MARK: - Memory Trend Tracking (F-023)
+
+/// One RAM reading for a tracked app, taken every 30 s by `MemoryTrendTracker`.
+struct MemorySample: Codable, Sendable {
+    let date: Date
+    let ramMB: Double
+}
+
+/// Rolling per-app RAM history, persisted as JSON (see `MemoryTrendTracker`).
+/// Keyed by bundle ID rather than PID so a "Restart App" (which changes the PID)
+/// keeps the same history instead of starting a fresh sparkline.
+/// Outcome of a "Restart app" action.
+///
+/// Distinguishing `.didNotQuit` from `.failed` matters: an app that declined to
+/// quit is almost always sitting on a "save changes?" sheet, and the right
+/// response is to tell the user that and leave it alone — not to escalate.
+enum RestartOutcome: Sendable, Equatable {
+    case restarted
+    case didNotQuit(String)
+    case failed(String)
+
+    var message: String? {
+        switch self {
+        case .restarted:                          return nil
+        case .didNotQuit(let m), .failed(let m):  return m
+        }
+    }
+}
+
+struct AppMemoryHistory: Codable, Identifiable, Sendable {
+    var id: String { bundleID }
+    let bundleID: String
+    var appName: String
+    /// Path to the .app bundle, used to relaunch via `NSWorkspace.openApplication(at:configuration:)`
+    /// after a "Restart App". Nil only if the app vanished before we ever recorded a path.
+    var bundlePath: String?
+    /// Ascending by date. Trimmed to the rolling 2-hour window on every sample.
+    var samples: [MemorySample]
+}
+
+/// Computed leak-detection result for one app's history. Never persisted —
+/// always recomputed fresh from `samples` so a stale flag can never survive
+/// a real RAM drop, and copy always says "possible", never "confirmed".
+struct MemoryLeakStatus: Sendable {
+    let isPossibleLeak: Bool
+    /// When the current unbroken growth streak began (nil if no growth streak is active).
+    let streakStartDate: Date?
+    /// RAM at the start of the current streak, for the "+N MB since HH:mm" readout.
+    let streakStartRAMMB: Double
+    let currentRAMMB: Double
+
+    static let empty = MemoryLeakStatus(isPossibleLeak: false, streakStartDate: nil, streakStartRAMMB: 0, currentRAMMB: 0)
 }
 
 // MARK: - Application Models
@@ -524,6 +684,81 @@ enum ClipboardItemKind: String, CaseIterable {
     }
 }
 
+// MARK: - Focus Session Models (F-028)
+
+/// A single app configured (in Settings → Focus) to be auto-hidden when a
+/// Focus Session starts. Stored by bundle identifier so the configuration
+/// survives even when the target app isn't currently running.
+struct FocusAppConfig: Identifiable, Codable, Equatable, Hashable {
+    let bundleIdentifier: String
+    let name: String
+    var id: String { bundleIdentifier }
+}
+
+/// End-of-session report. `topRAMProcessName` / `topRAMProcessMB` and
+/// `maxCPUPercent` are sampled every 5s during the session from the real
+/// `ProcessMonitor` actor + `AppState.cpuUsage` — not synthetic placeholder data.
+struct FocusSessionSummary: Identifiable {
+    let id: UUID
+    let date: Date
+    let plannedMinutes: Int
+    /// Stored in seconds so a session ended 5 seconds in is not reported as
+    /// "1 minute" — `max(1, rounded())` rounded every sub-minute session up,
+    /// in the summary, the AlertLog entry and the Focus History row alike.
+    let actualSeconds: Int
+    let hiddenAppNames: [String]
+    let topRAMProcessName: String?
+    let topRAMProcessMB: Double?
+    let maxCPUPercent: Double
+    let endedEarly: Bool
+
+    init(id: UUID = UUID(), date: Date = Date(), plannedMinutes: Int, actualSeconds: Int,
+         hiddenAppNames: [String], topRAMProcessName: String?, topRAMProcessMB: Double?,
+         maxCPUPercent: Double, endedEarly: Bool) {
+        self.id = id
+        self.date = date
+        self.plannedMinutes = plannedMinutes
+        self.actualSeconds = actualSeconds
+        self.hiddenAppNames = hiddenAppNames
+        self.topRAMProcessName = topRAMProcessName
+        self.topRAMProcessMB = topRAMProcessMB
+        self.maxCPUPercent = maxCPUPercent
+        self.endedEarly = endedEarly
+    }
+
+    /// Minutes, rounded — except below a minute, which says so rather than
+    /// claiming one.
+    var actualMinutes: Int { max(1, Int((Double(actualSeconds) / 60).rounded())) }
+
+    var durationText: String {
+        actualSeconds < 60 ? "Under-a-minute" : "\(Int((Double(actualSeconds) / 60).rounded()))-minute"
+    }
+
+    /// e.g. "50-minute session. Top RAM consumer: Chrome (820 MB). CPU stayed below 55%."
+    var digestText: String {
+        var parts: [String] = ["\(durationText) session\(endedEarly ? " (ended early)" : "")."]
+        if let name = topRAMProcessName, let mb = topRAMProcessMB {
+            parts.append("Top RAM consumer: \(name) (\(Int(mb)) MB).")
+        }
+        if maxCPUPercent > 0 {
+            parts.append("CPU stayed below \(Int((maxCPUPercent / 5).rounded(.up) * 5))%.")
+        } else {
+            parts.append("CPU usage stayed minimal throughout.")
+        }
+        return parts.joined(separator: " ")
+    }
+}
+
+/// Duration presets shown on the Dashboard's Focus Session card. "Custom" is
+/// handled separately as a plain minute count (see `FocusSessionCard`).
+enum FocusDurationPreset: Int, CaseIterable, Identifiable {
+    case twentyFive = 25
+    case fifty = 50
+
+    var id: Int { rawValue }
+    var label: String { "\(rawValue) min" }
+}
+
 // MARK: - Activity Event
 
 struct ActivityEvent: Identifiable {
@@ -561,6 +796,100 @@ enum ActivityKind {
     }
 }
 
+// MARK: - Metrics History & Weekly Digest (F-029)
+
+/// One hourly snapshot used to build the 7-day health-score sparkline and the
+/// Weekly Digest. Sampled by `AppState`'s dedicated hourly timer — NOT the
+/// existing 2 s metrics timer, which would produce ~1,800x too much data for a
+/// week-long rolling history. See `MetricsHistory.swift`.
+struct MetricsSample: Codable, Identifiable {
+    let id: UUID
+    let date: Date
+    let healthScore: Int
+    let diskFreeGB: Double
+    /// Top RAM-consuming user apps at the moment of this sample — real data
+    /// from `ProcessMonitor`, sampled at the same hourly cadence (not the
+    /// continuous per-second tracking a true "top RAM apps this week" ranking
+    /// would need). Empty if the read failed.
+    let topRAMProcesses: [ProcessRAMSample]
+
+    init(id: UUID = UUID(), date: Date = Date(), healthScore: Int, diskFreeGB: Double, topRAMProcesses: [ProcessRAMSample] = []) {
+        self.id = id
+        self.date = date
+        self.healthScore = healthScore
+        self.diskFreeGB = diskFreeGB
+        self.topRAMProcesses = topRAMProcesses
+    }
+}
+
+/// A single process's RAM usage at sample time.
+struct ProcessRAMSample: Codable {
+    let name: String
+    let ramMB: Double
+}
+
+/// An app ranked by its average RAM usage across the sampled window.
+struct RankedApp: Identifiable {
+    /// The app name, not a fresh UUID — this is re-derived on every digest
+    /// composition, and the name is already the unique key it was grouped by.
+    var id: String { name }
+    let name: String
+    /// Mean RSS across the whole period, counting hours the app was not in the
+    /// top 5 as zero. See WeeklyDigestGenerator.composeSummary for why the
+    /// divisor is the period and not the hours observed.
+    let avgRAMMB: Double
+    /// How many of the period's samples actually contained this app. Lets the
+    /// UI show a one-hour spike as a spike rather than presenting it as a
+    /// weekly average.
+    var hoursObserved: Int = 0
+    var hoursInPeriod: Int = 0
+
+    /// True when the app was present for less than a quarter of the period —
+    /// its average is dominated by a short burst.
+    var isSpike: Bool {
+        guard hoursInPeriod > 0 else { return false }
+        return Double(hoursObserved) / Double(hoursInPeriod) < 0.25
+    }
+}
+
+/// Composed once per digest delivery from `MetricsHistory` + `AlertLog` +
+/// live `AppState` metrics. Every field is backed by real, on-device data —
+/// see F-029's "As actually built" note in `docs/FEATURE_ROADMAP.md` for what
+/// was deliberately simplified or omitted rather than fabricated.
+struct WeeklyDigestSummary {
+    let generatedDate: Date
+    let periodDays: Int
+
+    // Health score trend (real — MetricsHistory hourly samples)
+    let healthScoreStart: Int?
+    let healthScoreEnd: Int
+    let healthSamples: [MetricsSample]
+
+    // "Top storage growers" simplified to a real week-over-week disk-free
+    // delta rather than a fabricated file-growth audit.
+    let diskFreeStartGB: Double?
+    let diskFreeEndGB: Double
+
+    // Real per-app average RAM aggregated from hourly ProcessMonitor samples.
+    // Empty when fewer than 2 samples exist yet (fresh install).
+    let topAverageRAMApps: [RankedApp]
+
+    // AlertLog-derived event summary (real)
+    let alertsInPeriod: [AlertEntry]
+    let threatsDetectedCount: Int
+    let scansCompletedCount: Int
+
+    var healthScoreDelta: Int? {
+        guard let start = healthScoreStart else { return nil }
+        return healthScoreEnd - start
+    }
+
+    var diskFreeDeltaGB: Double? {
+        guard let start = diskFreeStartGB else { return nil }
+        return diskFreeEndGB - start
+    }
+}
+
 // MARK: - Sample Data
 
 extension ActivityEvent {
@@ -590,4 +919,206 @@ extension ClipboardItem {
         .init(content: .code("actor DuplicateDetector {\n    func detect(in urls: [URL]) async throws -> [DuplicateGroup]", language: "swift"),
               copiedDate: Date().addingTimeInterval(-100000), sourceApp: "Xcode")
     ]
+}
+
+// MARK: - Time Machine Backup Health (F-022)
+
+/// Snapshot of Time Machine's real state, built entirely from `tmutil` output
+/// and volume metadata. `isConfigured == false` means Halo found no Time
+/// Machine destination at all — the UI must show an honest empty state, never
+/// a fabricated "healthy" card or empty heatmap as if backups exist.
+struct TimeMachineStatus: Sendable {
+    var isConfigured: Bool
+    var destinationName: String? = nil
+    var mountPoint: String? = nil
+    /// Set for network destinations (Time Capsule / NAS), which `tmutil`
+    /// reports with a `URL` instead of a `Mount Point`.
+    var destinationURL: String? = nil
+    /// A network destination has no local mount path until its sparsebundle is
+    /// mounted, so "no mount point" is not evidence that it is disconnected.
+    var isNetworkDestination: Bool = false
+    /// Whether the destination volume is currently mounted/reachable (it can
+    /// be configured but disconnected, e.g. an external HDD that's unplugged).
+    /// Only meaningful for local destinations — read `reachability` instead.
+    var isReachable: Bool = false
+    var availableBytes: Int64? = nil
+    var totalBytes: Int64? = nil
+    /// Most recent backup Halo could find, from `tmutil latestbackup` or,
+    /// failing that, the newest entry in `tmutil listbackups`.
+    var lastBackupDate: Date? = nil
+    var isBackupRunning: Bool = false
+    /// All snapshot dates found via `tmutil listbackups` — used to build the
+    /// 30-day heatmap. Empty when unknown; never fabricated.
+    var backupDates: [Date] = []
+
+    static let notConfigured = TimeMachineStatus(isConfigured: false)
+
+    /// True only when Halo has a real last-backup date and it's 48h+ old.
+    /// Never true for "no data" — that's the separate `.notConfigured` state,
+    /// or `hasNeverBackedUp` below.
+    var isStale: Bool {
+        guard isConfigured, let last = lastBackupDate else { return false }
+        return Date().timeIntervalSince(last) > (48 * 3600)
+    }
+
+    /// Time Machine is set up but no backup has ever completed — a destination
+    /// was selected and then the drive was never plugged in, or every attempt
+    /// failed.
+    ///
+    /// This is deliberately separate from `isStale`, which cannot represent it:
+    /// `isStale` needs a `lastBackupDate` to measure against, so with no
+    /// backups at all it is `false`. Without this the app stayed silent in the
+    /// one configuration where the user is most likely to believe they are
+    /// protected and not be.
+    var hasNeverBackedUp: Bool {
+        isConfigured && lastBackupDate == nil
+    }
+
+    /// Whether Halo can actually tell that the destination is present.
+    ///
+    /// Split three ways rather than two because "the drive is unplugged" and
+    /// "we have no way to measure this one" are different facts, and showing
+    /// the second as the first is what made healthy network destinations read
+    /// as disconnected.
+    enum Reachability { case reachable, unreachable, unknown }
+
+    var reachability: Reachability {
+        if isReachable { return .reachable }
+        if isNetworkDestination { return .unknown }
+        return .unreachable
+    }
+
+    var spaceUsedRatio: Double? {
+        guard let available = availableBytes, let total = totalBytes, total > 0 else { return nil }
+        return 1 - (Double(available) / Double(total))
+    }
+}
+
+/// One day's cell in the 30-day backup-frequency heatmap.
+enum BackupDayState: Equatable {
+    case backedUp   // a snapshot exists for this calendar day
+    case late       // 1 day since the most recent snapshot on/before this day
+    case missed     // 2+ days since the most recent snapshot on/before this day
+    /// No backup history is known for this day at all (before the earliest
+    /// known snapshot, or Time Machine has never produced one) — a neutral
+    /// gray cell, never colored red as if a backup was "missed".
+    case noData
+
+    var color: Color {
+        switch self {
+        case .backedUp: return .haloGreen
+        case .late: return .haloAmber
+        case .missed: return .haloRed
+        case .noData: return .haloBorder
+        }
+    }
+}
+
+/// Result of a user-initiated "Back Up Now".
+///
+/// `tmutil startbackup` needs Full Disk Access on recent macOS; without it the
+/// command exits non-zero and explains why. Returning a bare `Bool` threw that
+/// explanation away and left the user with a button that silently did nothing.
+enum BackupStartResult: Sendable, Equatable {
+    case started
+    case failed(String)
+}
+
+struct BackupHeatmapDay: Identifiable {
+    /// The day itself, not a fresh `UUID()`. `heatmap()` is pure and is called
+    /// from the view body, so it re-runs on every render — a generated id made
+    /// `ForEach` see 30 brand-new cells each time and rebuild all of them
+    /// instead of diffing. One day is one cell, so the date is the identity.
+    var id: Date { date }
+    let date: Date
+    let state: BackupDayState
+}
+
+// MARK: - App Usage Analytics Models (F-021)
+//
+// IMPORTANT — honesty constraint: Halo has no macOS API to retroactively read
+// system-wide Screen Time history. `FamilyControls`/`ManagedSettings` are
+// parental-control frameworks that need a special entitlement Halo does not
+// have. Every second recorded here was observed live, while Halo itself was
+// running, via NSWorkspace activation notifications. If Halo wasn't launched
+// (Mac asleep, app quit, launched-at-login disabled), that time is simply not
+// counted — it is never backfilled or estimated. See `AppUsageTracker`.
+
+/// One rolling-window day's worth of usage for a single app.
+/// Persisted as JSON to `UserDefaults["haloAppUsageHistory"]`, pruned to the
+/// trailing 14 days (7 for the headline chart, 14 so a week-over-week
+/// comparison is possible once Halo has been running that long).
+struct AppUsageRecord: Identifiable, Codable {
+    let id: UUID
+    let bundleID: String
+    var appName: String
+    let day: Date                       // start-of-day (local) this record covers
+    var foregroundSeconds: TimeInterval
+    var observedRunningSeconds: TimeInterval   // wall-clock time Halo saw this app in the running-apps list (fg + bg)
+    var switchCount: Int                // times the user activated this app that day
+    var ramSampleSumMB: Double
+    var ramSampleCount: Int
+
+    init(id: UUID = UUID(), bundleID: String, appName: String, day: Date,
+         foregroundSeconds: TimeInterval = 0, observedRunningSeconds: TimeInterval = 0,
+         switchCount: Int = 0, ramSampleSumMB: Double = 0, ramSampleCount: Int = 0) {
+        self.id = id
+        self.bundleID = bundleID
+        self.appName = appName
+        self.day = day
+        self.foregroundSeconds = foregroundSeconds
+        self.observedRunningSeconds = observedRunningSeconds
+        self.switchCount = switchCount
+        self.ramSampleSumMB = ramSampleSumMB
+        self.ramSampleCount = ramSampleCount
+    }
+
+    var averageRAMMB: Double {
+        ramSampleCount > 0 ? ramSampleSumMB / Double(ramSampleCount) : 0
+    }
+}
+
+/// Aggregated foreground time for one app across the reporting window — the
+/// row shown in the "top apps" bar chart.
+struct AppUsageSummary: Identifiable {
+    let id: String              // bundleID
+    let appName: String
+    let totalForegroundSeconds: TimeInterval
+    let averageRAMMB: Double
+    let switchCount: Int
+
+    var hoursFormatted: String {
+        let hours = totalForegroundSeconds / 3600
+        if hours >= 1 { return String(format: "%.1fh", hours) }
+        return "\(Int(totalForegroundSeconds / 60))m"
+    }
+}
+
+/// An app that Halo observed running continuously for a long stretch without
+/// ever being brought to the foreground — a candidate "background hog".
+struct BackgroundHogApp: Identifiable {
+    let id: String               // bundleID
+    let appName: String
+    let observedRunningSeconds: TimeInterval
+    let foregroundSeconds: TimeInterval
+    let averageRAMMB: Double
+    /// How many separate days in the window this app ran for the qualifying
+    /// stretch. What makes the rule "most days" rather than "an hour a day
+    /// adding up over a week".
+    var qualifyingDays: Int = 0
+
+    var foregroundRatio: Double {
+        observedRunningSeconds > 0 ? foregroundSeconds / observedRunningSeconds : 0
+    }
+
+    var observedHoursFormatted: String {
+        String(format: "%.1fh", observedRunningSeconds / 3600)
+    }
+}
+
+/// One day's total foreground time across all apps — used for the
+/// week-over-week comparison.
+struct DailyUsageTotal: Identifiable {
+    let id: Date
+    var totalForegroundSeconds: TimeInterval
 }
