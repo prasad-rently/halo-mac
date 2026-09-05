@@ -560,7 +560,15 @@ for b in $(git branch --no-merged main --format='%(refname:short)'); do
     | comm -13 /tmp/main-ids - | sed "s|$| $b|"
 done | sort > /tmp/pbx-claims
 awk '{print $1}' /tmp/pbx-claims | uniq -d | while read id; do
-  echo "$id  <-  $(grep "^$id " /tmp/pbx-claims | awk '{print $2}' | tr '\n' ' ')"
+  branches=($(grep "^$id " /tmp/pbx-claims | awk '{print $2}'))
+  # Inherited, not claimed twice: if the branches share an ancestor that already
+  # carries the ID, they are all looking at one object.
+  base=$(git merge-base --octopus $branches 2>/dev/null)
+  if [ -n "$base" ] && git show "$base":Halo.xcodeproj/project.pbxproj 2>/dev/null \
+       | grep -q "$id"; then
+    continue
+  fi
+  echo "$id  <-  ${branches[*]}"
 done
 ```
 
@@ -571,6 +579,14 @@ unmerged branch, and the line names them.
 merely share lineage — `feature/upcoming-features` descends from the already-merged
 `feature/f-043-drive-speed-test`, so they hold eight IDs in common quite legitimately.
 A check that prints eight false positives every run is one people learn to ignore.
+
+The `merge-base --octopus` step is there for the same reason, one level up. A Phase 0
+branch that adds a file and is then *merged* into feature branches puts its IDs on all
+of them legitimately — P0.5 (`AsyncTimeout`, `8171`/`8172`) is merged into both #17 and
+#19, so a naive scan reports a three-way collision on a single object. Checking whether
+the claimants share an ancestor that already carries the ID tells inheritance from a
+genuine double-claim. Two branches that independently picked the same ID have no such
+ancestor, so real collisions still print.
 
 ---
 
