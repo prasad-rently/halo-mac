@@ -268,6 +268,24 @@ struct MemorySample: Codable, Sendable {
 /// Rolling per-app RAM history, persisted as JSON (see `MemoryTrendTracker`).
 /// Keyed by bundle ID rather than PID so a "Restart App" (which changes the PID)
 /// keeps the same history instead of starting a fresh sparkline.
+/// Outcome of a "Restart app" action.
+///
+/// Distinguishing `.didNotQuit` from `.failed` matters: an app that declined to
+/// quit is almost always sitting on a "save changes?" sheet, and the right
+/// response is to tell the user that and leave it alone — not to escalate.
+enum RestartOutcome: Sendable, Equatable {
+    case restarted
+    case didNotQuit(String)
+    case failed(String)
+
+    var message: String? {
+        switch self {
+        case .restarted:                          return nil
+        case .didNotQuit(let m), .failed(let m):  return m
+        }
+    }
+}
+
 struct AppMemoryHistory: Codable, Identifiable, Sendable {
     var id: String { bundleID }
     let bundleID: String

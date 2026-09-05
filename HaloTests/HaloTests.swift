@@ -356,3 +356,115 @@ struct AppMemoryHistoryPersistenceTests {
         #expect(decoded[1].samples.first?.ramMB == 100)
     }
 }
+
+// MARK: - F-023 review fixes
+
+@Suite("MemoryTrendTracker leak detection")
+struct MemoryTrendLeakDetectionTests {
+
+    private func samples(_ points: [(minutesAgo: Double, ramMB: Double)], now: Date = Date()) -> [MemorySample] {
+        points
+            .map { MemorySample(date: now.addingTimeInterval(-$0.minutesAgo * 60), ramMB: $0.ramMB) }
+            .sorted { $0.date < $1.date }
+    }
+
+    // The reported false positive: RAM climbs early, then sits flat for
+    // ~110 minutes. No >15% drop from the peak, so the streak never resets, and
+    // the old `latest > streakStart` test passed — reporting a leak for an app
+    // whose memory hadn't moved in nearly two hours. This is the ordinary shape
+    // for a browser or IDE that allocates at startup and plateaus.
+    @Test("A long plateau after early growth is not a leak")
+    func testPlateauIsNotALeak() {
+        let now = Date()
+        var points: [(Double, Double)] = [(120, 1000), (118, 1100), (115, 1200), (112, 1100)]
+        // Flat at 1100 from 110 minutes ago until now.
+        for m in stride(from: 110.0, through: 0.0, by: -5.0) { points.append((m, 1100)) }
+
+        let history = AppMemoryHistory(bundleID: "com.test.plateau", appName: "Plateau",
+                                       bundlePath: nil, samples: samples(points.map { (minutesAgo: $0.0, ramMB: $0.1) }, now: now))
+        #expect(MemoryTrendTracker.shared.leakStatus(for: history).isPossibleLeak == false)
+    }
+
+    // The true positive must survive the new, stricter rule.
+    @Test("Steady sustained growth over more than an hour is still a leak")
+    func testSustainedGrowthIsALeak() {
+        let now = Date()
+        // 1000 MB -> 1700 MB, climbing throughout, sampled every 5 minutes for 2h.
+        var points: [(minutesAgo: Double, ramMB: Double)] = []
+        for m in stride(from: 120.0, through: 0.0, by: -5.0) {
+            points.append((minutesAgo: m, ramMB: 1000 + (120 - m) * 6))
+        }
+        let history = AppMemoryHistory(bundleID: "com.test.leak", appName: "Leaky",
+                                       bundlePath: nil, samples: samples(points, now: now))
+        #expect(MemoryTrendTracker.shared.leakStatus(for: history).isPossibleLeak)
+    }
+
+    @Test("Growth smaller than the noise floor is not a leak")
+    func testTinyGrowthIsNotALeak() {
+        let now = Date()
+        var points: [(minutesAgo: Double, ramMB: Double)] = []
+        // 1000 -> 1030 over two hours: 3%, well under the 10% floor.
+        for m in stride(from: 120.0, through: 0.0, by: -5.0) {
+            points.append((minutesAgo: m, ramMB: 1000 + (120 - m) * 0.25))
+        }
+        let history = AppMemoryHistory(bundleID: "com.test.noise", appName: "Noisy",
+                                       bundlePath: nil, samples: samples(points, now: now))
+        #expect(MemoryTrendTracker.shared.leakStatus(for: history).isPossibleLeak == false)
+    }
+
+    // Pre-existing behaviour the review flagged as correct — pinned so a
+    // refactor can't quietly drop it.
+    @Test("A declining app is never a leak")
+    func testDecliningIsNotALeak() {
+        let now = Date()
+        var points: [(minutesAgo: Double, ramMB: Double)] = []
+        for m in stride(from: 120.0, through: 0.0, by: -5.0) {
+            points.append((minutesAgo: m, ramMB: 2000 - (120 - m) * 5))
+        }
+        let history = AppMemoryHistory(bundleID: "com.test.decline", appName: "Shrinking",
+                                       bundlePath: nil, samples: samples(points, now: now))
+        #expect(MemoryTrendTracker.shared.leakStatus(for: history).isPossibleLeak == false)
+    }
+
+    @Test("A short history is never a leak, however steeply it grows")
+    func testShortHistoryIsNotALeak() {
+        let now = Date()
+        let points: [(minutesAgo: Double, ramMB: Double)] = [(10, 1000), (5, 2000), (0, 3000)]
+        let history = AppMemoryHistory(bundleID: "com.test.short", appName: "Young",
+                                       bundlePath: nil, samples: samples(points, now: now))
+        #expect(MemoryTrendTracker.shared.leakStatus(for: history).isPossibleLeak == false)
+    }
+}
+
+@Suite("MemoryTrendTracker slope")
+struct MemoryTrendSlopeTests {
+
+    @Test("A rising series has a positive slope")
+    func testRisingSlope() {
+        let now = Date()
+        let s = (0..<10).map { MemorySample(date: now.addingTimeInterval(Double($0) * 60), ramMB: 100 + Double($0) * 10) }
+        #expect(MemoryTrendTracker.hasPositiveSlope(samples: s, since: now.addingTimeInterval(-60)))
+    }
+
+    @Test("A flat series does not have a positive slope")
+    func testFlatSlope() {
+        let now = Date()
+        let s = (0..<10).map { MemorySample(date: now.addingTimeInterval(Double($0) * 60), ramMB: 100) }
+        #expect(MemoryTrendTracker.hasPositiveSlope(samples: s, since: now.addingTimeInterval(-60)) == false)
+    }
+
+    @Test("A falling series does not have a positive slope")
+    func testFallingSlope() {
+        let now = Date()
+        let s = (0..<10).map { MemorySample(date: now.addingTimeInterval(Double($0) * 60), ramMB: 200 - Double($0) * 10) }
+        #expect(MemoryTrendTracker.hasPositiveSlope(samples: s, since: now.addingTimeInterval(-60)) == false)
+    }
+
+    // An unknown slope must never be read as evidence of a leak.
+    @Test("Too few points is not a positive slope")
+    func testInsufficientPoints() {
+        let now = Date()
+        let s = [MemorySample(date: now, ramMB: 100), MemorySample(date: now.addingTimeInterval(60), ramMB: 200)]
+        #expect(MemoryTrendTracker.hasPositiveSlope(samples: s, since: now.addingTimeInterval(-60)) == false)
+    }
+}

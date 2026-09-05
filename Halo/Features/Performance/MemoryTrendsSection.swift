@@ -16,6 +16,10 @@ struct MemoryTrendsSection: View {
     @ObservedObject private var tracker = MemoryTrendTracker.shared
     @State private var isExpanded = true
     @State private var appPendingRestart: AppMemoryHistory?
+    /// Why a restart didn't happen. An app that declines to quit is almost
+    /// always sitting on a save sheet, and the user needs to be told that
+    /// rather than left wondering why the button did nothing.
+    @State private var restartMessage: String?
 
     @AppStorage("memoryLeakAlertThresholdGB") private var alertThresholdGB: Double = MemoryTrendTracker.defaultAlertThresholdGB
 
@@ -86,13 +90,21 @@ struct MemoryTrendsSection: View {
         ) {
             if let history = appPendingRestart {
                 Button("Restart App", role: .destructive) {
-                    MemoryTrendTracker.shared.restart(history)
+                    MemoryTrendTracker.shared.restart(history) { outcome in
+                        restartMessage = outcome.message
+                    }
                     appPendingRestart = nil
                 }
             }
             Button("Cancel", role: .cancel) { appPendingRestart = nil }
         } message: {
-            Text("This will quit the app immediately, which may cause unsaved data loss, then relaunch it fresh.")
+            Text("Halo will ask \(appPendingRestart?.appName ?? "the app") to quit, then relaunch it. If it has unsaved changes it will prompt you, and Halo will leave it alone.")
+        }
+        .alert("Restart", isPresented: .init(get: { restartMessage != nil },
+                                             set: { if !$0 { restartMessage = nil } })) {
+            Button("OK") { restartMessage = nil }
+        } message: {
+            Text(restartMessage ?? "")
         }
         .accessibilityIdentifier("performance.memoryTrends.tab")
     }

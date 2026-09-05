@@ -83,22 +83,52 @@ actor ProcessMonitor {
     /// it just re-keys by bundle ID (via `NSRunningApplication`) instead of PID, and skips
     /// the CPU-delta bookkeeping that F-023 doesn't need.
     /// Called every 30 s by `MemoryTrendTracker`, independent of the 3 s Top Processes timer.
-    func runningAppRAMSamples() -> [AppRAMSample] {
-        let apps = NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }
-        var samples: [AppRAMSample] = []
-        for app in apps {
-            guard let bundleID = app.bundleIdentifier else { continue }
-            let pid = app.processIdentifier
+    /// Identity of a running app, read from AppKit on the main actor.
+    ///
+    /// `NSWorkspace` is main-thread-affine. `runningApplications` is tolerant
+    /// in practice but is not documented thread-safe, and `localizedName` /
+    /// `bundleURL` read through to bundle info that AppKit caches without
+    /// synchronisation — the kind of thing that works until it intermittently
+    /// does not. Splitting the AppKit read from the `proc_pidinfo` read keeps
+    /// each on the thread it belongs to.
+    struct RunningAppIdentity: Sendable {
+        let pid: Int32
+        let bundleID: String
+        let name: String
+        let bundlePath: String?
+    }
+
+    /// Snapshots the AppKit half. Must be called on the main actor.
+    @MainActor
+    static func runningAppIdentities() -> [RunningAppIdentity] {
+        NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular }
+            .compactMap { app in
+                guard let bundleID = app.bundleIdentifier else { return nil }
+                return RunningAppIdentity(
+                    pid: app.processIdentifier,
+                    bundleID: bundleID,
+                    name: app.localizedName ?? "PID \(app.processIdentifier)",
+                    bundlePath: app.bundleURL?.path
+                )
+            }
+    }
+
+    /// Adds the RSS reading for each app. Pure `proc_pidinfo` — no AppKit — so
+    /// it is safe off the main thread.
+    func ramSamples(for identities: [RunningAppIdentity]) -> [AppRAMSample] {
+        identities.compactMap { identity in
             var info = proc_taskinfo()
             let size = MemoryLayout<proc_taskinfo>.size
-            let ret = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &info, Int32(size))
-            guard ret > 0 else { continue }
-            let ramMB = Double(info.pti_resident_size) / 1_048_576
-            let name = app.localizedName ?? processName(pid: pid)
-            samples.append(AppRAMSample(pid: pid, bundleID: bundleID, name: name,
-                                         bundlePath: app.bundleURL?.path, ramMB: ramMB))
+            guard proc_pidinfo(identity.pid, PROC_PIDTASKINFO, 0, &info, Int32(size)) > 0 else { return nil }
+            return AppRAMSample(
+                pid: identity.pid,
+                bundleID: identity.bundleID,
+                name: identity.name,
+                bundlePath: identity.bundlePath,
+                ramMB: Double(info.pti_resident_size) / 1_048_576
+            )
         }
-        return samples
     }
 
     // MARK: - Per-process info
