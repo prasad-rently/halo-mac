@@ -40,8 +40,10 @@ final class ProtectionViewModel: ObservableObject {
     @Published var isClearingBrowser = false
     @Published var clearBrowserError: String? = nil
 
-    // Permissions
+    // Permissions (F-016)
     @Published var permissions: [AppPermission] = []
+    @Published var permissionAudit: PermissionAuditResult = .unavailable(reason: "Not yet checked")
+    @Published var isLoadingPermissions = false
 
     // Launch Agents — real scan from ~/Library/LaunchAgents, /Library/LaunchAgents, /Library/LaunchDaemons
     @Published var launchAgents: [RealLaunchAgentItem] = []
@@ -84,6 +86,7 @@ final class ProtectionViewModel: ObservableObject {
         securityStoreObserver = SecurityPostureStore.shared.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
     }
+    private let permissionAuditor = PermissionAuditor()
 
     enum ScanState: Equatable {
         case idle, scanning(progress: Double), complete(clean: Bool), found(count: Int)
@@ -201,14 +204,35 @@ final class ProtectionViewModel: ObservableObject {
         showBrowserReviewSheet = false
     }
 
-    // MARK: Permissions
+    // MARK: Permissions (F-016)
 
     func loadPermissions() async {
         // Per-app TCC grants live in a SIP-protected database that requires Full
-        // Disk Access to read, so Halo does not fabricate an audit. Instead each
-        // category links straight to its System Settings privacy pane, where the
+        // Disk Access to read. `PermissionAuditor` attempts the real read first;
+        // when it can't (sandboxed release build, no Full Disk Access, locked
+        // database), Halo does not fabricate an audit — it honestly falls back
+        // to category cards that link straight to System Settings, where the
         // real, authoritative list lives.
+        isLoadingPermissions = true
         permissions = PermissionKind.allCases.map { AppPermission(kind: $0, grantedApps: []) }
+
+        var result = await permissionAuditor.run()
+
+        // Display names are resolved here, on the MainActor, rather than inside
+        // the actor — `NSWorkspace.urlForApplication(withBundleIdentifier:)` is
+        // main-thread-affine AppKit and was being called once per grant, several
+        // hundred times, from a cooperative pool thread.
+        if case .available(let grants) = result {
+            result = .available(grants: PermissionAuditor.resolveAppNames(for: grants))
+        }
+        permissionAudit = result
+
+        if case .available(let grants) = result {
+            var grouped: [PermissionKind: [String]] = [:]
+            for grant in grants { grouped[grant.kind, default: []].append(grant.appName) }
+            permissions = PermissionKind.allCases.map { AppPermission(kind: $0, grantedApps: grouped[$0] ?? []) }
+        }
+        isLoadingPermissions = false
     }
 
     // MARK: Launch Agents (real scan)
@@ -688,21 +712,209 @@ struct BrowserReviewSheet: View {
     }
 }
 
-// MARK: - Permissions Audit
+// MARK: - Permissions Audit (F-016)
 
 struct PermissionsAuditSection: View {
     @ObservedObject var viewModel: ProtectionViewModel
 
+    private var totalAuditedApps: Int {
+        guard case .available(let grants) = viewModel.permissionAudit else { return 0 }
+        return Set(grants.map(\.bundleID)).count
+    }
+
+    private var excessiveAppCount: Int {
+        guard case .available(let grants) = viewModel.permissionAudit else { return 0 }
+        return Set(grants.filter(\.isElevatedRisk).map(\.bundleID)).count
+    }
+
+    private var subtitle: String {
+        if case .available = viewModel.permissionAudit {
+            return "Real per-app grants read from this Mac's permission database"
+        }
+        return "Open a category to review which apps have access, in System Settings"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HaloSectionHeader(title: "App Permissions",
-                              subtitle: "Open a category to review which apps have access, in System Settings")
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
-                ForEach(viewModel.permissions) { permission in
-                    PermissionCard(permission: permission)
+            HStack(alignment: .top) {
+                HaloSectionHeader(title: "App Permissions", subtitle: subtitle)
+                Spacer()
+                if viewModel.isLoadingPermissions {
+                    ProgressView().scaleEffect(0.6).tint(.haloAccent)
+                } else if case .available = viewModel.permissionAudit {
+                    HaloBadge(
+                        text: "\(excessiveAppCount) of \(totalAuditedApps) apps excessive",
+                        color: excessiveAppCount > 0 ? .haloAmber : .haloGreen
+                    )
+                    .accessibilityIdentifier("protection.permissions.summary")
+                }
+            }
+
+            switch viewModel.permissionAudit {
+            case .available(let grants):
+                PermissionAuditList(grants: grants)
+
+            case .unavailable(let reason):
+                FullDiskAccessBanner(reason: reason)
+                    .accessibilityIdentifier("protection.permissions.banner")
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
+                    ForEach(viewModel.permissions) { permission in
+                        PermissionCard(permission: permission)
+                    }
                 }
             }
         }
+    }
+}
+
+struct FullDiskAccessBanner: View {
+    let reason: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "info.circle.fill")
+                .foregroundColor(.haloAmber)
+            Text(reason)
+                .font(HaloFont.body(12))
+                .foregroundColor(.haloText)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.haloAmber.opacity(0.08))
+        .cornerRadius(10)
+    }
+}
+
+/// Per-app grants grouped by `PermissionKind`, each group expandable.
+struct PermissionAuditList: View {
+    let grants: [TCCGrant]
+    @State private var expanded: Set<PermissionKind> = []
+
+    private var groups: [(kind: PermissionKind, grants: [TCCGrant])] {
+        PermissionKind.allCases.compactMap { kind in
+            let matches = grants.filter { $0.kind == kind }.sorted { $0.appName < $1.appName }
+            return matches.isEmpty ? nil : (kind, matches)
+        }
+    }
+
+    var body: some View {
+        LazyVStack(spacing: 8) {
+            ForEach(groups, id: \.kind) { group in
+                PermissionGroupRow(
+                    kind: group.kind,
+                    grants: group.grants,
+                    isExpanded: expanded.contains(group.kind)
+                ) {
+                    if expanded.contains(group.kind) { expanded.remove(group.kind) }
+                    else { expanded.insert(group.kind) }
+                }
+            }
+        }
+    }
+}
+
+struct PermissionGroupRow: View {
+    let kind: PermissionKind
+    let grants: [TCCGrant]
+    let isExpanded: Bool
+    let onToggle: () -> Void
+
+    private var riskCount: Int { grants.filter(\.isElevatedRisk).count }
+
+    /// Stable slug for this kind, used to build `protection.permissions.*`
+    /// accessibility identifiers (e.g. "Screen Recording" → "screenrecording").
+    private var slug: String {
+        kind.rawValue.replacingOccurrences(of: " ", with: "").lowercased()
+    }
+
+    /// System Settings privacy-pane anchor for this permission kind — same
+    /// mapping `PermissionCard` uses for its deep link.
+    private var settingsURL: URL? {
+        let anchor: String
+        switch kind {
+        case .camera:          anchor = "Privacy_Camera"
+        case .microphone:      anchor = "Privacy_Microphone"
+        case .location:        anchor = "Privacy_LocationServices"
+        case .contacts:        anchor = "Privacy_Contacts"
+        case .calendar:        anchor = "Privacy_Calendars"
+        case .fullDisk:        anchor = "Privacy_AllFiles"
+        case .screenRecording: anchor = "Privacy_ScreenCapture"
+        case .accessibility:   anchor = "Privacy_Accessibility"
+        }
+        return URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)")
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Button(action: onToggle) {
+                HStack(spacing: 10) {
+                    Image(systemName: kind.icon)
+                        .font(.system(size: 14))
+                        .foregroundColor(.haloAccent)
+                        .frame(width: 20)
+                    Text(kind.rawValue)
+                        .font(HaloFont.body(13, weight: .semibold))
+                        .foregroundColor(.haloText)
+                    Spacer()
+                    if riskCount > 0 {
+                        HaloBadge(text: "\(riskCount) elevated", color: .haloAmber)
+                    }
+                    Text("\(grants.count) app\(grants.count == 1 ? "" : "s")")
+                        .font(HaloFont.body(11))
+                        .foregroundColor(.haloText3)
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.haloText3)
+                }
+                .padding(12)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("protection.permissions.row.\(slug)")
+
+            if isExpanded {
+                VStack(spacing: 4) {
+                    ForEach(grants) { grant in
+                        HStack(spacing: 8) {
+                            Image(systemName: grant.isElevatedRisk
+                                ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                                .font(.system(size: 11))
+                                .foregroundColor(grant.isElevatedRisk ? .haloAmber : .haloGreen)
+                                .frame(width: 16)
+                            Text(grant.appName)
+                                .font(HaloFont.body(12))
+                                .foregroundColor(.haloText)
+                                .lineLimit(1)
+                            if grant.isElevatedRisk {
+                                Text("excessive for this app")
+                                    .font(HaloFont.body(10))
+                                    .foregroundColor(.haloAmber)
+                            }
+                            Spacer()
+                            Button {
+                                if let url = settingsURL { NSWorkspace.shared.open(url) }
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Text("Revoke")
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.system(size: 8, weight: .semibold))
+                                }
+                                .font(HaloFont.body(10, weight: .semibold))
+                                .foregroundColor(.haloRed)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("protection.permissions.revoke.\(slug)")
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 5)
+                    }
+                }
+                .padding(.bottom, 8)
+            }
+        }
+        .background(Color.haloSurface2)
+        .cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10)
+            .stroke(riskCount > 0 ? Color.haloAmber.opacity(0.3) : Color.haloBorder, lineWidth: 1))
     }
 }
 
@@ -754,6 +966,9 @@ struct PermissionCard: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(
+            "protection.permissions.card.\(permission.kind.rawValue.replacingOccurrences(of: " ", with: "").lowercased())"
+        )
     }
 }
 

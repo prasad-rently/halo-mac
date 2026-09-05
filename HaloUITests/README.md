@@ -108,6 +108,9 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 | `protection.scan.button` | Protection |
 | `protection.securityPosture.score` · `protection.securityPosture.list` · `protection.securityPosture.check.<slug>` (`.state` / `.fix`) | Protection → Security Posture (F-019) |
 | `protection.privacyscan.button` · `.icloudToggle` · `.status` · `.findings.list` · `.emptyState` · `.row.<id>` · `.reveal.<id>` | Protection → Sensitive Data Scanner (F-018) |
+| `protection.permissions.summary` · `protection.permissions.banner` | Protection → Permission Auditor (F-016) header/fallback |
+| `protection.permissions.row.<kind>` · `protection.permissions.revoke.<kind>` | Protection → Permission Auditor per-app list (rich state) |
+| `protection.permissions.card.<kind>` | Protection → Permission Auditor category grid (fallback state) |
 | `performance.idleApp.quit.button` | Performance → Idle Apps |
 | `performance.memoryTrends.tab` · `performance.memoryTrends.row.<bundleID>` · `performance.memoryTrends.sparkline.<bundleID>` · `performance.memoryTrends.restart.<bundleID>` | Performance → Memory Trends (F-023) |
 | `applications.row.<bundleId>` · `applications.uninstall.button` · `applications.leftover.<kind>` | Applications |

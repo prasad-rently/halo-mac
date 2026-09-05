@@ -287,6 +287,28 @@ Read-only, find-only scan of Downloads/Documents/Desktop (iCloud Drive is opt-in
 | **Unit** TC-PROT-U11 | P1 | Per-pattern match cap | 25 repeated AWS-shaped keys in one text | Exactly 20 hits returned, not 25 |
 | **Unit** TC-PROT-U12 | P2 | Plain/empty text produces no hits | Unremarkable text, empty string | Zero hits both times |
 | **Unit** TC-PROT-U13 | P1 | Risk severity ordering | Sort `[.info, .warning, .critical]` | Returns `[.critical, .warning, .info]` |
+### 4.1 Permission Auditor (F-016)
+
+**Files:** `PermissionAuditor.swift`, `ProtectionView.swift` (`PermissionsAuditSection`, `PermissionAuditList`, `PermissionGroupRow`, `FullDiskAccessBanner`, `PermissionCard`)
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-PROT-08 | P0 | TCC.db readable — real per-app audit | Grant Halo (or the debug binary) Full Disk Access in System Settings, relaunch, open Protection | "App Permissions" shows the grouped, expandable per-app list (`PermissionAuditList`) instead of the category grid; subtitle reads "Real per-app grants read from this Mac's permission database" |
+| TC-PROT-09 | P0 | Risk-flag heuristic — elevated flagged | With FDA granted, a non-browser/non-communication app holds Screen Recording or Accessibility | Its row shows the amber "excessive for this app" label and a warning-triangle icon; the group's "N elevated" badge counts it |
+| TC-PROT-10 | P1 | Risk-flag heuristic — browsers/comms exempt | A known browser (e.g. Chrome/Safari) or comms app (e.g. Slack, Zoom) holds Screen Recording or Accessibility | NOT flagged elevated — green checkmark icon, no "excessive" label |
+| TC-PROT-11 | P1 | Revoke deep link | Click "Revoke" on a per-app grant row | Opens the matching System Settings privacy pane for that permission kind (e.g. `Privacy_ScreenCapture` for Screen Recording) via `x-apple.systempreferences:` |
+| TC-PROT-12 | P0 | Summary badge — "X of Y apps excessive" | View the section header once grants have loaded | Badge reads "N of M apps excessive" (M = unique audited bundle IDs, N = unique bundle IDs with ≥1 elevated grant); amber if N > 0, green if N == 0 |
+| TC-PROT-13 | P0 | TCC.db unreadable — honest fallback | Default state: no Full Disk Access (sandboxed/release build, or FDA not granted) | `FullDiskAccessBanner` shows the honest reason text (e.g. "Halo needs Full Disk Access to show per-app grants — showing categories only"); the original 4-column category-card grid renders beneath it, unchanged |
+| TC-PROT-14 | P1 | Zero readable grants treated as unavailable | TCC.db opens but every row is denied/undetermined (`auth_value` 0 or 1) | Falls back to `.unavailable("No readable permission grants found…")` — the category grid is shown, never an empty per-app list |
+| TC-PROT-15 | P2 | Loading indicator | Observe the section header while `permissionAuditor.run()` is in flight | A small spinner replaces the summary badge; no flash of stale content or crash |
+| TC-PROT-16 | P2 | Release/sandboxed build always falls back | Run the sandboxed release build | TCC.db is unreachable by design → category-card view + banner always shown, never the rich list |
+| **Unit** TC-PROT-U5 | P0 | Risk heuristic — non-browser elevated | `TCCGrant` for Screen Recording/Accessibility, arbitrary bundle ID | `isElevatedRisk == true` |
+| **Unit** TC-PROT-U6 | P0 | Risk heuristic — browser/comm exemption | `TCCGrant` for Screen Recording/Accessibility, known browser/comm bundle ID | `isElevatedRisk == false` |
+| **Unit** TC-PROT-U7 | P1 | Risk heuristic — non-eligible kinds | `TCCGrant` for Camera/Microphone/etc. | Never flagged elevated regardless of bundle ID |
+| **Unit** TC-PROT-U8 | P0 | Grouping by category | Mixed-kind synthetic grant list | Grants bucket correctly per `PermissionKind`; kinds with no grants have no entry |
+| **Unit** TC-PROT-U9 | P0 | "X of Y" count — one excessive app, multiple grants | Same bundle ID: one elevated + one non-elevated grant | Counted once in both total and excessive (no double-count) |
+| **Unit** TC-PROT-U10 | P1 | "X of Y" count — zero apps | Empty grant list | `total == 0`, `excessive == 0` |
+| **Unit** TC-PROT-U11 | P1 | `.unavailable(reason:)` handled gracefully | `PermissionAuditor.run()` on a machine without Full Disk Access | Returns `.unavailable` with a non-empty reason; never throws or crashes |
 
 ---
 

@@ -57,6 +57,7 @@ For the iOS & Android platform feature mapping see `docs/MOBILE_PLATFORM_FEATURE
 - [x] Focus Session Companion (v4.1) — F-028: `FocusSessionCard` on the Dashboard with 25/50/custom-minute presets and a pre-session confirmation dialog; `FocusSessionManager` hides (never quits) a user-configured app list via `NSRunningApplication.hide()`/`unhide()`; floating `NSPanel` countdown overlay + automatic `MenuBarDisplayStyle.sessionCountdown` menu bar mode; end-of-session summary sampled every 5s from the real `ProcessMonitor` actor + `AppState.cpuUsage`, delivered via notification and logged to `AlertLog` (`kindRaw: "focus"`, surfaced in a new "Focus History" section); Settings → Focus tab to manage the hide list. **Scoping note:** the idea sheet's "suppress notifications" bullet was dropped as infeasible — no public macOS API lets a third-party app toggle system Focus/DND or silence other apps' banners — and replaced with an honest "Turn on Focus Mode…" deep link to System Settings instead of faking the capability
 - [x] Security Posture Dashboard (v4.2) — F-019: `SecurityPostureScanner` actor in the Protection module checks FileVault, Gatekeeper, Application Firewall, and Automatic Updates via read-only `Process` calls; SIP, Secure Boot, Find My Mac, and Login Window surface as an honest "check manually" state (no reliable non-interactive read exists) rather than a guessed verdict; 0–100 score feeds into `AppState.systemHealthScore` at a quarter-weight, never penalizing unverifiable checks
 - [x] Privacy Data Exposure Scanner (v4.2) — F-018: "Sensitive Data Scanner" section in the Protection module with `PrivacyExposureScanner` actor recursively scanning Downloads/Documents/Desktop (iCloud Drive opt-in, off by default) via `privacy-patterns.json`-driven `PrivacyPatternDatabase`; Luhn-validated credit card numbers, exact-prefix AWS/GitHub/Stripe keys, exact SSH private-key headers, and SSN patterns; binary/>10MB files skipped; results grouped by risk (Critical/Warning/Info) with redacted-preview-only findings — no raw secret is ever logged or persisted; "Reveal in Finder" only, no delete/quarantine path
+- [x] Permission Auditor (v4.2) — F-016: `PermissionAuditor` actor in the Protection module attempts a real per-app read of `TCC.db` via `sqlite3`; when readable (non-sandboxed/Full Disk Access), replaces the category-card grid with a per-category expandable list of real app grants, a risk flag for non-browser/non-communication apps holding Screen Recording or Accessibility, per-app "Revoke" deep-links into System Settings, and an "X of Y apps excessive" summary; when unreadable (sandboxed release, no Full Disk Access), falls back honestly to the original category-card-only grid with an explanatory banner — never a fabricated per-app audit
 
 ---
 
@@ -246,7 +247,6 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 
 | ID | Feature | Effort | Summary |
 |----|---------|--------|---------|
-| F-016 | **Permission Auditor** | ~3 d | Full map of every app's TCC permissions (mic, camera, screen recording, full disk access). Risk-flags excessive grants. Deep-links to System Settings pane per permission. |
 | F-017 | **Network Traffic Monitor** | ~5 d | Live per-app, per-domain network activity table. Flags telemetry/tracker domains from a bundled list. Read-only — no blocking. Complements existing Network section. |
 | F-018 | **Privacy Data Exposure Scanner** | ~3 d | Scans Downloads/Documents/Desktop for files containing API keys, credit card numbers, SSH private keys, SSNs. Regex-based, entirely on-device. Results grouped by risk level. |
 | F-019 | **Security Posture Dashboard** | ~1.5 d | Checklist of 8 macOS security settings: FileVault, Gatekeeper, SIP, Secure Boot, Find My, Firewall, auto-updates, login window. One-click deep-links. Security Score feeds into health score. |
@@ -296,6 +296,7 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 
 **Core differentiators** (medium effort, highest strategic value):
 - F-016 Permission Auditor
+- F-020 S.M.A.R.T. Disk Health
 - F-027 Snippet Manager
 - F-030 iCloud Storage Analyser
 
