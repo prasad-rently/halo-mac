@@ -118,6 +118,8 @@
 		000000000000000000008074 /* MetricsHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008073 /* MetricsHistory.swift */; };
 		000000000000000000008076 /* WeeklyDigestGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008075 /* WeeklyDigestGenerator.swift */; };
 		000000000000000000008078 /* HealthTrendCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008077 /* HealthTrendCard.swift */; };
+		000000000000000000008104 /* AppUsageTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008103 /* AppUsageTracker.swift */; };
+		000000000000000000008106 /* AppUsageInsightsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008105 /* AppUsageInsightsSection.swift */; };
 		000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009001 /* GetHealthScoreIntent.swift */; };
 		000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009003 /* GetCPUUsageIntent.swift */; };
 		000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009005 /* GetBatteryHealthIntent.swift */; };
@@ -362,6 +364,8 @@
 		000000000000000000008073 /* MetricsHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/MetricsHistory.swift; sourceTree = "<group>"; };
 		000000000000000000008075 /* WeeklyDigestGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/WeeklyDigestGenerator.swift; sourceTree = "<group>"; };
 		000000000000000000008077 /* HealthTrendCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/HealthTrendCard.swift; sourceTree = "<group>"; };
+		000000000000000000008103 /* AppUsageTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AppUsageTracker.swift; sourceTree = "<group>"; };
+		000000000000000000008105 /* AppUsageInsightsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/AppUsageInsightsSection.swift; sourceTree = "<group>"; };
 		000000000000000000009001 /* GetHealthScoreIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetHealthScoreIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009003 /* GetCPUUsageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetCPUUsageIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009005 /* GetBatteryHealthIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetBatteryHealthIntent.swift; sourceTree = "<group>"; };
@@ -496,6 +500,7 @@
 				000000000000000000004011 /* AlertLog.swift */,
 				000000000000000000008163 /* ShellReader.swift */,
 				000000000000000000008171 /* AsyncTimeout.swift */,
+				000000000000000000008103 /* AppUsageTracker.swift */,
 				000000000000000000004013 /* ReportGenerator.swift */,
 				000000000000000000004005 /* ScanScheduler.swift */,
 				000000000000000000008073 /* MetricsHistory.swift */,
@@ -526,6 +531,7 @@
 				000000000000000000008027 /* SnippetListSection.swift */,
 				000000000000000000001065 /* HotkeyManager.swift */,
 				000000000000000000001038 /* DashboardView.swift */,
+				000000000000000000008105 /* AppUsageInsightsSection.swift */,
 				000000000000000000001098 /* NetworkSparklineCard.swift */,
 				000000000000000000008077 /* HealthTrendCard.swift */,
 				000000000000000000001102 /* GPUDashboardCard.swift */,
@@ -997,6 +1003,8 @@
 				000000000000000000008028 /* SnippetListSection.swift in Sources */,
 				000000000000000000008030 /* ActionShareManager.swift in Sources */,
 				000000000000000000008114 /* MemoryTrendTracker.swift in Sources */,
+				000000000000000000008104 /* AppUsageTracker.swift in Sources */,
+				000000000000000000008106 /* AppUsageInsightsSection.swift in Sources */,
 				000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */,
 				000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */,
 				000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */,
