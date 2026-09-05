@@ -215,9 +215,7 @@ Copy this block into a study when assessing a feature for mobile.
 |------|--------|
 | 2026-08 | F-020 (S.M.A.R.T. Disk Health Monitor) shipped on desktop. Feasibility study added (§9): both iOS and Android verdict ❌ Blocked — neither OS exposes SMART/drive-health data to third-party apps. Row added to §3; status `Won't do`. |
 | 2026-08 | Desktop F-022 (Time Machine Backup Health Monitor) shipped. Feasibility study added (§9): Won't do / Reimagine → Time Machine has no mobile equivalent; the mobile-exclusive "iCloud Backup Health" idea (§5) is a distinct, much coarser reimagining, not a port. |
-=======
 | 2026-08 | Desktop F-023 (Memory Leak & App Bloat Tracker) shipped. Feasibility study added (§9): Won't do — inherits the same "no public live-process enumeration" blocker as Performance — top processes, on both iOS and Android. |
->>>>>>> feat/f023-memory-leak-tracker
 | 2026-07 | Formal feasibility studies added (§9): Code Beautifier, Snippets, Speed Test, cloud AI. |
 | 2026-07 | Document created. Assessed all shipped desktop capabilities (F-001–F-043) + planned cloud features (F-044–F-048) for iOS/Android. Established governance rules. First wave specced: F-044/F-045/F-048/F-049/F-050. |
 
@@ -289,7 +287,6 @@ promote to `Planned` (spec) when scheduled.
 - **Effort:** n/a (Won't do) for the direct port; the separate "iCloud Backup Health" idea is iOS-only, ~1 d, advisory-only.
 - **Verdict:** **Won't do** (direct port) → the desktop feature has no mobile home. **Reimagine** as "iCloud Backup Health" (§5) tracked as its own, much smaller idea → **P3**.
 - **Recommendation:** don't treat F-022 as pending mobile work — it's fully addressed by this study. If "iCloud Backup Health" is ever built, scope it as a single link-out advisory row bundled into the mobile app shell (F-049) rather than a dedicated feature — there isn't enough real, readable data to justify more.
-=======
 ### Feasibility — Memory Leak & App Bloat Tracker (from desktop F-023)
 - **Desktop capability:** `MemoryTrendTracker` samples every regular running app's RAM every 30 s via `ProcessMonitor.runningAppRAMSamples()` (macOS `proc_pidinfo`/`proc_taskinfo`), keeps a persisted rolling 2-hour history per bundle ID, flags apps with >1 hour of monotonic growth as a "possible memory leak," and offers a confirmed terminate+relaunch.
 - **iOS mechanism:** no public API lets one app read another app's resident memory — `proc_pidinfo` and friends are macOS-only, and iOS's per-process sandboxing treats "how much RAM is Slack using" as exactly the kind of cross-app introspection Apple blocks. `os_proc_available_memory()` only reports the *calling* app's own budget. Verdict ❌.
@@ -300,4 +297,3 @@ promote to `Planned` (spec) when scheduled.
 - **Scope on mobile:** none. Reimagining this as "track my *own* app's memory" would be a different, far less useful feature (a phone can't leak Slack's memory into the user's awareness the way desktop Halo can) and isn't worth the engineering cost of a self-monitoring dashboard.
 - **Effort:** n/a. **Dependencies:** n/a.
 - **Verdict:** **Blocked** → **Won't do**. **Recommendation:** do not build a mobile equivalent — the exact same OS-level blocker as `Performance — top processes`, which this feature is layered on top of on desktop. Revisit only if a future OS version ships a legitimate cross-app memory-attribution API (none currently planned on either platform).
->>>>>>> feat/f023-memory-leak-tracker
