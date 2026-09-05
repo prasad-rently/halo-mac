@@ -494,9 +494,26 @@ struct ProcessRAMSample: Codable {
 
 /// An app ranked by its average RAM usage across the sampled window.
 struct RankedApp: Identifiable {
-    let id = UUID()
+    /// The app name, not a fresh UUID — this is re-derived on every digest
+    /// composition, and the name is already the unique key it was grouped by.
+    var id: String { name }
     let name: String
+    /// Mean RSS across the whole period, counting hours the app was not in the
+    /// top 5 as zero. See WeeklyDigestGenerator.composeSummary for why the
+    /// divisor is the period and not the hours observed.
     let avgRAMMB: Double
+    /// How many of the period's samples actually contained this app. Lets the
+    /// UI show a one-hour spike as a spike rather than presenting it as a
+    /// weekly average.
+    var hoursObserved: Int = 0
+    var hoursInPeriod: Int = 0
+
+    /// True when the app was present for less than a quarter of the period —
+    /// its average is dominated by a short burst.
+    var isSpike: Bool {
+        guard hoursInPeriod > 0 else { return false }
+        return Double(hoursObserved) / Double(hoursInPeriod) < 0.25
+    }
 }
 
 /// Composed once per digest delivery from `MetricsHistory` + `AlertLog` +

@@ -378,3 +378,110 @@ struct ModelTests {
         #expect(cat.allBytes == 3000)
     }
 }
+
+// MARK: - F-029 review fixes
+
+@Suite("WeeklyDigest threat counting")
+struct WeeklyDigestThreatCountTests {
+
+    // The reported bug: the count came from `body.localizedCaseInsensitiveContains("threat")`,
+    // so the *negative* copy matched too. A clean week — which is what
+    // ProtectionScanner and ScanScheduler actually produce — reported threats.
+    @Test("Clean-scan wording is not counted as a threat")
+    func testCleanScanCopyIsNotAThreat() {
+        let clean = [
+            AlertEntry(title: "Scan complete", body: "No threats found.", kindRaw: "scan"),
+            AlertEntry(title: "Scan complete", body: "0 threats detected.", kindRaw: "scan")
+        ]
+        let counted = clean.filter { WeeklyDigestGenerator.threatKindRaws.contains($0.kindRaw) }.count
+        #expect(counted == 0)
+    }
+
+    @Test("A real detection is counted by kind, not by prose")
+    func testRealThreatIsCounted() {
+        let entries = [
+            AlertEntry(title: "Threat found", body: "Adware detected.", kindRaw: "threat"),
+            AlertEntry(title: "Scan complete", body: "No threats found.", kindRaw: "scan")
+        ]
+        let counted = entries.filter { WeeklyDigestGenerator.threatKindRaws.contains($0.kindRaw) }.count
+        #expect(counted == 1)
+    }
+
+    // Matching on prose also broke as soon as the copy was translated.
+    @Test("Localized copy does not change the count")
+    func testLocalizedCopyIsIrrelevant() {
+        let entries = [AlertEntry(title: "Analyse terminée", body: "Aucune menace trouvée.", kindRaw: "scan")]
+        let counted = entries.filter { WeeklyDigestGenerator.threatKindRaws.contains($0.kindRaw) }.count
+        #expect(counted == 0)
+    }
+}
+
+@Suite("WeeklyDigest period coverage")
+struct WeeklyDigestPeriodTests {
+
+    private func samples(count: Int, spanDays: Double) -> [MetricsSample] {
+        guard count > 0 else { return [] }
+        let end = Date()
+        let step = count > 1 ? (spanDays * 86_400) / Double(count - 1) : 0
+        return (0..<count).map {
+            MetricsSample(date: end.addingTimeInterval(-spanDays * 86_400 + Double($0) * step),
+                          healthScore: 80, diskFreeGB: 100)
+        }
+    }
+
+    // A fresh install has one seeded sample, so `history.first` was the launch
+    // sample and the "weekly" delta really spanned however long the app had
+    // been open.
+    @Test("A fresh install does not claim a week of history")
+    func testFreshInstallHasNoPeriod() {
+        #expect(WeeklyDigestGenerator.spansEnoughOfPeriod(samples(count: 1, spanDays: 0), days: 7) == false)
+    }
+
+    @Test("Empty history does not claim a period")
+    func testEmptyHistory() {
+        #expect(WeeklyDigestGenerator.spansEnoughOfPeriod([], days: 7) == false)
+    }
+
+    // MetricsHistory samples on a runloop Timer, so sleep/quit gaps are simply
+    // absent — a handful of samples can still be 7 days apart.
+    @Test("A few samples spread across a week is not enough coverage")
+    func testSparseSamplesAcrossAWeek() {
+        #expect(WeeklyDigestGenerator.spansEnoughOfPeriod(samples(count: 3, spanDays: 7), days: 7) == false)
+    }
+
+    @Test("Dense samples over a day is not a week")
+    func testDenseButShort() {
+        #expect(WeeklyDigestGenerator.spansEnoughOfPeriod(samples(count: 48, spanDays: 1), days: 7) == false)
+    }
+
+    @Test("Dense samples spanning the week does count")
+    func testFullWeek() {
+        #expect(WeeklyDigestGenerator.spansEnoughOfPeriod(samples(count: 168, spanDays: 7), days: 7))
+    }
+}
+
+@Suite("RankedApp averaging")
+struct RankedAppAveragingTests {
+
+    // The ranking inversion: averaging over hours-observed made a single 8 GB
+    // spike outrank an app sitting at 4 GB all week, in a section titled
+    // "Apps with high average RAM".
+    @Test("A sustained consumer outranks a one-hour spike")
+    func testSustainedBeatsSpike() {
+        let hours = 168
+        let spike     = RankedApp(name: "Spike",     avgRAMMB: 8000 / Double(hours), hoursObserved: 1,     hoursInPeriod: hours)
+        let sustained = RankedApp(name: "Sustained", avgRAMMB: 4000,                 hoursObserved: hours, hoursInPeriod: hours)
+        #expect(sustained.avgRAMMB > spike.avgRAMMB)
+    }
+
+    @Test("A brief appearance is flagged as a spike")
+    func testSpikeFlag() {
+        #expect(RankedApp(name: "S", avgRAMMB: 10, hoursObserved: 2, hoursInPeriod: 168).isSpike)
+        #expect(RankedApp(name: "C", avgRAMMB: 10, hoursObserved: 168, hoursInPeriod: 168).isSpike == false)
+    }
+
+    @Test("RankedApp id is the app name, stable across recomposition")
+    func testStableIdentity() {
+        #expect(RankedApp(name: "Xcode", avgRAMMB: 1).id == RankedApp(name: "Xcode", avgRAMMB: 2).id)
+    }
+}

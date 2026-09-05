@@ -24,6 +24,22 @@ import AppKit
 @MainActor
 enum WeeklyDigestGenerator {
 
+    /// Deletes any weekly-digest PDFs left in the temp directory by previous
+    /// runs. The share sheet copies what it needs, but nothing ever removed the
+    /// original, so one accumulated per share, forever.
+    static func cleanUpOldSharedReports() {
+        let tmp = FileManager.default.temporaryDirectory
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: tmp, includingPropertiesForKeys: [.contentModificationDateKey]
+        ) else { return }
+        let cutoff = Date().addingTimeInterval(-86_400)
+        for url in contents where url.lastPathComponent.hasPrefix("HaloWeeklyDigest-") {
+            let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            if let modified, modified > cutoff { continue }
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
     // MARK: - Composition
 
     static func composeSummary(from appState: AppState, days: Int = 7) -> WeeklyDigestSummary {
@@ -31,34 +47,82 @@ enum WeeklyDigestGenerator {
         let cutoff = Date().addingTimeInterval(-Double(days) * 24 * 3600)
         let alertsInPeriod = AlertLog.shared.entries.filter { $0.date >= cutoff }
 
-        // Aggregate real per-app average RAM across all hourly samples in the window.
-        var ramTotals: [String: (sum: Double, count: Int)] = [:]
+        // Per-app average RAM across the window.
+        //
+        // The divisor is the number of samples in the *period*, not the number
+        // in which the app happened to make that hour's top 5. Dividing by the
+        // latter meant an app that ran once at 8 GB averaged 8000 MB and ranked
+        // first, while one sitting at 4 GB every hour all week averaged 4000 MB
+        // and ranked second — so a section titled "Apps with high average RAM"
+        // systematically promoted brief spikes over the sustained consumers the
+        // user can actually act on. Hours where an app was not in the top 5 count
+        // as zero, which understates it slightly but never inverts the ranking.
+        //
+        // `hoursObserved` is carried through so the UI can show a spike as a
+        // spike rather than silently averaging it away.
+        var ramTotals: [String: (sum: Double, hours: Int)] = [:]
         for sample in history {
             for proc in sample.topRAMProcesses {
-                var entry = ramTotals[proc.name] ?? (sum: 0, count: 0)
+                var entry = ramTotals[proc.name] ?? (sum: 0, hours: 0)
                 entry.sum += proc.ramMB
-                entry.count += 1
+                entry.hours += 1
                 ramTotals[proc.name] = entry
             }
         }
+        let periodSamples = max(history.count, 1)
         let topRAMApps = ramTotals
-            .map { RankedApp(name: $0.key, avgRAMMB: $0.value.sum / Double($0.value.count)) }
+            .map { RankedApp(name: $0.key,
+                             avgRAMMB: $0.value.sum / Double(periodSamples),
+                             hoursObserved: $0.value.hours,
+                             hoursInPeriod: periodSamples) }
             .sorted { $0.avgRAMMB > $1.avgRAMMB }
             .prefix(5)
+
+        // Only quote a start-of-period figure when the history actually spans
+        // one. On a fresh install `history.first` is the launch sample, so the
+        // "weekly" delta was really "since Halo opened" — presented as a week's
+        // change. Sibling #10 already refuses to show a comparison until it has
+        // the data, for exactly this reason.
+        let hasFullPeriod = Self.spansEnoughOfPeriod(history, days: days)
 
         return WeeklyDigestSummary(
             generatedDate: Date(),
             periodDays: days,
-            healthScoreStart: history.first?.healthScore,
+            healthScoreStart: hasFullPeriod ? history.first?.healthScore : nil,
             healthScoreEnd: appState.systemHealthScore,
             healthSamples: history,
-            diskFreeStartGB: history.first?.diskFreeGB,
+            diskFreeStartGB: hasFullPeriod ? history.first?.diskFreeGB : nil,
             diskFreeEndGB: appState.diskFreeGB,
             topAverageRAMApps: Array(topRAMApps),
             alertsInPeriod: alertsInPeriod,
-            threatsDetectedCount: alertsInPeriod.filter { $0.body.localizedCaseInsensitiveContains("threat") }.count,
+            // `kindRaw`, not the notification prose. Matching on the word
+            // "threat" in `body` counted the *negative* case too: "No threats
+            // found" and "0 threats detected" are exactly what a clean week
+            // produces, so a week of clean scans reported "N threats flagged".
+            // It also broke the moment the copy was localized. `AlertEntry`
+            // carries `kindRaw` precisely so consumers never parse prose —
+            // `scansCompletedCount` on the next line already did it right.
+            threatsDetectedCount: alertsInPeriod.filter { Self.threatKindRaws.contains($0.kindRaw) }.count,
             scansCompletedCount: alertsInPeriod.filter { $0.kindRaw == "scan" }.count
         )
+    }
+
+    /// Alert kinds that represent a real detection. Kept as an explicit set so
+    /// adding a threat kind is a deliberate act rather than a substring
+    /// coincidence.
+    nonisolated static let threatKindRaws: Set<String> = ["threat", "threat_found", "malware", "adware"]
+
+    /// Whether the sample history genuinely covers most of the period.
+    ///
+    /// `MetricsHistory` samples on a main-runloop `Timer`, so sleep and quit
+    /// gaps are simply absent with no markers — `recent(days: 7)` cannot tell 7
+    /// days of hourly samples from 3 samples taken 7 days apart. Requiring both
+    /// a minimum count and a minimum span makes both failure shapes fall out.
+    nonisolated static func spansEnoughOfPeriod(_ history: [MetricsSample], days: Int) -> Bool {
+        guard let first = history.first, let last = history.last else { return false }
+        guard history.count >= 24 else { return false }
+        let spanDays = last.date.timeIntervalSince(first.date) / 86_400
+        return spanDays >= Double(days) * 0.85
     }
 
     // MARK: - Notification body
@@ -110,7 +174,19 @@ enum WeeklyDigestGenerator {
             intentIdentifiers: [],
             options: []
         )
-        UNUserNotificationCenter.current().setNotificationCategories([category])
+        // Read-modify-write. `setNotificationCategories` *replaces* the whole
+        // set, and this runs from `WeeklyDigestScheduler.start` on every launch
+        // — so it discarded any category another feature had registered.
+        // Nothing else registers one today, which is exactly what makes it a
+        // landmine: the next actionable notification would either be silently
+        // stripped or strip this one, depending on registration order.
+        Task {
+            let center = UNUserNotificationCenter.current()
+            var categories = await center.notificationCategories()
+            categories = categories.filter { $0.identifier != categoryIdentifier }
+            categories.insert(category)
+            center.setNotificationCategories(categories)
+        }
     }
 
     static func postDigestNotification(summary: WeeklyDigestSummary) {
@@ -125,12 +201,25 @@ enum WeeklyDigestGenerator {
             content: content,
             trigger: nil   // deliver immediately when this is called (schedule already gated it)
         )
-        UNUserNotificationCenter.current().add(request)
+        // "Generated", not "Sent". If notification authorization was denied the
+        // digest never appears, and the old copy had Alert History asserting it
+        // had been delivered. The wording is now true either way, and a genuine
+        // delivery failure is recorded rather than swallowed.
+        let body = notificationBody(for: summary)
+        UNUserNotificationCenter.current().add(request) { error in
+            guard let error else { return }
+            Task { @MainActor in
+                AlertLog.shared.append(
+                    title: "Weekly Digest Not Delivered",
+                    body: "Halo generated your digest but macOS refused to show it: \(error.localizedDescription)",
+                    kindRaw: "digest"
+                )
+            }
+        }
 
-        // Mirrors ScanScheduler's completion notification — also lands in Alert History.
         AlertLog.shared.append(
-            title: "Weekly Digest Sent",
-            body: notificationBody(for: summary),
+            title: "Weekly Digest Generated",
+            body: body,
             kindRaw: "digest"
         )
     }
@@ -155,7 +244,9 @@ enum WeeklyDigestGenerator {
     /// AirDrop, Messages, …) instead of a save panel — the "shareable via
     /// NSSharingService" half of the F-029 spec. Wired to a button in
     /// Settings → General → Weekly Digest.
-    static func shareReportPDF(appState: AppState) {
+    /// `onFailure` is how the caller learns the share sheet never appeared.
+    /// Every path that can fail silently reports through it.
+    static func shareReportPDF(appState: AppState, onFailure: @escaping @MainActor (String) -> Void = { _ in }) {
         let snapshot = ReportSnapshot.capture(from: appState)
         Task.detached(priority: .userInitiated) {
             let doc = ReportGenerator.shared.generate(snapshot: snapshot)
@@ -163,13 +254,29 @@ enum WeeklyDigestGenerator {
             formatter.dateFormat = "yyyy-MM-dd"
             let url = FileManager.default.temporaryDirectory
                 .appendingPathComponent("HaloWeeklyDigest-\(formatter.string(from: Date())).pdf")
-            guard doc.write(to: url) else { return }
+            guard doc.write(to: url) else {
+                await MainActor.run { onFailure("Halo couldn't write the report to disk.") }
+                return
+            }
             await MainActor.run {
                 NSApp.activate(ignoringOtherApps: true)
                 let picker = NSSharingServicePicker(items: [url])
-                if let window = NSApp.keyWindow, let view = window.contentView {
-                    picker.show(relativeTo: .zero, of: view, preferredEdge: .minY)
+
+                // `keyWindow` alone was not enough: this is invoked from
+                // Settings, and if the click path leaves it nil (Settings as a
+                // sheet, focus moving after `NSApp.activate`, or a
+                // notification-driven call) the PDF was written and then
+                // nothing at all happened on screen — no sheet, no error.
+                let anchor = NSApp.keyWindow?.contentView
+                    ?? NSApp.mainWindow?.contentView
+                    ?? NSApp.windows.first(where: { $0.isVisible })?.contentView
+
+                guard let anchor else {
+                    onFailure("Halo couldn't find a window to show the share sheet. Open Halo's main window and try again.")
+                    try? FileManager.default.removeItem(at: url)
+                    return
                 }
+                picker.show(relativeTo: .zero, of: anchor, preferredEdge: .minY)
             }
         }
     }

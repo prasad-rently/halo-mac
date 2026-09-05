@@ -276,6 +276,10 @@ struct SettingsView: View {
     @AppStorage("enableMenuBar") private var enableMenuBar = true
     @AppStorage("scanFrequency") private var scanFrequency = "weekly"
     @AppStorage("enableAnalytics") private var enableAnalytics = false
+    /// Why a "Share Weekly Report" attempt produced nothing on screen. These
+    /// paths used to fail silently — the PDF was written and then no sheet
+    /// appeared, with no error anywhere.
+    @State private var shareFailure: String?
     @AppStorage("clipboardHistoryLimit") private var clipboardLimit = 200
     // P3-12: thresholds
     @AppStorage("alertCPUThreshold")    private var alertCPUThreshold: Double = 0.85
@@ -397,7 +401,10 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                         HStack {
                             Button("Share Weekly Report Now…") {
-                                WeeklyDigestGenerator.shareReportPDF(appState: appState)
+                                shareFailure = nil
+                                WeeklyDigestGenerator.shareReportPDF(appState: appState) { message in
+                                    shareFailure = message
+                                }
                             }
                             .accessibilityIdentifier("settings.weeklyDigest.shareNow.button")
                             Spacer()
@@ -408,6 +415,14 @@ struct SettingsView: View {
                             .accessibilityIdentifier("settings.weeklyDigest.sendTestNow.button")
                         }
                         .font(.caption)
+                        // Previously these failures were silent: the PDF was
+                        // generated and written, and then nothing appeared.
+                        if let failure = shareFailure {
+                            Text(failure)
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                                .accessibilityIdentifier("settings.weeklyDigest.shareError")
+                        }
                     }
                 }
                 Section("Units") {
