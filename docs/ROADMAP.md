@@ -38,6 +38,7 @@ For the iOS & Android platform feature mapping see `docs/MOBILE_PLATFORM_FEATURE
 - [x] Quick Actions Phase 1 expansion (v3.0) — 24 new shell-based actions (39 total), 3 new categories (Developer, Files, Clipboard), covering system maintenance, network utils, dev tools, clipboard transforms
 - [x] Quick Actions Phase 2 expansion (v3.0) — 29 new actions (70 total), 2 new categories (Creative, Media), covering creative suite cache cleanup, clipboard transforms, media/image/video utilities
 - [x] Quick Actions Phase R1 expansion (v4.0) — 37 new actions (107 total), 3 new categories (Dock & Desktop, Display, Audio), covering Dock tinker (spacers, animations, orientation), display/screenshot controls, audio/mic management, system junk cleanup (resource forks, font cache, logs, symlinks, QuickLook, Launch Services), developer cache cleanup (CocoaPods, Gradle, Docker, pip, Homebrew)
+- [x] Scheduled Reports & Weekly Digest (F-029) — hourly `MetricsHistory` store powering a new 7-day health-score sparkline on the Dashboard; opt-in Weekly Digest local notification (day/hour picker reusing the Scheduled Scans pattern) summarising health trend, disk-free delta, scans completed, and threats flagged from `AlertLog`; PDF report share via `NSSharingServicePicker` and a "View Report" notification action
 - [x] Port Manager module (v4.0) — F-034: dedicated sidebar module with `PortScanner` actor, list/kill open TCP/UDP ports, named ports with friendly labels, configurable kill signals (ask/SIGTERM/SIGKILL), copy lsof/kill commands, 5s auto-refresh, search/sort
 - [x] Downloads Manager (v4.0) — F-026: "Downloads" tab in Files module with age-based grouping (Today/Week/Month/Older/Stale), type-based grouping, installer cross-reference with installed apps ("Safe to remove"), one-click stale cleanup, organize into subfolders by type, search/filter, breakdown bar visualization
 - [x] Customizable Menu Bar Format Strings (v4.0) — F-036: 5th "Custom" display style with user-editable format strings, 11 tokens ({cpu}, {ram}, {disk}, {battery}, {net_down}, {net_up}, {health}, etc.), 5 preset templates (Minimal/Standard/Full/Network/Battery), live preview, clickable token insertion grid
@@ -50,6 +51,13 @@ For the iOS & Android platform feature mapping see `docs/MOBILE_PLATFORM_FEATURE
 - [x] Siri Shortcuts / App Intents (v4.0) — F-042: 8 AppIntents (GetHealthScore, GetCPUUsage, GetBatteryHealth, GetDiskSpace, RunSmartScan, RunAction, GetClipboardHistory, ExportReport), HaloShortcutsProvider with Siri phrases, HaloAction AppEntity for action discovery in Shortcuts.app, IntentFile PDF export
 - [x] Drive Read & Write Speed Test (v4.1) — F-043 / NFeat-121: "Drive Speed" tab in Files module with `DriveSpeedTester` actor; enumerates internal & external volumes; uncached (`F_NOCACHE`) sequential write+read benchmark with `F_FULLFSYNC` durability flush and incompressible random payload; 3-pass multi-sample run reporting both average (sustained) and optimal (peak) MB/s; Quick/Standard/Thorough sizes (128 MB/512 MB/1 GB); live progress, cancellation, friendly error banner for read-only/permission-denied volumes
 - [x] Permission Auditor (v4.2) — F-016: `PermissionAuditor` actor in the Protection module attempts a real per-app read of `TCC.db` via `sqlite3`; when readable (non-sandboxed/Full Disk Access), replaces the category-card grid with a per-category expandable list of real app grants, a risk flag for non-browser/non-communication apps holding Screen Recording or Accessibility, per-app "Revoke" deep-links into System Settings, and an "X of Y apps excessive" summary; when unreadable (sandboxed release, no Full Disk Access), falls back honestly to the original category-card-only grid with an explanatory banner — never a fabricated per-app audit
+- [x] Privacy Data Exposure Scanner (v4.2) — F-018: "Sensitive Data Scanner" section in the Protection module with `PrivacyExposureScanner` actor recursively scanning Downloads/Documents/Desktop (iCloud Drive opt-in, off by default) via `privacy-patterns.json`-driven `PrivacyPatternDatabase`; Luhn-validated credit card numbers, exact-prefix AWS/GitHub/Stripe keys, exact SSH private-key headers, and SSN patterns; binary/>10MB files skipped; results grouped by risk (Critical/Warning/Info) with redacted-preview-only findings — no raw secret is ever logged or persisted; "Reveal in Finder" only, no delete/quarantine path
+- [x] Security Posture Dashboard (v4.2) — F-019: `SecurityPostureScanner` actor in the Protection module checks FileVault, Gatekeeper, Application Firewall, and Automatic Updates via read-only `Process` calls; SIP, Secure Boot, Find My Mac, and Login Window surface as an honest "check manually" state (no reliable non-interactive read exists) rather than a guessed verdict; 0–100 score feeds into `AppState.systemHealthScore` at a quarter-weight, never penalizing unverifiable checks
+- [x] Focus Session Companion (v4.1) — F-028: `FocusSessionCard` on the Dashboard with 25/50/custom-minute presets and a pre-session confirmation dialog; `FocusSessionManager` hides (never quits) a user-configured app list via `NSRunningApplication.hide()`/`unhide()`; floating `NSPanel` countdown overlay + automatic `MenuBarDisplayStyle.sessionCountdown` menu bar mode; end-of-session summary sampled every 5s from the real `ProcessMonitor` actor + `AppState.cpuUsage`, delivered via notification and logged to `AlertLog` (`kindRaw: "focus"`, surfaced in a new "Focus History" section); Settings → Focus tab to manage the hide list. **Scoping note:** the idea sheet's "suppress notifications" bullet was dropped as infeasible — no public macOS API lets a third-party app toggle system Focus/DND or silence other apps' banners — and replaced with an honest "Turn on Focus Mode…" deep link to System Settings instead of faking the capability
+- [x] App Usage & Screen Time Analytics (v4.1) — F-021: `AppUsageTracker` singleton tracks per-app foreground time via `NSWorkspace` activation notifications + a 30 s sampling timer (RAM correlation, context-switch counts); "App Usage Insights" card on the Dashboard below the health ring with a top-5-apps bar chart (`Charts`), "Background Hogs" list (8h+ running, never activated), context-switches/hour, and week-over-week trend; UserDefaults+JSON rolling 14-day store (no SQLite — matches `AlertLog`'s pattern); off-by-default opt-in toggle in Settings; explicit "time Halo has been running" honesty caption everywhere, since no third-party macOS API can read real system Screen Time history
+- [x] Memory Leak & App Bloat Tracker (v4.2) — F-023: `MemoryTrendTracker` extends `ProcessMonitor` with per-app RAM sampling (every 30s, rolling 2-hour window, persisted as JSON in Application Support — not SQLite, matching this codebase's existing JSON-over-UserDefaults convention); "Memory Trends" sub-section below Top Processes in the Performance module with per-app sparklines; "Possible memory leak" badge after >1 hour of monotonic growth (15% drop-from-peak or a 5-minute observation gap resets the streak); confirmed terminate+relaunch "Restart App" button on flagged apps; per-app RAM alert (default 2 GB, user-configurable) wired into the existing `AlertManager`
+- [x] Time Machine Backup Health Monitor (v4.2) — F-022: `TimeMachineMonitor` actor parses `tmutil destinationinfo`/`latestbackup`/`listbackups`/`status` (read-only); `BackupHealthCard` on the Dashboard shows last backup time, destination free space bar, and a 30-day GitHub-style heatmap (green/amber/red/gray-for-no-data); "Back Up Now" calls `tmutil startbackup`; honest "Time Machine isn't set up" empty state with a Settings deep link when no destination is configured (verified live on the dev machine, which has no Time Machine destination); `AlertManager.evaluateBackup` fires a recurring daily alert once a configured backup is 48h+ stale
+- [x] S.M.A.R.T. Disk Health Monitor (v4.1) — F-020: `SMARTDiskMonitor` actor reads real NVMe health data via `diskutil info -plist` (SMART status, temperature, power-on hours/cycles, TBW, available spare, NVMe percentage-used wear indicator, media errors) plus an `IONVMeController` IOKit lookup for serial number; surfaces as a "Drive Health" card in the Files → Drive Speed tab with a lifespan-remaining bar and a 24h temperature sparkline for the internal drive; `AlertManager` rule fires on Warning/Failing status. On this Apple Silicon test machine, ATA-only fields (reallocated/pending sector counts) and the originally-planned manufacturer-TBW lookup table are not applicable/needed — NVMe's own wear-percentage counter replaces the TBW-table approach; every unavailable field renders "Not available on this drive" rather than a fabricated value. See `docs/FEATURE_ROADMAP.md` F-020 "As actually built" for the full breakdown.
 
 ---
 
@@ -240,8 +248,8 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 | ID | Feature | Effort | Summary |
 |----|---------|--------|---------|
 | F-017 | **Network Traffic Monitor** | ~5 d | Live per-app, per-domain network activity table. Flags telemetry/tracker domains from a bundled list. Read-only — no blocking. Complements existing Network section. |
-| F-018 | **Privacy Data Exposure Scanner** | ~3 d | Scans Downloads/Documents/Desktop for files containing API keys, credit card numbers, SSH private keys, SSNs. Regex-based, entirely on-device. Results grouped by risk level. |
 | F-019 | **Security Posture Dashboard** | ~1.5 d | Checklist of 8 macOS security settings: FileVault, Gatekeeper, SIP, Secure Boot, Find My, Firewall, auto-updates, login window. One-click deep-links. Security Score feeds into health score. |
+| F-018 | **Privacy Data Exposure Scanner** | ~3 d | Scans Downloads/Documents/Desktop for files containing API keys, credit card numbers, SSH private keys, SSNs. Regex-based, entirely on-device. Results grouped by risk level. |
 
 ---
 
@@ -272,28 +280,27 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 | ID | Feature | Effort | Summary |
 |----|---------|--------|---------|
 | F-027 | **Snippet Manager** | ~3 d | Promotes clipboard items to permanent labelled snippets with tags and collections. ⌘⇧V picker gains a Snippets tab. Persists across reboots, searchable. Evolution of existing Clipboard module. |
-| F-028 | **Focus Session Companion** | ~3 d | Timed focus sessions (25/50/custom min). Auto-quits distracting apps, suppresses notifications, switches menu bar to session countdown. End-of-session efficiency summary. |
 | F-029 | **Scheduled Reports & Weekly Digest** | ~2 d | Weekly macOS notification summarising health score trend, top storage growers, high-RAM apps, backup status, threats. Optional PDF attachment via existing ReportGenerator. |
+| F-028 | **Focus Session Companion** | ~3 d | Timed focus sessions (25/50/custom min). Auto-quits distracting apps, suppresses notifications, switches menu bar to session countdown. End-of-session efficiency summary. |
 
 ---
 
 ### Recommended Sequencing
 
 **Quick wins** (low effort, immediate value — implement first):
-- F-019 Security Posture Dashboard (~1.5 d)
 - F-022 Time Machine Backup Health (~1.5 d)
+- F-019 Security Posture Dashboard (~1.5 d)
 - F-024 Browser Cleaner (~2 d)
 - F-026 Downloads Organiser (~2 d)
-- F-029 Scheduled Reports (~2 d)
 
 **Core differentiators** (medium effort, highest strategic value):
 - F-020 S.M.A.R.T. Disk Health
+- F-016 Permission Auditor
 - F-027 Snippet Manager
 - F-030 iCloud Storage Analyser
 
 **Ambitious long-term** (high effort, strong market positioning):
 - F-017 Network Traffic Monitor
-- F-023 Memory Leak Tracker
 - F-025 Duplicate Photos Finder (pHash)
 
 ---
