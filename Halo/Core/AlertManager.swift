@@ -37,6 +37,8 @@ final class AlertManager {
         case chargingDone   = "charging_done"
         case diskSmartWarning = "disk_smart_warning"
         case diskSmartFailing = "disk_smart_failing"
+        case backupStale    = "backup_stale"   // F-022
+        case backupNever    = "backup_never"   // F-022
     }
 
     // MARK: - State
@@ -161,6 +163,38 @@ final class AlertManager {
         case .good, .unknown:
             break
         }
+    }
+
+    // MARK: - Time Machine backup health (F-022)
+
+    /// Called separately from `evaluate()` — Time Machine status comes from
+    /// `tmutil` shell calls (tens of ms each), far too heavy for the 2 s
+    /// metrics tick. `AppState` polls this on its own longer-interval timer
+    /// and passes the result in here. A 24 h cooldown makes this a genuinely
+    /// "persistent" alert — it keeps recurring daily until a backup runs,
+    /// rather than firing once and going silent.
+    func evaluateBackup(status: TimeMachineStatus) {
+        guard status.isConfigured else { return }
+
+        // Configured but nothing has ever completed. `isStale` structurally
+        // cannot catch this — it needs a lastBackupDate to measure against, so
+        // it reads `false` and the app stayed silent in exactly the case where
+        // the user is most likely to believe they are protected and not be.
+        if status.hasNeverBackedUp {
+            fire(.backupNever,
+                 title: "Time Machine Has Never Backed Up",
+                 body: "Time Machine is set up, but no backup has ever finished. Connect your backup drive to run the first one.",
+                 cooldown: 86400)
+            return
+        }
+
+        guard status.isStale, let last = status.lastBackupDate else { return }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        fire(.backupStale,
+             title: "Time Machine Backup Overdue",
+             body: "Your last backup was \(formatter.localizedString(for: last, relativeTo: Date())). Connect your backup drive or run one now.",
+             cooldown: 86400) // once per day until resolved
     }
 
     // MARK: - Fire helper

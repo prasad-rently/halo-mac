@@ -563,6 +563,8 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `8029` / `8030` | ActionShareManager.swift file ref / sources build file |
 | `8043` / `8044` | SMARTDiskMonitor.swift file ref / sources build file |
 | `8045` / `8046` | DriveHealthSection.swift file ref / sources build file |
+| `8053` / `8054` | TimeMachineMonitor.swift file ref / sources build file |
+| `8055` / `8056` | BackupHealthCard.swift file ref / sources build file |
 | `8163` / `8164` | ShellReader.swift file ref / sources build file |
 | `9001` / `9002` | GetHealthScoreIntent.swift file ref / sources build file |
 | `9003` / `9004` | GetCPUUsageIntent.swift file ref / sources build file |

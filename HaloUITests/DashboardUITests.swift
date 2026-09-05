@@ -56,4 +56,54 @@ final class DashboardUITests: HaloUITestCase {
         HaloSidebar(test: self).navigate(to: .dashboard)
         assertID("dashboard.alertHistory", "Dashboard should show the Alert History section")
     }
+
+    // MARK: - Backup Health / Time Machine Monitor (F-022) — TC-DASH-09…18
+    //
+    // Entirely read-only status via `tmutil` (Back Up Now is the one write
+    // action, and it's a normal user-initiated backup identical to the menu
+    // bar icon — no confirmation gate needed, but we never block on it
+    // actually completing).
+
+    // TC-DASH-09 / TC-DASH-10 / TC-DASH-11 — the card always renders exactly
+    // one of its three honest states, never a crash and never a blank space.
+    func test_backupHealth_card_renders() {
+        HaloSidebar(test: self).navigate(to: .dashboard)
+        XCTAssertTrue(assertID("dashboard.backupHealth.card",
+                                "Backup Health card should render on the Dashboard", timeout: 10).exists)
+    }
+
+    // TC-DASH-09 — when Time Machine has never been configured, the "Set Up"
+    // deep link is present and no heatmap is rendered as if data existed.
+    func test_backupHealth_notConfigured_shows_setup_button() throws {
+        HaloSidebar(test: self).navigate(to: .dashboard)
+        guard waitForID("dashboard.backupHealth.setup.button", timeout: 10) != nil else {
+            throw XCTSkip("Time Machine is already configured on this test machine — " +
+                          "not-configured expectation only applies to a fresh setup.")
+        }
+        XCTAssertFalse(element(id: "dashboard.backupHealth.heatmap").exists,
+                       "No heatmap should render when Time Machine isn't configured")
+    }
+
+    // TC-DASH-10 / TC-DASH-16 — when a destination is configured and
+    // reachable, the 30-day heatmap renders.
+    func test_backupHealth_configured_shows_heatmap() throws {
+        HaloSidebar(test: self).navigate(to: .dashboard)
+        guard waitForID("dashboard.backupHealth.heatmap", timeout: 15) != nil else {
+            throw XCTSkip("Time Machine isn't configured/reachable on this test machine — " +
+                          "heatmap expectation only applies once a destination is set up.")
+        }
+        XCTAssertTrue(app.windows.firstMatch.exists)
+    }
+
+    // TC-DASH-14 — "Back Up Now" is tappable when a destination is
+    // configured. We don't wait for the backup itself to complete — just
+    // that tapping it doesn't crash and the app stays responsive.
+    func test_backupHealth_backupNow_does_not_crash() throws {
+        HaloSidebar(test: self).navigate(to: .dashboard)
+        guard tapID("dashboard.backupHealth.backupNow.button", timeout: 10) else {
+            throw XCTSkip("Time Machine isn't configured on this test machine — " +
+                          "no 'Back Up Now' button to exercise.")
+        }
+        XCTAssertTrue(app.windows.firstMatch.exists)
+    }
 }
