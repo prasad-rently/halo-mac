@@ -55,6 +55,7 @@ For the iOS & Android platform feature mapping see `docs/MOBILE_PLATFORM_FEATURE
 - [x] Memory Leak & App Bloat Tracker (v4.2) — F-023: `MemoryTrendTracker` extends `ProcessMonitor` with per-app RAM sampling (every 30s, rolling 2-hour window, persisted as JSON in Application Support — not SQLite, matching this codebase's existing JSON-over-UserDefaults convention); "Memory Trends" sub-section below Top Processes in the Performance module with per-app sparklines; "Possible memory leak" badge after >1 hour of monotonic growth (15% drop-from-peak or a 5-minute observation gap resets the streak); confirmed terminate+relaunch "Restart App" button on flagged apps; per-app RAM alert (default 2 GB, user-configurable) wired into the existing `AlertManager`
 - [x] App Usage & Screen Time Analytics (v4.1) — F-021: `AppUsageTracker` singleton tracks per-app foreground time via `NSWorkspace` activation notifications + a 30 s sampling timer (RAM correlation, context-switch counts); "App Usage Insights" card on the Dashboard below the health ring with a top-5-apps bar chart (`Charts`), "Background Hogs" list (8h+ running, never activated), context-switches/hour, and week-over-week trend; UserDefaults+JSON rolling 14-day store (no SQLite — matches `AlertLog`'s pattern); off-by-default opt-in toggle in Settings; explicit "time Halo has been running" honesty caption everywhere, since no third-party macOS API can read real system Screen Time history
 - [x] Focus Session Companion (v4.1) — F-028: `FocusSessionCard` on the Dashboard with 25/50/custom-minute presets and a pre-session confirmation dialog; `FocusSessionManager` hides (never quits) a user-configured app list via `NSRunningApplication.hide()`/`unhide()`; floating `NSPanel` countdown overlay + automatic `MenuBarDisplayStyle.sessionCountdown` menu bar mode; end-of-session summary sampled every 5s from the real `ProcessMonitor` actor + `AppState.cpuUsage`, delivered via notification and logged to `AlertLog` (`kindRaw: "focus"`, surfaced in a new "Focus History" section); Settings → Focus tab to manage the hide list. **Scoping note:** the idea sheet's "suppress notifications" bullet was dropped as infeasible — no public macOS API lets a third-party app toggle system Focus/DND or silence other apps' banners — and replaced with an honest "Turn on Focus Mode…" deep link to System Settings instead of faking the capability
+- [x] Security Posture Dashboard (v4.2) — F-019: `SecurityPostureScanner` actor in the Protection module checks FileVault, Gatekeeper, Application Firewall, and Automatic Updates via read-only `Process` calls; SIP, Secure Boot, Find My Mac, and Login Window surface as an honest "check manually" state (no reliable non-interactive read exists) rather than a guessed verdict; 0–100 score feeds into `AppState.systemHealthScore` at a quarter-weight, never penalizing unverifiable checks
 
 ---
 
@@ -247,7 +248,6 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 | F-016 | **Permission Auditor** | ~3 d | Full map of every app's TCC permissions (mic, camera, screen recording, full disk access). Risk-flags excessive grants. Deep-links to System Settings pane per permission. |
 | F-017 | **Network Traffic Monitor** | ~5 d | Live per-app, per-domain network activity table. Flags telemetry/tracker domains from a bundled list. Read-only — no blocking. Complements existing Network section. |
 | F-018 | **Privacy Data Exposure Scanner** | ~3 d | Scans Downloads/Documents/Desktop for files containing API keys, credit card numbers, SSH private keys, SSNs. Regex-based, entirely on-device. Results grouped by risk level. |
-| F-019 | **Security Posture Dashboard** | ~1.5 d | Checklist of 8 macOS security settings: FileVault, Gatekeeper, SIP, Secure Boot, Find My, Firewall, auto-updates, login window. One-click deep-links. Security Score feeds into health score. |
 
 ---
 
@@ -288,6 +288,7 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 
 **Quick wins** (low effort, immediate value — implement first):
 - F-019 Security Posture Dashboard (~1.5 d)
+- F-022 Time Machine Backup Health (~1.5 d)
 - F-024 Browser Cleaner (~2 d)
 - F-026 Downloads Organiser (~2 d)
 

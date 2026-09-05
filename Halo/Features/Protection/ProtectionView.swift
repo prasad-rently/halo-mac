@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 struct ProtectionView: View {
     @StateObject private var viewModel = ProtectionViewModel()
@@ -8,6 +9,7 @@ struct ProtectionView: View {
             VStack(spacing: 24) {
                 ProtectionHeader(viewModel: viewModel)
                 ScannerCardsRow(viewModel: viewModel)
+                SecurityPostureSection(viewModel: viewModel)
                 PermissionsAuditSection(viewModel: viewModel)
                 LaunchAgentsSection(viewModel: viewModel)
             }
@@ -44,7 +46,29 @@ final class ProtectionViewModel: ObservableObject {
     @Published var launchAgents: [RealLaunchAgentItem] = []
     @Published var isLoadingAgents = false
 
+    // Security Posture (F-019) — read through the shared store so the checklist
+    // and the Dashboard health score can never disagree.
+    @Published var isLoadingSecurity = false
+    var securityChecks: [SecurityCheck] { SecurityPostureStore.shared.checks }
+    var securityScore: Int { SecurityPostureStore.shared.score }
+    var securityAutomationAvailable: Bool { SecurityPostureStore.shared.automationAvailable }
+
     private let scanner = ProtectionScanner()
+
+    /// The three `security*` properties above read `SecurityPostureStore.shared`,
+    /// which is shared state this view model does not own. Reading it without
+    /// subscribing meant the section only repainted for refreshes *it* started —
+    /// a refresh from anywhere else (AppState's launch scan today, anything
+    /// added later) changed the values under a view that had no reason to
+    /// re-render. Forwarding the store's `objectWillChange` is the standard way
+    /// to republish a nested `ObservableObject`; SwiftUI re-reads after the
+    /// change lands, so the computed properties give fresh values.
+    private var securityStoreObserver: AnyCancellable?
+
+    init() {
+        securityStoreObserver = SecurityPostureStore.shared.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+    }
 
     enum ScanState: Equatable {
         case idle, scanning(progress: Double), complete(clean: Bool), found(count: Int)
@@ -75,6 +99,7 @@ final class ProtectionViewModel: ObservableObject {
             group.addTask { await self.loadPermissions() }
             group.addTask { await self.loadInstalledBrowsers() }
             group.addTask { await self.loadLaunchAgents() }
+            group.addTask { await self.loadSecurityPosture() }
         }
     }
 
@@ -143,6 +168,17 @@ final class ProtectionViewModel: ObservableObject {
         isLoadingAgents = true
         launchAgents = await scanner.scanLaunchAgents()
         isLoadingAgents = false
+    }
+
+    // MARK: Security Posture (F-019)
+
+    func loadSecurityPosture() async {
+        isLoadingSecurity = true
+        // No manual `objectWillChange.send()`: the store is observed in `init`,
+        // so its own change notification is what repaints this section — and it
+        // does so for refreshes started anywhere, not just this one.
+        await SecurityPostureStore.shared.refresh()
+        isLoadingSecurity = false
     }
 }
 
@@ -604,6 +640,143 @@ struct PermissionCard: View {
             }
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Security Posture (F-019)
+
+struct SecurityPostureSection: View {
+    @ObservedObject var viewModel: ProtectionViewModel
+
+    private var scoreColor: Color {
+        switch viewModel.securityScore {
+        case 80...100: return .haloGreen
+        case 50..<80:  return .haloAmber
+        default:       return .haloRed
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                HaloSectionHeader(
+                    title: "Security Posture",
+                    subtitle: "Read-only checks of key macOS security settings"
+                )
+                Spacer()
+                if viewModel.isLoadingSecurity {
+                    ProgressView().scaleEffect(0.6).tint(.haloAccent)
+                } else {
+                    HStack(spacing: 6) {
+                        // Only the badge is gated on having checks. Refresh was
+                        // gated on the same condition, so an empty result — the
+                        // one state where you most need to re-run — left no way
+                        // to do it.
+                        if !viewModel.securityChecks.isEmpty {
+                            HaloBadge(text: "\(viewModel.securityScore)/100", color: scoreColor)
+                                .accessibilityIdentifier("protection.securityPosture.score")
+                        }
+                        Button {
+                            Task { await viewModel.loadSecurityPosture() }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 12))
+                                .foregroundColor(.haloText2)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("protection.securityPosture.refresh")
+                    }
+                }
+            }
+
+            if viewModel.isLoadingSecurity {
+                HStack(spacing: 10) {
+                    ProgressView().scaleEffect(0.8).tint(.haloAccent)
+                    Text("Checking security settings…")
+                        .font(HaloFont.body(13))
+                        .foregroundColor(.haloText2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(Color.haloSurface2)
+                .cornerRadius(12)
+            } else {
+                // Under the App Sandbox every automated check degrades to
+                // "unknown" and the score sits at a permanent 100/100. Saying so
+                // is the honest thing — eight silent "unknown"s otherwise read as
+                // "this Mac can't be verified" rather than "Halo wasn't allowed
+                // to look".
+                if !viewModel.securityAutomationAvailable {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "lock.slash")
+                            .font(.system(size: 12))
+                            .foregroundColor(.haloAmber)
+                        Text("This build can't read your security settings automatically, so every row below needs checking by hand and the score isn't meaningful.")
+                            .font(HaloFont.body(11))
+                            .foregroundColor(.haloText2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.haloSurface2)
+                    .cornerRadius(10)
+                    .accessibilityIdentifier("protection.securityPosture.sandboxNotice")
+                }
+
+                LazyVStack(spacing: 6) {
+                    ForEach(viewModel.securityChecks) { check in
+                        SecurityCheckRow(check: check)
+                    }
+                }
+                .accessibilityIdentifier("protection.securityPosture.list")
+            }
+        }
+    }
+}
+
+struct SecurityCheckRow: View {
+    let check: SecurityCheck
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: check.kind.icon)
+                .font(.system(size: 14))
+                .foregroundColor(.haloAccent)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(check.kind.rawValue)
+                    .font(HaloFont.body(13, weight: .semibold))
+                    .foregroundColor(.haloText)
+                Text(check.detail)
+                    .font(HaloFont.body(11))
+                    .foregroundColor(.haloText2)
+            }
+
+            Spacer()
+
+            Image(systemName: check.state.icon)
+                .font(.system(size: 14))
+                .foregroundColor(check.state.color)
+                .accessibilityIdentifier("protection.securityPosture.check.\(check.kind.idSlug).state")
+
+            if let url = check.kind.settingsURL {
+                Button {
+                    NSWorkspace.shared.open(url)
+                } label: {
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.haloText3)
+                }
+                .buttonStyle(.plain)
+                .help("Open in System Settings")
+                .accessibilityIdentifier("protection.securityPosture.check.\(check.kind.idSlug).fix")
+            }
+        }
+        .padding(12)
+        .background(Color.haloSurface2)
+        .cornerRadius(10)
+        .accessibilityIdentifier("protection.securityPosture.check.\(check.kind.idSlug)")
     }
 }
 

@@ -122,6 +122,7 @@
 		000000000000000000008106 /* AppUsageInsightsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008105 /* AppUsageInsightsSection.swift */; };
 		000000000000000000008134 /* FocusSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008133 /* FocusSessionManager.swift */; };
 		000000000000000000008136 /* FocusSessionOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008135 /* FocusSessionOverlayView.swift */; };
+		000000000000000000008032 /* SecurityPostureScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008031 /* SecurityPostureScanner.swift */; };
 		000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009001 /* GetHealthScoreIntent.swift */; };
 		000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009003 /* GetCPUUsageIntent.swift */; };
 		000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009005 /* GetBatteryHealthIntent.swift */; };
@@ -370,6 +371,7 @@
 		000000000000000000008105 /* AppUsageInsightsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/AppUsageInsightsSection.swift; sourceTree = "<group>"; };
 		000000000000000000008133 /* FocusSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/FocusSessionManager.swift; sourceTree = "<group>"; };
 		000000000000000000008135 /* FocusSessionOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/FocusSessionOverlayView.swift; sourceTree = "<group>"; };
+		000000000000000000008031 /* SecurityPostureScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SecurityPostureScanner.swift; sourceTree = "<group>"; };
 		000000000000000000009001 /* GetHealthScoreIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetHealthScoreIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009003 /* GetCPUUsageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetCPUUsageIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009005 /* GetBatteryHealthIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetBatteryHealthIntent.swift; sourceTree = "<group>"; };
@@ -522,6 +524,7 @@
 				000000000000000000008019 /* IdleAppMonitor.swift */,
 				000000000000000000008053 /* TimeMachineMonitor.swift */,
 				000000000000000000008113 /* MemoryTrendTracker.swift */,
+				000000000000000000008031 /* SecurityPostureScanner.swift */,
 				000000000000000000001030 /* DesignSystem.swift */,
 				000000000000000000008011 /* CelebrationOverlay.swift */,
 				000000000000000000001032 /* ApplicationsView.swift */,
@@ -1013,6 +1016,7 @@
 				000000000000000000008106 /* AppUsageInsightsSection.swift in Sources */,
 				000000000000000000008134 /* FocusSessionManager.swift in Sources */,
 				000000000000000000008136 /* FocusSessionOverlayView.swift in Sources */,
+				000000000000000000008032 /* SecurityPostureScanner.swift in Sources */,
 				000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */,
 				000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */,
 				000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */,

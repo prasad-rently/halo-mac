@@ -106,6 +106,7 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 | `dashboard.focusSession.start` · `.end` · `dashboard.focusHistory` | Dashboard → Focus Session (F-028) |
 | `cleanup.cleanAll.button` · `fileListView` | Cleanup |
 | `protection.scan.button` | Protection |
+| `protection.securityPosture.score` · `protection.securityPosture.list` · `protection.securityPosture.check.<slug>` (`.state` / `.fix`) | Protection → Security Posture (F-019) |
 | `performance.idleApp.quit.button` | Performance → Idle Apps |
 | `performance.memoryTrends.tab` · `performance.memoryTrends.row.<bundleID>` · `performance.memoryTrends.sparkline.<bundleID>` · `performance.memoryTrends.restart.<bundleID>` | Performance → Memory Trends (F-023) |
 | `applications.row.<bundleId>` · `applications.uninstall.button` · `applications.leftover.<kind>` | Applications |
