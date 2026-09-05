@@ -580,3 +580,105 @@ struct ProcessMonitorTests {
         #expect(zip(byRAM, byRAM.dropFirst()).allSatisfy { $0.ramMB >= $1.ramMB })
     }
 }
+// MARK: - AsyncTimeout
+//
+// Every assertion here is on ELAPSED TIME, deliberately. The idiom this helper
+// replaces — racing a `Task.sleep` sibling inside a `withTaskGroup` — returned
+// the correct *value* and the wrong *time*, so a test that only checked the
+// returned value passed against the broken version. Timing is the property that
+// was actually missing.
+@Suite("AsyncTimeout")
+struct AsyncTimeoutTests {
+
+    /// Bounds are generous: the gap between "released at the deadline" and
+    /// "joined the abandoned work" is seconds, not milliseconds, so there is no
+    /// need to measure tightly and invite flakiness.
+    private static let slowWork: TimeInterval = 3.0
+
+    // The case that used to hang the caller for the full duration of work it
+    // had already given up on.
+    @Test("Work slower than the deadline releases the caller at the deadline")
+    func testBoundsWallClock() async {
+        let started = Date()
+        let value: String? = await AsyncTimeout.run(seconds: 0.3) { deliver in
+            DispatchQueue.global().async {
+                Thread.sleep(forTimeInterval: Self.slowWork)   // uninterruptible
+                deliver("too-late")
+            }
+        }
+        let elapsed = Date().timeIntervalSince(started)
+
+        #expect(value == nil)
+        #expect(elapsed < Self.slowWork / 2, "waited \(elapsed)s for abandoned work")
+    }
+
+    // The worse case: no delivery ever. Under the old shape the group waited on
+    // a child that would never finish, so the caller blocked forever.
+    @Test("A callback that never fires still returns at the deadline")
+    func testNeverDelivered() async {
+        let started = Date()
+        let value: String? = await AsyncTimeout.run(seconds: 0.3) { _ in }
+
+        #expect(value == nil)
+        #expect(Date().timeIntervalSince(started) < 2.0)
+    }
+
+    @Test("A prompt result is returned immediately, not held until the deadline")
+    func testFastPathNotDelayed() async {
+        let started = Date()
+        let value: String? = await AsyncTimeout.run(seconds: 10) { $0("quick") }
+
+        #expect(value == "quick")
+        #expect(Date().timeIntervalSince(started) < 1.0)
+    }
+
+    // A second resume on a checked continuation is a fatalError, so the test
+    // process surviving is itself the assertion.
+    @Test("Repeated deliveries resolve to the first and do not crash")
+    func testRepeatedDeliveryTakesFirst() async {
+        let value: Int? = await AsyncTimeout.run(seconds: 10) { deliver in
+            deliver(1)
+            deliver(2)
+            deliver(3)
+        }
+        #expect(value == 1)
+    }
+
+    // PhotoKit delivers a placeholder then a real image; the first delivery
+    // wins even when it is nil, which is the documented behaviour of `.run`.
+    @Test("A first delivery of nil wins over a later real value")
+    func testFirstNilWins() async {
+        let value: Int? = await AsyncTimeout.run(seconds: 10) { deliver in
+            deliver(nil)
+            deliver(42)
+        }
+        #expect(value == nil)
+    }
+
+    @Test("A delivery arriving after the deadline is ignored rather than crashing")
+    func testLateDeliveryIgnored() async {
+        let value: Int? = await AsyncTimeout.run(seconds: 0.2) { deliver in
+            DispatchQueue.global().async {
+                Thread.sleep(forTimeInterval: 0.5)
+                deliver(7)
+            }
+        }
+        #expect(value == nil)
+        // Let the late delivery land while the test is still running, so a
+        // double-resume would take this process down rather than a later one.
+        try? await Task.sleep(nanoseconds: 600_000_000)
+    }
+
+    @Test("runBlocking returns a prompt value and bounds a slow one")
+    func testRunBlocking() async {
+        #expect(await AsyncTimeout.runBlocking(seconds: 10) { "done" } == "done")
+
+        let started = Date()
+        let slow: String? = await AsyncTimeout.runBlocking(seconds: 0.3) {
+            Thread.sleep(forTimeInterval: Self.slowWork)
+            return "too-late"
+        }
+        #expect(slow == nil)
+        #expect(Date().timeIntervalSince(started) < Self.slowWork / 2)
+    }
+}

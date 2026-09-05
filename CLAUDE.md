@@ -518,6 +518,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `4009` / `4010` | AppScanner.swift file ref / sources build file |
 | `4011` / `4012` | AlertLog.swift file ref / sources build file |
 | `4013` / `4014` | ReportGenerator.swift file ref / sources build file |
+| `8171` / `8172` | AsyncTimeout.swift file ref / sources build file |
 | `5001` | Sentry in Frameworks build file |
 | `5002` | XCSwiftPackageProductDependency (Sentry) |
 | `5003` | XCRemoteSwiftPackageReference (sentry-cocoa) |
@@ -705,6 +706,16 @@ ancestor, so real collisions still print.
     - **Thread-pool starvation.** The natural fix — one blocking read dispatched per pipe onto `DispatchQueue.global()`, joined with a `DispatchGroup` — *also* deadlocks, and this one is subtle: each call parks two pool threads on a blocking read while a third waits on them, so once enough calls overlap the pool has no thread left to run a drain block and `leave()` is never reached. Halo genuinely has several in flight at once (AppState's SMART timer, `SystemControlsManager`'s poll loop, an AI tool call), and a parallel test run reproduced it in seconds. `ShellReader` therefore multiplexes both descriptors with `poll(2)` **on the calling thread** — no worker threads, nothing to starve. Do not "tidy" this back into a worker-per-pipe design; `HaloTests`' ShellReader suite has explicit regression tests for all three traps.
 
     Also: `ShellReader` is synchronous and blocking by design (callers are already inside an `actor` or a detached `Task`) — **never call it from the main actor**. It reports a denied `posix_spawn` as `launchFailure`, which is how every call behaves under the release App Sandbox, so callers can distinguish "we were not allowed to ask" from "the tool found nothing". The one sanctioned exception is `ActionRunner`'s live-output path, which needs `readabilityHandler` streaming to relay stdout line-by-line to the UI and so cannot use a batch reader.
+21. **Timing out callback work** — never race a `Task.sleep` sibling inside a
+   `withTaskGroup` and take `group.next()`. It bounds the returned *value* but not
+   the *time*: `withTaskGroup` joins every child before returning, and
+   `group.cancelAll()` cannot interrupt a `withCheckedContinuation` around a
+   blocking call or a framework callback, so the group waits on the work you just
+   abandoned. Measured: a 1.5 s "ceiling" over 5 s of work returns nil after
+   5.01 s, and work that never calls back blocks forever. Use `AsyncTimeout.run`
+   (or `.runBlocking`), which resumes one continuation from whichever of the
+   callback or the deadline arrives first. Note it bounds the *caller*, not the
+   work — the abandoned operation still runs to completion.
 
 ---
 
