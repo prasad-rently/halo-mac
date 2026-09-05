@@ -19,7 +19,9 @@ actor TimeMachineMonitor {
             return .notConfigured
         }
 
-        let (name, mountPoint) = parseDestinationInfo(destInfo)
+        let destination = Self.parseDestinationInfo(destInfo)
+        let name = destination.name
+        let mountPoint = destination.mountPoint
 
         let statusOutput = run("/usr/bin/tmutil", ["status"])
         let isRunning = statusOutput.contains("Running = 1")
@@ -58,6 +60,8 @@ actor TimeMachineMonitor {
             isConfigured: true,
             destinationName: name,
             mountPoint: mountPoint,
+            destinationURL: destination.url,
+            isNetworkDestination: destination.isNetwork,
             isReachable: isReachable,
             availableBytes: availableBytes,
             totalBytes: totalBytes,
@@ -72,10 +76,23 @@ actor TimeMachineMonitor {
     /// failed to launch or exited non-zero (e.g. no destination configured);
     /// success just means the backup was *accepted*, not that it finished —
     /// callers should re-poll `status()` to observe progress/completion.
+    /// On recent macOS `tmutil startbackup` requires the caller to hold Full
+    /// Disk Access. Without it the command exits non-zero and prints the reason
+    /// to stderr — so this merges stderr and hands the text back rather than
+    /// collapsing every distinct failure into a silent `false`.
     @discardableResult
-    func startBackupNow() async -> Bool {
-        let result = runWithExitCode("/usr/bin/tmutil", ["startbackup"])
-        return result.exitCode == 0
+    func startBackupNow() async -> BackupStartResult {
+        let result = runWithExitCode("/usr/bin/tmutil", ["startbackup"], mergeStderr: true)
+        guard result.exitCode == 0 else {
+            let message = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            if result.exitCode == -1 {
+                return .failed("Halo could not launch tmutil. In a sandboxed build this is blocked outright.")
+            }
+            return .failed(message.isEmpty
+                           ? "tmutil exited with code \(result.exitCode)."
+                           : message)
+        }
+        return .started
     }
 
     // MARK: - Heatmap
@@ -126,21 +143,47 @@ actor TimeMachineMonitor {
 
     /// `tmutil destinationinfo` prints one or more "Key : Value" blocks
     /// separated by "====" lines. Halo surfaces the primary (first) destination.
-    private func parseDestinationInfo(_ output: String) -> (name: String?, mountPoint: String?) {
-        var name: String?
-        var mountPoint: String?
+    ///
+    /// A **network** destination (Time Capsule, NAS, any SMB/AFP share) reports
+    /// `Kind : Network` and a `URL`, and has no `Mount Point` at all until its
+    /// sparsebundle happens to be mounted. Reading only `Mount Point` therefore
+    /// made every network destination look permanently disconnected with no
+    /// capacity — a healthy, currently-backing-up Time Capsule shown as
+    /// unreachable. The `URL` is parsed so that case can be told apart.
+    ///
+    /// Note the `URL` value itself contains `://`, so the split must be on the
+    /// *first* colon only — which `firstIndex(of:)` already does.
+    static func parseDestinationInfo(_ output: String) -> DestinationInfo {
+        var info = DestinationInfo()
         for rawLine in output.split(separator: "\n") {
             guard let colonIndex = rawLine.firstIndex(of: ":") else { continue }
             let key = rawLine[rawLine.startIndex..<colonIndex].trimmingCharacters(in: .whitespaces)
             let value = rawLine[rawLine.index(after: colonIndex)...].trimmingCharacters(in: .whitespaces)
             guard !value.isEmpty else { continue }
             switch key {
-            case "Name": if name == nil { name = value }
-            case "Mount Point": if mountPoint == nil { mountPoint = value }
+            case "Name":        if info.name == nil { info.name = value }
+            case "Mount Point": if info.mountPoint == nil { info.mountPoint = value }
+            case "URL":         if info.url == nil { info.url = value }
+            case "Kind":        if info.kind == nil { info.kind = value }
             default: break
             }
         }
-        return (name, mountPoint)
+        return info
+    }
+
+    struct DestinationInfo {
+        var name: String?
+        var mountPoint: String?
+        var url: String?
+        var kind: String?
+
+        /// `tmutil` reports "Network" for Time Capsule / NAS destinations. The
+        /// presence of a `URL` with no `Mount Point` means the same thing, and
+        /// is checked as a fallback in case the `Kind` wording ever shifts.
+        var isNetwork: Bool {
+            if let kind { return kind.caseInsensitiveCompare("Network") == .orderedSame }
+            return url != nil && mountPoint == nil
+        }
     }
 
     /// `tmutil listbackups` prints one absolute snapshot path per line, e.g.
@@ -174,20 +217,51 @@ actor TimeMachineMonitor {
         runWithExitCode(path, args).output
     }
 
-    private func runWithExitCode(_ path: String, _ args: [String]) -> (output: String, exitCode: Int32) {
+    /// Runs a tool and returns its output and exit status.
+    ///
+    /// The ordering here is load-bearing. Draining the pipe **before**
+    /// `waitUntilExit()` is what keeps this from deadlocking: a pipe holds
+    /// roughly 64 KB, and once the child fills it the child blocks on `write`
+    /// while the parent blocks in `waitUntilExit`, and neither ever moves.
+    /// `tmutil listbackups` is exactly the command that reaches that ceiling —
+    /// it prints one absolute snapshot path per line at ~70–90 bytes, so a
+    /// destination with a year of thinned history is comfortably past 64 KB.
+    ///
+    /// `readDataToEndOfFile()` returns when the child closes its end of the
+    /// pipe, which happens when it exits, so this both collects the output and
+    /// waits for completion — `waitUntilExit()` afterwards only reaps the
+    /// status.
+    ///
+    /// stderr is the second way to deadlock, and the subtler one: an
+    /// unattached `Pipe()` that nobody reads fills and blocks the child just
+    /// the same. It goes to `nullDevice` unless the caller actually wants the
+    /// diagnostics, in which case it is merged into the single stdout pipe
+    /// (plain `2>&1`) so there is still only one buffer and one reader.
+    private func runWithExitCode(
+        _ path: String,
+        _ args: [String],
+        mergeStderr: Bool = false
+    ) -> (output: String, exitCode: Int32) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = args
+
         let outPipe = Pipe()
         process.standardOutput = outPipe
-        process.standardError = Pipe()
+        process.standardError = mergeStderr ? outPipe : FileHandle.nullDevice
+
         do {
             try process.run()
-            process.waitUntilExit()
         } catch {
+            // Denied by the sandbox, or the tool is missing. Either way there
+            // is no output and no exit status — callers treat -1 as "we were
+            // not able to ask", which is not the same as "nothing found".
             return ("", -1)
         }
+
         let data = outPipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+
         let output = String(data: data, encoding: .utf8) ?? ""
         return (output, process.terminationStatus)
     }

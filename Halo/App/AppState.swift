@@ -89,6 +89,9 @@ final class AppState: ObservableObject {
     @Published var timeMachineStatus: TimeMachineStatus = .notConfigured
     @Published var isCheckingTimeMachine: Bool = false
     @Published var isStartingBackup: Bool = false
+    /// Why the last "Back Up Now" failed, if it did. `tmutil startbackup` needs
+    /// Full Disk Access on recent macOS; the button used to fail silently.
+    @Published var backupStartError: String? = nil
 
     // MARK: Phase 3 — Bandwidth History (P3-10)
     /// Rolling 30-sample (60 s) buffers — appended in refreshMetrics(), max 30 entries.
@@ -244,7 +247,12 @@ final class AppState: ObservableObject {
     func startTimeMachineBackupNow() async {
         guard !isStartingBackup else { return }
         isStartingBackup = true
-        _ = await timeMachineMonitor.startBackupNow()
+        let result = await timeMachineMonitor.startBackupNow()
+        if case .failed(let reason) = result {
+            backupStartError = reason
+        } else {
+            backupStartError = nil
+        }
         await refreshTimeMachineStatus()
         isStartingBackup = false
     }

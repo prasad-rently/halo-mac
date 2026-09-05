@@ -20,6 +20,7 @@ final class AlertManager {
         case batteryCritical = "battery_critical"
         case chargingDone   = "charging_done"
         case backupStale    = "backup_stale"   // F-022
+        case backupNever    = "backup_never"   // F-022
     }
 
     // MARK: - State
@@ -123,6 +124,20 @@ final class AlertManager {
     /// "persistent" alert — it keeps recurring daily until a backup runs,
     /// rather than firing once and going silent.
     func evaluateBackup(status: TimeMachineStatus) {
+        guard status.isConfigured else { return }
+
+        // Configured but nothing has ever completed. `isStale` structurally
+        // cannot catch this — it needs a lastBackupDate to measure against, so
+        // it reads `false` and the app stayed silent in exactly the case where
+        // the user is most likely to believe they are protected and not be.
+        if status.hasNeverBackedUp {
+            fire(.backupNever,
+                 title: "Time Machine Has Never Backed Up",
+                 body: "Time Machine is set up, but no backup has ever finished. Connect your backup drive to run the first one.",
+                 cooldown: 86400)
+            return
+        }
+
         guard status.isStale, let last = status.lastBackupDate else { return }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full

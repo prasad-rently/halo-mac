@@ -501,8 +501,15 @@ struct TimeMachineStatus: Sendable {
     var isConfigured: Bool
     var destinationName: String? = nil
     var mountPoint: String? = nil
+    /// Set for network destinations (Time Capsule / NAS), which `tmutil`
+    /// reports with a `URL` instead of a `Mount Point`.
+    var destinationURL: String? = nil
+    /// A network destination has no local mount path until its sparsebundle is
+    /// mounted, so "no mount point" is not evidence that it is disconnected.
+    var isNetworkDestination: Bool = false
     /// Whether the destination volume is currently mounted/reachable (it can
     /// be configured but disconnected, e.g. an external HDD that's unplugged).
+    /// Only meaningful for local destinations — read `reachability` instead.
     var isReachable: Bool = false
     var availableBytes: Int64? = nil
     var totalBytes: Int64? = nil
@@ -517,10 +524,38 @@ struct TimeMachineStatus: Sendable {
     static let notConfigured = TimeMachineStatus(isConfigured: false)
 
     /// True only when Halo has a real last-backup date and it's 48h+ old.
-    /// Never true for "no data" — that's the separate `.notConfigured` state.
+    /// Never true for "no data" — that's the separate `.notConfigured` state,
+    /// or `hasNeverBackedUp` below.
     var isStale: Bool {
         guard isConfigured, let last = lastBackupDate else { return false }
         return Date().timeIntervalSince(last) > (48 * 3600)
+    }
+
+    /// Time Machine is set up but no backup has ever completed — a destination
+    /// was selected and then the drive was never plugged in, or every attempt
+    /// failed.
+    ///
+    /// This is deliberately separate from `isStale`, which cannot represent it:
+    /// `isStale` needs a `lastBackupDate` to measure against, so with no
+    /// backups at all it is `false`. Without this the app stayed silent in the
+    /// one configuration where the user is most likely to believe they are
+    /// protected and not be.
+    var hasNeverBackedUp: Bool {
+        isConfigured && lastBackupDate == nil
+    }
+
+    /// Whether Halo can actually tell that the destination is present.
+    ///
+    /// Split three ways rather than two because "the drive is unplugged" and
+    /// "we have no way to measure this one" are different facts, and showing
+    /// the second as the first is what made healthy network destinations read
+    /// as disconnected.
+    enum Reachability { case reachable, unreachable, unknown }
+
+    var reachability: Reachability {
+        if isReachable { return .reachable }
+        if isNetworkDestination { return .unknown }
+        return .unreachable
     }
 
     var spaceUsedRatio: Double? {
@@ -549,8 +584,22 @@ enum BackupDayState: Equatable {
     }
 }
 
+/// Result of a user-initiated "Back Up Now".
+///
+/// `tmutil startbackup` needs Full Disk Access on recent macOS; without it the
+/// command exits non-zero and explains why. Returning a bare `Bool` threw that
+/// explanation away and left the user with a button that silently did nothing.
+enum BackupStartResult: Sendable, Equatable {
+    case started
+    case failed(String)
+}
+
 struct BackupHeatmapDay: Identifiable {
-    let id = UUID()
+    /// The day itself, not a fresh `UUID()`. `heatmap()` is pure and is called
+    /// from the view body, so it re-runs on every render — a generated id made
+    /// `ForEach` see 30 brand-new cells each time and rebuild all of them
+    /// instead of diffing. One day is one cell, so the date is the identity.
+    var id: Date { date }
     let date: Date
     let state: BackupDayState
 }

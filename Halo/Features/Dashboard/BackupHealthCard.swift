@@ -40,7 +40,7 @@ struct BackupHealthCard: View {
                 Group {
                     if !status.isConfigured {
                         notConfiguredState
-                    } else if !status.isReachable {
+                    } else if status.reachability == .unreachable {
                         unreachableState
                     } else {
                         configuredState
@@ -55,7 +55,10 @@ struct BackupHealthCard: View {
     private var accentColor: Color {
         guard status.isConfigured else { return .haloText3 }
         if status.isStale { return .haloRed }
-        if !status.isReachable { return .haloAmber }
+        // `.unknown` (a network destination whose sparsebundle isn't mounted)
+        // is not a warning — backups may well be running fine. Only a local
+        // volume we genuinely cannot find is amber.
+        if status.reachability == .unreachable { return .haloAmber }
         return .haloGreen
     }
 
@@ -126,6 +129,11 @@ struct BackupHealthCard: View {
                         Text("No backups found")
                             .font(HaloFont.display(16, weight: .bold))
                             .foregroundColor(.haloText3)
+                        if status.hasNeverBackedUp {
+                            Text("Set up, but no backup has ever finished.")
+                                .font(HaloFont.body(11))
+                                .foregroundColor(.haloAmber)
+                        }
                     }
                 }
                 Spacer()
@@ -138,6 +146,23 @@ struct BackupHealthCard: View {
                 }
                 .disabled(status.isBackupRunning || appState.isStartingBackup)
                 .accessibilityIdentifier("dashboard.backupHealth.backupNow.button")
+            }
+
+            // Say why the button did nothing. On recent macOS `tmutil
+            // startbackup` needs Full Disk Access, and the failure used to be
+            // swallowed — the user pressed the button and simply nothing
+            // happened, with no way to tell that from a slow backup.
+            if let error = appState.backupStartError {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(.haloAmber)
+                    Text(error)
+                        .font(HaloFont.body(11))
+                        .foregroundColor(.haloText2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityIdentifier("dashboard.backupHealth.backupNow.error")
             }
 
             // Destination + free space
@@ -158,6 +183,13 @@ struct BackupHealthCard: View {
                 }
                 if let ratio = status.spaceUsedRatio {
                     HaloMiniBar(value: ratio, color: ratio > 0.9 ? .haloRed : ratio > 0.75 ? .haloAmber : .haloAccent)
+                } else if status.isNetworkDestination {
+                    // Say why the bar is missing rather than just omitting it.
+                    // Capacity comes from the mounted volume, and a network
+                    // destination has none until its sparsebundle is mounted.
+                    Text("Capacity isn't reported for network destinations.")
+                        .font(HaloFont.body(11))
+                        .foregroundColor(.haloText3)
                 }
             }
 
