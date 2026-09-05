@@ -95,14 +95,19 @@ actor BrowserCleanerScanner {
                 // Resolved *before* trashing — measuring afterwards reads a
                 // path that no longer exists and reports 0.
                 //
-                // Reuses the size `measure(_:)` already computed: re-walking
-                // each directory immediately before trashing it doubled the I/O
-                // of every clear, which on a multi-GB four-profile Chrome cache
-                // is substantial. Falls back to measuring when the profile never
-                // went through `measure(_:)` — the UI always measures first, but
-                // silently reporting 0 bytes freed for a caller that didn't
-                // would be a wrong answer rather than a loud one.
-                let size = item.size > 0 ? item.size : Self.size(ofPaths: [path])
+                // Measured per path, and NOT reused from `item.size`.
+                // `measure(_:)` sets `item.size` to the total across *all* of the
+                // category's paths, so adding it once per path inflated the
+                // reported figure by the number of paths that existed: 2x for
+                // Safari's history (History.db + History.plist), up to 4x for a
+                // four-profile Chrome, whose categories carry one path per
+                // profile. The fallback measured a single path, so the two
+                // branches were not even reporting the same quantity.
+                //
+                // That re-walk is the cost of a correct number. If it ever shows
+                // up on a multi-GB cache, the fix is for `measure(_:)` to keep
+                // per-path sizes — not to reuse a total as though it were one.
+                let size = Self.size(ofPaths: [path])
                 do {
                     // ALWAYS trashItem — never removeItem. Confirmed by the
                     // review sheet before this function is ever called.

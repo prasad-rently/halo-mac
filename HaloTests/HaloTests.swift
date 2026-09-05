@@ -433,6 +433,80 @@ struct BrowserCleanerSizeTests {
     }
 }
 
+// MARK: - Browser clear accounting
+//
+// `clear()` reported `freed` by adding `item.size` once per path. `measure(_:)`
+// sets `item.size` to the total across ALL of a category's paths, so the figure
+// was inflated by the number of paths that existed — 2x for Safari's history,
+// up to 4x for a four-profile Chrome. `cleared` was always right, which made it
+// look consistent.
+//
+// This walks a real temp tree rather than asserting on a constructed
+// `BrowserClearResult`, because the bug was in the accounting, not the struct.
+@Suite("BrowserCleanerScanner clear accounting")
+struct BrowserCleanAccountingTests {
+
+    @Test("Freed bytes are the sum of the paths, not the category total per path")
+    func testMultiPathFreedIsNotMultiplied() async throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("HaloClearTest-\(UUID().uuidString)")
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root) }
+
+        // One category, three paths of known size — the shape that multiplied.
+        let sizes = [1000, 2000, 3000]
+        var paths: [String] = []
+        for (i, bytes) in sizes.enumerated() {
+            let url = root.appendingPathComponent("file\(i).bin")
+            try Data(repeating: 0xAB, count: bytes).write(to: url)
+            paths.append(url.path)
+        }
+        let total = Int64(sizes.reduce(0, +))
+
+        let item = BrowserCategoryItem(category: .httpCache, paths: paths)
+        let profile = BrowserProfile(name: "Test", icon: "safari",
+                                     appPath: "/Applications/Safari.app",
+                                     categories: [item])
+
+        let scanner = BrowserCleanerScanner()
+        let measured = await scanner.measure(profile)
+
+        // Precondition: measure() really does report the whole category as one
+        // number. If this ever stops being true the bug below changes shape.
+        #expect(measured.categories[0].size == total)
+
+        let measuredItem = measured.categories[0]
+        let result = await scanner.clear(measured, categories: [measuredItem.id])
+
+        #expect(result.cleared == 3)
+        // The broken version reported 3 x 6000 = 18000 here.
+        #expect(result.freed == total)
+    }
+
+    @Test("A single-path category is unaffected")
+    func testSinglePathUnchanged() async throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("HaloClearTest-\(UUID().uuidString)")
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root) }
+
+        let url = root.appendingPathComponent("only.bin")
+        try Data(repeating: 0xCD, count: 4096).write(to: url)
+
+        let item = BrowserCategoryItem(category: .httpCache, paths: [url.path])
+        let profile = BrowserProfile(name: "Test", icon: "safari",
+                                     appPath: "/Applications/Safari.app",
+                                     categories: [item])
+
+        let scanner = BrowserCleanerScanner()
+        let measured = await scanner.measure(profile)
+        let result = await scanner.clear(measured, categories: [measured.categories[0].id])
+
+        #expect(result.cleared == 1)
+        #expect(result.freed == 4096)
+    }
+}
+
 @Suite("BrowserClearResult reporting")
 struct BrowserClearResultTests {
 
