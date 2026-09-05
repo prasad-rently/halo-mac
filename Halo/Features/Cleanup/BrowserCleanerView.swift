@@ -81,6 +81,8 @@ final class BrowserCleanerViewModel: ObservableObject {
         case .single(let id): targetIDs = [id]
         }
 
+        var allErrors: [String] = []
+
         for id in targetIDs {
             guard let idx = browsers.firstIndex(where: { $0.id == id }) else { continue }
             let profile = browsers[idx]
@@ -88,7 +90,8 @@ final class BrowserCleanerViewModel: ObservableObject {
             guard !selected.isEmpty else { continue }
             let result = await scanner.clear(profile, categories: selected)
             totalFreed += result.freed
-            if let error = result.error, firstError == nil { firstError = error }
+            allErrors.append(contentsOf: result.errors)
+            if let summary = result.summary, firstError == nil { firstError = summary }
             browsers[idx] = await scanner.measure(profile)
             // Keep prior selections for categories still holding data; clear the rest.
             for j in browsers[idx].categories.indices {
@@ -96,7 +99,14 @@ final class BrowserCleanerViewModel: ObservableObject {
             }
         }
 
-        if let firstError { clearError = firstError }
+        // Report the whole picture, not just the first failure.
+        if !allErrors.isEmpty {
+            clearError = allErrors.count == 1
+                ? allErrors[0]
+                : "\(allErrors.count) items couldn't be moved to the Trash. First: \(allErrors[0])"
+        } else if let firstError {
+            clearError = firstError
+        }
         lastFreedBytes = totalFreed
         isClearing = false
         reviewTarget = nil
@@ -397,6 +407,17 @@ struct BrowserCleanerReviewSheet: View {
         browsersInScope.contains { $0.hasAnySelected }
     }
 
+    /// Browsers in scope that are currently running.
+    ///
+    /// Clearing an open Chromium browser's `Sessions` is a direct "lost all my
+    /// tabs" bug — it holds the *current* session — and `History` / `Cookies`
+    /// are WAL-mode SQLite databases actively being written to. There was no
+    /// running check anywhere, and the PR's own test plan flagged this as
+    /// unverified.
+    private var runningBrowsers: [BrowserProfile] {
+        browsersInScope.filter { BrowserCleanerScanner.isRunning($0) }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -407,6 +428,19 @@ struct BrowserCleanerReviewSheet: View {
                     Text("Selected items will be moved to Trash.")
                         .font(HaloFont.body(12))
                         .foregroundColor(.haloText2)
+                    if !runningBrowsers.isEmpty {
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 11))
+                                .foregroundColor(.haloAmber)
+                            Text("\(runningBrowsers.map(\.name).joined(separator: ", ")) \(runningBrowsers.count == 1 ? "is" : "are") running. Quit \(runningBrowsers.count == 1 ? "it" : "them") first — clearing an open browser can lose your current tabs and leave its profile inconsistent.")
+                                .font(HaloFont.body(11))
+                                .foregroundColor(.haloAmber)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.top, 4)
+                        .accessibilityIdentifier("browserCleaner.review.runningWarning")
+                    }
                 }
                 Spacer()
                 Button { dismiss() } label: {

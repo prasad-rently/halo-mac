@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 // MARK: - Browser Cleaner Scanner (F-024)
 //
@@ -58,28 +59,70 @@ actor BrowserCleanerScanner {
 
     /// Moves every *selected* category's backing paths to the Trash.
     /// Returns (items trashed, freed bytes, first error message if any).
-    func clear(_ profile: BrowserProfile, categories selectedIDs: Set<UUID>) -> (cleared: Int, freed: Int64, error: String?) {
+    /// SQLite sidecar suffixes. `History`, `Cookies` and `Sessions` are WAL-mode
+    /// databases; trashing the primary file alone leaves an orphaned `-wal` with
+    /// no matching database, which Chromium meets on next launch as a corrupt
+    /// profile.
+    private static let sqliteSiblingSuffixes = ["-journal", "-wal", "-shm"]
+
+    /// True when the browser this profile belongs to is currently running.
+    ///
+    /// Clearing an open browser's `Sessions` directory is a direct "lost all my
+    /// tabs" bug — it holds the *current* session — and its WAL-mode databases
+    /// are being written to as we trash them. There was no running check
+    /// anywhere.
+    static func isRunning(_ profile: BrowserProfile) -> Bool {
+        NSWorkspace.shared.runningApplications.contains { app in
+            guard let path = app.bundleURL?.path else { return false }
+            return path == profile.appPath
+        }
+    }
+
+    /// Moves every *selected* category's backing paths to the Trash.
+    ///
+    /// Returns every failure rather than only the first: under the sandbox most
+    /// paths are expected to fail, and reporting one message beside a `cleared`
+    /// count gave the user no idea the operation had mostly not worked.
+    func clear(_ profile: BrowserProfile, categories selectedIDs: Set<UUID>) -> BrowserClearResult {
         let fm = FileManager.default
         var cleared = 0
         var freed: Int64 = 0
-        var firstError: String?
+        var errors: [String] = []
 
         for item in profile.categories where selectedIDs.contains(item.id) {
             for path in item.paths {
                 guard fm.fileExists(atPath: path) else { continue }
-                let size = Self.size(ofPaths: [path])
+                // Resolved *before* trashing — measuring afterwards reads a
+                // path that no longer exists and reports 0.
+                //
+                // Reuses the size `measure(_:)` already computed: re-walking
+                // each directory immediately before trashing it doubled the I/O
+                // of every clear, which on a multi-GB four-profile Chrome cache
+                // is substantial. Falls back to measuring when the profile never
+                // went through `measure(_:)` — the UI always measures first, but
+                // silently reporting 0 bytes freed for a caller that didn't
+                // would be a wrong answer rather than a loud one.
+                let size = item.size > 0 ? item.size : Self.size(ofPaths: [path])
                 do {
                     // ALWAYS trashItem — never removeItem. Confirmed by the
                     // review sheet before this function is ever called.
                     try fm.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
                     cleared += 1
                     freed += size
+
+                    // Take the SQLite sidecars with it, so what is left on disk
+                    // is consistent rather than a WAL pointing at nothing.
+                    for suffix in Self.sqliteSiblingSuffixes {
+                        let sibling = path + suffix
+                        guard fm.fileExists(atPath: sibling) else { continue }
+                        try? fm.trashItem(at: URL(fileURLWithPath: sibling), resultingItemURL: nil)
+                    }
                 } catch {
-                    if firstError == nil { firstError = error.localizedDescription }
+                    errors.append("\((path as NSString).lastPathComponent): \(error.localizedDescription)")
                 }
             }
         }
-        return (cleared, freed, firstError)
+        return BrowserClearResult(cleared: cleared, freed: freed, errors: errors)
     }
 
     // MARK: - Size measurement
@@ -90,16 +133,48 @@ actor BrowserCleanerScanner {
         paths.reduce(0) { $0 + recursiveSize(URL(fileURLWithPath: $1)) }
     }
 
+    /// Maximum entries walked per path. Matches the 20,000 cap
+    /// `ICloudDriveScanner.directorySize` and `SpaceLensViewModel.directorySize`
+    /// already use.
+    private static let maxEntriesPerPath = 20_000
+
+    /// Iterative, via `FileManager.enumerator(at:)`.
+    ///
+    /// The recursive version used `fileExists(atPath:isDirectory:)`, which
+    /// **resolves symlinks** — so a symlink inside any of these trees pointing at
+    /// a parent, or at `/`, recursed without bound. That is a stack-overflow
+    /// crash rather than a slow scan, and a symlink to $HOME would have made
+    /// "measure Chrome's cache" walk the entire home directory. There was no
+    /// depth or entry cap either.
+    ///
+    /// `enumerator(at:)` does not descend into directory symlinks by default,
+    /// which removes the cycle entirely; the cap bounds the rest.
     private static func recursiveSize(_ url: URL) -> Int64 {
         let fm = FileManager.default
         var isDir: ObjCBool = false
         guard fm.fileExists(atPath: url.path, isDirectory: &isDir) else { return 0 }
-        if isDir.boolValue {
-            let children = (try? fm.contentsOfDirectory(
-                at: url, includingPropertiesForKeys: [.fileSizeKey], options: [])) ?? []
-            return children.reduce(0) { $0 + recursiveSize($1) }
+
+        guard isDir.boolValue else {
+            return (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map { Int64($0) } ?? 0
         }
-        return (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map { Int64($0) } ?? 0
+
+        guard let enumerator = fm.enumerator(
+            at: url,
+            includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
+            options: [],
+            errorHandler: { _, _ in true }
+        ) else { return 0 }
+
+        var total: Int64 = 0
+        var seen = 0
+        for case let child as URL in enumerator {
+            seen += 1
+            if seen > maxEntriesPerPath { break }
+            guard let values = try? child.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
+                  values.isRegularFile == true else { continue }
+            total += Int64(values.fileSize ?? 0)
+        }
+        return total
     }
 
     // MARK: - Candidate table
@@ -177,9 +252,22 @@ actor BrowserCleanerScanner {
             BrowserCategoryItem(category: .downloadHistory, paths: [
                 "\(home)/Library/Safari/Downloads.plist",
             ]),
-            BrowserCategoryItem(category: .cookies, paths: [
-                "\(home)/Library/Cookies/Cookies.binarycookies",
-            ]),
+            // Safari cookies are deliberately NOT offered.
+            //
+            // `~/Library/Cookies/Cookies.binarycookies` is the shared,
+            // process-wide NSHTTPCookieStorage file used by every non-sandboxed
+            // app that touches NSURLSession or WKWebView outside a container.
+            // Modern Safari is sandboxed and keeps its cookies in
+            // ~/Library/Containers/com.apple.Safari/Data/Library/Cookies/, which
+            // needs Full Disk Access to reach.
+            //
+            // So the old entry did two wrong things at once: it did not clear
+            // Safari's cookies, and it *did* clear cookies belonging to other
+            // apps — silently signing the user out of unrelated software behind
+            // a one-click "Clean All Browsers". That is collateral damage to
+            // state the user never agreed to touch.
+            //
+            // Dropped for the same reason Safari's Site Data already was.
             BrowserCategoryItem(category: .sessions, paths: [
                 "\(home)/Library/Safari/LastSession.plist",
             ]),

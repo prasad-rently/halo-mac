@@ -211,6 +211,24 @@ struct BrowserCategoryItem: Identifiable, Sendable {
 }
 
 /// A browser detected on this Mac, broken down into per-category clearable items.
+/// Outcome of a browser clean.
+///
+/// Carries *every* failure, not just the first. Under the sandbox most paths are
+/// expected to fail, and one opaque message beside a "cleared N" count told the
+/// user nothing about what had actually happened.
+struct BrowserClearResult: Sendable {
+    let cleared: Int
+    let freed: Int64
+    let errors: [String]
+
+    var succeeded: Bool { errors.isEmpty }
+    var summary: String? {
+        guard !errors.isEmpty else { return nil }
+        if errors.count == 1 { return errors[0] }
+        return "\(errors.count) items couldn't be moved to the Trash. First: \(errors[0])"
+    }
+}
+
 struct BrowserProfile: Identifiable, Sendable {
     let id = UUID()
     let name: String

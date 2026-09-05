@@ -368,7 +368,7 @@ struct BrowserCleanerScannerTests {
 
         #expect(result.cleared == 1)
         #expect(result.freed == 400)
-        #expect(result.error == nil)
+        #expect(result.errors.isEmpty)
         #expect(!FileManager.default.fileExists(atPath: cacheFile.path), "the selected cache file should have been trashed")
         #expect(FileManager.default.fileExists(atPath: cookiesFile.path), "the unselected cookies file must be left alone")
     }
@@ -382,6 +382,80 @@ struct BrowserCleanerScannerTests {
         let result = await scanner.clear(profile, categories: [missingItem.id])
         #expect(result.cleared == 0)
         #expect(result.freed == 0)
-        #expect(result.error == nil)
+        #expect(result.errors.isEmpty)
+    }
+}
+
+// MARK: - F-024 review fixes
+
+@Suite("BrowserCleanerScanner size measurement")
+struct BrowserCleanerSizeTests {
+
+    // The regression this guards: recursiveSize used
+    // fileExists(atPath:isDirectory:), which RESOLVES symlinks — so a symlink
+    // pointing at a parent recursed without bound. That is a stack-overflow
+    // crash, not a slow scan, and a symlink to $HOME would have made "measure
+    // Chrome's cache" walk the entire home directory.
+    @Test("A symlink loop does not recurse without bound")
+    func testSymlinkLoopTerminates() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("HaloBrowserLoop-\(UUID().uuidString)")
+        let child = root.appendingPathComponent("child")
+        try fm.createDirectory(at: child, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root) }
+
+        try Data(repeating: 0x41, count: 1024).write(to: child.appendingPathComponent("a.bin"))
+        // child/loop -> root
+        try fm.createSymbolicLink(at: child.appendingPathComponent("loop"), withDestinationURL: root)
+
+        let size = BrowserCleanerScanner.size(ofPaths: [root.path])
+        #expect(size >= 1024)
+        #expect(size < 10_000_000)   // did not walk the world
+    }
+
+    @Test("Sizes sum the regular files in a tree")
+    func testSumsRegularFiles() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("HaloBrowserSize-\(UUID().uuidString)")
+        let sub = root.appendingPathComponent("sub")
+        try fm.createDirectory(at: sub, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root) }
+
+        try Data(repeating: 0x42, count: 2048).write(to: root.appendingPathComponent("a.bin"))
+        try Data(repeating: 0x43, count: 4096).write(to: sub.appendingPathComponent("b.bin"))
+
+        #expect(BrowserCleanerScanner.size(ofPaths: [root.path]) == 6144)
+    }
+
+    @Test("A missing path measures zero rather than failing")
+    func testMissingPath() {
+        #expect(BrowserCleanerScanner.size(ofPaths: ["/nonexistent/halo/path"]) == 0)
+    }
+}
+
+@Suite("BrowserClearResult reporting")
+struct BrowserClearResultTests {
+
+    // clear() returned only the first error. Under the sandbox most paths are
+    // expected to fail, so one message beside a "cleared N" count told the user
+    // nothing about what had actually happened.
+    @Test("Every failure is carried, not just the first")
+    func testAllErrorsCarried() {
+        let r = BrowserClearResult(cleared: 2, freed: 100, errors: ["a: denied", "b: denied", "c: denied"])
+        #expect(r.succeeded == false)
+        #expect(r.errors.count == 3)
+        #expect(r.summary?.contains("3 items") == true)
+    }
+
+    @Test("A clean run reports no summary")
+    func testCleanRun() {
+        let r = BrowserClearResult(cleared: 5, freed: 999, errors: [])
+        #expect(r.succeeded)
+        #expect(r.summary == nil)
+    }
+
+    @Test("A single failure is reported verbatim")
+    func testSingleFailure() {
+        #expect(BrowserClearResult(cleared: 0, freed: 0, errors: ["History: denied"]).summary == "History: denied")
     }
 }
