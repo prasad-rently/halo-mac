@@ -40,7 +40,7 @@
 | [F-019](#f-019--security-posture-dashboard) | Security Posture Dashboard | 💡 Future Idea | ~1.5 d | none |
 | [F-020](#f-020--smart-disk-health-monitor) | S.M.A.R.T. Disk Health Monitor | ✅ Done | 3 d | none |
 | [F-021](#f-021--app-usage--screen-time-analytics) | App Usage & Screen Time Analytics | 💡 Future Idea | ~3 d | none |
-| [F-022](#f-022--time-machine-backup-health-monitor) | Time Machine Backup Health Monitor | 💡 Future Idea | ~1.5 d | AlertManager |
+| [F-022](#f-022--time-machine-backup-health-monitor) | Time Machine Backup Health Monitor | ✅ Done | ~1.5 d | AlertManager |
 | [F-023](#f-023--memory-leak--app-bloat-tracker) | Memory Leak & App Bloat Tracker | 💡 Future Idea | ~3 d | ProcessMonitor |
 | [F-024](#f-024--browser-cleaner) | Browser Cleaner | 💡 Future Idea | ~2 d | none |
 | [F-025](#f-025--duplicate-photos-finder-perceptual-hash) | Duplicate Photos Finder (pHash) | 💡 Future Idea | ~5 d | DuplicateDetector |
@@ -1552,7 +1552,7 @@ New **"Insights"** sub-section within the existing Dashboard, below the health r
 
 ## F-022 · Time Machine Backup Health Monitor
 
-**Status:** 💡 Future Idea  
+**Status:** ✅ Done  
 **Effort estimate:** 1.5 days  
 **Theme:** Intelligent Insights  
 **Branch naming (when ready):** `feat/f022-time-machine-monitor`  
@@ -1575,6 +1575,15 @@ Time Machine is the primary backup for most Mac users, but its status is entirel
 
 ### Integration point
 New **"Backup Health"** card on the Dashboard. Summary status (last backup time, green/red dot) visible as a persistent Dashboard widget even when collapsed.
+
+### As actually built
+Data sourcing deviated from the original plan for reliability: rather than parsing `/Library/Preferences/com.apple.TimeMachine.plist` or walking `Backups.backupdb/` directly (both fragile — the plist schema shifts across macOS versions, and APFS-snapshot backups don't produce a `Backups.backupdb` directory at all on modern destinations), the implementation goes entirely through the public `tmutil` CLI: `destinationinfo` (destination name + mount point), `status` (in-progress state), `latestbackup` (fast-path last-backup date), and `listbackups` (full snapshot history for the heatmap, with a graceful fallback to the newest `listbackups` entry when `latestbackup` fails because the destination is unreachable). Free-space numbers come from `URLResourceValues` on the mounted destination volume itself (`tmutil` doesn't expose capacity). Verified live on the dev machine, which has **no Time Machine destination configured** — `tmutil destinationinfo` returns `"No destinations configured."`, `latestbackup` fails with `Failed to mount destination.` (error 17), and `listbackups` fails with `"No machine directory found for host."` — confirming the `.notConfigured` empty state (rather than a fabricated "healthy" card) is what actually renders on a real, unconfigured Mac.
+- `Halo/Core/Scanner/TimeMachineMonitor.swift` — actor, `status()` (async, shells out to `tmutil`) + static `heatmap(backupDates:days:referenceDate:)` (pure, no I/O) + `startBackupNow()` (`tmutil startbackup`)
+- `Halo/Core/Models/Models.swift` — `TimeMachineStatus` (`isConfigured`/`isReachable`/`isStale`/`spaceUsedRatio`), `BackupDayState`, `BackupHeatmapDay`
+- `Halo/Features/Dashboard/BackupHealthCard.swift` — three honest states (not configured / configured-but-unreachable / fully configured), free-space `HaloMiniBar`, 30-day `LazyVGrid` heatmap with per-cell tooltips, "Back Up Now" button disabled while a backup is already running or launching
+- `Halo/App/AppState.swift` — `timeMachineStatus`/`isCheckingTimeMachine`/`isStartingBackup`, polled every 15 minutes (not the 2 s metrics tick — `tmutil` shell calls are tens of ms each and backup status doesn't change that fast)
+- `Halo/Core/AlertManager.swift` — `evaluateBackup(status:)` fires `.backupStale` with a 24 h cooldown once a configured, reachable destination's last backup exceeds 48 h; a disconnected/unreachable destination or "never backed up" state does not spuriously alert
+- Heatmap gray "no data" cells are used both before the earliest known backup and for the entire 30 days when Time Machine isn't configured at all — never rendered as red "missed" days, which would misrepresent absence of data as backup failure
 
 ---
 
