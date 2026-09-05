@@ -279,6 +279,28 @@ struct AsyncTimeoutTests {
         try? await Task.sleep(nanoseconds: 600_000_000)
     }
 
+    // The deadline is a cancellable `Task` so the fast path reclaims it instead
+    // of leaving it queued for the full timeout. This exercises that path hard:
+    // 400 fast calls against a 60 s ceiling. If cancellation raced the gate the
+    // deadline could resume an already-resumed continuation, which is a hard
+    // fatalError — so the suite surviving is the assertion, alongside the wall
+    // clock staying nowhere near the timeout.
+    @Test("Many fast calls with a long ceiling all settle promptly")
+    func testFastPathReclaimsTheDeadline() async {
+        let started = Date()
+        let results = await withTaskGroup(of: Int?.self) { group in
+            for i in 0..<400 {
+                group.addTask { await AsyncTimeout.run(seconds: 60) { $0(i) } }
+            }
+            var seen: [Int] = []
+            for await r in group { if let r { seen.append(r) } }
+            return seen
+        }
+        #expect(results.count == 400)
+        #expect(Set(results) == Set(0..<400))
+        #expect(Date().timeIntervalSince(started) < 10)
+    }
+
     @Test("runBlocking returns a prompt value and bounds a slow one")
     func testRunBlocking() async {
         #expect(await AsyncTimeout.runBlocking(seconds: 10) { "done" } == "done")
