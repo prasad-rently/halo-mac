@@ -276,6 +276,10 @@ struct SettingsView: View {
     @AppStorage("enableMenuBar") private var enableMenuBar = true
     @AppStorage("scanFrequency") private var scanFrequency = "weekly"
     @AppStorage("enableAnalytics") private var enableAnalytics = false
+    /// Why a "Share Weekly Report" attempt produced nothing on screen. These
+    /// paths used to fail silently — the PDF was written and then no sheet
+    /// appeared, with no error anywhere.
+    @State private var shareFailure: String?
     @AppStorage(MemoryTrendTracker.persistenceEnabledKey) private var memoryTrendPersistence = false
     @AppStorage("clipboardHistoryLimit") private var clipboardLimit = 200
     // P3-12: thresholds
@@ -297,6 +301,11 @@ struct SettingsView: View {
     // F-015: scan schedule preferences
     @AppStorage("scanPreferredWeekday") private var scanWeekday: Int = 2  // 1=Sun … 7=Sat (Calendar.Component)
     @AppStorage("scanPreferredHour")    private var scanHour: Int = 3      // 0–23
+    // F-029: weekly digest preferences
+    @AppStorage("weeklyDigestEnabled")   private var weeklyDigestEnabled = false
+    @AppStorage("weeklyDigestFrequency") private var weeklyDigestFrequency = "weekly"
+    @AppStorage("weeklyDigestWeekday")   private var weeklyDigestWeekday: Int = 2
+    @AppStorage("weeklyDigestHour")      private var weeklyDigestHour: Int = 9
 
     var body: some View {
         TabView {
@@ -347,6 +356,73 @@ struct SettingsView: View {
                             Text("Next scan: \(rel)")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                // F-029: Weekly Digest — reuses the same day/hour picker pattern as
+                // "Scheduled Scans" above, backed by WeeklyDigestScheduler.
+                Section("Weekly Digest") {
+                    Toggle("Send Weekly Digest", isOn: $weeklyDigestEnabled)
+                        .accessibilityIdentifier("settings.weeklyDigest.toggle")
+                    if weeklyDigestEnabled {
+                        Picker("Frequency", selection: $weeklyDigestFrequency) {
+                            Text("Weekly").tag("weekly")
+                            Text("Daily").tag("daily")
+                        }
+                        .accessibilityIdentifier("settings.weeklyDigest.frequency.picker")
+                        if weeklyDigestFrequency == "weekly" {
+                            Picker("Day", selection: $weeklyDigestWeekday) {
+                                Text("Sunday").tag(1)
+                                Text("Monday").tag(2)
+                                Text("Tuesday").tag(3)
+                                Text("Wednesday").tag(4)
+                                Text("Thursday").tag(5)
+                                Text("Friday").tag(6)
+                                Text("Saturday").tag(7)
+                            }
+                        }
+                        Picker("Time", selection: $weeklyDigestHour) {
+                            ForEach(0..<24, id: \.self) { h in
+                                Text(String(format: "%02d:00", h)).tag(h)
+                            }
+                        }
+                        .accessibilityIdentifier("settings.weeklyDigest.hour.picker")
+                        if let next = WeeklyDigestScheduler.shared.nextDigestDate(
+                            frequency: weeklyDigestFrequency,
+                            weekday: weeklyDigestWeekday,
+                            hour: weeklyDigestHour
+                        ) {
+                            let rel = RelativeDateTimeFormatter().localizedString(for: next, relativeTo: Date())
+                            Text("Next digest: \(rel)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Text("Summarises the past 7 days: health score trend, disk space change, scans completed, and threats flagged. Tap “View Report” on the notification to export the full PDF.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        HStack {
+                            Button("Share Weekly Report Now…") {
+                                shareFailure = nil
+                                WeeklyDigestGenerator.shareReportPDF(appState: appState) { message in
+                                    shareFailure = message
+                                }
+                            }
+                            .accessibilityIdentifier("settings.weeklyDigest.shareNow.button")
+                            Spacer()
+                            Button("Send Test Digest Now") {
+                                WeeklyDigestScheduler.shared.sendNow()
+                            }
+                            .foregroundColor(.secondary)
+                            .accessibilityIdentifier("settings.weeklyDigest.sendTestNow.button")
+                        }
+                        .font(.caption)
+                        // Previously these failures were silent: the PDF was
+                        // generated and written, and then nothing appeared.
+                        if let failure = shareFailure {
+                            Text(failure)
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                                .accessibilityIdentifier("settings.weeklyDigest.shareError")
                         }
                     }
                 }

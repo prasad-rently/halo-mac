@@ -94,8 +94,10 @@
 | TC-DASH-06 | P1 | Alert history section | After alerts fired | — | Recent `AlertEntry` items listed |
 | TC-DASH-07 | P0 | Export Report button | Click Export Report | — | NSSavePanel; PDF generated (see §15) |
 | TC-DASH-08 | P2 | Battery card on desktop Mac | Run on Mac mini/Studio | — | Battery card hidden or "No battery" gracefully |
+| TC-DASH-09 | P1 | 7-Day Health Trend card (F-029) | Fresh install vs. ≥2 hourly samples | — | Shows honest "collecting samples" placeholder when <2 samples; sparkline + Δ pts once populated |
 | **Unit** TC-DASH-U1 | P0 | `calculateHealthScore()` | Feed known CPU/RAM/disk/battery | Returns expected score; clamps 0–100 |
 | **Unit** TC-DASH-U2 | P1 | Health thresholds boundary | Values at each threshold edge | Correct deduction at boundaries (off-by-one safe) |
+| **Unit** TC-DASH-U3 | P1 | `MetricsSample` Codable roundtrip | Encode/decode with RAM samples | All fields, including nested `ProcessRAMSample`s, preserved |
 
 ### 2.1 Backup Health / Time Machine Monitor (F-022)
 
@@ -620,6 +622,24 @@ Read-only S.M.A.R.T./NVMe health reader via `diskutil info -plist` + an `IONVMeC
 | **Unit** TC-RPT-U1 | P1 | Snapshot capture | from AppState | All fields populated on MainActor |
 | **Unit** TC-RPT-U2 | P1 | Page bounds | DrawablePDFPage | `bounds(for:)` returns A4 rect |
 
+### 15.3 Weekly Digest (F-029)
+
+**Files:** `MetricsHistory.swift`, `WeeklyDigestGenerator.swift`, `HealthTrendCard.swift`, Settings → "Weekly Digest" section in `OnboardingView.swift`
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-DIGEST-01 | P1 | Toggle exposed in Settings | Open Settings → General | "Send Weekly Digest" toggle present, off by default |
+| TC-DIGEST-02 | P1 | Enabling reveals schedule pickers | Toggle on | Frequency (Weekly/Daily), Day (weekly only), Time pickers appear; "Next digest: …" label shown |
+| TC-DIGEST-03 | P1 | Schedule independence from Smart Scan | Set digest schedule ≠ scan schedule | `WeeklyDigestScheduler`'s `com.halo.mac.weeklydigest` activity fires independently of `ScanScheduler` |
+| TC-DIGEST-04 | P0 | Send Test Digest Now | Click button | Local notification posted immediately; `AlertLog` gains a "Weekly Digest Sent" entry |
+| TC-DIGEST-05 | P1 | "View Report" notification action | Tap action on the digest notification | App activates, PDF save panel opens (same flow as Export Report) |
+| TC-DIGEST-06 | P2 | Share Weekly Report Now | Click button | `NSSharingServicePicker` opens with a generated PDF |
+| TC-DIGEST-07 | P2 | Honesty scope | Inspect digest body/report | No "backup status" claim; "top storage growers" reads as disk-free delta, not a file audit |
+| TC-DIGEST-08 | P2 | Fresh-install graceful empty state | Send digest with <2 hourly samples | No trend delta shown (nil-safe); body still composes from live metrics |
+| **Unit** TC-DIGEST-U1 | P1 | `healthScoreDelta` / `diskFreeDeltaGB` | Various start/end pairs, including nil start | Correct signed delta; nil when no starting sample |
+| **Unit** TC-DIGEST-U2 | P1 | `notificationBody(for:)` composition | Up/down/steady score, freed/lost/negligible disk, scan & threat counts | Correct direction wording, singular/plural counts, sub-0.1GB disk noise omitted |
+| **Unit** TC-DIGEST-U3 | P1 | `WeeklyDigestScheduler.nextDigestDate` | daily / weekly / "off" / out-of-range hour | Correct next date, matching weekday/hour; nil for "off"; hour clamped to 0–23 |
+
 ---
 
 ## 16. Siri Shortcuts / App Intents
@@ -697,6 +717,7 @@ Read-only S.M.A.R.T./NVMe health reader via `diskutil info -plist` + an `IONVMeC
 | TC-ONB-05 | P1 | Analytics opt-in | Toggle analytics | `enableAnalytics` set; default false |
 | TC-ONB-06 | P2 | Skip onboarding | Skip | App usable with defaults |
 | TC-ONB-07 | P2 | Re-run onboarding | From settings | Re-displays flow |
+| TC-ONB-08 | P1 | Weekly Digest setup (F-029) | Toggle "Send Weekly Digest" in Settings | Persists `weeklyDigestEnabled`/`weeklyDigestFrequency`/`weeklyDigestWeekday`/`weeklyDigestHour`; see §15.3 for full digest coverage |
 
 ---
 
@@ -835,6 +856,6 @@ Frequency:     Always / Intermittent (<x/y>)
 | Productivity | Clipboard, Snippets, Actions (108), Ports, Code Beautifier |
 | Connectivity | HaloShare (LocalSend P2P) |
 | System integration | Menu Bar, Widget, Siri Intents, Hotkeys, System Controls (Mic/Cam/DDC) |
-| Automation | Smart Scan, Scheduler, Alerts, PDF Report |
+| Automation | Smart Scan, Scheduler, Alerts, PDF Report, Weekly Digest |
 
 > **Total numbered test cases:** 200+ across 23 sections, including dedicated unit-test (`-U`) rows for all pure-logic components (health score, fuzzy search, VPN detection, battery label, signature lookup, duplicate hashing, scheduler dates, format renderer, lsof parser, Codable roundtrips).
