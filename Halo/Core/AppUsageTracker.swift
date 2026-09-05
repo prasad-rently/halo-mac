@@ -1,4 +1,5 @@
 import Foundation
+import Darwin.sys.proc_info
 import AppKit
 
 // MARK: - AppUsageTracker (F-021)
@@ -54,8 +55,15 @@ final class AppUsageTracker: ObservableObject {
     /// Menu-bar agents / system UI processes that would otherwise pollute
     /// per-app usage stats. Mirrors `IdleAppMonitor.systemBundleIDs` plus Halo
     /// itself (watching your own dashboard isn't "app usage").
+    // Finder is deliberately NOT in this set. It is a regular, Dock-visible app
+    // that users genuinely spend time in; excluding it meant Finder time was
+    // both uncounted *and* — before the activation fix in `handleActivation` —
+    // misattributed to whatever happened to be in front beforehand. Everything
+    // that remains is a menu-bar agent or system UI chrome, which is a
+    // different thing, and Halo itself (watching your own dashboard is not
+    // "app usage").
     private static let excludedBundleIDs: Set<String> = [
-        "com.apple.finder", "com.apple.dock", "com.apple.SystemUIServer",
+        "com.apple.dock", "com.apple.SystemUIServer",
         "com.apple.WindowManager", "com.apple.controlcenter",
         "com.apple.notificationcenterui", "com.apple.loginwindow",
         "com.halo.mac"
@@ -68,6 +76,11 @@ final class AppUsageTracker: ObservableObject {
     private var activePID: pid_t?
     private var timer: Timer?
     private var observerTokens: [NSObjectProtocol] = []
+    private var todayIndexCache: [String: Int] = [:]
+    private var todayIndexCacheDay: Date?
+    private var ticksSincePersist = 0
+    private var lockToken: NSObjectProtocol?
+    private var unlockToken: NSObjectProtocol?
 
     private init() {
         loadFromDefaults()
@@ -109,7 +122,28 @@ final class AppUsageTracker: ObservableObject {
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
             Task { @MainActor in self?.handleActivation(app) }
         }
-        observerTokens = [activateToken]
+        // Screen lock and display sleep both leave the timer running while the
+        // user is demonstrably not using anything. Without these the last
+        // foreground app accrues time for the whole locked period — hours of
+        // "usage" for a Mac sitting untouched.
+        let screensSleep = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main
+        ) { [weak self] _ in Task { @MainActor in self?.clearActiveApp() } }
+
+        let screensWake = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in Task { @MainActor in self?.resumeFromFrontmost() } }
+
+        observerTokens = [activateToken, screensSleep, screensWake]
+
+        // Lock and unlock are distributed notifications, not NSWorkspace ones.
+        let dnc = DistributedNotificationCenter.default()
+        lockToken = dnc.addObserver(
+            forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main
+        ) { [weak self] _ in Task { @MainActor in self?.clearActiveApp() } }
+        unlockToken = dnc.addObserver(
+            forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main
+        ) { [weak self] _ in Task { @MainActor in self?.resumeFromFrontmost() } }
 
         timer = Timer.scheduledTimer(withTimeInterval: Self.sampleInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
@@ -122,6 +156,11 @@ final class AppUsageTracker: ObservableObject {
             NSWorkspace.shared.notificationCenter.removeObserver(token)
         }
         observerTokens.removeAll()
+        let dnc = DistributedNotificationCenter.default()
+        if let lockToken { dnc.removeObserver(lockToken) }
+        if let unlockToken { dnc.removeObserver(unlockToken) }
+        lockToken = nil
+        unlockToken = nil
         timer?.invalidate()
         timer = nil
         activeBundleID = nil
@@ -130,12 +169,45 @@ final class AppUsageTracker: ObservableObject {
         isTracking = false
     }
 
+    /// Re-reads the frontmost app after unlock or display wake, so tracking
+    /// resumes against whatever is genuinely in front now rather than whatever
+    /// happened to be there before the screen went away.
+    private func resumeFromFrontmost() {
+        guard isTracking, let frontmost = NSWorkspace.shared.frontmostApplication else { return }
+        handleActivation(frontmost)
+    }
+
+    /// Nothing is in the foreground — the screen is locked, the display slept,
+    /// or the frontmost app is one Halo deliberately doesn't attribute time to.
+    private func clearActiveApp() {
+        activeBundleID = nil
+        activeAppName = nil
+        activePID = nil
+    }
+
     // MARK: - Event handling
 
     private func handleActivation(_ app: NSRunningApplication) {
+        // Returning early here used to leave `activeBundleID` naming the
+        // *previous* app, so `tick()` kept crediting it foreground time every
+        // 30 s. The excluded set is Finder, Dock, SystemUIServer, WindowManager,
+        // Control Center, Notification Center, loginwindow and Halo — exactly the
+        // things users bounce into and linger in. Ten minutes copying files in
+        // Finder credited ten minutes to whatever was in front beforehand.
+        //
+        // `loginwindow` is the worst case: locking the screen activates it, so
+        // the last app accrued foreground time for the entire locked period. The
+        // header claims the design avoids precisely this, and it did for system
+        // sleep — but not for lock or display sleep, where the timer keeps firing.
+        //
+        // Clearing rather than returning means "nothing is in the foreground",
+        // which is the truth.
         guard app.activationPolicy == .regular,
               let bid = app.bundleIdentifier, !bid.isEmpty,
-              !Self.excludedBundleIDs.contains(bid) else { return }
+              !Self.excludedBundleIDs.contains(bid) else {
+            clearActiveApp()
+            return
+        }
 
         activePID = app.processIdentifier
         guard bid != activeBundleID else { return }   // refocusing the same app isn't a "switch"
@@ -169,20 +241,55 @@ final class AppUsageTracker: ObservableObject {
             }
         }
 
-        pruneOldRecords()
-        persistToDefaults()
+        // Both used to run on every 30 s tick. Pruning only matters at a day
+        // boundary, and re-encoding the whole record set twice a minute is work
+        // the UI thread should not be doing — losing at most a few minutes of
+        // buckets to an unclean exit is immaterial against a 14-day window.
+        ticksSincePersist += 1
+        if ticksSincePersist >= Self.ticksPerPersist {
+            ticksSincePersist = 0
+            pruneOldRecords()
+            persistToDefaults()
+        }
     }
+
+    /// Persist every Nth tick rather than every tick. 10 x 30 s = 5 minutes.
+    private static let ticksPerPersist = 10
 
     // MARK: - Record mutation
 
     private func todayIndex(bundleID: String, appName: String) -> Int {
         let day = Calendar.current.startOfDay(for: Date())
-        if let idx = records.firstIndex(where: { $0.bundleID == bundleID && Calendar.current.isDate($0.day, inSameDayAs: day) }) {
+        // Was an O(records) scan doing a Calendar comparison per element, run
+        // once per running app per tick and again for each accrue* call. With
+        // 14-day retention and ~30 apps that is roughly 12,600 calendar
+        // comparisons every 30 s on the main thread. The index is rebuilt only
+        // when the day rolls over.
+        if todayIndexCacheDay != day {
+            todayIndexCache = [:]
+            todayIndexCacheDay = day
+            for (i, r) in records.enumerated() where Calendar.current.isDate(r.day, inSameDayAs: day) {
+                todayIndexCache[r.bundleID] = i
+            }
+        }
+
+        if let idx = todayIndexCache[bundleID], idx < records.count,
+           records[idx].bundleID == bundleID,
+           Calendar.current.isDate(records[idx].day, inSameDayAs: day) {
             records[idx].appName = appName   // keep the display name fresh
             return idx
         }
+
         records.append(AppUsageRecord(bundleID: bundleID, appName: appName, day: day))
-        return records.count - 1
+        let idx = records.count - 1
+        todayIndexCache[bundleID] = idx
+        return idx
+    }
+
+    /// Invalidated whenever `records` is reordered or filtered.
+    private func invalidateTodayIndexCache() {
+        todayIndexCache = [:]
+        todayIndexCacheDay = nil
     }
 
     private func accrueForeground(bundleID: String, appName: String, seconds: TimeInterval) {
@@ -222,10 +329,26 @@ final class AppUsageTracker: ObservableObject {
         Self.topApps(from: records, limit: limit, windowDays: Self.headlineWindowDays, now: Date())
     }
 
-    /// Apps observed running continuously for a long stretch (default 8 h)
-    /// over the last 7 days while almost never being brought to the front.
-    func backgroundHogs(minObservedHours: Double = 8, maxForegroundRatio: Double = 0.02) -> [BackgroundHogApp] {
-        Self.backgroundHogs(from: records, minObservedHours: minObservedHours, maxForegroundRatio: maxForegroundRatio,
+    /// Apps that ran for a long stretch on most days of the week while almost
+    /// never being brought to the front.
+    ///
+    /// The rule used to be "8 cumulative hours over the whole 7-day window",
+    /// which is a bit over an hour a day — every menu-bar utility, sync client
+    /// and app left open during the workday cleared it, and
+    /// `maxForegroundRatio` cannot exclude them because a background helper has
+    /// near-zero foreground time by definition. So the section listed most of
+    /// the user's normal background apps as "hogs", which is not actionable.
+    /// The doc comment and PR text both claimed "continuously", which the
+    /// implementation never did.
+    ///
+    /// It is now per-day, which `AppUsageRecord` already buckets for: at least
+    /// `minHoursPerDay` observed on at least `minQualifyingDays` separate days.
+    func backgroundHogs(minHoursPerDay: Double = 4,
+                        minQualifyingDays: Int = 4,
+                        maxForegroundRatio: Double = 0.02) -> [BackgroundHogApp] {
+        Self.backgroundHogs(from: records, minHoursPerDay: minHoursPerDay,
+                             minQualifyingDays: minQualifyingDays,
+                             maxForegroundRatio: maxForegroundRatio,
                              windowDays: Self.headlineWindowDays, now: Date())
     }
 
@@ -261,12 +384,12 @@ final class AppUsageTracker: ObservableObject {
     // instance methods above just forward to these with `self.records` and
     // `Date()`.
 
-    static func recordsInWindow(_ records: [AppUsageRecord], days: Int, now: Date) -> [AppUsageRecord] {
+    nonisolated static func recordsInWindow(_ records: [AppUsageRecord], days: Int, now: Date) -> [AppUsageRecord] {
         guard let cutoff = Calendar.current.date(byAdding: .day, value: -(days - 1), to: Calendar.current.startOfDay(for: now)) else { return records }
         return records.filter { $0.day >= cutoff }
     }
 
-    static func topApps(from records: [AppUsageRecord], limit: Int, windowDays: Int, now: Date) -> [AppUsageSummary] {
+    nonisolated static func topApps(from records: [AppUsageRecord], limit: Int, windowDays: Int, now: Date) -> [AppUsageSummary] {
         var byBundle: [String: (name: String, fg: TimeInterval, ramSum: Double, ramCount: Int, switches: Int)] = [:]
         for r in recordsInWindow(records, days: windowDays, now: now) {
             var entry = byBundle[r.bundleID] ?? (r.appName, 0, 0, 0, 0)
@@ -289,31 +412,41 @@ final class AppUsageTracker: ObservableObject {
             .map { $0 }
     }
 
-    static func backgroundHogs(from records: [AppUsageRecord], minObservedHours: Double, maxForegroundRatio: Double,
+    nonisolated static func backgroundHogs(from records: [AppUsageRecord],
+                                minHoursPerDay: Double,
+                                minQualifyingDays: Int,
+                                maxForegroundRatio: Double,
                                 windowDays: Int, now: Date) -> [BackgroundHogApp] {
-        var byBundle: [String: (name: String, observed: TimeInterval, fg: TimeInterval, ramSum: Double, ramCount: Int)] = [:]
+        var byBundle: [String: (name: String, observed: TimeInterval, fg: TimeInterval,
+                                ramSum: Double, ramCount: Int, qualifyingDays: Int)] = [:]
         for r in recordsInWindow(records, days: windowDays, now: now) {
-            var entry = byBundle[r.bundleID] ?? (r.appName, 0, 0, 0, 0)
+            var entry = byBundle[r.bundleID] ?? (r.appName, 0, 0, 0, 0, 0)
             entry.observed += r.observedRunningSeconds
             entry.fg += r.foregroundSeconds
             entry.ramSum += r.ramSampleSumMB
             entry.ramCount += r.ramSampleCount
             entry.name = r.appName
+            // Counted per day-bucket, which is what makes this "most days"
+            // rather than "an hour a day adds up over a week".
+            if r.observedRunningSeconds >= minHoursPerDay * 3600 {
+                entry.qualifyingDays += 1
+            }
             byBundle[r.bundleID] = entry
         }
         return byBundle
             .compactMap { bid, v -> BackgroundHogApp? in
+                guard v.qualifyingDays >= minQualifyingDays else { return nil }
                 let hog = BackgroundHogApp(id: bid, appName: v.name, observedRunningSeconds: v.observed,
                                             foregroundSeconds: v.fg,
-                                            averageRAMMB: v.ramCount > 0 ? v.ramSum / Double(v.ramCount) : 0)
-                guard hog.observedRunningSeconds >= minObservedHours * 3600,
-                      hog.foregroundRatio <= maxForegroundRatio else { return nil }
+                                            averageRAMMB: v.ramCount > 0 ? v.ramSum / Double(v.ramCount) : 0,
+                                            qualifyingDays: v.qualifyingDays)
+                guard hog.foregroundRatio <= maxForegroundRatio else { return nil }
                 return hog
             }
             .sorted { $0.observedRunningSeconds > $1.observedRunningSeconds }
     }
 
-    static func contextSwitchesPerHour(from records: [AppUsageRecord], firstObservedDay: Date?,
+    nonisolated static func contextSwitchesPerHour(from records: [AppUsageRecord], firstObservedDay: Date?,
                                         windowDays: Int, now: Date) -> Double? {
         guard let first = firstObservedDay else { return nil }
         let hoursTracked = max(0, now.timeIntervalSince(first) / 3600)
@@ -326,7 +459,7 @@ final class AppUsageTracker: ObservableObject {
         return Double(totalSwitches) / windowHours
     }
 
-    static func weekOverWeekChange(from records: [AppUsageRecord], firstObservedDay: Date?, now: Date) -> WeekOverWeek? {
+    nonisolated static func weekOverWeekChange(from records: [AppUsageRecord], firstObservedDay: Date?, now: Date) -> WeekOverWeek? {
         guard let first = firstObservedDay else { return nil }
         let today = Calendar.current.startOfDay(for: now)
         guard let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -6, to: today),
@@ -360,28 +493,33 @@ final class AppUsageTracker: ObservableObject {
 
     private func pruneOldRecords() {
         guard let cutoff = Calendar.current.date(byAdding: .day, value: -(Self.retentionWindowDays - 1), to: Calendar.current.startOfDay(for: Date())) else { return }
+        let before = records.count
         records.removeAll { $0.day < cutoff }
+        // Removing shifts every later index, so the cache must go with it.
+        if records.count != before { invalidateTodayIndexCache() }
     }
 
-    // MARK: - RAM sampling (same `ps -p <pid> -o rss=` technique as IdleAppMonitor)
+    // MARK: - RAM sampling
+    //
+    // This used to fork/exec `/bin/ps -p <pid> -o rss=` and block on
+    // `waitUntilExit()` — from `tick()`, which runs on the MainActor. That is a
+    // process spawn plus teardown (10-30 ms) on the UI thread twice a minute,
+    // forever, for a number the kernel will hand over directly. It also carried
+    // the `waitUntilExit()`-before-read ordering that deadlocks elsewhere in
+    // this batch; `ps -o rss=` output is a few bytes so it never bit here, but
+    // it was the same copied shape.
+    //
+    // `proc_pidinfo` is one syscall, no subprocess, and no main-thread stall.
 
     private static func processRAMMB(pid: pid_t) -> Double {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/ps")
-        process.arguments = ["-p", "\(pid)", "-o", "rss="]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let str = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-               let kb = Double(str) {
-                return kb / 1024.0   // KB → MB
-            }
-        } catch {}
-        return 0
+        var info = proc_taskinfo()
+        let size = MemoryLayout<proc_taskinfo>.size
+        guard proc_pidinfo(pid, PROC_PIDTASKINFO_HALO, 0, &info, Int32(size)) > 0 else { return 0 }
+        return Double(info.pti_resident_size) / 1_048_576
     }
 }
+
+/// `PROC_PIDTASKINFO`. Declared here because the Darwin overlay does not
+/// surface the constant to Swift; `ProcessMonitor` declares its own copy for the
+/// same reason.
+private let PROC_PIDTASKINFO_HALO: Int32 = 4

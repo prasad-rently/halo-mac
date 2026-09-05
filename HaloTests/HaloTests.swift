@@ -275,35 +275,67 @@ struct AppUsageTrackerAggregationTests {
 
     // MARK: - backgroundHogs
 
-    @Test("backgroundHogs flags an app observed 8h+ with a near-zero foreground ratio")
-    func testBackgroundHogsFlagsLowRatio() {
-        let now = anchorNow
-        let records = [record(bundleID: "com.hog", appName: "Hog", dayOffset: 0, now: now,
-                              fg: 10, observed: 8 * 3600, ramSum: 50, ramCount: 1)]
-        let hogs = Tracker.backgroundHogs(from: records, minObservedHours: 8, maxForegroundRatio: 0.02,
-                                           windowDays: 7, now: now)
-        #expect(hogs.count == 1)
-        #expect(hogs.first?.id == "com.hog")
+    // The rule is now per-day: a long stretch on most days, not a cumulative
+    // total that any always-open app clears in a week.
+    private func hogs(_ records: [AppUsageRecord], now: Date) -> [BackgroundHogApp] {
+        Tracker.backgroundHogs(from: records, minHoursPerDay: 4, minQualifyingDays: 4,
+                                maxForegroundRatio: 0.02, windowDays: 7, now: now)
     }
 
-    @Test("backgroundHogs excludes an app observed less than the minimum-hours threshold")
+    @Test("backgroundHogs flags an app running most days with a near-zero foreground ratio")
+    func testBackgroundHogsFlagsLowRatio() {
+        let now = anchorNow
+        let records = (0..<5).map {
+            record(bundleID: "com.hog", appName: "Hog", dayOffset: $0, now: now,
+                   fg: 10, observed: 8 * 3600, ramSum: 50, ramCount: 1)
+        }
+        let result = hogs(records, now: now)
+        #expect(result.count == 1)
+        #expect(result.first?.id == "com.hog")
+        #expect(result.first?.qualifyingDays == 5)
+    }
+
+    // The reported false positive: 8 cumulative hours over a week is a bit over
+    // an hour a day, which every menu-bar utility and sync client clears — and
+    // maxForegroundRatio cannot filter them out, because a background helper has
+    // near-zero foreground time by definition.
+    @Test("backgroundHogs no longer flags an app running about an hour a day")
+    func testBackgroundHogsExcludesLowDailyUse() {
+        let now = anchorNow
+        let records = (0..<7).map {
+            record(bundleID: "com.menubar", appName: "MenuBar", dayOffset: $0, now: now,
+                   fg: 0, observed: 75 * 60)   // 8.75h cumulative, but only 1.25h/day
+        }
+        #expect(hogs(records, now: now).isEmpty)
+    }
+
+    @Test("backgroundHogs excludes a long stretch on too few days")
+    func testBackgroundHogsExcludesTooFewDays() {
+        let now = anchorNow
+        // Two 10-hour days: plenty cumulatively, but not a habit.
+        let records = (0..<2).map {
+            record(bundleID: "com.burst", appName: "Burst", dayOffset: $0, now: now,
+                   fg: 0, observed: 10 * 3600)
+        }
+        #expect(hogs(records, now: now).isEmpty)
+    }
+
+    @Test("backgroundHogs excludes an app observed less than the per-day threshold")
     func testBackgroundHogsExcludesShortObservation() {
         let now = anchorNow
         let records = [record(bundleID: "com.short", appName: "Short", dayOffset: 0, now: now, observed: 3600)]
-        let hogs = Tracker.backgroundHogs(from: records, minObservedHours: 8, maxForegroundRatio: 0.02,
-                                           windowDays: 7, now: now)
-        #expect(hogs.isEmpty)
+        #expect(hogs(records, now: now).isEmpty)
     }
 
     @Test("backgroundHogs excludes an app with real foreground usage despite long observation")
     func testBackgroundHogsExcludesHighRatio() {
         let now = anchorNow
-        // Observed 10h, foregrounded 2h -> ratio 0.2, well above the 0.02 threshold.
-        let records = [record(bundleID: "com.used", appName: "Used", dayOffset: 0, now: now,
-                              fg: 2 * 3600, observed: 10 * 3600)]
-        let hogs = Tracker.backgroundHogs(from: records, minObservedHours: 8, maxForegroundRatio: 0.02,
-                                           windowDays: 7, now: now)
-        #expect(hogs.isEmpty)
+        // 10h/day for 5 days, but foregrounded 2h/day -> ratio 0.2, well above 0.02.
+        let records = (0..<5).map {
+            record(bundleID: "com.used", appName: "Used", dayOffset: $0, now: now,
+                   fg: 2 * 3600, observed: 10 * 3600)
+        }
+        #expect(hogs(records, now: now).isEmpty)
     }
 
     // MARK: - contextSwitchesPerHour

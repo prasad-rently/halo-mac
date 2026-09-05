@@ -559,6 +559,10 @@ struct BackgroundHogApp: Identifiable {
     let observedRunningSeconds: TimeInterval
     let foregroundSeconds: TimeInterval
     let averageRAMMB: Double
+    /// How many separate days in the window this app ran for the qualifying
+    /// stretch. What makes the rule "most days" rather than "an hour a day
+    /// adding up over a week".
+    var qualifyingDays: Int = 0
 
     var foregroundRatio: Double {
         observedRunningSeconds > 0 ? foregroundSeconds / observedRunningSeconds : 0
