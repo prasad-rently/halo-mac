@@ -8,9 +8,12 @@ struct DashboardView: View {
             VStack(spacing: 24) {
                 DashHeader()
                 HealthAndMetrics()
+                AppUsageInsightsSection()      // F-021: app usage & screen time analytics
                 GPUDashboardCard()            // F-001: GPU utilisation + memory
                 NetworkSparklineCard()        // P3-10: bandwidth history
                 FocusSessionCard()             // F-028: Pomodoro-style focus sessions
+                HealthTrendCard()              // F-029: 7-day health score sparkline
+                BackupHealthCard()            // F-022: Time Machine backup health
                 QuickActionsGrid()
                 AlertHistorySection()          // F-011: system alert history log
                 FocusHistorySection()          // F-028: past focus session log

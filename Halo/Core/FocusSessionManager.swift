@@ -54,7 +54,12 @@ final class FocusSessionManager: ObservableObject {
 
     private var countdownTimer: Timer?
     private var sampleTimer: Timer?
-    private let processMonitor = ProcessMonitor()
+    // `.shared` (P0.3). The focus session samples every 5 s while it runs; a
+    // private instance would have been a concurrent process enumeration
+    // alongside Top Processes, F-023's sampler and F-029's history sampler, and
+    // would bypass the 1 s coalescing window that only collapses calls sharing
+    // an instance.
+    private let processMonitor = ProcessMonitor.shared
     private var endDate: Date?
     private var hiddenApps: [NSRunningApplication] = []
     /// Bundle IDs of everything hidden this session. Survives an

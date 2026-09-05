@@ -94,8 +94,62 @@
 | TC-DASH-06 | P1 | Alert history section | After alerts fired | — | Recent `AlertEntry` items listed |
 | TC-DASH-07 | P0 | Export Report button | Click Export Report | — | NSSavePanel; PDF generated (see §15) |
 | TC-DASH-08 | P2 | Battery card on desktop Mac | Run on Mac mini/Studio | — | Battery card hidden or "No battery" gracefully |
+| TC-DASH-09 | P1 | 7-Day Health Trend card (F-029) | Fresh install vs. ≥2 hourly samples | — | Shows honest "collecting samples" placeholder when <2 samples; sparkline + Δ pts once populated |
 | **Unit** TC-DASH-U1 | P0 | `calculateHealthScore()` | Feed known CPU/RAM/disk/battery | Returns expected score; clamps 0–100 |
 | **Unit** TC-DASH-U2 | P1 | Health thresholds boundary | Values at each threshold edge | Correct deduction at boundaries (off-by-one safe) |
+| **Unit** TC-DASH-U3 | P1 | `MetricsSample` Codable roundtrip | Encode/decode with RAM samples | All fields, including nested `ProcessRAMSample`s, preserved |
+
+### 2.1 Backup Health / Time Machine Monitor (F-022)
+
+**Files:** `TimeMachineMonitor.swift`, `BackupHealthCard.swift`, `AppState.startTimeMachineMonitoring()` / `refreshTimeMachineStatus()` / `startTimeMachineBackupNow()`, `AlertManager.evaluateBackup(status:)`
+
+Read-only checks via the public `tmutil` CLI (`destinationinfo`, `status`, `listbackups`, `latestbackup`) — no entitlements, no elevation. "Back Up Now" is a normal `tmutil startbackup`, identical to the menu bar icon's own action. If Time Machine has never been configured, the card must show an explicit empty state — never a fabricated "healthy" card or heatmap.
+
+| ID | Priority | Title | Preconditions | Steps | Expected |
+|----|----------|-------|---------------|-------|----------|
+| TC-DASH-09 | P0 | Not configured — honest empty state | Time Machine never set up | Open Dashboard | "Time Machine isn't set up" state; "Set Up" opens System Settings' Time Machine pane; no heatmap shown |
+| TC-DASH-10 | P0 | Configured + reachable | TM set up, destination mounted | Open Dashboard | Last backup relative time, destination name, free/total space bar, and 30-day heatmap all render |
+| TC-DASH-11 | P0 | Configured but unreachable | TM set up, backup drive unplugged | Open Dashboard | "Not currently reachable" state; last known backup date shown if any; no heatmap fabricated |
+| TC-DASH-12 | P0 | Stale backup visual + alert | Last backup > 48h ago | View card / wait for the 15-min poll | Last-backup text in red; `AlertManager.evaluateBackup` fires "Time Machine Backup Overdue" (24h cooldown) |
+| TC-DASH-13 | P1 | Recent backup is not flagged stale | Last backup < 48h ago | View card | Last-backup text in normal color; no stale alert fires |
+| TC-DASH-14 | P0 | Back Up Now | Configured + reachable | Click "Back Up Now" | Button shows "Backing Up…"/disabled while running; `tmutil startbackup` invoked; status re-polled after |
+| TC-DASH-15 | P1 | Backup already running | A TM backup is in progress (menu bar spinning) | View card | "Backing Up…" state shown; Back Up Now disabled, not double-triggerable |
+| TC-DASH-16 | P1 | Heatmap — backed-up day | A snapshot exists for a given day | View 30-day grid | That day's cell is green ("Backed up") |
+| TC-DASH-17 | P1 | Heatmap — late vs missed | 1-day gap vs 2+ day gap since the nearest prior snapshot | View grid | 1-day gap → amber ("Late"); 2+ day gap → red ("Missed") |
+| TC-DASH-18 | P0 | Heatmap — no fabricated history | Days before Halo's earliest known snapshot, or no backup history at all | View grid | Those cells are neutral gray ("No data") — never red as if a backup was missed |
+| TC-DASH-19 | P2 | 15-minute poll cadence | Leave Dashboard open | Wait / inspect | Status re-checked every 15 min (900s timer), not on the 2s metrics tick — `tmutil` is too heavy for that |
+| **Unit** TC-DASH-U3 | P0 | `heatmap()` — no history at all | Empty backup-dates array | Every day in the window is `.noData` |
+| **Unit** TC-DASH-U4 | P0 | `heatmap()` — backed-up / late / missed classification | Backup today; 1-day gap; 3-day gap | `.backedUp`, `.late`, `.missed` respectively |
+| **Unit** TC-DASH-U5 | P0 | `heatmap()` — days before earliest backup are `.noData`, not `.missed` | One backup 2 days ago, 7-day window | Day 6 (before the backup) is `.noData` |
+| **Unit** TC-DASH-U6 | P1 | `heatmap()` — window size and end date | 30-day window, referenceDate = today | Exactly 30 entries; last = today, first = 29 days ago |
+| **Unit** TC-DASH-U7 | P0 | `TimeMachineStatus.isStale` | Not configured (any date); configured + no date; configured + 47h; configured + 49h | false, false, false, true respectively |
+| **Unit** TC-DASH-U8 | P1 | `TimeMachineStatus.spaceUsedRatio` | 250/1000 bytes; missing available; missing total; zero total | 0.75; nil; nil; nil |
+
+### 2.1 App Usage Insights (F-021)
+
+**Files:** `AppUsageTracker.swift`, `AppUsageInsightsSection.swift` (Dashboard), Settings → General → Privacy toggle in `OnboardingView.swift`
+
+**Honesty constraint — do not test around this:** Halo has no macOS API to read system-wide Screen Time history (`FamilyControls`/`ManagedSettings` need a parental-control entitlement Halo doesn't have). Every number here is time Halo personally observed via `NSWorkspace` activation notifications *while Halo itself was running* — a sleeping Mac or a quit Halo means that time is simply not counted, never estimated or backfilled. Every surface must say so.
+
+| ID | Priority | Title | Preconditions | Steps | Expected |
+|----|----------|-------|---------------|-------|----------|
+| TC-DASH-09 | P0 | Tracking off by default | Fresh install | Open Dashboard | "Usage tracking is off" disabled state shown; no data collected |
+| TC-DASH-10 | P0 | Opt-in starts tracking | Settings → General → Privacy | Enable "Track app usage & screen time insights" | `AppUsageTracker.shared.isTracking` becomes true; `NSWorkspace` observer + 30s timer start |
+| TC-DASH-11 | P1 | Collecting state before any data | Tracking just enabled, no usage yet | View Dashboard | "Collecting usage data" state shown, not an empty chart |
+| TC-DASH-12 | P0 | Top Apps bar chart | Tracking on, several apps used | View Dashboard | Top 5 apps by foreground time over last 7 days, bars sorted descending |
+| TC-DASH-13 | P1 | Background Hogs list | An app run 8h+ with near-zero foreground time | View Dashboard | Listed under "Background Hogs"; apps with real usage are never misflagged |
+| TC-DASH-14 | P1 | Context switching stat | <1h of tracked history vs ≥1h | View stat tile | "Not enough data yet" before 1h; a real switches/hr rate after |
+| TC-DASH-15 | P1 | Week-over-week trend | <14 days of history vs ≥14 days | View stat tile | "Needs 14 days of history" before; a real ±% (or "New this week" if last week was zero) after |
+| TC-DASH-16 | P0 | Sleep excludes time | Put Mac to sleep for a while with an app frontmost, wake it | Check that app's foreground time | No foreground seconds added for the sleep duration — the 30s timer can't fire while asleep |
+| TC-DASH-17 | P1 | Halo quit excludes time | Quit Halo, use the Mac, relaunch Halo | Check usage history | No usage recorded for the time Halo wasn't running |
+| TC-DASH-18 | P2 | System/menu-bar processes excluded | — | Check usage history | Finder, Dock, SystemUIServer, Control Center, Halo itself never appear as tracked "apps" |
+| TC-DASH-19 | P1 | Clear Usage History | Tracking on, some history exists | Settings → "Clear Usage History" | All records removed; Dashboard reverts to the collecting/empty state |
+| **Unit** TC-DASH-U3 | P0 | `recordsInWindow` — trailing-N-day boundary | Records at day 0, 6, 7 for a 7-day window | Days 0 and 6 included; day 7 excluded |
+| **Unit** TC-DASH-U4 | P0 | `topApps` — sums across days, sorts descending, excludes zero-foreground apps | Multi-day records for 2+ bundle IDs, one with only background time | Correct per-app sums; sorted by foreground time desc; zero-foreground app excluded |
+| **Unit** TC-DASH-U5 | P0 | `backgroundHogs` — flags low-ratio long-running apps, excludes short observation and real usage | 8h+/near-zero-fg app; <8h app; 10h/2h-fg app | Only the first is flagged |
+| **Unit** TC-DASH-U6 | P0 | `contextSwitchesPerHour` — nil before 1h of history, real rate after | firstObservedDay 30min ago vs 1+ day ago | nil, then switches ÷ tracked hours |
+| **Unit** TC-DASH-U7 | P0 | `weekOverWeekChange` — nil before 14 days, real comparison after | firstObservedDay 5 days ago vs 13 days ago | nil, then correct this-week/last-week totals and % change |
+| **Unit** TC-DASH-U8 | P1 | `WeekOverWeek.percentChange` — nil when last week was zero | lastWeekSeconds = 0 | nil, not a fabricated +100% |
 
 ### 2.1 Focus Session (F-028)
 
@@ -235,6 +289,45 @@ Pomodoro-style deep-work session. Hides (never quits) a user-configured list of 
 | TC-PERF-61 | P1 | Quit idle app | Action on idle app | App quits / confirmation shown |
 | TC-PERF-62 | P2 | No idle apps | All active | Empty state |
 
+### 5.8 Memory Trends (F-023 — Memory Leak & App Bloat Tracker)
+
+**Files:** `MemoryTrendTracker.swift`, `MemoryTrendsSection.swift`, `ProcessMonitor.runningAppRAMSamples()`, `AlertManager.checkAppMemory(appName:bundleID:ramMB:)`
+
+Concrete thresholds under test (all constants on `MemoryTrendTracker`):
+
+| Constant | Value |
+|---|---|
+| `sampleInterval` | 30 s |
+| `windowSeconds` | 2 h rolling window |
+| `leakWindowSeconds` | 3600 s (streak must survive >1 h before the badge shows) |
+| `significantDropFraction` | 0.15 (a drop of >15% below the streak's local peak resets it) |
+| `maxSampleGapSeconds` | 300 s (5× the sample interval; a bigger gap also resets the streak) |
+| `defaultAlertThresholdGB` | 2.0 GB (user-configurable, `UserDefaults["memoryLeakAlertThresholdGB"]`) |
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-PERF-70 | P1 | Section renders | Open Performance | "Memory Trends" section appears below Top Processes with a subtitle "Rolling 2h window · sampled every 30s" (`performance.memoryTrends.tab`) |
+| TC-PERF-71 | P1 | Sparklines render per app | Let Halo sample for a few minutes | Each visible app row (>50 MB) shows a live RAM sparkline (`performance.memoryTrends.sparkline.<bundleID>`); a freshly-added row shows "Collecting samples…" until it has ≥2 samples |
+| TC-PERF-72 | P2 | Sub-50 MB apps filtered | Inspect visible rows | Helper processes/apps under 50 MB current RAM are not listed (noise filter) |
+| TC-PERF-73 | P0 | Leak badge appears after >1h monotonic growth | Let an app's RAM grow continuously for >1 h | "Possible memory leak" badge (`.haloAmber`) appears on that row with a "+N MB since HH:mm" readout |
+| TC-PERF-74 | P0 | Leak badge does NOT appear with <1h of growth | Fresh app / growth streak <1 h old | No badge, regardless of growth rate — not enough data yet |
+| TC-PERF-75 | P1 | >15% drop resets the streak | RAM grows, then drops >15% below the streak's local peak, then grows again for <1h | Badge disappears (streak restarted at the drop) until the new streak itself passes 1 h |
+| TC-PERF-76 | P2 | Sleep/wake gap resets the streak | Growing app, then a >5 min sampling gap (e.g. Mac sleeps), then growth resumes | Streak resets at the gap rather than treating it as continued monotonic growth |
+| TC-PERF-77 | P0 / TC-SAFE-02 | Restart App requires confirmation | On a flagged app, click "Restart App" (`performance.memoryTrends.restart.<bundleID>`) | `.confirmationDialog` appears ("Restart \"<app>\"?" + data-loss warning) before anything happens |
+| TC-PERF-78 | P0 / TC-SAFE-02 | Cancel takes no action | From the dialog in TC-PERF-77, click Cancel | Target app is NOT terminated or relaunched; its PID and RAM history are unchanged |
+| TC-PERF-79 | P1 | Restart App only offered on flagged rows | Inspect a non-leaking row | No "Restart App" button present |
+| TC-PERF-80 | P1 | 2 GB alert threshold — configurable | Change the Stepper (`performance.memoryTrends.alertThreshold.stepper`) | New value persists to `UserDefaults["memoryLeakAlertThresholdGB"]` and survives an app restart |
+| TC-PERF-81 | P0 | Alert fires at/above threshold, not below | An app's RAM crosses the configured GB threshold | A notification + `AlertLog` entry ("`<App>` Using High Memory", icon `memorychip.fill`, `.haloAmber`) fires once, then is suppressed for 30 min (per-bundle-ID cooldown) — an app that stays just below threshold never fires |
+| TC-PERF-82 | P1 | History persists across app restart | Quit and relaunch Halo after some sample history has accumulated | `Application Support/Halo/memoryTrendHistory.json` is read back on launch and sparklines resume without a gap (data older than the 2h window is dropped at load) |
+| **Unit** TC-PERF-U5 | P0 | Monotonic growth >1h flags leak | Synthetic samples growing steadily over >1h (30s cadence) | `leakStatus(for:).isPossibleLeak == true` |
+| **Unit** TC-PERF-U6 | P0 | <1h of growth never flags | Synthetic samples growing steadily for <1h | `isPossibleLeak == false` regardless of growth rate |
+| **Unit** TC-PERF-U7 | P0 | >15% drop resets the streak | Growth, then a >15% drop from local peak, then <1h of renewed growth | `isPossibleLeak == false` (new streak hasn't reached 1h yet) |
+| **Unit** TC-PERF-U8 | P2 | ≤15% dip does NOT reset the streak | Growth with a small (<15%) wobble, total streak >1h | `isPossibleLeak == true` (minor fluctuation tolerated) |
+| **Unit** TC-PERF-U9 | P1 | Sleep/wake gap resets the streak | >1h of growth, then a >5 min gap, then <1h renewed growth | `isPossibleLeak == false` (gap breaks the streak) |
+| **Unit** TC-PERF-U10 | P1 | JSON persistence round-trip | Encode a synthetic `[AppMemoryHistory]`, decode it back | Decoded value == original (bundleID, appName, bundlePath, samples all equal) |
+| **Unit** TC-PERF-U11 | P0 | Alert fires exactly at configured threshold | `ramMB == thresholdGB * 1024` | Alert fires |
+| **Unit** TC-PERF-U12 | P0 | Alert does not fire just below threshold | `ramMB` slightly under `thresholdGB * 1024` | Alert does not fire |
+
 ---
 
 ## 6. Applications (Deep Uninstaller)
@@ -322,6 +415,32 @@ Pomodoro-style deep-work session. Hides (never quits) a user-configured list of 
 > `unlink`-ed (not trashed) immediately — the only sanctioned exception to
 > `TC-SAFE-01`. Verify no `.HaloSpeedTest` residue remains on external drives
 > after any run, cancel, or error.
+
+### 7.6 Drive Health / S.M.A.R.T. Monitor (F-020)
+
+**Files:** `SMARTDiskMonitor.swift`, `DriveHealthSection.swift` (shown in the same Drive Speed tab, below the volume picker)
+
+Read-only S.M.A.R.T./NVMe health reader via `diskutil info -plist` + an `IONVMeController` IOKit lookup for the serial number only. Every field diskutil/IOKit doesn't report renders "Not available on this drive" — never a guessed or zeroed value.
+
+| ID | Priority | Title | Preconditions | Steps | Expected |
+|----|----------|-------|---------------|-------|----------|
+| TC-FILE-50 | P0 | On-demand only | Open Drive Speed tab | View Drive Health card before tapping anything | No scan has run yet — "Tap 'Check Drive Health'..." prompt shown, not a spinner |
+| TC-FILE-51 | P0 | Run a health check | Tap "Check Drive Health" | Status settles to Good/Warning/Failing/Unknown with an icon + colored badge |
+| TC-FILE-52 | P0 | Metrics grid renders | After a scan | View the 12-field grid | Each field shows a real value or "Not available on this drive" — never blank or a guess |
+| TC-FILE-53 | P1 | NVMe sector fields | Internal Apple Silicon SSD | View Reallocated/Pending Sectors | Shows "N/A on NVMe" (not "Not available") since these are genuinely ATA-only concepts |
+| TC-FILE-54 | P0 | Lifespan bar | Drive reports a wear percentage | View "Estimated Lifespan Remaining" | Bar + percentage = 100 − NVMe's `PERCENTAGE_USED`; color: red <10%, amber <25%, else green |
+| TC-FILE-55 | P1 | Lifespan unavailable | Drive doesn't report wear % | View lifespan section | "Lifespan estimate unavailable" text, not a fabricated bar |
+| TC-FILE-56 | P1 | Temperature sparkline (internal only) | Internal boot volume selected, Halo running a while | View card | 24h chart once ≥2 samples exist; external volumes never show this section |
+| TC-FILE-57 | P1 | Re-check | Tap "Re-Check" after an initial scan | Re-runs the scan | Spinner shown briefly, values refresh |
+| TC-FILE-58 | P1 | Switching volumes re-scans | Select a different volume in the picker | Drive Health card | Auto re-scans for the newly selected volume (`scanIfNeeded`) |
+| TC-FILE-59 | P2 | Failing status alerts | Force/simulate a failing SMART status | — | `AlertManager.evaluateSMART` fires `.diskSmartFailing` (1h cooldown); `.good`/`.unknown` never fire |
+| **Unit** TC-FILE-U8 | P0 | classify() — failing status overrides everything | status=.failing + healthy-looking counters | Returns `.failing` |
+| **Unit** TC-FILE-U9 | P0 | classify() — available spare at/below threshold | spare=10, threshold=10; spare=5, threshold=10 | Both return `.failing` (NVMe spec: at-or-below threshold is critical) |
+| **Unit** TC-FILE-U10 | P0 | classify() — 100%+ wear is failing, 90-99% is only a warning | percentageUsed=100 vs 90/99 | 100 → `.failing`; 90 and 99 → `.warning` |
+| **Unit** TC-FILE-U11 | P1 | classify() — media errors and unrecognized status are warnings | mediaErrorCount=1; status=.other(...) | Both → `.warning` |
+| **Unit** TC-FILE-U12 | P0 | classify() — verified with no red flags is good; unavailable with no signal is unknown, never guessed | status=.verified, all clean vs status=.unavailable, all nil | `.good` and `.unknown` respectively |
+| **Unit** TC-FILE-U13 | P0 | nonEmpty() — the diskutil MediaName-by-mount-path gotcha | nil / "" / "   " / real value | nil, nil, nil, passthrough respectively |
+| **Unit** TC-FILE-U14 | P1 | lifespanRemainingPercent | percentageUsed nil/30/0/110 | nil / 70 / 100 / 0 (clamped, never negative) |
 
 ---
 
@@ -555,6 +674,24 @@ Pomodoro-style deep-work session. Hides (never quits) a user-configured list of 
 | **Unit** TC-RPT-U1 | P1 | Snapshot capture | from AppState | All fields populated on MainActor |
 | **Unit** TC-RPT-U2 | P1 | Page bounds | DrawablePDFPage | `bounds(for:)` returns A4 rect |
 
+### 15.3 Weekly Digest (F-029)
+
+**Files:** `MetricsHistory.swift`, `WeeklyDigestGenerator.swift`, `HealthTrendCard.swift`, Settings → "Weekly Digest" section in `OnboardingView.swift`
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-DIGEST-01 | P1 | Toggle exposed in Settings | Open Settings → General | "Send Weekly Digest" toggle present, off by default |
+| TC-DIGEST-02 | P1 | Enabling reveals schedule pickers | Toggle on | Frequency (Weekly/Daily), Day (weekly only), Time pickers appear; "Next digest: …" label shown |
+| TC-DIGEST-03 | P1 | Schedule independence from Smart Scan | Set digest schedule ≠ scan schedule | `WeeklyDigestScheduler`'s `com.halo.mac.weeklydigest` activity fires independently of `ScanScheduler` |
+| TC-DIGEST-04 | P0 | Send Test Digest Now | Click button | Local notification posted immediately; `AlertLog` gains a "Weekly Digest Sent" entry |
+| TC-DIGEST-05 | P1 | "View Report" notification action | Tap action on the digest notification | App activates, PDF save panel opens (same flow as Export Report) |
+| TC-DIGEST-06 | P2 | Share Weekly Report Now | Click button | `NSSharingServicePicker` opens with a generated PDF |
+| TC-DIGEST-07 | P2 | Honesty scope | Inspect digest body/report | No "backup status" claim; "top storage growers" reads as disk-free delta, not a file audit |
+| TC-DIGEST-08 | P2 | Fresh-install graceful empty state | Send digest with <2 hourly samples | No trend delta shown (nil-safe); body still composes from live metrics |
+| **Unit** TC-DIGEST-U1 | P1 | `healthScoreDelta` / `diskFreeDeltaGB` | Various start/end pairs, including nil start | Correct signed delta; nil when no starting sample |
+| **Unit** TC-DIGEST-U2 | P1 | `notificationBody(for:)` composition | Up/down/steady score, freed/lost/negligible disk, scan & threat counts | Correct direction wording, singular/plural counts, sub-0.1GB disk noise omitted |
+| **Unit** TC-DIGEST-U3 | P1 | `WeeklyDigestScheduler.nextDigestDate` | daily / weekly / "off" / out-of-range hour | Correct next date, matching weekday/hour; nil for "off"; hour clamped to 0–23 |
+
 ---
 
 ## 16. Siri Shortcuts / App Intents
@@ -632,6 +769,7 @@ Pomodoro-style deep-work session. Hides (never quits) a user-configured list of 
 | TC-ONB-05 | P1 | Analytics opt-in | Toggle analytics | `enableAnalytics` set; default false |
 | TC-ONB-06 | P2 | Skip onboarding | Skip | App usable with defaults |
 | TC-ONB-07 | P2 | Re-run onboarding | From settings | Re-displays flow |
+| TC-ONB-08 | P1 | Weekly Digest setup (F-029) | Toggle "Send Weekly Digest" in Settings | Persists `weeklyDigestEnabled`/`weeklyDigestFrequency`/`weeklyDigestWeekday`/`weeklyDigestHour`; see §15.3 for full digest coverage |
 
 ---
 
@@ -770,6 +908,6 @@ Frequency:     Always / Intermittent (<x/y>)
 | Productivity | Clipboard, Snippets, Actions (108), Ports, Code Beautifier |
 | Connectivity | HaloShare (LocalSend P2P) |
 | System integration | Menu Bar, Widget, Siri Intents, Hotkeys, System Controls (Mic/Cam/DDC) |
-| Automation | Smart Scan, Scheduler, Alerts, PDF Report |
+| Automation | Smart Scan, Scheduler, Alerts, PDF Report, Weekly Digest |
 
 > **Total numbered test cases:** 200+ across 23 sections, including dedicated unit-test (`-U`) rows for all pure-logic components (health score, fuzzy search, VPN detection, battery label, signature lookup, duplicate hashing, scheduler dates, format renderer, lsof parser, Codable roundtrips).
