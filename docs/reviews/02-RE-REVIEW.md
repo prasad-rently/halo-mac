@@ -36,14 +36,14 @@ the tests those commits added.
 |---|----|-----------|-------|------|
 | R1 | #17 | `NetworkTrafficMonitor.swift:144` | Infinite loop in the new bounded-concurrency scheduler | **Critical** · **fixed** `5562c5c` |
 | R2 | #14 | `FocusSessionManager.swift:88` | Session recovery deadlocks the app at launch | **Critical** · **fixed** `66bbe4e` |
-| R3 | #19 | `PerceptualDuplicateDetector.swift:517` | PhotoKit timeout does not bound anything | High · **fixed** `061eed4` |
-| R4 | #17 | `NetworkTrafficMonitor.swift:84` | Reverse-DNS timeout does not bound anything (same root cause as R3) | High · **fixed** `3691a24` |
-| R5 | #15 | `BrowserCleanerScanner.swift:105` | "Freed N bytes" over-reported by up to `paths.count`× | Medium |
-| R6 | — | `phase0/shared-singletons` | Silently breaks #13 and #14 compilation on merge (no git conflict) | Medium |
-| R7 | #21 | `ProtectionView.swift:51` | `ProtectionViewModel` reads the shared store without observing it | Low |
-| R8 | #21 | `SecurityPostureScanner.swift:218` | `refresh()` has no reentrancy guard | Low |
-| R9 | #21 | `AppState.swift:226` | `.receive(on: RunLoop.main)` stalls during event tracking; ~4 redundant Dashboard invalidations per refresh | Low |
-| R10 | #13 | `MemoryTrendsSection.swift:93` | No in-flight guard — the restart chain can be started twice for one app | Low |
+| R3 | #19 | `PerceptualDuplicateDetector.swift:517` | PhotoKit timeout does not bound anything | High · **fixed** `061eed4`, shared in `cff9598` |
+| R4 | #17 | `NetworkTrafficMonitor.swift:84` | Reverse-DNS timeout does not bound anything (same root cause as R3) | High · **fixed** `3691a24`, shared in `a1cdc95` |
+| R5 | #15 | `BrowserCleanerScanner.swift:105` | "Freed N bytes" over-reported by up to `paths.count`× | Medium · **fixed** `179893b` |
+| R6 | — | `phase0/shared-singletons` | Silently breaks #13 and #14 compilation on merge (no git conflict) | Medium · **documented** `2fe0eec` |
+| R7 | #21 | `ProtectionView.swift:51` | `ProtectionViewModel` reads the shared store without observing it | Low · **fixed** `58dfc1c` |
+| R8 | #21 | `SecurityPostureScanner.swift:218` | `refresh()` has no reentrancy guard | Low · **fixed** `58dfc1c` |
+| R9 | #21 | `AppState.swift:226` | `.receive(on: RunLoop.main)` stalls during event tracking; ~4 redundant Dashboard invalidations per refresh | Low · **fixed** `58dfc1c` |
+| R10 | #13 | `MemoryTrendsSection.swift:93` | No in-flight guard — the restart chain can be started twice for one app | Low · **fixed** `bf56139` |
 
 ---
 
@@ -444,7 +444,8 @@ shows what a Phase 0 dependency costs. Both copies carry a comment pointing at t
 saying to lift it into one place once they have landed; it is a natural P0.2-style extraction
 alongside `ShellReader`.
 
-**Still open from this review:** R5, R6, and the four Lows.
+**R5–R10 are now fixed too**, and the R3/R4 helper is shared rather than duplicated — see
+"Every finding closed" below.
 
 ## Recommendation
 
@@ -556,3 +557,74 @@ Cumulative deltas against the original sweep:
 
 No other branch moved. The new timing suites were each run four times in isolation to check
 for flakiness — stable at 0.81–0.86 s.
+
+
+---
+
+## Every finding closed
+
+R1–R10 are all addressed. The duplication R3/R4 originally shipped with is gone: the helper
+is one file, on a new Phase 0 branch, used by both.
+
+| | Branch | Commit |
+|---|---|---|
+| R1 | `feat/f017-network-traffic-monitor` | `5562c5c` |
+| R4 | `feat/f017-network-traffic-monitor` | `3691a24`, then `a1cdc95` (adopt P0.5) |
+| R2 | `feat/f028-focus-session` | `66bbe4e` |
+| R3 | `feat/f025-duplicate-photos` | `061eed4`, then `cff9598` (adopt P0.5) |
+| R5 | `feat/f024-browser-cleaner` | `179893b` |
+| R6 | `docs/reviews/00-MERGE-ORDER.md` | `2fe0eec` — documented, not code |
+| R7·R8·R9 | `feat/f019-security-posture` | `58dfc1c` |
+| R10 | `feat/f023-memory-leak-tracker` | `bf56139` |
+| — | `phase0/async-timeout` (**new, P0.5**) | `9e1fd54` |
+| — | `phase0/pbxproj-uuid-blocks` | `0cdf85d`, `0b045b1` |
+
+### P0.5 — `AsyncTimeout`
+
+The review said R3 and R4 were worth one shared helper, and they now have one:
+`Halo/Core/AsyncTimeout.swift`, with the whole explanation of why the `withTaskGroup`-plus-sleeper
+idiom bounds nothing, and CLAUDE.md gotcha 20 pointing at it.
+
+It is based on **`main`, not on P0.2**. Basing it on `ShellReader` would have been tidier in the
+Phase 0 sequence, but #17 and #19 merge P0.5 to use it, and that would have dragged P0.2's eight
+call-site changes into both feature PRs. The cost of the `main` base is that P0.5 and P0.2 both
+number their gotcha 20 — a one-line conflict for whoever merges second, which is much the better
+trade.
+
+Two things fell out of doing it properly:
+
+- **`SecurityPostureStore.init()` is no longer private.** The first version of the R8 tests
+  asserted against `.shared` and failed instantly — `HaloTests` is hosted *in* Halo, so
+  `AppState.init()` already has a scan running on that store before the first test executes.
+  Asserting against a store the app host is concurrently refreshing tests nothing. Tests now
+  drive their own instance.
+- **The pbxproj audit needed teaching.** P0.5 merged into two feature branches puts `8171`/`8172`
+  on all three, and the naive scan called that a three-way collision on what is a single object —
+  the same false-positive class the `--no-merged main` note already warned about, one level up.
+  The script now checks whether the claimants share an ancestor that already carries the ID.
+  Verified both ways: silent on the inherited IDs, and it still prints a genuine double-claim
+  (checked with two throwaway branches independently claiming one ID).
+
+### Re-verification — fourth sweep
+
+Eighteen branches now, P0.5 included.
+
+**18/18 `BUILD SUCCEEDED`, 18/18 `TEST SUCCEEDED`, zero failures.**
+
+| Branch | Original | Now |
+|---|---|---|
+| `feat/f017-network-traffic-monitor` | 75 in 16 suites | **87 in 18** |
+| `feat/f019-security-posture` | 67 in 17 | **70 in 18** |
+| `feat/f023-memory-leak-tracker` | 68 in 18 | **70 in 19** |
+| `feat/f024-browser-cleaner` | 70 in 17 | **72 in 18** |
+| `feat/f025-duplicate-photos` | 59 in 15 | **66 in 16** |
+| `feat/f028-focus-session` | 64 in 18 | **68 in 19** |
+| `phase0/async-timeout` | — | **57 in 15** (new) |
+
+No other branch moved. The pbxproj audit is clean under the corrected script.
+
+### One thing to know about the new tests
+
+The R5 test exercises the real `trashItem` path against a temp tree, so running the suite leaves
+a few small files in the Trash. That matches existing practice on that branch, and measuring the
+accounting anywhere else would not have caught the bug. Worth knowing before it surprises someone.
