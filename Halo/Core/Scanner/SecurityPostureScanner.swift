@@ -203,7 +203,15 @@ actor SecurityPostureScanner {
 final class SecurityPostureStore: ObservableObject {
 
     static let shared = SecurityPostureStore()
-    private init() {}
+
+    /// App code uses `shared`; this exists so tests can drive an instance of
+    /// their own.
+    ///
+    /// `HaloTests` is hosted *in* Halo, so `AppState.init()` has already
+    /// started a scan on `shared` before the first test runs — asserting
+    /// against it means asserting against a store the app host is concurrently
+    /// refreshing, which is not a meaningful test of anything.
+    init() {}
 
     @Published private(set) var checks: [SecurityCheck] = []
     @Published private(set) var isRefreshing = false
@@ -211,16 +219,35 @@ final class SecurityPostureStore: ObservableObject {
     /// UI can say that rather than showing eight silent "unknown"s.
     @Published private(set) var automationAvailable = true
 
+    /// Published rather than computed off `checks`.
+    ///
+    /// A computed property forces every reader to observe `objectWillChange`,
+    /// which fires for *each* published property this type mutates — four per
+    /// refresh — and to re-read the score each time. The Dashboard was being
+    /// invalidated four times for one scan, three of them redundant, and one of
+    /// those fired during the `await` below and re-published the *previous*
+    /// score. Publishing the value lets a reader subscribe to `$score` and
+    /// `removeDuplicates()`, so it hears once, and only when it actually moved.
+    @Published private(set) var score: Int = 100
+
     private let scanner = SecurityPostureScanner()
 
-    var score: Int { SecurityPostureScanner.score(for: checks) }
-
+    /// Re-entrant refreshes are collapsed, not queued.
+    ///
+    /// Opening Protection while the launch-time scan is still running used to
+    /// start a second one: ten `posix_spawn`s instead of five, and whichever
+    /// finished first cleared `isRefreshing` while the other was still in
+    /// flight, so the spinner stopped early. The in-flight scan publishes to
+    /// every reader anyway, so there is nothing for a second one to add.
     func refresh() async {
+        guard !isRefreshing else { return }
         isRefreshing = true
+        defer { isRefreshing = false }
+
         let available = await scanner.automationAvailable()
         let fresh = await scanner.scan()
         checks = fresh
+        score = SecurityPostureScanner.score(for: fresh)
         automationAvailable = available
-        isRefreshing = false
     }
 }

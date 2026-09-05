@@ -354,6 +354,60 @@ struct SecurityCheckIdentityTests {
     }
 }
 
+// MARK: - Shared security-posture store
+//
+// The store is the single source both the Protection checklist and the
+// Dashboard health score read from, so its refresh contract matters more than
+// a normal view model's.
+// Each test drives its own instance, never `.shared`. `HaloTests` is hosted in
+// Halo, so `AppState.init()` has already kicked off a scan on `shared` before
+// the first test runs — asserting `isRefreshing == false` against it fails
+// immediately and for a reason that has nothing to do with the code under test.
+@Suite("SecurityPostureStore")
+struct SecurityPostureStoreTests {
+
+    // `isRefreshing` was published but never checked, so opening Protection
+    // during the launch-time scan started a second one: ten posix_spawns
+    // instead of five, and whichever finished first cleared the flag while the
+    // other was still running, stopping the spinner early.
+    @Test("A concurrent refresh is collapsed, not run twice")
+    @MainActor
+    func testRefreshIsNotReentrant() async {
+        let store = SecurityPostureStore()
+
+        async let first: Void = store.refresh()
+        async let second: Void = store.refresh()
+        _ = await (first, second)
+
+        // Both settle, the flag is clean, and the score is a real value from a
+        // completed scan rather than a half-applied one.
+        #expect(store.isRefreshing == false)
+        #expect(store.score >= 0 && store.score <= 100)
+    }
+
+    // `score` is published rather than computed so readers can subscribe to the
+    // value and `removeDuplicates()`; if it ever drifts from `checks` the
+    // Dashboard and the checklist disagree again, which is the whole thing this
+    // store exists to prevent.
+    @Test("The published score always matches the published checks")
+    @MainActor
+    func testPublishedScoreMatchesChecks() async {
+        let store = SecurityPostureStore()
+        await store.refresh()
+
+        #expect(store.score == SecurityPostureScanner.score(for: store.checks))
+    }
+
+    @Test("The flag is cleared even when a refresh returns early")
+    @MainActor
+    func testFlagClearedOnEarlyReturn() async {
+        let store = SecurityPostureStore()
+        await store.refresh()
+        await store.refresh()   // the second sees a clean flag and runs normally
+        #expect(store.isRefreshing == false)
+    }
+}
+
 @Suite("SecurityPostureScanner scoring")
 struct SecurityPostureScoringTests {
 

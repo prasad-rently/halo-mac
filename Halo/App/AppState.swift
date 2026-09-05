@@ -115,7 +115,6 @@ final class AppState: ObservableObject {
     // Phase 3
     private let alertManager = AlertManager()
     private let networkMonitor = NetworkDetailMonitor()
-    private var securityStoreObserver: AnyCancellable?
 
     init() {
         systemMonitor = SystemMonitor()
@@ -216,18 +215,27 @@ final class AppState: ObservableObject {
     /// value in re-checking on the 2 s metrics timer. The Protection module's
     /// own "Refresh" button re-scans independently for the on-screen checklist.
     private func startSecurityPostureCheck() {
+        // Bound before the first scan, so nothing that happens during it is
+        // missed, and so the Dashboard tracks later refreshes from the
+        // Protection module instead of holding the launch value until relaunch.
+        //
+        // Subscribes to `$score` rather than `objectWillChange`: the latter
+        // fires once per published property the store mutates, and each firing
+        // had to go and re-read a computed score — four Dashboard invalidations
+        // per scan, one of them landing mid-`await` and re-publishing the old
+        // value. `removeDuplicates()` then means an unchanged score is not an
+        // event at all, which is the common case on a periodic re-scan.
+        //
+        // `RunLoop.main` is deliberately not used here. It schedules in the
+        // default mode only, so deliveries are held for the duration of any
+        // event tracking — the score would visibly fail to update while the
+        // user was mid-scroll or dragging a window.
+        SecurityPostureStore.shared.$score
+            .removeDuplicates()
+            .assign(to: &$securityScore)
+
         Task { @MainActor in
             await SecurityPostureStore.shared.refresh()
-            self.securityScore = SecurityPostureStore.shared.score
-            // Keep the Dashboard score in step with later refreshes from the
-            // Protection module, instead of holding the launch-time value until
-            // the next relaunch.
-            self.securityStoreObserver = SecurityPostureStore.shared.objectWillChange
-                .receive(on: RunLoop.main)
-                .sink { [weak self] _ in
-                    guard let self else { return }
-                    Task { @MainActor in self.securityScore = SecurityPostureStore.shared.score }
-                }
         }
     }
 

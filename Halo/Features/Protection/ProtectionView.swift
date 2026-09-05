@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 struct ProtectionView: View {
     @StateObject private var viewModel = ProtectionViewModel()
@@ -53,6 +54,21 @@ final class ProtectionViewModel: ObservableObject {
     var securityAutomationAvailable: Bool { SecurityPostureStore.shared.automationAvailable }
 
     private let scanner = ProtectionScanner()
+
+    /// The three `security*` properties above read `SecurityPostureStore.shared`,
+    /// which is shared state this view model does not own. Reading it without
+    /// subscribing meant the section only repainted for refreshes *it* started —
+    /// a refresh from anywhere else (AppState's launch scan today, anything
+    /// added later) changed the values under a view that had no reason to
+    /// re-render. Forwarding the store's `objectWillChange` is the standard way
+    /// to republish a nested `ObservableObject`; SwiftUI re-reads after the
+    /// change lands, so the computed properties give fresh values.
+    private var securityStoreObserver: AnyCancellable?
+
+    init() {
+        securityStoreObserver = SecurityPostureStore.shared.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+    }
 
     enum ScanState: Equatable {
         case idle, scanning(progress: Double), complete(clean: Bool), found(count: Int)
@@ -158,8 +174,10 @@ final class ProtectionViewModel: ObservableObject {
 
     func loadSecurityPosture() async {
         isLoadingSecurity = true
+        // No manual `objectWillChange.send()`: the store is observed in `init`,
+        // so its own change notification is what repaints this section — and it
+        // does so for refreshes started anywhere, not just this one.
         await SecurityPostureStore.shared.refresh()
-        objectWillChange.send()   // securityChecks/-Score are computed off the store
         isLoadingSecurity = false
     }
 }
