@@ -570,12 +570,34 @@ struct ICloudDriveItem: Identifiable, Sendable {
     let id: String              // stable: the item's full path
     let url: URL
     let name: String
+    /// Logical size — the full size of the content, counting evicted files at
+    /// their real size rather than at their few-hundred-byte placeholder.
     let sizeBytes: Int64
+    /// Bytes actually occupying this Mac's disk. Differs from `sizeBytes`
+    /// wherever content has been evicted under Optimise Mac Storage.
+    var localBytes: Int64 = 0
+    /// True when measurement stopped at the 20,000-entry cap, so the figure is a
+    /// floor rather than an exact total.
+    var isTruncated: Bool = false
     let isDirectory: Bool
     let modifiedDate: Date?
     let syncStatus: ICloudSyncStatus
 
-    var sizeFormatted: String { ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file) }
+    /// Prefixed with "≥" when truncated: a partial total rendered as a plain
+    /// byte string is indistinguishable from an exact measurement, and this
+    /// tab's job is telling the user where their storage went.
+    var sizeFormatted: String {
+        let base = ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file)
+        return isTruncated ? "≥ \(base)" : base
+    }
+
+    var localSizeFormatted: String {
+        ByteCountFormatter.string(fromByteCount: localBytes, countStyle: .file)
+    }
+
+    /// True when a meaningful part of this item isn't on disk — worth showing
+    /// both figures rather than one.
+    var hasEvictedContent: Bool { sizeBytes > localBytes + 1_048_576 }
 
     var modifiedDateFormatted: String {
         guard let modifiedDate else { return "—" }

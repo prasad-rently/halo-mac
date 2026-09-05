@@ -371,3 +371,43 @@ struct ModelTests {
         #expect(cat.allBytes == 3000)
     }
 }
+
+// MARK: - F-030 review fixes
+
+@Suite("ICloudDriveItem size reporting")
+struct ICloudDriveSizeTests {
+
+    private func item(size: Int64, local: Int64, truncated: Bool = false) -> ICloudDriveItem {
+        ICloudDriveItem(id: "/x", url: URL(fileURLWithPath: "/x"), name: "x",
+                        sizeBytes: size, localBytes: local, isTruncated: truncated,
+                        isDirectory: true, modifiedDate: nil, syncStatus: .unknown)
+    }
+
+    // A partial total rendered as a plain byte string is indistinguishable from
+    // an exact measurement, in a tab whose job is telling the user where their
+    // storage went.
+    @Test("A capped measurement is rendered as a floor, not an exact figure")
+    func testTruncatedShowsAsFloor() {
+        #expect(item(size: 12_000_000_000, local: 0, truncated: true).sizeFormatted.hasPrefix("≥"))
+        #expect(item(size: 12_000_000_000, local: 0).sizeFormatted.hasPrefix("≥") == false)
+    }
+
+    // The headline bug: evicted content lives in hidden `.name.icloud`
+    // placeholders of a few hundred bytes, so a 40 GB folder measured as a few
+    // megabytes and sorted to the bottom of a size-ordered list.
+    @Test("Evicted content is detected when logical greatly exceeds local")
+    func testEvictedContentDetected() {
+        #expect(item(size: 40_000_000_000, local: 2_000_000).hasEvictedContent)
+    }
+
+    @Test("A fully-downloaded folder is not flagged as evicted")
+    func testFullyLocalNotFlagged() {
+        #expect(item(size: 5_000_000, local: 5_000_000).hasEvictedContent == false)
+    }
+
+    // Guards against the difference being reported for rounding noise.
+    @Test("A sub-megabyte difference is not treated as evicted content")
+    func testSmallDifferenceIgnored() {
+        #expect(item(size: 5_000_000, local: 4_900_000).hasEvictedContent == false)
+    }
+}

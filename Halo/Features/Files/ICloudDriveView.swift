@@ -311,10 +311,20 @@ struct ICloudDriveItemRow: View {
             .onTapGesture { if item.isDirectory { onTap() } }
 
             Spacer(minLength: 8)
-            Text(item.sizeFormatted)
-                .font(HaloFont.body(12, weight: .semibold))
-                .foregroundColor(.haloText)
-                .frame(minWidth: 64, alignment: .trailing)
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(item.sizeFormatted)
+                    .font(HaloFont.body(12, weight: .semibold))
+                    .foregroundColor(.haloText)
+                // Two figures, because "in iCloud" and "on this Mac" are
+                // different numbers and the difference is the whole point of the
+                // tab. Only shown when they actually diverge.
+                if item.hasEvictedContent {
+                    Text("\(item.localSizeFormatted) on this Mac")
+                        .font(HaloFont.body(10))
+                        .foregroundColor(.haloText3)
+                }
+            }
+            .frame(minWidth: 64, alignment: .trailing)
             HaloGhostButton("Reveal", icon: "arrow.up.forward.square") { onReveal() }
                 .accessibilityIdentifier("files.icloud.reveal.button")
             HaloGhostButton("Trash", icon: "trash") { onTrash() }
