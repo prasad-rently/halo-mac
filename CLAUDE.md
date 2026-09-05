@@ -304,6 +304,52 @@ codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
 
 ---
 
+## Continuous Integration
+
+`.github/workflows/ci.yml` — runs on every pull request, on pushes to `main`, and on demand
+(`workflow_dispatch`). Before it existed there were no checks on any branch, so every
+"BUILD SUCCEEDED" in a PR body was an unverifiable local claim.
+
+| Job | Runs on | What it does |
+|-----|---------|--------------|
+| `debug-build-and-test` | PR + push to `main` | Debug build of all four products, then `HaloTests` |
+| `release-build` | push to `main` + manual only | Release (whole-module) build — kept off the PR path so a PR pays for one build, not two |
+
+- **Runner:** `macos-26` (arm64). Xcode pinned to **26.4.1**, the version the `F-016`–`F-030`
+  batch was developed against, with a fallback to the image default if that patch release is
+  dropped from the runner image.
+- **One build covers four targets.** The `HaloUITests` scheme builds the `Halo` target, which
+  has a `PBXTargetDependency` on both `HaloWidget` and `HaloHelper` — so `Halo.app`,
+  `HaloWidget.appex`, `HaloHelper.xpc` and `HaloUITests.xctest` all compile in a single
+  `xcodebuild build`. There is no separate widget or helper job, and none is needed.
+- **Only `HaloTests` is executed.** `HaloUITests` is *compiled* but not run: XCUITest needs
+  Accessibility permission, which a hosted runner cannot grant non-interactively. Compiling it
+  keeps it from silently rotting.
+- **Signing is off** (`CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY=""`)
+  — the runner has no Developer ID keychain. CI therefore verifies that the code **compiles**,
+  not that it ships: the entitlement and sandbox differences between `Halo-Debug.entitlements`
+  and `Halo.entitlements` are **not** exercised, and neither is the signing order in
+  *Build & Sign* above.
+- **`timeout-minutes: 45`** on both jobs. A deadlocked subprocess hangs rather than fails (see
+  `ShellReader`); without a cap that burns the full 6-hour job limit at the 10× macOS rate.
+  `concurrency` + `cancel-in-progress` kills superseded runs for the same reason.
+- **Shared schemes only.** `HaloTests` and `HaloUITests` live in
+  `Halo.xcodeproj/xcshareddata/xcschemes/` and are git-tracked; `HaloWidget` and `HaloHelper`
+  are auto-created per machine. **A scheme that is not shared is invisible to CI** — if you add
+  one, share it.
+- On failure the `.xcresult` bundle uploads as artifact `HaloTests-xcresult` (7-day retention).
+
+Baseline on `main` at the time this landed: **54 tests in 15 suites passed**, Debug and Release
+both `BUILD SUCCEEDED`.
+
+> **Known reproducibility gap.** `Package.resolved` is in `.gitignore`, and Sentry is pinned
+> only as `upToNextMajorVersion` from `8.0.0`. CI therefore resolves whatever the newest 8.x is
+> at run time, so a Sentry release can turn CI red with no change to this repo. Committing the
+> lockfile would close it — that is a dependency-policy decision, not a CI one, so it has been
+> left alone.
+
+---
+
 ## Sentry Crash Reporting
 
 - Sentry SDK 8.x declared as `XCRemoteSwiftPackageReference` in `project.pbxproj` (ID 5003). Also in `Package.swift` but xcodebuild uses pbxproj exclusively.
