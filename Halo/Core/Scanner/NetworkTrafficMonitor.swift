@@ -1,5 +1,4 @@
 import Foundation
-import os
 
 // MARK: - NetworkTrafficMonitor (F-017)
 //
@@ -136,58 +135,18 @@ actor NetworkTrafficMonitor {
         }
     }
 
-    /// Bounds `start` in wall-clock time: whichever of the callback or the
-    /// deadline arrives first wins, and the loser is ignored.
+    /// A PTR lookup with a wall-clock ceiling.
     ///
-    /// The version this replaces raced the work against a `Task.sleep` sibling
-    /// inside a `withTaskGroup` and returned `group.next()`. That bounds the
-    /// *value* but not the *time*: `withTaskGroup` waits for every child before
-    /// it returns, `group.cancelAll()` cannot interrupt a `withCheckedContinuation`
-    /// wrapped around a blocking C call, and so the group sat on the abandoned
-    /// lookup anyway. Measured on that shape, a 1.5 s "ceiling" over 5 s of work
-    /// returned nil after 5.01 s — the right answer, at the wrong time, which is
-    /// the half that mattered.
+    /// `AsyncTimeout` (P0.5) exists because the obvious shape here — racing a
+    /// `Task.sleep` sibling inside a `withTaskGroup` — bounds the returned value
+    /// and not the time. See that file for why; F-025 had the identical bug.
     ///
-    /// Resuming the *same* continuation from both sides is what actually bounds
-    /// it. The abandoned work still runs to completion — nothing can interrupt a
-    /// thread inside `getnameinfo` — but the caller is released on the deadline,
-    /// so the concurrency slot is freed and the poll loop keeps its cadence.
-    ///
-    /// The `start` callback may fire any number of times, including zero: the
-    /// one-shot gate makes every call after the first a no-op, so a late
-    /// delivery cannot double-resume (a hard trap on a checked continuation)
-    /// and a delivery that never comes cannot wedge the caller.
-    ///
-    /// The same shape exists on `PerceptualDuplicateDetector` (F-025), which had
-    /// the identical defect. Worth lifting into one place once both have landed;
-    /// duplicated for now so these two PRs stay independently mergeable.
-    static func withTimeout<Value: Sendable>(
-        seconds: TimeInterval,
-        _ start: @escaping @Sendable (@escaping @Sendable (Value?) -> Void) -> Void
-    ) async -> Value? {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Value?, Never>) in
-            let resumed = OSAllocatedUnfairLock(initialState: false)
-
-            @Sendable func resumeOnce(_ value: Value?) {
-                let alreadyResumed = resumed.withLock { wasResumed -> Bool in
-                    if wasResumed { return true }
-                    wasResumed = true
-                    return false
-                }
-                guard !alreadyResumed else { return }
-                continuation.resume(returning: value)
-            }
-
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + seconds) {
-                resumeOnce(nil)
-            }
-            start(resumeOnce)
-        }
-    }
-
+    /// The ceiling releases the *caller*, not the lookup: `getnameinfo` has no
+    /// interruption point and runs to completion regardless. That is what frees
+    /// the `mapConcurrently` slot and keeps the 2 s poll on cadence.
     static func resolveHostWithTimeout(ip: String) async -> String? {
-        await withTimeout(seconds: resolveTimeoutSeconds) { done in
-            DispatchQueue.global(qos: .utility).async { done(reverseDNSLookup(ip: ip)) }
+        await AsyncTimeout.runBlocking(seconds: resolveTimeoutSeconds) {
+            reverseDNSLookup(ip: ip)
         }
     }
 
