@@ -106,6 +106,7 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 | `dashboard.backupHealth.card` · `.setup.button` · `.backupNow.button` · `.heatmap` | Dashboard → Backup Health / Time Machine (F-022) |
 | `cleanup.cleanAll.button` · `fileListView` | Cleanup |
 | `protection.scan.button` | Protection |
+| `protection.privacyscan.button` · `.icloudToggle` · `.status` · `.findings.list` · `.emptyState` · `.row.<id>` · `.reveal.<id>` | Protection → Sensitive Data Scanner (F-018) |
 | `protection.securityPosture.score` · `protection.securityPosture.list` · `protection.securityPosture.check.<slug>` (`.state` / `.fix`) | Protection → Security Posture (F-019) |
 | `performance.idleApp.quit.button` | Performance → Idle Apps |
 | `performance.memoryTrends.tab` · `performance.memoryTrends.row.<bundleID>` · `performance.memoryTrends.sparkline.<bundleID>` · `performance.memoryTrends.restart.<bundleID>` | Performance → Memory Trends (F-023) |

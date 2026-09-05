@@ -86,6 +86,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | **Dashboard — App Usage Insights (F-021)** | 🟡 | ✅ | iOS: `DeviceActivity`/`FamilyControls` restricted, same foreground-observation-only fallback as desktop; Android: `UsageStatsManager` gives real system-wide usage history — genuinely **better** than the desktop version | P2 | Assessed ✓ (§9) |
 | **Cleanup** (caches/logs/trash) | ❌ | 🟡 | Sandbox: own-cache only; Android → guide to Storage settings | P3 | Assessed |
 | **Protection** (malware scan) | ❌ | 🟡 | iOS blocks scanning; Android limited pkg/file heuristics | P3 | Assessed |
+| Protection — **Privacy/Sensitive Data Scanner (F-018)** | 🟡 | 🟡 | Scoped to user-picked folders (SAF/document picker) — no broad Downloads/Desktop sweep | P3 | Assessed ✓ (§9) |
 | **Performance — top processes** | ❌ | ❌ | No public live-process enumeration | — | Won't do |
 | Performance — **memory leak tracker (F-023)** | ❌ | ❌ | Extends top-processes' per-app RAM sampling — same blocked capability (no public API on either OS to read another app's resident memory over time) | — | Won't do |
 | Performance — login items | ❌ | ❌ | No equivalent concept | — | Won't do |
@@ -217,6 +218,7 @@ Copy this block into a study when assessing a feature for mobile.
 
 | Date | Change |
 |------|--------|
+| 2026-08 | Feasibility study added (§9) for Privacy/Sensitive Data Scanner (F-018); row added to §3. |
 | 2026-08 | Desktop F-019 (Security Posture Dashboard) shipped. Feasibility study added (§9): Reimagine → P3, advisory-only checklist, no automated scoring possible on either platform. |
 | 2026-08 | F-028 Focus Session Companion assessed (§9): app auto-hide is Blocked on both mobile platforms (no cross-app hide/suppress API), but iOS's Shortcuts→Focus integration and Android's permissioned DND toggle are each *more* capable in the "quiet things down" dimension than anything macOS grants a third-party app — noted as a mobile-native reimagining, not a port, deferred to P3. |
 | 2026-08 | Desktop F-021 (App Usage & Screen Time Analytics) shipped. Feasibility study added (§9): iOS 🟡 Adapt (same foreground-only fallback as desktop) / Android ✅ Port-and-improve (`UsageStatsManager` gives real system-wide history desktop can never have) → P2. |
@@ -273,6 +275,17 @@ promote to `Planned` (spec) when scheduled.
 - **Effort:** iOS ~5 d · Android ~6 d (three providers + streaming + Keystore). **Dependencies:** F-049 shell; mirrors F-046 desktop architecture.
 - **Verdict:** **Port (chat) + Adapt (agentic)** → **P1**. **Recommendation:** high value on mobile; ship chat + context first, add the small mobile tool set incrementally. Consider sharing the Swift provider layer between macOS + iOS.
 
+### Feasibility — Privacy/Sensitive Data Scanner (from desktop F-018)
+- **Desktop capability:** recursive `FileManager` scan of Downloads/Documents/Desktop (+ opt-in iCloud Drive) for exposed secrets — Luhn-validated credit card numbers, exact-prefix AWS/GitHub/Stripe keys, exact SSH private-key headers, SSN patterns — via a bundled/updatable `privacy-patterns.json`; redacted-preview-only results, "Reveal in Finder" only, no delete path.
+- **iOS mechanism:** the pattern-matching core (`PrivacyPatternDatabase` — regex + Luhn + redaction) is pure Swift/Foundation and **ports as-is**. Folder access, however, is fully sandboxed: no equivalent of "just enumerate Downloads/Desktop." The app must go through **`UIDocumentPickerViewController`** (security-scoped bookmark) per folder the user wants scanned, then walk only that scoped tree. Verdict 🟡
+- **Android mechanism:** pattern core ports to Kotlin unchanged. Folder access via the **Storage Access Framework** (`ACTION_OPEN_DOCUMENT_TREE`), persisting a `Uri` permission per folder the user grants; scan walks only that `DocumentFile` tree via `ContentResolver`. Broad filesystem access (`MANAGE_EXTERNAL_STORAGE`) is deliberately avoided — Play Store restricts that permission to file-manager-class apps and it would put the whole app's listing at review risk. Verdict 🟡
+- **OS blockers:** neither OS allows a background/automatic sweep of Downloads-equivalent folders the way macOS does; every folder must be explicitly picked by the user, per session or via a persisted scoped bookmark/URI. No scheduled background scan is realistic (no persistent full-disk grant to wake into).
+- **Permissions required:** iOS — none beyond the standard document-picker UI (no Info.plist usage-description needed since the picker itself is the consent). Android — SAF folder-grant dialog per tree (revocable by the user at any time); explicitly **not** requesting `MANAGE_EXTERNAL_STORAGE`.
+- **Store-policy risk:** low if scoped to SAF/document-picker; **high** if `MANAGE_EXTERNAL_STORAGE` were used instead — avoid.
+- **Scope on mobile:** reduced — one or more user-picked folders per run rather than a fixed Downloads/Documents/Desktop set; no iCloud-Drive-style "opt-in extra location" concept carries over 1:1 (iOS: pick the iCloud Drive folder via the same picker; Android: pick any SAF-exposed provider tree, including cloud providers that register as a `DocumentsProvider`).
+- **Effort:** iOS ~2 d (pattern port + document-picker plumbing + security-scoped bookmark persistence) · Android ~2.5 d (pattern port + SAF tree walk + persisted `Uri` permissions).
+- **Dependencies:** F-049 mobile shell.
+- **Verdict:** **Adapt / Adapt** → **P3**. **Recommendation:** defer behind Tier 1/2 — the detection engine is a cheap reuse once the mobile shell exists, but the picker-per-folder UX is a meaningfully different (and weaker) product than desktop's "just works on Downloads" story, so it isn't a priority mover on its own.
 ### Feasibility — Security Posture Dashboard (from desktop F-019)
 - **Desktop capability:** 8-check security dashboard (`SecurityPostureScanner`) feeding a 0–100 score into the health score. 4 checks are genuinely auto-verified via read-only shell calls (FileVault, Gatekeeper, Application Firewall, Automatic Updates); the other 4 (SIP, Secure Boot, Find My Mac, Login Window) have no reliable non-interactive read path even on macOS, so they surface as an honest "check manually" row with a deep-link rather than a guessed verdict.
 - **iOS mechanism:** no public API exposes passcode/biometric state, on-disk-encryption state, or Find My Mac/iPhone status to a third-party app — Apple treats this as a privacy boundary, not an oversight. Verdict ❌ for automated checks.
