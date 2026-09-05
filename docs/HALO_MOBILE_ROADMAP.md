@@ -87,6 +87,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | **Cleanup** (caches/logs/trash) | ❌ | 🟡 | Sandbox: own-cache only; Android → guide to Storage settings | P3 | Assessed |
 | **Protection** (malware scan) | ❌ | 🟡 | iOS blocks scanning; Android limited pkg/file heuristics | P3 | Assessed |
 | **Performance — top processes** | ❌ | ❌ | No public live-process enumeration | — | Won't do |
+| Performance — **memory leak tracker (F-023)** | ❌ | ❌ | Extends top-processes' per-app RAM sampling — same blocked capability (no public API on either OS to read another app's resident memory over time) | — | Won't do |
 | Performance — login items | ❌ | ❌ | No equivalent concept | — | Won't do |
 | Performance — VPN detection | ✅ | ✅ | NetworkExtension / ConnectivityManager | P2 | Assessed |
 | Performance — **speed test** | ✅ | ✅ | Socket-based; fully portable | P1 | Assessed |
@@ -97,6 +98,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | Files — Large files | 🟡 | 🟡 | Scoped | P3 | Assessed |
 | Files — Downloads manager | 🟡 | 🟡 | Downloads dir (Android) / Files (iOS) | P3 | Assessed |
 | Files — **Drive Speed (F-043)** | 🟡 | 🟡 | Benchmark internal storage; external limited (OTG Android) | P2 | Assessed |
+| Files — **Drive Health / S.M.A.R.T. (F-020)** | ❌ | ❌ | No public SMART/drive-health API on either OS — not a permission gap, a total API absence | — | Won't do |
 | **Clipboard history** | 🟡 | 🟡 | iOS current-only/foreground; Android 10+ limited → F-045 | P1 | Planned (F-045) |
 | **Snippets / text expansion** | ✅ | ✅ | **Strong on mobile** (keyboard extension / IME) | P1 | Assessed ✓ (§9) |
 | **Actions** — clipboard/text transforms | ✅ | ✅ | JSON/base64/hash/QR/case… pure compute | P1 | Assessed |
@@ -107,6 +109,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | **Widget** | ✅ | ✅ | WidgetKit / App Widgets (Glance) | P1 | Assessed |
 | **Alert history** | ✅ | ✅ | Local notifications + log | P2 | Assessed |
 | **Report export (PDF)** | ✅ | ✅ | PDFKit / PdfDocument | P2 | Assessed |
+| **Scheduled Reports / Weekly Digest (F-029)** | ✅ | ✅ | Local notifications + BGTaskScheduler/WorkManager + share sheet, all direct equivalents of already-assessed rows above | P2 | Assessed ✓ (§9) |
 | **Siri Shortcuts / App Intents** | ✅ | 🟡 | iOS App Intents (rich); Android App Actions (lighter) | P2 | Assessed |
 | **HaloShare (P2P)** | ✅ | ✅ | LocalSend v2.1 native peer | P0 | Planned (F-050) |
 | **Code Beautifier** | ✅ | ✅ | Pure text/render + PNG export; fully portable | P1 | Assessed ✓ (§9) |
@@ -117,6 +120,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | **SMS console (F-044)** | 🟡 | ✅ | Android sync source; iOS viewer only | P0 | Planned (F-044) |
 | **Expenditure (F-048)** | ✅ | ✅ | Parse device SMS (Android) / cloud (iOS) | P1 | Planned (F-048) |
 | **Clipboard sync (F-045)** | 🟡 | 🟡 | F-045 (AccessibilityService Android) | P1 | Planned (F-045) |
+| **Time Machine Backup Health (F-022)** | ❌ | ❌ | Time Machine is a macOS-only concept — no iOS/Android equivalent exists to read. Reimagined separately as the iOS-exclusive "iCloud Backup Health" idea (§5), which is a different, much coarser feature, not a port. | — | Assessed ✓ (§9) |
 
 ---
 
@@ -167,6 +171,7 @@ A phone unlocks capabilities Halo desktop never could — these should be
 | **Device security posture** (lock, encryption, OS patch) | ✅ | ✅ | Read-only checks + advice |
 | **Call log / spam insight** | ❌ | 🟡 | Android CallLog (policy-heavy); iOS none |
 | **Battery/charging habits** | 🟡 | ✅ | Charging history + advice |
+| **iCloud Backup Health** (iOS-exclusive) | 🟡 | ❌ | No public API for actual backup timestamp/size on either OS; iOS: `UIDevice.identifierForVendor` + Settings deep-link only, so the "health" signal is a link, not real data. Android: no equivalent — Google's own backup status isn't exposed to third-party apps either. |
 
 > These are the reason a Halo *phone* app is compelling beyond "companion to
 > desktop." SMS + expenditure (already specced) are the flagship examples.
@@ -211,6 +216,10 @@ Copy this block into a study when assessing a feature for mobile.
 | Date | Change |
 |------|--------|
 | 2026-08 | Desktop F-021 (App Usage & Screen Time Analytics) shipped. Feasibility study added (§9): iOS 🟡 Adapt (same foreground-only fallback as desktop) / Android ✅ Port-and-improve (`UsageStatsManager` gives real system-wide history desktop can never have) → P2. |
+| 2026-08 | Feasibility study added (§9): Scheduled Reports / Weekly Digest (F-029). Row added to §3 — near-full Port on both platforms, entirely composed of already-assessed primitives (local notifications, BG scheduling, PDF export, share sheet). |
+| 2026-08 | Desktop F-023 (Memory Leak & App Bloat Tracker) shipped. Feasibility study added (§9): Won't do — inherits the same "no public live-process enumeration" blocker as Performance — top processes, on both iOS and Android. |
+| 2026-08 | Desktop F-022 (Time Machine Backup Health Monitor) shipped. Feasibility study added (§9): Won't do / Reimagine → Time Machine has no mobile equivalent; the mobile-exclusive "iCloud Backup Health" idea (§5) is a distinct, much coarser reimagining, not a port. |
+| 2026-08 | F-020 (S.M.A.R.T. Disk Health Monitor) shipped on desktop. Feasibility study added (§9): both iOS and Android verdict ❌ Blocked — neither OS exposes SMART/drive-health data to third-party apps. Row added to §3; status `Won't do`. |
 | 2026-07 | Formal feasibility studies added (§9): Code Beautifier, Snippets, Speed Test, cloud AI. |
 | 2026-07 | Document created. Assessed all shipped desktop capabilities (F-001–F-043) + planned cloud features (F-044–F-048) for iOS/Android. Established governance rules. First wave specced: F-044/F-045/F-048/F-049/F-050. |
 
@@ -270,3 +279,45 @@ promote to `Planned` (spec) when scheduled.
 - **Scope on mobile:** Android — full feature, arguably the flagship "mobile-exclusive" win listed in §5 (real historical data, not just "since the app launched"), reusing the desktop's aggregation logic (top apps, background hogs redefined as "installed but rarely opened", context-switch score from `queryEvents()` transition timestamps) against a genuinely richer data source. iOS — ship only if `DeviceActivityReport`'s sanctioned extension UI is acceptable as-is; otherwise defer/skip on iOS rather than build a hollow "time in Halo" version that undersells the desktop feature it's supposed to port.
 - **Effort:** iOS ~2 d (DeviceActivityReport extension, if pursued) or skip · Android ~3 d (UsageStatsManager integration + permission rationale screen + reuse of desktop's aggregation math, ported to Kotlin). **Dependencies:** F-049 shell.
 - **Verdict:** **Adapt (iOS, likely defer)** / **Port-and-improve (Android)** → **P2**. **Recommendation:** build the Android version — it's a strictly better feature than what desktop Halo can offer and fits the "mobile-exclusive value" thesis in §2/§5 directly. Treat iOS as optional/deferred rather than force a same-shaped feature onto an OS that structurally can't support it without a special entitlement.
+### Feasibility — Scheduled Reports & Weekly Digest (from desktop F-029)
+- **Desktop capability:** hourly `MetricsHistory` rolling buffer (health score + disk-free + top-RAM-process samples) feeding a 7-day Dashboard sparkline; `WeeklyDigestScheduler` (`NSBackgroundActivityScheduler`) delivers a local notification summarising the past 7 days (health trend, disk-free delta, scans completed, threats flagged) with a "View Report" action; PDF export/share via the existing `ReportGenerator` + `NSSharingServicePicker`.
+- **iOS mechanism:** `UNUserNotificationCenter` local notifications with a matching `UNNotificationCategory`/action (identical API family to macOS — near line-for-line port); **`BGAppRefreshTask`** (or `BGProcessingTask`) for the periodic compose-and-fire step, subject to iOS's opportunistic scheduling (no guaranteed exact-time fire, unlike macOS's `NSBackgroundActivityScheduler`); `PDFKit` for the report; `UIActivityViewController` in place of `NSSharingServicePicker` for the share sheet. Verdict ✅ (notification/PDF/share) / 🟡 (exact-time scheduling).
+- **Android mechanism:** local notifications via `NotificationManager` + `NotificationChannel` with an action button; **`WorkManager`** `PeriodicWorkRequest` for the compose-and-fire step (Android's battery optimizations can delay fire time similarly to iOS `BGTaskScheduler`, though `setExpedited`/exact-alarm APIs narrow the gap); `PdfDocument` for the report; `Intent.ACTION_SEND` for the share sheet. Verdict ✅ (notification/PDF/share) / 🟡 (exact-time scheduling).
+- **OS blockers:** neither mobile OS guarantees a background task fires at a user-picked exact day/hour the way `NSBackgroundActivityScheduler` does on a running Mac — both platforms treat this as a *best-effort* window (typically within a few hours of the target), so the mobile Settings UI should say "around 9 AM" rather than promise exact delivery. No blocker for the notification/PDF/share primitives themselves — all three are already assessed ✅ elsewhere in this table (Alert history, Report export (PDF)).
+- **Permissions required:** notification permission (already requested for Alert history parity); no new permission beyond what F-029's dependencies already need. Background refresh/battery-optimization opt-out is a user-facing nudge, not a hard permission.
+- **Store-policy risk:** none — local notifications and periodic background work are standard, well-trodden APIs on both platforms.
+- **Scope on mobile:** full for the notification + PDF + share flow; the health-score-trend + disk-free-delta content is directly portable since the mobile Dashboard's health score / storage rows are already assessed (🟡/✅ respectively) elsewhere in §3. The "top-RAM-apps" bullet does **not** port — mobile OSes provide no live per-process RAM enumeration for other apps (see "Performance — top processes: Won't do" in §3), so a mobile digest would honestly drop that line, same honesty principle as the desktop build.
+- **Effort:** iOS ~1.5 d (mostly notification category + BGAppRefreshTask wiring; PDF/report code shares heavily with the desktop pattern) · Android ~2 d (WorkManager + NotificationChannel setup). **Dependencies:** mobile Dashboard health score (assessed), mobile Report export (assessed), mobile Alert history (assessed) — F-029 mobile is a thin composition layer over three already-assessed primitives, not new capability.
+- **Verdict:** **Port** → **P2**. **Recommendation:** low-risk, low-effort follow-on once the mobile Dashboard + PDF export + notification primitives it depends on are built; schedule after those land rather than before.
+### Feasibility — Memory Leak & App Bloat Tracker (from desktop F-023)
+- **Desktop capability:** `MemoryTrendTracker` samples every regular running app's RAM every 30 s via `ProcessMonitor.runningAppRAMSamples()` (macOS `proc_pidinfo`/`proc_taskinfo`), keeps a persisted rolling 2-hour history per bundle ID, flags apps with >1 hour of monotonic growth as a "possible memory leak," and offers a confirmed terminate+relaunch.
+- **iOS mechanism:** no public API lets one app read another app's resident memory — `proc_pidinfo` and friends are macOS-only, and iOS's per-process sandboxing treats "how much RAM is Slack using" as exactly the kind of cross-app introspection Apple blocks. `os_proc_available_memory()` only reports the *calling* app's own budget. Verdict ❌.
+- **Android mechanism:** `ActivityManager.getRunningAppProcesses()` has been restricted to the calling app's own processes since Android 5.0 (Lollipop) — there is no more `getProcessMemoryInfo()` cross-app query without a system/signature permission no third-party app can hold. `UsageStatsManager` reports foreground *time*, not memory. Verdict ❌.
+- **OS blockers:** identical to `Performance — top processes` (§3), which this feature is a time-series extension of — both mobile OSes consider "another app's live memory footprint" a sandbox boundary, not a permission that can be requested. There is no reduced/coarse fallback worth reimagining (unlike, say, Security Posture's one Android signal) — there is no data source at all.
+- **Permissions required:** none exist that would unlock this — not a permission gap, an API gap.
+- **Store-policy risk:** n/a — nothing to submit against a policy that could be built.
+- **Scope on mobile:** none. Reimagining this as "track my *own* app's memory" would be a different, far less useful feature (a phone can't leak Slack's memory into the user's awareness the way desktop Halo can) and isn't worth the engineering cost of a self-monitoring dashboard.
+- **Effort:** n/a. **Dependencies:** n/a.
+- **Verdict:** **Blocked** → **Won't do**. **Recommendation:** do not build a mobile equivalent — the exact same OS-level blocker as `Performance — top processes`, which this feature is layered on top of on desktop. Revisit only if a future OS version ships a legitimate cross-app memory-attribution API (none currently planned on either platform).
+### Feasibility — Time Machine Backup Health Monitor (from desktop F-022)
+- **Desktop capability:** `TimeMachineMonitor` actor parses `tmutil destinationinfo` / `latestbackup` / `listbackups` / `status` (all read-only shell calls) into last-backup time, destination free space, and a 30-day backup-frequency heatmap; alerts when a configured destination goes 48h+ without a backup; "Back Up Now" triggers `tmutil startbackup`.
+- **iOS mechanism:** Time Machine is a macOS-only technology — there is no concept of a local/network backup destination, no `tmutil`-equivalent CLI, and no API exposing backup snapshot history to a third-party app. Verdict ❌.
+- **Android mechanism:** same absence — Android has no Time-Machine-like local backup system for third-party apps to observe at all. Verdict ❌.
+- **OS blockers:** not a permission or sandbox limit — the underlying *concept* Time Machine represents (versioned local/network snapshots of the whole filesystem) simply doesn't exist as a mobile OS primitive. Nothing to port.
+- **Permissions required:** n/a.
+- **Store-policy risk:** n/a.
+- **Scope on mobile:** none, as a direct port. The nearest analogous mobile idea is the pre-existing "iCloud Backup Health" entry in §5 — but that's a *reimagining*, not this feature: it can only report a coarse, mostly-decorative "last backup" signal via `UIDevice.identifierForVendor` + a Settings deep-link, since iOS doesn't expose real iCloud backup timestamps/size to third-party apps either, and Android has no equivalent concept to reimagine at all (Google's own device-backup status isn't exposed to third-party apps).
+- **Effort:** n/a (Won't do) for the direct port; the separate "iCloud Backup Health" idea is iOS-only, ~1 d, advisory-only.
+- **Verdict:** **Won't do** (direct port) → the desktop feature has no mobile home. **Reimagine** as "iCloud Backup Health" (§5) tracked as its own, much smaller idea → **P3**.
+- **Recommendation:** don't treat F-022 as pending mobile work — it's fully addressed by this study. If "iCloud Backup Health" is ever built, scope it as a single link-out advisory row bundled into the mobile app shell (F-049) rather than a dedicated feature — there isn't enough real, readable data to justify more.
+### Feasibility — S.M.A.R.T. Disk Health Monitor (from desktop F-020)
+- **Desktop capability:** reads the NVMe S.M.A.R.T./Health-Info Log via `diskutil info -plist` (SMART status, temperature, power-on hours/cycles, total bytes written, available spare, NVMe's own percentage-used wear indicator, media errors) plus an `IONVMeController` IOKit lookup for serial number. Surfaces health status Good/Warning/Failing, a lifespan-remaining bar, and a 24h temperature sparkline; `AlertManager` rule on degradation.
+- **iOS mechanism:** none. iOS gives third-party apps zero access to the physical storage device — no IOKit-equivalent, no raw block-device path, no public SMART/NVMe framework of any kind. This isn't a scoped/permissioned gap like Files or Photos; there is no API surface to request access to at all. Verdict ❌
+- **Android mechanism:** none for a genuinely equivalent read. `StorageManager`/`StorageVolume` expose free/total space only; SMART-equivalent health data (`smartctl`-style) requires root or a system-signed app, unavailable to a normal installed app, and OEM storage variance (eMMC/UFS/removable SD) means there'd be no vendor-neutral path even if root were assumed. Verdict ❌
+- **OS blockers:** full sandbox on iOS (no IOKit-equivalent, no raw device access); Android requires root/system privilege that a distributed app cannot have.
+- **Permissions required:** none possible — there is no permission that unlocks this, on either OS.
+- **Store-policy risk:** n/a — nothing to request or submit.
+- **Scope on mobile:** none.
+- **Effort:** n/a. **Dependencies:** none.
+- **Verdict:** **Blocked** (both platforms) → **Won't do**.
+- **Recommendation:** do not build; the API absence is total, not a reduced/adapted case. If a phone-side "storage health" signal is ever wanted, the honest option is a *different*, clearly-labeled feature — e.g. surfacing Android's `StorageManager` cache-pressure/low-space signals, or iOS's on-device storage breakdown — not a SMART port, since there is nothing on either platform that corresponds to a physical drive's wear/failure telemetry.

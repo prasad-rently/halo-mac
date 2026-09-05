@@ -85,6 +85,14 @@ final class AppState: ObservableObject {
     // MARK: Phase 3 — Network Intelligence (P3-05)
     @Published var isVPNActive: Bool = false
 
+    // MARK: Time Machine Backup Health (F-022)
+    @Published var timeMachineStatus: TimeMachineStatus = .notConfigured
+    @Published var isCheckingTimeMachine: Bool = false
+    @Published var isStartingBackup: Bool = false
+    /// Why the last "Back Up Now" failed, if it did. `tmutil startbackup` needs
+    /// Full Disk Access on recent macOS; the button used to fail silently.
+    @Published var backupStartError: String? = nil
+
     // MARK: Phase 3 — Bandwidth History (P3-10)
     /// Rolling 30-sample (60 s) buffers — appended in refreshMetrics(), max 30 entries.
     /// Must be @Published so NetworkSparklineCard re-renders on every tick.
@@ -102,6 +110,14 @@ final class AppState: ObservableObject {
     private var systemMonitor: SystemMonitor?
     private var metricsTimer: AnyCancellable?
     private var widgetReloadTimer: AnyCancellable?
+    // F-029: separate, much-slower timer for MetricsHistory — deliberately NOT
+    // hooked into the 2 s metricsTimer above (see MetricsHistory.swift).
+    private var metricsHistoryTimer: AnyCancellable?
+    // `.shared` (P0.3). A private instance here would have been a fourth
+    // overlapping process enumeration alongside Top Processes, F-023's sampler
+    // and the Focus session sampler — and would defeat the 1 s coalescing
+    // window, which only collapses calls that share an instance.
+    private let historyProcessMonitor = ProcessMonitor.shared
     private var clipboardMonitor: ClipboardMonitor?
     private let hotkeyManager = HotkeyManager()
     private let quickPickerController  = ClipboardQuickPickerController()
@@ -110,13 +126,24 @@ final class AppState: ObservableObject {
     private var wasAxTrusted = false
 
     // Phase 3
-    private let alertManager = AlertManager()
+    private let alertManager = AlertManager.shared
     private let networkMonitor = NetworkDetailMonitor()
+
+    // F-022
+    private let timeMachineMonitor = TimeMachineMonitor()
+    private var timeMachineTimer: AnyCancellable?
+    // F-020: S.M.A.R.T. disk health — boot volume only, on a 5-minute cadence
+    // (a `diskutil info` shell-out is cheap, but there's no reason to run it
+    // on the 2 s metrics loop). Feeds the temperature sparkline history and
+    // AlertManager's failing/warning rule.
+    private let smartMonitor = SMARTDiskMonitor()
+    private var smartMonitorTimer: AnyCancellable?
 
     init() {
         systemMonitor = SystemMonitor()
         startMetricsPolling()
         startWidgetReloadTimer()
+        startMetricsHistoryTimer()
         loadStoredActivity()
         // Mock/sample clipboard seed data disabled — real history now comes only
         // from ClipboardMonitor picking up actual pasteboard changes.
@@ -124,7 +151,13 @@ final class AppState: ObservableObject {
         startClipboardMonitoring()
         setupHotkeys()
         startNetworkMonitoring()
+        startTimeMachineMonitoring()
+        startSMARTMonitoring()
         AlertManager.requestPermission()
+        // F-023: per-app RAM history sampling — runs continuously (not tied to
+        // the Performance view's lifetime) since leak detection needs an
+        // uninterrupted sample history.
+        MemoryTrendTracker.shared.start()
     }
 
     // MARK: - Metrics Polling
@@ -205,6 +238,68 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Time Machine Backup Health (F-022)
+
+    /// `tmutil` shell calls are tens of ms each — far too heavy for the 2 s
+    /// metrics tick, and backup status doesn't change that fast anyway.
+    /// Runs once at launch, then every 15 minutes, which is frequent enough
+    /// for the 48 h "stale" alert to fire in a timely way without any real cost.
+    private func startTimeMachineMonitoring() {
+        Task { await refreshTimeMachineStatus() }
+        timeMachineTimer = Timer.publish(every: 900.0, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                Task { await self?.refreshTimeMachineStatus() }
+            }
+    }
+
+    func refreshTimeMachineStatus() async {
+        isCheckingTimeMachine = true
+        let status = await timeMachineMonitor.status()
+        timeMachineStatus = status
+        isCheckingTimeMachine = false
+        alertManager.evaluateBackup(status: status)
+    }
+
+    /// "Back Up Now" — a normal, user-initiated Time Machine backup identical
+    /// to the menu bar icon's own action. Re-checks status afterward so the
+    /// card reflects the in-progress state without waiting for the next tick.
+    func startTimeMachineBackupNow() async {
+        guard !isStartingBackup else { return }
+        isStartingBackup = true
+        let result = await timeMachineMonitor.startBackupNow()
+        if case .failed(let reason) = result {
+            backupStartError = reason
+        } else {
+            backupStartError = nil
+        }
+        await refreshTimeMachineStatus()
+        isStartingBackup = false
+    }
+
+    // MARK: - S.M.A.R.T. disk health monitoring (F-020)
+
+    private func startSMARTMonitoring() {
+        Task { await runSMARTCheck() }   // one check at launch
+        smartMonitorTimer = Timer.publish(every: 300.0, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                Task { await self?.runSMARTCheck() }
+            }
+    }
+
+    private func runSMARTCheck() async {
+        // Boot volume only — see SMARTTemperatureHistory's header comment for why.
+        // AppState is itself @MainActor, so no extra hop is needed after the await.
+        let info = await smartMonitor.scan(path: "/", id: "/")
+        if let temp = info.temperatureCelsius {
+            SMARTTemperatureHistory.shared.record(celsius: temp)
+        }
+        // `alertLevel`, not `healthLevel` — a notification has to clear a higher
+        // bar than the card does. See SMARTDiskInfo.alertLevel.
+        alertManager.evaluateSMART(model: info.model, healthLevel: info.alertLevel)
+    }
+
     private func writeWidgetData() {
         let previews = clipboardItems.prefix(5).compactMap { item -> String? in
             if case .text(let s) = item.content { return s }
@@ -231,6 +326,35 @@ final class AppState: ObservableObject {
             }
         // Fire once immediately so the widget shows data right after launch.
         WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    // MARK: - Metrics History (F-029)
+    //
+    // Samples once/hour into MetricsHistory — powers the Dashboard's 7-day
+    // health sparkline and the Weekly Digest. This is a SEPARATE, much slower
+    // timer from metricsTimer (2 s) — see MetricsHistory.swift for why hooking
+    // into the fast tick would be the wrong move.
+
+    private func startMetricsHistoryTimer() {
+        metricsHistoryTimer = Timer.publish(every: 3600.0, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                Task { await self?.recordMetricsHistorySample() }
+            }
+        // Seed one sample immediately so the sparkline / digest aren't
+        // completely empty right after a fresh launch.
+        Task { await recordMetricsHistorySample() }
+    }
+
+    private func recordMetricsHistorySample() async {
+        let topRAM = await historyProcessMonitor.topProcesses(sortBy: .ram, limit: 5)
+            .filter(\.isUserApp)
+            .map { ProcessRAMSample(name: $0.name, ramMB: $0.ramMB) }
+        MetricsHistory.shared.record(
+            healthScore: systemHealthScore,
+            diskFreeGB: diskFreeGB,
+            topRAMProcesses: topRAM
+        )
     }
 
     private func calculateHealthScore() -> Int {

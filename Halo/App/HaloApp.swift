@@ -71,6 +71,8 @@ struct HaloApp: App {
                     ScanScheduler.shared.start(appState: appState)
                     // F-021: resume app-usage tracking if the user has opted in
                     AppUsageTracker.shared.startIfEnabled()
+                    // F-029: start weekly-digest scheduler (opt-in; no-op until enabled in Settings)
+                    WeeklyDigestScheduler.shared.start(appState: appState)
                 }
                 // F-041: handle halo:// deep links for action sharing
                 .onOpenURL { url in
