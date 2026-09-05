@@ -227,7 +227,9 @@ struct TCCGrant: Identifiable, Sendable {
     let id = UUID()
     let kind: PermissionKind
     let bundleID: String
-    let appName: String
+    /// Starts as the bundle ID; replaced with the display name by
+    /// `PermissionAuditor.resolveAppNames(for:)` on the MainActor.
+    var appName: String
     /// Heuristic flag: this permission looks excessive for what the app is
     /// (e.g. a non-browser, non-communication app holding Screen Recording
     /// or Accessibility).

@@ -142,7 +142,15 @@ final class ProtectionViewModel: ObservableObject {
         isLoadingPermissions = true
         permissions = PermissionKind.allCases.map { AppPermission(kind: $0, grantedApps: []) }
 
-        let result = await permissionAuditor.run()
+        var result = await permissionAuditor.run()
+
+        // Display names are resolved here, on the MainActor, rather than inside
+        // the actor — `NSWorkspace.urlForApplication(withBundleIdentifier:)` is
+        // main-thread-affine AppKit and was being called once per grant, several
+        // hundred times, from a cooperative pool thread.
+        if case .available(let grants) = result {
+            result = .available(grants: PermissionAuditor.resolveAppNames(for: grants))
+        }
         permissionAudit = result
 
         if case .available(let grants) = result {

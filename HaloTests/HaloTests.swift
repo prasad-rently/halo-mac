@@ -374,3 +374,45 @@ struct PermissionAuditorTests {
         }
     }
 }
+
+// MARK: - F-016 review fixes
+
+@Suite("PermissionAuditor allowlist")
+struct PermissionAuditorAllowlistTests {
+
+    // For an allowlist whose job is *suppressing* a risk flag, prefix matching
+    // fails in the permissive direction.
+    @Test("A real browser is still treated as expected")
+    func testRealBrowserAllowed() {
+        #expect(PermissionAuditor.isExpectedElevated("com.apple.Safari"))
+        #expect(PermissionAuditor.isExpectedElevated("com.google.Chrome"))
+    }
+
+    // com.apple.mail used to match com.apple.mailctl, and anything naming itself
+    // com.apple.Safari.helper was silently never flagged.
+    @Test("A lookalike identifier is no longer silently allowed")
+    func testLookalikeNotAllowed() {
+        #expect(PermissionAuditor.isExpectedElevated("com.apple.mailctl") == false)
+        #expect(PermissionAuditor.isExpectedElevated("com.apple.Safari.helper.evil") == false)
+        #expect(PermissionAuditor.isExpectedElevated("com.google.ChromeMalware") == false)
+    }
+
+    // The old entry "com.duckduckgo" isn't a real bundle ID — it only worked
+    // because of the prefix behaviour, which is a neat illustration of the bug.
+    @Test("DuckDuckGo is allowlisted under its actual bundle identifier")
+    func testDuckDuckGoRealIdentifier() {
+        #expect(PermissionAuditor.isExpectedElevated("com.duckduckgo.macos.browser"))
+        #expect(PermissionAuditor.isExpectedElevated("com.duckduckgo") == false)
+    }
+
+    // Deliberately-chosen family prefixes still work.
+    @Test("Browser helper processes inherit the parent's expectation")
+    func testHelperPrefixesAllowed() {
+        #expect(PermissionAuditor.isExpectedElevated("com.google.Chrome.helper.renderer"))
+    }
+
+    @Test("An unrelated app is flagged")
+    func testUnknownAppFlagged() {
+        #expect(PermissionAuditor.isExpectedElevated("com.example.randomapp") == false)
+    }
+}
