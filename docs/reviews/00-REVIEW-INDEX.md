@@ -3,6 +3,7 @@
 Full review of all 16 open PRs, 2026-09-04. Reviewed against each PR's head commit as it stood
 that day. Every finding here is also posted as an inline comment on the PR itself.
 
+- **Start here if picking this up cold:** [`00-SESSION-HANDOFF.md`](00-SESSION-HANDOFF.md)
 - **Merge order:** [`00-MERGE-ORDER.md`](00-MERGE-ORDER.md)
 - **Cross-PR notes:** [consolidated comment on #21](https://github.com/prasad-rently/halo-mac/pull/21#issuecomment-5543671519)
 
