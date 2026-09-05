@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 // MARK: - NetworkTrafficMonitor (F-017)
 //
@@ -135,16 +136,58 @@ actor NetworkTrafficMonitor {
         }
     }
 
-    static func resolveHostWithTimeout(ip: String) async -> String? {
-        await withTaskGroup(of: String?.self) { group in
-            group.addTask { await performReverseDNS(ip: ip) }
-            group.addTask {
-                try? await Task.sleep(nanoseconds: UInt64(resolveTimeoutSeconds * 1_000_000_000))
-                return nil
+    /// Bounds `start` in wall-clock time: whichever of the callback or the
+    /// deadline arrives first wins, and the loser is ignored.
+    ///
+    /// The version this replaces raced the work against a `Task.sleep` sibling
+    /// inside a `withTaskGroup` and returned `group.next()`. That bounds the
+    /// *value* but not the *time*: `withTaskGroup` waits for every child before
+    /// it returns, `group.cancelAll()` cannot interrupt a `withCheckedContinuation`
+    /// wrapped around a blocking C call, and so the group sat on the abandoned
+    /// lookup anyway. Measured on that shape, a 1.5 s "ceiling" over 5 s of work
+    /// returned nil after 5.01 s — the right answer, at the wrong time, which is
+    /// the half that mattered.
+    ///
+    /// Resuming the *same* continuation from both sides is what actually bounds
+    /// it. The abandoned work still runs to completion — nothing can interrupt a
+    /// thread inside `getnameinfo` — but the caller is released on the deadline,
+    /// so the concurrency slot is freed and the poll loop keeps its cadence.
+    ///
+    /// The `start` callback may fire any number of times, including zero: the
+    /// one-shot gate makes every call after the first a no-op, so a late
+    /// delivery cannot double-resume (a hard trap on a checked continuation)
+    /// and a delivery that never comes cannot wedge the caller.
+    ///
+    /// The same shape exists on `PerceptualDuplicateDetector` (F-025), which had
+    /// the identical defect. Worth lifting into one place once both have landed;
+    /// duplicated for now so these two PRs stay independently mergeable.
+    static func withTimeout<Value: Sendable>(
+        seconds: TimeInterval,
+        _ start: @escaping @Sendable (@escaping @Sendable (Value?) -> Void) -> Void
+    ) async -> Value? {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Value?, Never>) in
+            let resumed = OSAllocatedUnfairLock(initialState: false)
+
+            @Sendable func resumeOnce(_ value: Value?) {
+                let alreadyResumed = resumed.withLock { wasResumed -> Bool in
+                    if wasResumed { return true }
+                    wasResumed = true
+                    return false
+                }
+                guard !alreadyResumed else { return }
+                continuation.resume(returning: value)
             }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first
+
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + seconds) {
+                resumeOnce(nil)
+            }
+            start(resumeOnce)
+        }
+    }
+
+    static func resolveHostWithTimeout(ip: String) async -> String? {
+        await withTimeout(seconds: resolveTimeoutSeconds) { done in
+            DispatchQueue.global(qos: .utility).async { done(reverseDNSLookup(ip: ip)) }
         }
     }
 
@@ -444,7 +487,7 @@ actor NetworkTrafficMonitor {
         if let cached = dnsCache[ip] {
             return cached
         }
-        let host = await Self.performReverseDNS(ip: ip)
+        let host = await Self.resolveHostWithTimeout(ip: ip)
         cacheResult(ip: ip, host: host)
         return host
     }
@@ -462,29 +505,28 @@ actor NetworkTrafficMonitor {
     /// `NI_NAMEREQD` makes `getnameinfo` fail (rather than echo the numeric
     /// IP back) when there's no PTR record, so a nil here is a genuine "no
     /// hostname available" — never a fabricated fallback.
-    private static func performReverseDNS(ip: String) async -> String? {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                var hints = addrinfo(ai_flags: AI_NUMERICHOST, ai_family: AF_UNSPEC,
-                                      ai_socktype: 0, ai_protocol: 0,
-                                      ai_addrlen: 0, ai_canonname: nil, ai_addr: nil, ai_next: nil)
-                var res: UnsafeMutablePointer<addrinfo>?
-                guard getaddrinfo(ip, nil, &hints, &res) == 0, let addr = res else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-                defer { freeaddrinfo(res) }
+    ///
+    /// **Blocking, and not cancellable.** `getaddrinfo`/`getnameinfo` are
+    /// synchronous C calls with no interruption point; against an unresponsive
+    /// resolver they can sit for 30 s+ (five 5 s retries). Nothing in Swift
+    /// Concurrency can shorten that, which is why the ceiling in
+    /// `resolveHostWithTimeout` releases the *caller* rather than pretending to
+    /// stop the work. Never call this on the main thread or directly from the
+    /// actor — go through `resolveHostWithTimeout`.
+    private static func reverseDNSLookup(ip: String) -> String? {
+        var hints = addrinfo(ai_flags: AI_NUMERICHOST, ai_family: AF_UNSPEC,
+                              ai_socktype: 0, ai_protocol: 0,
+                              ai_addrlen: 0, ai_canonname: nil, ai_addr: nil, ai_next: nil)
+        var res: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo(ip, nil, &hints, &res) == 0, let addr = res else { return nil }
+        defer { freeaddrinfo(res) }
 
-                var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                let ret = getnameinfo(addr.pointee.ai_addr, addr.pointee.ai_addrlen,
-                                       &host, socklen_t(NI_MAXHOST), nil, 0, NI_NAMEREQD)
-                guard ret == 0 else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-                let name = String(cString: host)
-                continuation.resume(returning: name.isEmpty ? nil : name)
-            }
-        }
+        var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+        let ret = getnameinfo(addr.pointee.ai_addr, addr.pointee.ai_addrlen,
+                               &host, socklen_t(NI_MAXHOST), nil, 0, NI_NAMEREQD)
+        guard ret == 0 else { return nil }
+
+        let name = String(cString: host)
+        return name.isEmpty ? nil : name
     }
 }
