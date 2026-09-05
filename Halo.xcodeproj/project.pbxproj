@@ -123,6 +123,9 @@
 		000000000000000000008134 /* FocusSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008133 /* FocusSessionManager.swift */; };
 		000000000000000000008136 /* FocusSessionOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008135 /* FocusSessionOverlayView.swift */; };
 		000000000000000000008032 /* SecurityPostureScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008031 /* SecurityPostureScanner.swift */; };
+		000000000000000000008084 /* PrivacyExposureScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008083 /* PrivacyExposureScanner.swift */; };
+		000000000000000000008086 /* PrivacyPatternDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008085 /* PrivacyPatternDatabase.swift */; };
+		000000000000000000008088 /* privacy-patterns.json in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008087 /* privacy-patterns.json */; };
 		000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009001 /* GetHealthScoreIntent.swift */; };
 		000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009003 /* GetCPUUsageIntent.swift */; };
 		000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009005 /* GetBatteryHealthIntent.swift */; };
@@ -372,6 +375,9 @@
 		000000000000000000008133 /* FocusSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/FocusSessionManager.swift; sourceTree = "<group>"; };
 		000000000000000000008135 /* FocusSessionOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/FocusSessionOverlayView.swift; sourceTree = "<group>"; };
 		000000000000000000008031 /* SecurityPostureScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SecurityPostureScanner.swift; sourceTree = "<group>"; };
+		000000000000000000008083 /* PrivacyExposureScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PrivacyExposureScanner.swift; sourceTree = "<group>"; };
+		000000000000000000008085 /* PrivacyPatternDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PrivacyPatternDatabase.swift; sourceTree = "<group>"; };
+		000000000000000000008087 /* privacy-patterns.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Halo/Resources/privacy-patterns.json; sourceTree = "<group>"; };
 		000000000000000000009001 /* GetHealthScoreIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetHealthScoreIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009003 /* GetCPUUsageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetCPUUsageIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009005 /* GetBatteryHealthIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetBatteryHealthIntent.swift; sourceTree = "<group>"; };
@@ -525,6 +531,8 @@
 				000000000000000000008053 /* TimeMachineMonitor.swift */,
 				000000000000000000008113 /* MemoryTrendTracker.swift */,
 				000000000000000000008031 /* SecurityPostureScanner.swift */,
+				000000000000000000008083 /* PrivacyExposureScanner.swift */,
+				000000000000000000008085 /* PrivacyPatternDatabase.swift */,
 				000000000000000000001030 /* DesignSystem.swift */,
 				000000000000000000008011 /* CelebrationOverlay.swift */,
 				000000000000000000001032 /* ApplicationsView.swift */,
@@ -570,6 +578,7 @@
 				000000000000000000001056 /* Assets.xcassets */,
 				000000000000000000001058 /* PrivacyInfo.xcprivacy */,
 				000000000000000000004001 /* signatures.json */,
+				000000000000000000008087 /* privacy-patterns.json */,
 				000000000000000000009001 /* GetHealthScoreIntent.swift */,
 				000000000000000000009003 /* GetCPUUsageIntent.swift */,
 				000000000000000000009005 /* GetBatteryHealthIntent.swift */,
@@ -906,6 +915,7 @@
 				000000000000000000001057 /* Assets.xcassets in Resources */,
 				000000000000000000001059 /* PrivacyInfo.xcprivacy in Resources */,
 				000000000000000000004002 /* signatures.json in Resources */,
+				000000000000000000008088 /* privacy-patterns.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1025,6 +1035,8 @@
 				000000000000000000009012 /* RunActionIntent.swift in Sources */,
 				000000000000000000009014 /* GetClipboardHistoryIntent.swift in Sources */,
 				000000000000000000009016 /* ExportReportIntent.swift in Sources */,
+				000000000000000000008084 /* PrivacyExposureScanner.swift in Sources */,
+				000000000000000000008086 /* PrivacyPatternDatabase.swift in Sources */,
 				000000000000000000009018 /* HaloShortcutsProvider.swift in Sources */,
 				000000000000000000007002 /* ActionSettingsStore.swift in Sources */,
 				000000000000000000007004 /* VoiceSearchController.swift in Sources */,

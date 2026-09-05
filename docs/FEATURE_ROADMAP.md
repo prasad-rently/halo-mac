@@ -1282,7 +1282,7 @@ New sub-tab within the existing **Network** section of the Performance module, o
 
 ## F-018 · Privacy Data Exposure Scanner
 
-**Status:** 💡 Future Idea  
+**Status:** ✅ Done  
 **Effort estimate:** 3 days  
 **Theme:** Privacy & Security  
 **Branch naming (when ready):** `feat/f018-privacy-exposure-scanner`  
@@ -1310,6 +1310,21 @@ New **"Sensitive Data"** tab within the existing **Protection** module, or an ad
 - Binary files, images, and files > 10 MB should be skipped to keep scan fast
 - Regex false-positive rate needs careful tuning (credit card patterns especially)
 - User opt-in required before scanning Documents/iCloud — privacy of the privacy scanner itself
+
+### As actually built
+- **`PrivacyExposureScanner`** (`Halo/Core/Scanner/PrivacyExposureScanner.swift`) — actor, async-stream driven recursive walk of Downloads/Documents/Desktop (iCloud Drive local folder opt-in only, off by default). Skips symlinks, a fixed set of noise directories (`.git`, `node_modules`, `Library`, `DerivedData`, etc.), files over 10 MB, a large binary-extension denylist, and anything that fails a null-byte peek heuristic — so misnamed/extension-less binaries are still excluded without reading them fully.
+- **`PrivacyPatternDatabase`** (`Halo/Core/Scanner/PrivacyPatternDatabase.swift`) — actor mirroring `SignatureDatabase`'s bundle-first / cached-update-wins loading, backed by `Halo/Resources/privacy-patterns.json`. All matching **and redaction** happen inside this actor so the full raw secret value never leaves it — callers only ever receive a `PrivacyPatternHit` carrying a pre-redacted preview string.
+- **Detection categories actually implemented** (deliberately narrower than the original brainstorm — precision over completeness):
+  - **Credit card numbers** — a digit-run regex finds *candidates*, each candidate is then Luhn-checksum validated before being reported. A raw "13-19 digits in a row" match on its own has a very high false-positive rate against order numbers, phone numbers, and tracking IDs; the Luhn pass cuts that down without needing brand-specific BIN tables.
+  - **AWS access keys** — exact `AKIA[0-9A-Z]{16}` prefix/format match.
+  - **GitHub tokens** — exact prefix match on `ghp_`/`gho_`/`ghu_`/`ghs_`/`ghr_` followed by the token body.
+  - **Stripe keys** — exact prefix match on `sk_live_` (secret) and `pk_live_` (publishable); test-mode (`sk_test_`/`pk_test_`) keys are intentionally not flagged.
+  - **SSH private keys** — exact PEM header match (`-----BEGIN RSA/OPENSSH/EC PRIVATE KEY-----`); only the header (a public marker) is matched, the key material after it is never read or included in the preview.
+  - **SSNs** — `\d{3}-\d{2}-\d{4}` pattern, deliberately filed under **Warning** rather than **Critical** since this shape collides with other formatted numbers (invoice/order IDs) more than the other categories do.
+  - **Not implemented:** "hardcoded passwords in config files" from the original brainstorm was dropped — there is no way to pattern-match `password = "..."`-style assignments with the same prefix/checksum precision as the other categories, and a generic key=value heuristic would dominate the results with false positives. Left for a future, more targeted pass (e.g. known config-file-format-aware parsing) rather than shipped as a noisy regex.
+- **Redaction is structural, not incidental** — `PrivacyPatternDatabase.redact(_:category:)` is the only path that produces a `PrivacyPatternHit`, and it returns last-4/prefix-plus-last-4 previews (e.g. `•••• •••• •••• 3f2a`, `sk_live_••••••••3f2a`). No code path in the scanner, the pattern database, or `ProtectionView`/`ProtectionViewModel` ever calls `print`, `NSLog`, or `os_log`/`Logger` on a matched value, and no raw match is persisted to disk or `UserDefaults` — findings live only in `ProtectionViewModel.privacyFindings` in memory for the current app session.
+- **UI** — new **"Sensitive Data Scanner"** section in the existing Protection module (`PrivacyExposureSection` in `ProtectionView.swift`), not a new top-level module. iCloud Drive toggle (off by default), live "N files checked" progress, results grouped by risk (Critical/Warning/Info) via `HaloBadge`, each row showing filename, category, redacted preview, relative last-modified date, and a **"Reveal in Finder"** button (`NSWorkspace.activateFileViewerSelecting`) — there is no delete/quarantine action anywhere in the feature.
+- **Models** (`Halo/Core/Models/Models.swift`) — `PrivacyExposureFinding`, `PrivacyExposureCategory`, `PrivacyExposureRiskLevel`, `PrivacyScanLocation` (Downloads/Documents/Desktop as `defaultLocations`, lazy `iCloudDriveLocation()` since `url(forUbiquityContainerIdentifier:)` can block on first call).
 
 ---
 
