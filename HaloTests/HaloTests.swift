@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import AppKit
 @testable import Halo
 
 // MARK: - FileSystemScanner Tests
@@ -468,5 +469,41 @@ struct SMARTDiskMonitorTests {
     @Test("lifespanRemainingPercent never goes negative even if wear reports over 100%")
     func testLifespanRemainingClampsAtZero() {
         #expect(makeInfo(percentageUsed: 110).lifespanRemainingPercent == 0)
+    }
+}
+
+// MARK: - AlertKind icon coverage
+//
+// Adding a case to `AlertKind` without adding the matching arm to
+// `AlertEntry.icon` / `.accentColor` leaves the alert rendering as a generic
+// bell in Alert History. F-020 shipped exactly that gap for both of its kinds.
+//
+// `phase0/shared-singletons` carries a version of the first test; it is here
+// too so this branch is covered before Phase 0 merges.
+@Suite("AlertEntry icon coverage")
+struct AlertEntryIconCoverageTests {
+
+    @Test("Every AlertKind has its own icon and colour")
+    func testEveryKindIsMapped() {
+        for kind in AlertManager.AlertKind.allCases {
+            let entry = AlertEntry(title: "t", body: "b", kindRaw: kind.rawValue)
+            #expect(entry.icon != "bell.fill",
+                    "AlertKind.\(kind) has no arm in AlertEntry.icon — renders as a generic bell")
+            #expect(entry.accentColor != .haloAccent,
+                    "AlertKind.\(kind) has no arm in AlertEntry.accentColor")
+        }
+    }
+
+    // An SF Symbol name that does not exist renders as a *blank*, not an error,
+    // so a typo or an invented name ships silently. Writing these two arms, the
+    // obvious `internaldrive.badge.exclamationmark` and `internaldrive.badge.xmark`
+    // both turned out not to exist — this is the check that catches that class.
+    @Test("Every AlertKind icon resolves to a real SF Symbol")
+    func testEveryIconResolves() {
+        for kind in AlertManager.AlertKind.allCases {
+            let name = AlertEntry(title: "t", body: "b", kindRaw: kind.rawValue).icon
+            #expect(NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil,
+                    "AlertKind.\(kind) uses \"\(name)\", which is not an SF Symbol on this OS — it renders blank")
+        }
     }
 }
