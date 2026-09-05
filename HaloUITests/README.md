@@ -100,14 +100,17 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 |------------|-------|
 | `sidebar.row.<AppModule.rawValue>` | every sidebar row (drives all navigation) |
 | `dashboard.smartScan.button` / `dashboard.exportReport.button` / `dashboard.alertHistory` | Dashboard |
+| `dashboard.backupHealth.card` · `.setup.button` · `.backupNow.button` · `.heatmap` | Dashboard → Backup Health / Time Machine (F-022) |
 | `cleanup.cleanAll.button` · `fileListView` | Cleanup |
 | `protection.scan.button` | Protection |
 | `performance.idleApp.quit.button` | Performance → Idle Apps |
+| `performance.memoryTrends.tab` · `performance.memoryTrends.row.<bundleID>` · `performance.memoryTrends.sparkline.<bundleID>` · `performance.memoryTrends.restart.<bundleID>` | Performance → Memory Trends (F-023) |
 | `applications.row.<bundleId>` · `applications.uninstall.button` · `applications.leftover.<kind>` | Applications |
 | `files.tab.<TabTitle>` | Files tab bar |
 | `files.duplicates.deleteMarked.button` | Files → Duplicates |
 | `files.downloads.row` · `files.downloads.trash.button` · `files.downloads.cleanStale.button` | Files → Downloads |
 | `files.largeFiles.row` · `files.largeFiles.trash.button` | Files → Large Files |
+| `files.driveHealth.card` · `.check.button` · `.status` · `.field.<id>` | Files → Drive Speed → Drive Health (F-020) |
 | `ports.row.<port>` · `ports.kill.<port>` · `ports.refresh.button` · `ports.search` | Ports |
 | `actions.newCustom.button` | Actions |
 | `ai.providerPicker` · `ai.modelPicker` · `ai.composer` · `ai.send.button` · `ai.keySetup.title` | AI Assistant |

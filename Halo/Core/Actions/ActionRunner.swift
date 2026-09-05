@@ -18,6 +18,11 @@ final class ActionRunner: ObservableObject {
 
     static let shared = ActionRunner()
 
+    /// Ceiling for a privileged (`osascript … with administrator privileges`)
+    /// action. Sized for a human at an authentication dialog, not for the
+    /// command itself — see `runPrivileged`.
+    private static let privilegedActionTimeout: TimeInterval = 300
+
     /// Ordered most-recent-first. Capped at 50 entries.
     @Published private(set) var executions: [ActionExecution] = []
     /// F-038: Code Beautifier sheet trigger
@@ -279,38 +284,47 @@ final class ActionRunner: ObservableObject {
             .replacingOccurrences(of: "\"", with: "\\\"")
         let script = "do shell script \"\(escaped)\" with administrator privileges"
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments     = ["-e", script]
+        // Privileged path. Unlike the streaming case above, there is no live
+        // output to relay — `osascript` buffers the script's output and returns
+        // it in one go — so a batch read through ShellReader is the right shape,
+        // and it fixes a real hazard: both pipes were previously left undrained
+        // while `waitUntilExit()` blocked, so a sudo action producing more than
+        // 64 KB would wedge the Actions module permanently.
+        //
+        // The timeout has to accommodate a human. This blocks on the native
+        // authentication dialog while the user finds and types their password,
+        // so the 15 s default would SIGKILL the prompt mid-entry. Five minutes
+        // is generous for a person yet still bounded, so a genuinely stuck
+        // `osascript` can't hang the actor forever. Cancelling the dialog exits
+        // promptly on its own (error -128) and never reaches the timeout.
+        let result = await Task.detached(priority: .userInitiated) {
+            ShellReader.run("/usr/bin/osascript", ["-e", script],
+                            timeout: Self.privilegedActionTimeout)
+        }.value
 
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        process.standardOutput = outPipe
-        process.standardError  = errPipe
-
-        do {
-            try process.run()
-        } catch {
-            finish(execId, success: false, finalLine: "Launch error: \(error.localizedDescription)")
+        if let failure = result.launchFailure {
+            finish(execId, success: false, finalLine: "Launch error: \(failure)")
             return
         }
 
-        // Same race-condition-free wait pattern
-        await Task.detached(priority: .userInitiated) {
-            process.waitUntilExit()
-        }.value
-
-        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-
-        if let s = String(data: outData, encoding: .utf8), !s.isEmpty {
-            s.components(separatedBy: "\n").filter { !$0.isEmpty }.forEach { appendLine($0, to: execId) }
+        if !result.standardOutput.isEmpty {
+            result.standardOutput.components(separatedBy: "\n")
+                .filter { !$0.isEmpty }
+                .forEach { appendLine($0, to: execId) }
         }
-        if let s = String(data: errData, encoding: .utf8), !s.isEmpty {
-            s.components(separatedBy: "\n").filter { !$0.isEmpty }.forEach { appendLine("⚠ \($0)", to: execId) }
+        if !result.standardError.isEmpty {
+            result.standardError.components(separatedBy: "\n")
+                .filter { !$0.isEmpty }
+                .forEach { appendLine("⚠ \($0)", to: execId) }
         }
 
-        let ok = process.terminationStatus == 0
+        if result.didTimeOut {
+            finish(execId, success: false,
+                   finalLine: "Timed out after \(Int(Self.privilegedActionTimeout / 60)) minutes and was terminated.")
+            return
+        }
+
+        let ok = result.exitCode == 0
         finish(execId, success: ok,
                finalLine: ok ? nil : "Command failed or authentication was cancelled.")
     }

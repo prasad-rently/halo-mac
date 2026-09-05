@@ -257,6 +257,60 @@ struct SystemMaintenanceTask: Identifiable {
     }
 }
 
+// MARK: - Memory Trend Tracking (F-023)
+
+/// One RAM reading for a tracked app, taken every 30 s by `MemoryTrendTracker`.
+struct MemorySample: Codable, Sendable {
+    let date: Date
+    let ramMB: Double
+}
+
+/// Rolling per-app RAM history, persisted as JSON (see `MemoryTrendTracker`).
+/// Keyed by bundle ID rather than PID so a "Restart App" (which changes the PID)
+/// keeps the same history instead of starting a fresh sparkline.
+/// Outcome of a "Restart app" action.
+///
+/// Distinguishing `.didNotQuit` from `.failed` matters: an app that declined to
+/// quit is almost always sitting on a "save changes?" sheet, and the right
+/// response is to tell the user that and leave it alone — not to escalate.
+enum RestartOutcome: Sendable, Equatable {
+    case restarted
+    case didNotQuit(String)
+    case failed(String)
+
+    var message: String? {
+        switch self {
+        case .restarted:                          return nil
+        case .didNotQuit(let m), .failed(let m):  return m
+        }
+    }
+}
+
+struct AppMemoryHistory: Codable, Identifiable, Sendable {
+    var id: String { bundleID }
+    let bundleID: String
+    var appName: String
+    /// Path to the .app bundle, used to relaunch via `NSWorkspace.openApplication(at:configuration:)`
+    /// after a "Restart App". Nil only if the app vanished before we ever recorded a path.
+    var bundlePath: String?
+    /// Ascending by date. Trimmed to the rolling 2-hour window on every sample.
+    var samples: [MemorySample]
+}
+
+/// Computed leak-detection result for one app's history. Never persisted —
+/// always recomputed fresh from `samples` so a stale flag can never survive
+/// a real RAM drop, and copy always says "possible", never "confirmed".
+struct MemoryLeakStatus: Sendable {
+    let isPossibleLeak: Bool
+    /// When the current unbroken growth streak began (nil if no growth streak is active).
+    let streakStartDate: Date?
+    /// RAM at the start of the current streak, for the "+N MB since HH:mm" readout.
+    let streakStartRAMMB: Double
+    let currentRAMMB: Double
+
+    static let empty = MemoryLeakStatus(isPossibleLeak: false, streakStartDate: nil, streakStartRAMMB: 0, currentRAMMB: 0)
+}
+
 // MARK: - Application Models
 
 struct InstalledApp: Identifiable {
@@ -583,4 +637,117 @@ extension ClipboardItem {
         .init(content: .code("actor DuplicateDetector {\n    func detect(in urls: [URL]) async throws -> [DuplicateGroup]", language: "swift"),
               copiedDate: Date().addingTimeInterval(-100000), sourceApp: "Xcode")
     ]
+}
+
+// MARK: - Time Machine Backup Health (F-022)
+
+/// Snapshot of Time Machine's real state, built entirely from `tmutil` output
+/// and volume metadata. `isConfigured == false` means Halo found no Time
+/// Machine destination at all — the UI must show an honest empty state, never
+/// a fabricated "healthy" card or empty heatmap as if backups exist.
+struct TimeMachineStatus: Sendable {
+    var isConfigured: Bool
+    var destinationName: String? = nil
+    var mountPoint: String? = nil
+    /// Set for network destinations (Time Capsule / NAS), which `tmutil`
+    /// reports with a `URL` instead of a `Mount Point`.
+    var destinationURL: String? = nil
+    /// A network destination has no local mount path until its sparsebundle is
+    /// mounted, so "no mount point" is not evidence that it is disconnected.
+    var isNetworkDestination: Bool = false
+    /// Whether the destination volume is currently mounted/reachable (it can
+    /// be configured but disconnected, e.g. an external HDD that's unplugged).
+    /// Only meaningful for local destinations — read `reachability` instead.
+    var isReachable: Bool = false
+    var availableBytes: Int64? = nil
+    var totalBytes: Int64? = nil
+    /// Most recent backup Halo could find, from `tmutil latestbackup` or,
+    /// failing that, the newest entry in `tmutil listbackups`.
+    var lastBackupDate: Date? = nil
+    var isBackupRunning: Bool = false
+    /// All snapshot dates found via `tmutil listbackups` — used to build the
+    /// 30-day heatmap. Empty when unknown; never fabricated.
+    var backupDates: [Date] = []
+
+    static let notConfigured = TimeMachineStatus(isConfigured: false)
+
+    /// True only when Halo has a real last-backup date and it's 48h+ old.
+    /// Never true for "no data" — that's the separate `.notConfigured` state,
+    /// or `hasNeverBackedUp` below.
+    var isStale: Bool {
+        guard isConfigured, let last = lastBackupDate else { return false }
+        return Date().timeIntervalSince(last) > (48 * 3600)
+    }
+
+    /// Time Machine is set up but no backup has ever completed — a destination
+    /// was selected and then the drive was never plugged in, or every attempt
+    /// failed.
+    ///
+    /// This is deliberately separate from `isStale`, which cannot represent it:
+    /// `isStale` needs a `lastBackupDate` to measure against, so with no
+    /// backups at all it is `false`. Without this the app stayed silent in the
+    /// one configuration where the user is most likely to believe they are
+    /// protected and not be.
+    var hasNeverBackedUp: Bool {
+        isConfigured && lastBackupDate == nil
+    }
+
+    /// Whether Halo can actually tell that the destination is present.
+    ///
+    /// Split three ways rather than two because "the drive is unplugged" and
+    /// "we have no way to measure this one" are different facts, and showing
+    /// the second as the first is what made healthy network destinations read
+    /// as disconnected.
+    enum Reachability { case reachable, unreachable, unknown }
+
+    var reachability: Reachability {
+        if isReachable { return .reachable }
+        if isNetworkDestination { return .unknown }
+        return .unreachable
+    }
+
+    var spaceUsedRatio: Double? {
+        guard let available = availableBytes, let total = totalBytes, total > 0 else { return nil }
+        return 1 - (Double(available) / Double(total))
+    }
+}
+
+/// One day's cell in the 30-day backup-frequency heatmap.
+enum BackupDayState: Equatable {
+    case backedUp   // a snapshot exists for this calendar day
+    case late       // 1 day since the most recent snapshot on/before this day
+    case missed     // 2+ days since the most recent snapshot on/before this day
+    /// No backup history is known for this day at all (before the earliest
+    /// known snapshot, or Time Machine has never produced one) — a neutral
+    /// gray cell, never colored red as if a backup was "missed".
+    case noData
+
+    var color: Color {
+        switch self {
+        case .backedUp: return .haloGreen
+        case .late: return .haloAmber
+        case .missed: return .haloRed
+        case .noData: return .haloBorder
+        }
+    }
+}
+
+/// Result of a user-initiated "Back Up Now".
+///
+/// `tmutil startbackup` needs Full Disk Access on recent macOS; without it the
+/// command exits non-zero and explains why. Returning a bare `Bool` threw that
+/// explanation away and left the user with a button that silently did nothing.
+enum BackupStartResult: Sendable, Equatable {
+    case started
+    case failed(String)
+}
+
+struct BackupHeatmapDay: Identifiable {
+    /// The day itself, not a fresh `UUID()`. `heatmap()` is pure and is called
+    /// from the view body, so it re-runs on every render — a generated id made
+    /// `ForEach` see 30 brand-new cells each time and rebuild all of them
+    /// instead of diffing. One day is one cell, so the date is the identity.
+    var id: Date { date }
+    let date: Date
+    let state: BackupDayState
 }

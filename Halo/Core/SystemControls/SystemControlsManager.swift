@@ -327,16 +327,14 @@ private func tccPermittedIDs(service: String) -> Set<String> {
     let tccPath = NSHomeDirectory() +
         "/Library/Application Support/com.apple.TCC/TCC.db"
     guard FileManager.default.fileExists(atPath: tccPath) else { return [] }
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-    proc.arguments = [tccPath,
-        "SELECT client FROM access WHERE service='\(service)' AND auth_value=2"]
-    let pipe = Pipe()
-    proc.standardOutput = pipe
-    proc.standardError  = Pipe()
-    do { try proc.run(); proc.waitUntilExit() } catch { return [] }
-    let raw = String(data: pipe.fileHandleForReading.readDataToEndOfFile(),
-                     encoding: .utf8) ?? ""
+    // `-readonly`: this is a SELECT against a database the OS holds open, so
+    // opening read-write (sqlite3's default) risks lock contention for no
+    // benefit. TCC.db can also hold hundreds of rows, which is why this goes
+    // through ShellReader rather than an undrained pipe.
+    let raw = ShellReader.output("/usr/bin/sqlite3", [
+        "-readonly", tccPath,
+        "SELECT client FROM access WHERE service='\(service)' AND auth_value=2"
+    ]) ?? ""
     return Set(raw.components(separatedBy: "\n")
                   .map { $0.trimmingCharacters(in: .whitespaces) }
                   .filter { !$0.isEmpty })
@@ -345,15 +343,10 @@ private func tccPermittedIDs(service: String) -> Set<String> {
 /// Returns true if the launchd service's active count > 0.
 /// Runs launchctl synchronously — must only be called from a background thread.
 private func launchctlActive(_ label: String, uid: uid_t) -> Bool {
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-    proc.arguments = ["print", "gui/\(uid)/\(label)"]
-    let pipe = Pipe()
-    proc.standardOutput = pipe
-    proc.standardError  = Pipe()
-    do { try proc.run(); proc.waitUntilExit() } catch { return false }
-    let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(),
-                     encoding: .utf8) ?? ""
+    // `launchctl print` is verbose — a full service dump runs to many KB, so
+    // this is exactly the shape that fills a pipe buffer. Exits non-zero when
+    // the label isn't loaded, which is a normal "not active" answer.
+    let out = ShellReader.output("/bin/launchctl", ["print", "gui/\(uid)/\(label)"]) ?? ""
     guard let match = out.range(of: #"active count = (\d+)"#, options: .regularExpression),
           let numStr = out[match].split(separator: "=").last
                            .map({ String($0).trimmingCharacters(in: .whitespaces) }),
@@ -363,25 +356,19 @@ private func launchctlActive(_ label: String, uid: uid_t) -> Bool {
 
 /// Finds the PID of a process by exact name — background-safe.
 private func pidOf(_ name: String) -> pid_t? {
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-    proc.arguments = ["-x", name]
-    let pipe = Pipe()
-    proc.standardOutput = pipe
-    try? proc.run(); proc.waitUntilExit()
-    let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(),
-                     encoding: .utf8) ?? ""
+    // pgrep exits 1 when nothing matches — a normal "not running" answer, so
+    // read stdout regardless of exit status. Previously stderr was left
+    // inherited rather than piped, so pgrep's diagnostics leaked into Halo's
+    // own stderr; ShellReader captures it instead.
+    let out = ShellReader.run("/usr/bin/pgrep", ["-x", name]).standardOutput
     guard let pid = Int32(out.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
     return pid_t(pid)
 }
 
 @discardableResult
 private func runLaunchctl(_ args: [String]) -> Int32 {
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-    proc.arguments = args
-    proc.standardOutput = Pipe()
-    proc.standardError  = Pipe()
-    try? proc.run(); proc.waitUntilExit()
-    return proc.terminationStatus
+    // Both streams were previously assigned to Pipes that nothing ever read —
+    // the classic latent deadlock. ShellReader drains both and bounds the call.
+    let result = ShellReader.run("/bin/launchctl", args)
+    return result.launchFailure == nil ? result.exitCode : -1
 }

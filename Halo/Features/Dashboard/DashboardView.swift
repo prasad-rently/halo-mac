@@ -11,6 +11,7 @@ struct DashboardView: View {
                 GPUDashboardCard()            // F-001: GPU utilisation + memory
                 NetworkSparklineCard()        // P3-10: bandwidth history
                 HealthTrendCard()              // F-029: 7-day health score sparkline
+                BackupHealthCard()            // F-022: Time Machine backup health
                 QuickActionsGrid()
                 AlertHistorySection()          // F-011: system alert history log
                 RecentActivityList()
