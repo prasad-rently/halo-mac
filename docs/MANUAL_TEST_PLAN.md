@@ -373,6 +373,33 @@ Read-only, find-only scan of Downloads/Documents/Desktop (iCloud Drive is opt-in
 | TC-PERF-23 | P1 | Definitive protocols | ppp/ipsec/tap interface | Flagged as VPN |
 | **Unit** TC-PERF-U3 | P0 | VPN two-rule logic | Mock utun+.other vs utun+.wifi | First=VPN, second=not |
 
+### 5.3.1 Network Traffic Monitor (F-017)
+
+**Files:** `NetworkTrafficMonitor.swift` (actor), `NetworkTrafficSection.swift` (view, embedded in the Network card).
+
+Read-only per-process network visibility via `lsof -i -n -P` (open sockets) and `nettop -P -L 1 -J bytes_in,bytes_out` (per-app byte totals), joined by **pid** (not process name — the two tools truncate the same process's name differently). Reverse DNS is best-effort via `getaddrinfo`/`getnameinfo`, cached per-IP, and never fabricated: an unresolved host is always `nil`, never guessed, and never flagged as a tracker.
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-PERF-70 | P0 | Section expands | Open Performance → Network, click "Show" on Network Traffic Monitor | Controls appear; settles into loading, a populated list, or the explicit empty state — never an indefinite spinner |
+| TC-PERF-71 | P1 | Filter and sort controls render | Expand the section | Filter-by-app field and sort picker (Recent / App Name / Data) both visible |
+| TC-PERF-72 | P1 | Filter narrows the list | Type an app name substring | List narrows to matching rows (case-insensitive substring match) |
+| TC-PERF-73 | P1 | Filter with no matches | Type a nonsense string | Explicit "No active outbound connections match." empty state, not a stuck spinner |
+| TC-PERF-74 | P0 | Sort by Data | Switch sort picker to "Data" | Rows reorder by joined per-app byte total, descending |
+| TC-PERF-75 | P0 | Suspicious flag only on resolved + matched host | View a connection whose reverse DNS resolves to a bundled tracker domain | Red warning icon + red host text; an unresolved IP is never flagged |
+| TC-PERF-76 | P1 | Collapse stops polling | Click "Hide" | Controls disappear; re-expanding ("Show") works without error |
+| TC-PERF-77 | P2 | Top talker banner | A process has nonzero session bytes | "Top talker: `<name>` — `<bytes>` this session" banner shown above the controls |
+| **Unit** TC-PERF-U5 | P0 | lsof parser — ESTABLISHED row | Real captured `lsof -i -n -P` line | pid/host/port/state parsed correctly |
+| **Unit** TC-PERF-U6 | P0 | lsof parser — filters LISTEN/connectionless | Rows with `(LISTEN)` or `*:*` | Excluded from parsed connections |
+| **Unit** TC-PERF-U7 | P1 | lsof parser — IPv6 brackets | `[2600:1901:1:d18::]:443` | Brackets stripped, port parsed |
+| **Unit** TC-PERF-U8 | P1 | lsof parser — dedup | Duplicate (pid, ip, port, protocol) rows | Collapsed to one entry |
+| **Unit** TC-PERF-U9 | P0 | nettop parser — pid join with spaced names | `Google Chrome H.902,488148251,1953712,` | pid=902, name preserved with space, bytes parsed |
+| **Unit** TC-PERF-U10 | P1 | nettop parser — zero-byte rows filtered, sorted descending | Mixed zero/nonzero rows | Zero-byte rows dropped; remaining sorted by total bytes desc |
+| **Unit** TC-PERF-U11 | P0 | pid join survives name mismatch | lsof "Google" vs nettop "Google Chrome H" for same pid | Join by pid succeeds; join by process-name string does not (the bug this PR fixed) |
+| **Unit** TC-PERF-U12 | P0 | Tracker domain matching | Exact / subdomain / suffix-only-no-dot / case-insensitive / unrelated host | Exact and subdomain match; bare suffix string and unrelated hosts don't |
+| **Unit** TC-PERF-U13 | P1 | Reverse DNS never fabricates | Unresolvable host | Returns `nil`, never a guessed name |
+| **Unit** TC-PERF-U14 | P2 | Reverse DNS cache keyed by IP | Same IP looked up twice; two distinct IPs looked up once each | One cache slot for the repeat; two slots for the distinct IPs |
+
 ### 5.4 Speed Test
 
 **File:** `SpeedTestService.swift`

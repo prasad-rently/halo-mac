@@ -61,6 +61,7 @@ For the iOS & Android platform feature mapping see `docs/MOBILE_PLATFORM_FEATURE
 - [x] iCloud Drive Analyzer (v4.1) — F-030, shipped scoped down from the original "iCloud Storage Analyser" card: no public API exists for third-party apps to read a user's total iCloud account quota or a category breakdown (Drive/Photos/Backups/Mail), so the donut chart, quota progress bar, and old-device-backups detector were all dropped as infeasible. What shipped instead is a real **local** analyzer: "iCloud Drive" tab in the Files module with `ICloudDriveScanner` actor enumerating `~/Library/Mobile Documents/` (iCloud Drive's on-disk sync mirror), real folder/file sizes and modified dates, real per-item sync status (on this Mac / downloading / uploading / iCloud-only) via `URLResourceKey.ubiquitousItemDownloadingStatusKey`, breadcrumb drill-down, Reveal in Finder, and confirmed Move to Trash. See `docs/FEATURE_ROADMAP.md` F-030 "As actually built" for the full feasibility writeup
 - [x] Duplicate Photos Finder / Similar Photos (v4.1) — F-025: DCT-based 64-bit perceptual hash (pHash) via `PerceptualDuplicateDetector` actor; Hamming-distance union-find clustering (UI-adjustable ≤1–20 bit threshold, default 8); "Similar Photos" tab in Files module scans `~/Pictures`/`~/Downloads`/`~/Desktop` (or a chosen folder) for loose-file near-duplicates, cluster grid with "recommended keep" auto-selection and `trashItem`-only deletion behind confirmation. Also ships a real, entitlement-wired PhotoKit path (Photos Library scan + `PHAssetChangeRequest.deleteAssets`) that is **not yet runtime-tested** — needs a permission-grant pass on a real device before it's considered verified.
 - [x] Browser Cleaner — F-024: "Browsers" tab in Cleanup module with `BrowserCleanerScanner` actor; per-category checklist (HTTP cache, GPU shader cache, browsing/download history, cookies, sessions, crash reports, site data) for Safari/Chrome/Arc/Brave/Edge/Opera/Vivaldi/Firefox; paths verified live for Safari/Chrome/Arc, long-stable documented paths for the rest; per-category review sheet, "Clean All Browsers" + per-browser buttons, `trashItem`-only deletion
+- [x] Network Traffic Monitor (v4.2) — F-017: `NetworkTrafficMonitor` actor sub-section in the Performance module's Network card; real outbound socket table via `lsof -i -n -P` (per-app, remote IP:port, protocol, last-seen); real per-app session byte totals via `nettop -P -L 1`, joined to connections by PID (not by name — `lsof` and `nettop` truncate process names to different lengths); best-effort cached reverse-DNS hostname resolution (`getnameinfo` with `NI_NAMEREQD`, never fabricated) against a bundled 40-domain tracker list (`tracker-domains.json`) for suspicious-domain flagging; filter by app name, sort by recency/app/traffic volume; "Top talker" session summary; UI explicitly labels hostnames "best-effort" and unresolved IPs are never flagged. Read-only — no blocking, no kernel extension.
 
 ---
 
@@ -251,6 +252,7 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 | ID | Feature | Effort | Summary |
 |----|---------|--------|---------|
 | F-017 | **Network Traffic Monitor** | ~5 d | Live per-app, per-domain network activity table. Flags telemetry/tracker domains from a bundled list. Read-only — no blocking. Complements existing Network section. |
+| F-016 | **Permission Auditor** | ~3 d | Full map of every app's TCC permissions (mic, camera, screen recording, full disk access). Risk-flags excessive grants. Deep-links to System Settings pane per permission. |
 | F-018 | **Privacy Data Exposure Scanner** | ~3 d | Scans Downloads/Documents/Desktop for files containing API keys, credit card numbers, SSH private keys, SSNs. Regex-based, entirely on-device. Results grouped by risk level. |
 | F-019 | **Security Posture Dashboard** | ~1.5 d | Checklist of 8 macOS security settings: FileVault, Gatekeeper, SIP, Secure Boot, Find My, Firewall, auto-updates, login window. One-click deep-links. Security Score feeds into health score. |
 
@@ -302,6 +304,7 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 
 **Ambitious long-term** (high effort, strong market positioning):
 - F-017 Network Traffic Monitor
+- F-023 Memory Leak Tracker
 - F-025 Duplicate Photos Finder (pHash)
 - F-023 Memory Leak Tracker
 
