@@ -37,7 +37,7 @@
 | [F-016](#f-016--permission-auditor) | Permission Auditor | 💡 Future Idea | ~3 d | F-002 (release) |
 | [F-017](#f-017--network-traffic-monitor-app-level-firewall-companion) | Network Traffic Monitor | 💡 Future Idea | ~5 d | none |
 | [F-018](#f-018--privacy-data-exposure-scanner) | Privacy Data Exposure Scanner | 💡 Future Idea | ~3 d | none |
-| [F-019](#f-019--security-posture-dashboard) | Security Posture Dashboard | 💡 Future Idea | ~1.5 d | none |
+| [F-019](#f-019--security-posture-dashboard) | Security Posture Dashboard | ✅ Done | 1.5 d | none |
 | [F-020](#f-020--smart-disk-health-monitor) | S.M.A.R.T. Disk Health Monitor | 💡 Future Idea | ~3 d | none |
 | [F-021](#f-021--app-usage--screen-time-analytics) | App Usage & Screen Time Analytics | ✅ Done | ~3 d | none |
 | [F-020](#f-020--smart-disk-health-monitor) | S.M.A.R.T. Disk Health Monitor | ✅ Done | 3 d | none |
@@ -1312,7 +1312,7 @@ New **"Sensitive Data"** tab within the existing **Protection** module, or an ad
 
 ## F-019 · Security Posture Dashboard
 
-**Status:** 💡 Future Idea  
+**Status:** ✅ Done — `feat/f019-security-posture` branch (2026-08)  
 **Effort estimate:** 1.5 days  
 **Theme:** Privacy & Security  
 **Branch naming (when ready):** `feat/f019-security-posture`  
@@ -1337,6 +1337,14 @@ Most users have no idea whether FileVault is on, if their firewall is disabled, 
 
 ### Integration point
 New **"Security Posture"** card in the existing **Protection** module's main view, collapsible. Summary score visible on Dashboard.
+
+### As actually built
+Scope was narrowed from the original 8-auto-check plan for honesty: only **4 of 8** checks have a reliable, non-interactive read path (FileVault, Gatekeeper, Application Firewall, Automatic Updates). SIP, Secure Boot, Find My Mac, and Login Window security have no dependable public CLI read even outside the sandbox — rather than guess and risk a wrong verdict, those 4 surface as an honest `.unknown` state with a one-line "how to check manually" hint (and a Settings deep-link where one exists). The security score (`SecurityPostureScanner.score(for:)`) only ever penalizes checks that were genuinely verified — `.unknown` never subtracts points.
+- `Halo/Core/Scanner/SecurityPostureScanner.swift` — actor, `scan()` + static `score(for:)`
+- `Halo/Core/Models/Models.swift` — `SecurityCheck`, `SecurityCheckState`, `SecurityCheckKind`
+- `Halo/Features/Protection/ProtectionView.swift` — `SecurityPostureSection` + `SecurityCheckRow`, wired into `ProtectionViewModel.loadAll()`
+- `Halo/App/AppState.swift` — `securityScore` (default 100 until the one-time launch scan completes), factored into `calculateHealthScore()` at a quarter-weight vs. CPU/RAM/disk
+- No SecureBoot/SIP/FindMy/LoginWindow "Fix" button is offered where no Settings pane exists (SIP/Secure Boot require booting into Recovery Mode) — the row explains this instead of showing a dead button.
 
 ---
 

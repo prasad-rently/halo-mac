@@ -54,6 +54,9 @@ final class AppState: ObservableObject {
     @Published var batteryHealth: Double = 0
     @Published var batteryCycles: Int = 0
     @Published var systemHealthScore: Int = 0
+    // F-019: optimistic default until the one-time launch scan completes, so we
+    // never show a false "unhealthy" score before Halo has had a chance to check.
+    @Published var securityScore: Int = 100
 
     // MARK: Scan State
     @Published var lastSmartScanDate: Date? = UserDefaults.standard.object(forKey: "lastSmartScanDate") as? Date
@@ -151,6 +154,7 @@ final class AppState: ObservableObject {
         startClipboardMonitoring()
         setupHotkeys()
         startNetworkMonitoring()
+        startSecurityPostureCheck()
         startTimeMachineMonitoring()
         startSMARTMonitoring()
         AlertManager.requestPermission()
@@ -235,6 +239,36 @@ final class AppState: ObservableObject {
                     self?.isVPNActive = isVPN
                 }
             }
+        }
+    }
+
+    // MARK: - Security Posture (F-019)
+
+    /// Runs once at launch — these settings rarely change, so there's no
+    /// value in re-checking on the 2 s metrics timer. The Protection module's
+    /// own "Refresh" button re-scans independently for the on-screen checklist.
+    private func startSecurityPostureCheck() {
+        // Bound before the first scan, so nothing that happens during it is
+        // missed, and so the Dashboard tracks later refreshes from the
+        // Protection module instead of holding the launch value until relaunch.
+        //
+        // Subscribes to `$score` rather than `objectWillChange`: the latter
+        // fires once per published property the store mutates, and each firing
+        // had to go and re-read a computed score — four Dashboard invalidations
+        // per scan, one of them landing mid-`await` and re-publishing the old
+        // value. `removeDuplicates()` then means an unchanged score is not an
+        // event at all, which is the common case on a periodic re-scan.
+        //
+        // `RunLoop.main` is deliberately not used here. It schedules in the
+        // default mode only, so deliveries are held for the duration of any
+        // event tracking — the score would visibly fail to update while the
+        // user was mid-scroll or dragging a window.
+        SecurityPostureStore.shared.$score
+            .removeDuplicates()
+            .assign(to: &$securityScore)
+
+        Task { @MainActor in
+            await SecurityPostureStore.shared.refresh()
         }
     }
 
@@ -368,6 +402,9 @@ final class AppState: ObservableObject {
         else if diskUsedRatio > 0.75 { score -= 10 }
         if batteryHealth < 0.7 { score -= 10 }
         else if batteryHealth < 0.85 { score -= 5 }
+        // F-019: modest weight — a secondary factor, not a dominant one, and
+        // never penalizes the checks Halo can't reliably verify (see SecurityPostureScanner.score).
+        if securityScore < 100 { score -= (100 - securityScore) / 4 }
         return max(0, min(100, score))
     }
 
