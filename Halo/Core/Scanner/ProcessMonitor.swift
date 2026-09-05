@@ -3,11 +3,23 @@ import AppKit
 
 // MARK: - ProcessMonitor  (P3-11)
 //
-// Foreground-active — lists top processes by CPU or RAM.
+// Lists top processes by CPU or RAM.
 // Uses proc_listallpids() + proc_pidinfo() (same APIs as Activity Monitor).
-// Timer owned by TopProcessesSection; destroyed when section closes.
 
 actor ProcessMonitor {
+
+    // MARK: - Singleton
+    //
+    // One instance, app-wide. Several subsystems sample processes on their own
+    // cadences (Performance → Top Processes every 3 s, and the F-021/F-023/F-028
+    // features queued behind it). A per-caller instance gives each its own
+    // `previousCPUInfo` baseline, which means: the ~600-entry dictionary is
+    // duplicated per instance, every instance's first call reports 0 % CPU
+    // because it has no baseline to diff against, and two surfaces quote
+    // different CPU numbers for the same process because their sampling windows
+    // differ. `init` is private so a fourth instance can't reappear by accident.
+    static let shared = ProcessMonitor()
+    private init() {}
 
     // MARK: - Public model
 
@@ -21,14 +33,120 @@ actor ProcessMonitor {
 
     enum SortKey: Sendable { case cpu, ram }
 
+    // MARK: - F-023 — per-app RAM sample (memory trend tracking)
+
+    /// One RAM reading for a regular (Dock-visible) running application.
+    /// Distinct from `ProcessInfo` above because F-023 needs an identity that
+    /// survives a relaunch (bundle ID), not just the PID — a "Restart App"
+    /// action changes the PID but must keep the same rolling history.
+    struct AppRAMSample: Sendable {
+        let pid: Int32
+        let bundleID: String
+        let name: String
+        let bundlePath: String?
+        let ramMB: Double
+    }
+
     // MARK: - Private state
 
-    private var previousCPUInfo: [Int32: (user: UInt64, sys: UInt64, total: UInt64)] = [:]
+    /// PID → cumulative user+system CPU nanoseconds at the last sample.
+    /// Rebuilt (not mutated) on every pass, so dead PIDs drop out — see `resample()`.
+    private var previousCPUInfo: [Int32: UInt64] = [:]
     private var previousSampleTime: Date = Date()
+
+    private var cachedProcesses: [ProcessInfo] = []
+    private var cachedAt: Date?
+
+    /// Snapshot coalescing window.
+    ///
+    /// Sharing one instance means two callers can land within milliseconds of
+    /// each other. Without this, the second call computes its CPU delta over a
+    /// near-zero `elapsed` and every process reads ~0 % — so whichever surface
+    /// sampled second would show a flat, wrong CPU column. One second is well
+    /// under the fastest real caller (the 3 s Top Processes timer), so that
+    /// caller still re-samples on every tick; the window only absorbs
+    /// coincidences.
+    private static let coalesceWindow: TimeInterval = 1.0
 
     // MARK: - Public
 
     func topProcesses(sortBy: SortKey, limit: Int = 10) -> [ProcessInfo] {
+        let infos = snapshot()
+        let sorted: [ProcessInfo]
+        switch sortBy {
+        case .cpu: sorted = infos.sorted { $0.cpuPercent > $1.cpuPercent }
+        case .ram: sorted = infos.sorted { $0.ramMB > $1.ramMB }
+        }
+        return Array(sorted.prefix(limit))
+    }
+
+    /// Every live process, re-sampled at most once per `coalesceWindow`.
+    func snapshot() -> [ProcessInfo] {
+        if let at = cachedAt, Date().timeIntervalSince(at) < Self.coalesceWindow {
+            return cachedProcesses
+        }
+        return resample()
+    }
+
+    // MARK: - F-023 — running-app RAM sampling
+
+    /// Samples RAM usage for every regular (Dock-visible) running application,
+    /// reusing the same `proc_taskinfo` resident-size read as `processInfo(pid:elapsed:)`
+    /// above — this EXTENDS the existing per-process sampling rather than duplicating it,
+    /// it just re-keys by bundle ID (via `NSRunningApplication`) instead of PID, and skips
+    /// the CPU-delta bookkeeping that F-023 doesn't need.
+    /// Called every 30 s by `MemoryTrendTracker`, independent of the 3 s Top Processes timer.
+    /// Identity of a running app, read from AppKit on the main actor.
+    ///
+    /// `NSWorkspace` is main-thread-affine. `runningApplications` is tolerant
+    /// in practice but is not documented thread-safe, and `localizedName` /
+    /// `bundleURL` read through to bundle info that AppKit caches without
+    /// synchronisation — the kind of thing that works until it intermittently
+    /// does not. Splitting the AppKit read from the `proc_pidinfo` read keeps
+    /// each on the thread it belongs to.
+    struct RunningAppIdentity: Sendable {
+        let pid: Int32
+        let bundleID: String
+        let name: String
+        let bundlePath: String?
+    }
+
+    /// Snapshots the AppKit half. Must be called on the main actor.
+    @MainActor
+    static func runningAppIdentities() -> [RunningAppIdentity] {
+        NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular }
+            .compactMap { app in
+                guard let bundleID = app.bundleIdentifier else { return nil }
+                return RunningAppIdentity(
+                    pid: app.processIdentifier,
+                    bundleID: bundleID,
+                    name: app.localizedName ?? "PID \(app.processIdentifier)",
+                    bundlePath: app.bundleURL?.path
+                )
+            }
+    }
+
+    /// Adds the RSS reading for each app. Pure `proc_pidinfo` — no AppKit — so
+    /// it is safe off the main thread.
+    func ramSamples(for identities: [RunningAppIdentity]) -> [AppRAMSample] {
+        identities.compactMap { identity in
+            var info = proc_taskinfo()
+            let size = MemoryLayout<proc_taskinfo>.size
+            guard proc_pidinfo(identity.pid, PROC_PIDTASKINFO, 0, &info, Int32(size)) > 0 else { return nil }
+            return AppRAMSample(
+                pid: identity.pid,
+                bundleID: identity.bundleID,
+                name: identity.name,
+                bundlePath: identity.bundlePath,
+                ramMB: Double(info.pti_resident_size) / 1_048_576
+            )
+        }
+    }
+
+    // MARK: - Sampling
+
+    private func resample() -> [ProcessInfo] {
         let count = proc_listallpids(nil, 0)
         guard count > 0 else { return [] }
 
@@ -36,72 +154,61 @@ actor ProcessMonitor {
         let actual = proc_listallpids(&pids, Int32(pids.count) * 4)
         guard actual > 0 else { return [] }
 
-        let now = Date()
+        let now     = Date()
         let elapsed = now.timeIntervalSince(previousSampleTime)
-        previousSampleTime = now
+        let cores   = Double(Foundation.ProcessInfo.processInfo.activeProcessorCount)
 
         var infos: [ProcessInfo] = []
+        infos.reserveCapacity(Int(actual))
+
+        // Built fresh rather than mutated in place: the previous version only
+        // ever added entries, so `previousCPUInfo` kept a row for every PID the
+        // app had ever seen and grew without bound as short-lived processes came
+        // and went. Rebuilding drops dead PIDs on every pass.
+        var nextCPUInfo: [Int32: UInt64] = [:]
+        nextCPUInfo.reserveCapacity(Int(actual))
 
         for pid in pids.prefix(Int(actual)) where pid > 0 {
-            guard let info = processInfo(pid: pid, elapsed: elapsed) else { continue }
-            infos.append(info)
+            // One proc_pidinfo() per PID. The previous version called it twice —
+            // once to read the process and again to record the CPU snapshot —
+            // which doubled the syscall count of every sample for no benefit.
+            var info = proc_taskinfo()
+            let size = MemoryLayout<proc_taskinfo>.size
+            guard proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &info, Int32(size)) > 0 else { continue }
+
+            // pti_total_user / pti_total_system are cumulative nanosecond counters.
+            let total = info.pti_total_user + info.pti_total_system
+            nextCPUInfo[pid] = total
+
+            var cpuPct: Double = 0
+            // `total >= previous` is a real guard, not defensive noise: macOS
+            // recycles PIDs, so a slot can come back pointing at a younger
+            // process with a smaller cumulative counter. `total - previous` is
+            // UInt64 subtraction, which traps on underflow — that would crash
+            // the app outright. A shared, long-lived instance keeps its baseline
+            // for the whole app lifetime, so it sees PID reuse far more often
+            // than a short-lived per-view instance ever did.
+            if let previous = previousCPUInfo[pid], total >= previous, elapsed > 0 {
+                cpuPct = Double(total - previous) / 1e9 / elapsed * 100.0 / cores
+            }
+
+            let ramMB = Double(info.pti_resident_size) / 1_048_576
+
+            infos.append(ProcessInfo(
+                id: pid,
+                name: processName(pid: pid),
+                cpuPercent: max(0, min(cpuPct, 100)),
+                ramMB: ramMB,
+                isUserApp: ramMB > 1   // heuristic: daemons typically < 1 MB
+            ))
         }
 
-        // Update CPU snapshot
-        for pid in pids.prefix(Int(actual)) where pid > 0 {
-            updateCPUSnapshot(pid: pid)
-        }
+        previousCPUInfo    = nextCPUInfo
+        previousSampleTime = now
+        cachedProcesses    = infos
+        cachedAt           = now
 
-        let sorted: [ProcessInfo]
-        switch sortBy {
-        case .cpu: sorted = infos.sorted { $0.cpuPercent > $1.cpuPercent }
-        case .ram: sorted = infos.sorted { $0.ramMB > $1.ramMB }
-        }
-
-        return Array(sorted.prefix(limit))
-    }
-
-    // MARK: - Per-process info
-
-    private func processInfo(pid: Int32, elapsed: TimeInterval) -> ProcessInfo? {
-        var info = proc_taskinfo()
-        let size = MemoryLayout<proc_taskinfo>.size
-        let ret = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &info, Int32(size))
-        guard ret > 0 else { return nil }
-
-        let ramMB = Double(info.pti_resident_size) / 1_048_576
-
-        // CPU: diff user+system ticks from previous snapshot
-        let user  = info.pti_total_user
-        let sys   = info.pti_total_system
-        let total = user + sys
-
-        var cpuPct: Double = 0
-        if let prev = previousCPUInfo[pid], elapsed > 0 {
-            let delta = Double(total - prev.total)
-            // pti_total_user/system are in nanoseconds
-            cpuPct = (delta / 1e9) / elapsed * 100.0 / Double(Foundation.ProcessInfo.processInfo.activeProcessorCount)
-        }
-
-        let name = processName(pid: pid)
-
-        return ProcessInfo(
-            id: pid,
-            name: name,
-            cpuPercent: max(0, min(cpuPct, 100)),
-            ramMB: ramMB,
-            isUserApp: ramMB > 1   // heuristic: daemons typically < 1 MB
-        )
-    }
-
-    private func updateCPUSnapshot(pid: Int32) {
-        var info = proc_taskinfo()
-        let size = MemoryLayout<proc_taskinfo>.size
-        let ret = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &info, Int32(size))
-        guard ret > 0 else { return }
-        previousCPUInfo[pid] = (user: info.pti_total_user,
-                                sys: info.pti_total_system,
-                                total: info.pti_total_user + info.pti_total_system)
+        return infos
     }
 
     private func processName(pid: Int32) -> String {
