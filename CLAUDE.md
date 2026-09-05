@@ -59,6 +59,7 @@ Halo/
 │   │       └── SMARTDiskMonitor.swift     actor; diskutil-backed S.M.A.R.T./NVMe health reader (F-020)
 │   │       ├── PrivacyExposureScanner.swift  actor; scans Downloads/Documents/Desktop for exposed secrets (F-018)
 │   │       └── PrivacyPatternDatabase.swift  actor; loads privacy-patterns.json, matches + redacts (F-018)
+│   │       └── ICloudDriveScanner.swift   actor; local ~/Library/Mobile Documents/ analyzer (F-030)
 │   ├── DesignSystem/DesignSystem.swift   colours, components, typography
 │   ├── Intents/
 │   │   ├── GetHealthScoreIntent.swift
@@ -76,9 +77,10 @@ Halo/
 │   │   ├── Protection/ProtectionView.swift
 │   │   ├── Performance/PerformanceView.swift  login items via LoginItemScanner
 │   │   ├── Applications/ApplicationsView.swift AppScanner + deep uninstall
-│   │   ├── Files/FilesView.swift              SpaceLens + Duplicates + LargeFiles + Downloads + Drive Speed tabs
+│   │   ├── Files/FilesView.swift              SpaceLens + Duplicates + LargeFiles + Downloads + Drive Speed + iCloud Drive tabs
 │   │   ├── Files/DriveSpeedView.swift          drive read/write benchmark screen (F-043)
 │   │   ├── Files/DriveHealthSection.swift      S.M.A.R.T. drive health card, shown in Drive Speed tab (F-020)
+│   │   ├── Files/ICloudDriveView.swift         iCloud Drive local folder analyzer screen (F-030)
 │   │   ├── Clipboard/
 │   │   │   ├── ClipboardView.swift
 │   │   │   ├── ClipboardMonitor.swift
@@ -456,6 +458,17 @@ codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
 - **Redaction is mandatory, not incidental** — `PrivacyPatternDatabase.redact(_:category:)` is the only path that produces a `PrivacyPatternHit`'s `redactedPreview` (e.g. `sk_live_••••••••3f2a`, `•••• •••• •••• 3f2a`). No `print`/`NSLog`/`os_log` call anywhere in this feature touches a raw matched value; findings live only in `ProtectionViewModel.privacyFindings` for the current session — never persisted to disk or `UserDefaults`.
 - **Find-only, no delete path** — the only action on a `PrivacyExposureFinding` is `ProtectionViewModel.revealInFinder(_:)` (`NSWorkspace.activateFileViewerSelecting`). There is no quarantine/delete capability anywhere in this feature, by design.
 - `PrivacyScanLocation.defaultLocations` = Downloads/Documents/Desktop; `PrivacyScanLocation.iCloudDriveLocation()` resolves lazily (not a stored static) since `url(forUbiquityContainerIdentifier:)` can block briefly — only called when the user opts in via the iCloud toggle.
+## ICloudDriveScanner (F-030)
+
+`Halo/Core/Scanner/ICloudDriveScanner.swift` + `Halo/Features/Files/ICloudDriveView.swift`
+
+- **Scope note (read this first):** this is a LOCAL analyzer of `~/Library/Mobile Documents/` — the on-disk mirror of iCloud Drive — not a full-account iCloud storage report. There is no public API (CloudKit, `NSUbiquitousKeyValueStore`, or otherwise) that returns a third-party app's total iCloud account quota/usage or a category breakdown (Drive/Photos/Backups/Mail/etc). `CKContainer.default().accountStatus` only reports sign-in state, never a storage number, entitlement or not. Those numbers are only visible in System Settings' own iCloud pane. See `docs/FEATURE_ROADMAP.md` F-030 "As actually built" for the full writeup — the donut-chart-by-category, quota progress bar, and "old device backups" detector from the original spec were all dropped as infeasible.
+- `actor ICloudDriveScanner` — enumerates `~/Library/Mobile Documents/`. Surfaced as the **"iCloud Drive"** tab in the Files module.
+- `func availableContainers() -> [ICloudContainer]` — every top-level folder under Mobile Documents; `com~apple~CloudDocs` (the user-visible "iCloud Drive") sorted first, every other sibling is a per-app ubiquity container.
+- `func scanDirectory(_ url: URL) async -> [ICloudDriveItem]` — top-level entries of any folder, real sizes (directories summed, capped at 20,000 files — same bound/rationale as `SpaceLensViewModel.directorySize`), real modified dates.
+- **Real per-item sync status** via `URLResourceKey.ubiquitousItemDownloadingStatusKey` + `isUploading`/`isDownloading` — populated by the OS for any URL under a ubiquity container, no entitlement needed. Deliberately not `NSMetadataQuery`: the resource-key read is synchronous per-URL with no run-loop/notification machinery, and is equally real for this use case.
+- `func trash(_ item:) -> (success: Bool, errorMessage: String?)` — `trashItem` only, called after the mandatory confirmation dialog in `ICloudDriveView`.
+- `ICloudDriveViewModel` — breadcrumb drill-down mirrors `SpaceLensViewModel`'s navigation model (container picker instead of `NSOpenPanel`, since containers are fixed OS locations, not user-chosen folders).
 
 ---
 
@@ -564,6 +577,8 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | Files (SpaceLens) | ✅ | SpaceLensViewModel | — | — |
 | Files (Duplicates) | ✅ | DuplicateFinderViewModel | DuplicateDetector | ✅ |
 | Files (Drive Speed) | ✅ | DriveSpeedViewModel | DriveSpeedTester + SMARTDiskMonitor (F-020) | ✅ |
+| Files (Drive Speed) | ✅ | DriveSpeedViewModel | DriveSpeedTester | ✅ |
+| Files (iCloud Drive) | ✅ | ICloudDriveViewModel | ICloudDriveScanner | — |
 | Clipboard | ✅ | ClipboardViewModel | ClipboardMonitor | ✅ |
 | Actions | ✅ | ActionsViewModel | ActionRunner + ActionLibrary | — |
 | Ports | ✅ | PortManagerViewModel | PortScanner | — |
@@ -643,6 +658,8 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `8105` / `8106` | AppUsageInsightsSection.swift file ref / sources build file |
 | `8133` / `8134` | FocusSessionManager.swift file ref / sources build file |
 | `8135` / `8136` | FocusSessionOverlayView.swift file ref / sources build file |
+| `8143` / `8144` | ICloudDriveScanner.swift file ref / sources build file |
+| `8145` / `8146` | ICloudDriveView.swift file ref / sources build file |
 | `8163` / `8164` | ShellReader.swift file ref / sources build file |
 | `9001` / `9002` | GetHealthScoreIntent.swift file ref / sources build file |
 | `9003` / `9004` | GetCPUUsageIntent.swift file ref / sources build file |

@@ -127,6 +127,8 @@
 		000000000000000000008086 /* PrivacyPatternDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008085 /* PrivacyPatternDatabase.swift */; };
 		000000000000000000008088 /* privacy-patterns.json in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008087 /* privacy-patterns.json */; };
 		000000000000000000008154 /* PermissionAuditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008153 /* PermissionAuditor.swift */; };
+		000000000000000000008144 /* ICloudDriveScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008143 /* ICloudDriveScanner.swift */; };
+		000000000000000000008146 /* ICloudDriveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008145 /* ICloudDriveView.swift */; };
 		000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009001 /* GetHealthScoreIntent.swift */; };
 		000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009003 /* GetCPUUsageIntent.swift */; };
 		000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009005 /* GetBatteryHealthIntent.swift */; };
@@ -380,6 +382,8 @@
 		000000000000000000008085 /* PrivacyPatternDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PrivacyPatternDatabase.swift; sourceTree = "<group>"; };
 		000000000000000000008087 /* privacy-patterns.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Halo/Resources/privacy-patterns.json; sourceTree = "<group>"; };
 		000000000000000000008153 /* PermissionAuditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PermissionAuditor.swift; sourceTree = "<group>"; };
+		000000000000000000008143 /* ICloudDriveScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ICloudDriveScanner.swift; sourceTree = "<group>"; };
+		000000000000000000008145 /* ICloudDriveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/ICloudDriveView.swift; sourceTree = "<group>"; };
 		000000000000000000009001 /* GetHealthScoreIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetHealthScoreIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009003 /* GetCPUUsageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetCPUUsageIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009005 /* GetBatteryHealthIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetBatteryHealthIntent.swift; sourceTree = "<group>"; };
@@ -571,6 +575,8 @@
 				000000000000000000008029 /* ActionShareManager.swift */,
 				000000000000000000008133 /* FocusSessionManager.swift */,
 				000000000000000000008135 /* FocusSessionOverlayView.swift */,
+				000000000000000000008143 /* ICloudDriveScanner.swift */,
+				000000000000000000008145 /* ICloudDriveView.swift */,
 				000000000000000000008013 /* CodeBeautifierView.swift */,
 				000000000000000000008015 /* CodeTheme.swift */,
 				000000000000000000008017 /* SyntaxHighlighter.swift */,
@@ -1031,6 +1037,8 @@
 				000000000000000000008136 /* FocusSessionOverlayView.swift in Sources */,
 				000000000000000000008032 /* SecurityPostureScanner.swift in Sources */,
 				000000000000000000008154 /* PermissionAuditor.swift in Sources */,
+				000000000000000000008144 /* ICloudDriveScanner.swift in Sources */,
+				000000000000000000008146 /* ICloudDriveView.swift in Sources */,
 				000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */,
 				000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */,
 				000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */,

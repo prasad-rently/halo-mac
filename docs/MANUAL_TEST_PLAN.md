@@ -534,6 +534,30 @@ Read-only S.M.A.R.T./NVMe health reader via `diskutil info -plist` + an `IONVMeC
 | **Unit** TC-FILE-U12 | P0 | classify() — verified with no red flags is good; unavailable with no signal is unknown, never guessed | status=.verified, all clean vs status=.unavailable, all nil | `.good` and `.unknown` respectively |
 | **Unit** TC-FILE-U13 | P0 | nonEmpty() — the diskutil MediaName-by-mount-path gotcha | nil / "" / "   " / real value | nil, nil, nil, passthrough respectively |
 | **Unit** TC-FILE-U14 | P1 | lifespanRemainingPercent | percentageUsed nil/30/0/110 | nil / 70 / 100 / 0 (clamped, never negative) |
+### 7.6 iCloud Drive Analyzer (F-030)
+
+**Files:** `ICloudDriveScanner.swift`, `ICloudDriveView.swift`
+
+> **Scope note:** this is a LOCAL analyzer of `~/Library/Mobile Documents/` (the
+> on-disk sync mirror), not a full-account iCloud storage report — there is no
+> public API for a third-party app's iCloud quota or a Drive/Photos/Backups/Mail
+> category breakdown. See `docs/FEATURE_ROADMAP.md` F-030 "As actually built."
+
+| ID | Priority | Title | Preconditions | Steps | Expected |
+|----|----------|-------|---------------|-------|----------|
+| TC-FILE-50 | P0 | Container enumeration | iCloud Drive set up | Open Files → iCloud Drive | `com~apple~CloudDocs` shown first as "iCloud Drive"; other ubiquity containers listed with derived names |
+| TC-FILE-51 | P1 | iCloud Drive not set up | Fresh Mac / iCloud Drive off | Open tab | Friendly "iCloud Drive isn't set up on this Mac" state, no crash |
+| TC-FILE-52 | P0 | Drill into a folder | Select a container with subfolders | Click a folder row | Breadcrumb grows; contents of subfolder shown |
+| TC-FILE-53 | P1 | Breadcrumb navigation | Drilled 2+ levels deep | Click an earlier breadcrumb segment | Navigates back; deeper segments truncated |
+| TC-FILE-54 | P1 | Real per-item sync status | Mix of local / evicted ("Optimise Mac Storage") files | View rows | Status label/icon matches actual state (On This Mac / iCloud Only / Downloading…/Uploading…) |
+| TC-FILE-55 | P2 | Reveal in Finder | Any row | Click Reveal | Finder opens with item selected |
+| TC-FILE-56 | P0 | Delete requires confirmation | Any row | Click Trash | Confirmation dialog names the file + size, mentions cross-device removal; Cancel deletes nothing (TC-SAFE-02) |
+| TC-FILE-57 | P2 | Refresh | After external change (e.g. via Finder) | Click Refresh | Re-scans current container/folder |
+| **Unit** TC-FILE-U8 | P1 | `scanDirectory` sizes + sort | Temp dir: 1 file + 1 subfolder | Real sizes (folder summed), sorted largest-first |
+| **Unit** TC-FILE-U9 | P2 | `scanDirectory` empty/missing folder | Empty dir / nonexistent URL | Returns `[]`, no crash |
+| **Unit** TC-FILE-U10 | P2 | `ICloudContainer.displayName` | `com~apple~CloudDocs`, `com~apple~Pages`, third-party `com~...` | "iCloud Drive" override; Apple/third-party prefixes stripped correctly |
+| **Unit** TC-FILE-U11 | P2 | `ICloudSyncStatus` presentation | Each case | Correct label/icon/color mapping |
+| **Unit** TC-FILE-U12 | P2 | `ICloudDriveItem.icon` | Various extensions + directory | Extension-based icon; directories always `folder.fill` |
 
 ---
 
@@ -995,7 +1019,7 @@ Frequency:     Always / Intermittent (<x/y>)
 | Area | Modules covered |
 |------|-----------------|
 | Core UI | Shell, Sidebar, Dashboard, Onboarding |
-| Cleanup/Files | Cleanup, SpaceLens, Duplicates, Downloads, Large Files, Disk Health |
+| Cleanup/Files | Cleanup, SpaceLens, Duplicates, Downloads, Large Files, Disk Health, iCloud Drive Analyzer |
 | Security | Protection, SignatureDatabase, Permissions, Sentry, Data Safety |
 | Performance | Processes, CPU, Battery, Network, Speed Test, Sensors, Login Items, Idle Apps, GPU |
 | Productivity | Clipboard, Snippets, Actions (108), Ports, Code Beautifier |

@@ -57,7 +57,7 @@
 | [F-029](#f-029--scheduled-reports--weekly-digest) | Scheduled Reports & Weekly Digest | ✅ Done | 2 d | ReportGenerator |
 | [F-028](#f-028--focus-session-companion) | Focus Session Companion | ✅ Done | ~3 d | MenuBarDisplayStyle |
 | [F-029](#f-029--scheduled-reports--weekly-digest) | Scheduled Reports & Weekly Digest | 💡 Future Idea | ~2 d | ReportGenerator |
-| [F-030](#f-030--icloud-storage-analyser) | iCloud Storage Analyser | 💡 Future Idea | ~4 d | none |
+| [F-030](#f-030--icloud-storage-analyser) | iCloud Storage Analyser → shipped as **iCloud Drive Analyzer** | ✅ Done | ~4 d | none |
 | [F-031](#f-031--dock--desktop-tinker-actions) | Dock & Desktop Tinker Actions | ✅ Done | 0.5 d | none |
 | [F-032](#f-032--display--audio-quick-actions) | Display & Audio Quick Actions | ✅ Done | 0.5 d | none |
 | [F-033](#f-033--system-junk--developer-cache-cleaner-actions) | System Junk & Dev Cache Cleaner Actions | ✅ Done | 0.5 d | none |
@@ -2043,10 +2043,10 @@ Scope was narrowed from the original 6-bullet digest plan for honesty, following
 
 ## F-030 · iCloud Storage Analyser
 
-**Status:** 💡 Future Idea  
+**Status:** ✅ Done — shipped as **iCloud Drive Analyzer** (scoped down from the card below; see "As actually built") — `feat/f030-icloud-drive-analyzer`  
 **Effort estimate:** 4 days  
 **Theme:** Cleanup & Storage  
-**Branch naming (when ready):** `feat/f030-icloud-storage-analyser`  
+**Branch naming (when ready):** `feat/f030-icloud-storage-analyser` → actually built as `feat/f030-icloud-drive-analyzer`  
 **Depends on:** none
 
 ### Why
@@ -2072,6 +2072,27 @@ New **"iCloud"** tab in the **Files** module, alongside SpaceLens, Exact Duplica
 - Full quota numbers via CloudKit require `com.apple.developer.icloud-services` entitlement — plan for sandboxed build
 - File enumeration of a large iCloud Drive can be slow; needs async streaming with progress indicator
 - "Old device backups" detection depends on accessing CloudKit backup records, which require user authentication
+
+### As actually built
+
+**A pre-implementation feasibility pass found a hard blocker in the original card's headline feature, and three sub-features were dropped as a result. Read this before assuming the card above shipped as written.**
+
+**The blocker:** there is no public API — not CloudKit, not `NSUbiquitousKeyValueStore`, not `CKContainer`, nothing — that gives a third-party app the user's total iCloud account storage (the "X of 5 GB used" number) or a category breakdown of it (iCloud Drive vs Photos vs Backups vs Mail vs third-party app data). `CKContainer.default().accountStatus` only reports whether iCloud is signed in — never a storage number, with or without the iCloud entitlement. Those numbers exist only inside System Settings' own iCloud pane, which is Apple-internal. The original card's own "Data sources" section flagged that quota needs `CKOperation` + entitlement, but understated the real problem: even with the entitlement granted, no CloudKit operation returns this data at all.
+
+**Three sub-features were dropped as a direct result — they are not present in the shipped feature:**
+1. **The donut chart by category** (iCloud Drive / Photos / Backups / Mail / third-party app data) — requires the account-wide category breakdown described above. Does not exist.
+2. **The quota usage progress bar** (used / available / total) — requires the same account-wide total. Does not exist.
+3. **"Old device backups" detection** — requires CloudKit backup records, which are not exposed to third-party apps at all (the original card flagged this as a risk; it turned out to be a full blocker, not a risk).
+
+**What shipped instead — a genuinely real, local iCloud Drive folder analyzer:**
+- `Halo/Core/Scanner/ICloudDriveScanner.swift` (actor) enumerates `~/Library/Mobile Documents/` — iCloud Drive's real on-disk sync mirror, readable via plain `FileManager` with no entitlement in the debug build. `com~apple~CloudDocs` (the user-visible "iCloud Drive" folder) is surfaced first; every sibling per-app ubiquity container (Pages, Mail, WhatsApp, etc.) is listed too.
+- Real folder/file sizes (directories summed, capped at 20,000 files — identical bound and rationale to `SpaceLensViewModel.directorySize`), real last-modified dates, drill-down via breadcrumb (mirrors `SpaceLensViewModel`'s navigation model).
+- **Real per-item sync status** (on this Mac / downloading / uploading / iCloud-only-evicted) — this part of the original spec's data-sources list genuinely works. Implemented via `URLResourceKey.ubiquitousItemDownloadingStatusKey` + the `isUploading`/`isDownloading` flags rather than a live `NSMetadataQuery`: both are equally real, but the resource-key approach is a synchronous per-URL property read with no run-loop/notification machinery to manage, which is simpler and has no more moving parts than necessary for what is fundamentally a property lookup.
+- **Reveal in Finder** and **Move to Trash** (via `trashItem`, gated behind the mandatory confirmation dialog) for any file or folder in the tree. Trashing a file synced to iCloud Drive also removes it from the cloud — standard, expected Finder behavior, no special-casing needed.
+- Renamed to **"iCloud Drive Analyzer"** everywhere in the UI (tab label, header) — "iCloud Storage Analyser" implied the account-wide report described above, which this feature does not and cannot provide. No screen claims to show total iCloud account usage or quota anywhere.
+- New models (`ICloudContainer`, `ICloudSyncStatus`, `ICloudDriveItem`, `ICloudDriveScanError`) in `Halo/Core/Models/Models.swift`; new view + view model in `Halo/Features/Files/ICloudDriveView.swift`; new **"iCloud Drive"** tab in the Files module alongside Space Lens / Duplicates / Large Files / Downloads / Drive Speed.
+
+**Mobile parity:** assessed in `docs/HALO_MOBILE_ROADMAP.md` §9 — iOS is 🟡 (document-picker-scoped only, the same ceiling already assigned to Space Lens; no bulk iCloud Drive enumeration outside a user-picked folder), Android is ❌ (iCloud does not exist on Android). Recommendation there is not to build this as a standalone mobile feature — the Files app already does this, and better, since it can show the real account quota Halo cannot access on any platform.
 
 ---
 
@@ -2111,6 +2132,7 @@ New **"iCloud"** tab in the **Files** module, alongside SpaceLens, Exact Duplica
 
 *Last updated: v4.1 · 26 features shipped (F-001–F-015 + F-026, F-027, F-028, F-031–F-034, F-036–F-039, F-041–F-042) · 12 future ideas remaining (F-016–F-025, F-029–F-030)*
 *Last updated: v4.2 · 26 features shipped (F-001–F-015 + F-016, F-026, F-027, F-031–F-034, F-036–F-039, F-041–F-042) · 12 future ideas remaining (F-017–F-025, F-028–F-030)*
+*Last updated: v4.1 · 26 features shipped (F-001–F-015 + F-026, F-027, F-030 (scoped down — see "As actually built"), F-031–F-034, F-036–F-039, F-041–F-042) · 12 future ideas remaining (F-016–F-025, F-028, F-029)*
 
 ---
 
