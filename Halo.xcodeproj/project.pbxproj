@@ -120,6 +120,8 @@
 		000000000000000000008078 /* HealthTrendCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008077 /* HealthTrendCard.swift */; };
 		000000000000000000008104 /* AppUsageTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008103 /* AppUsageTracker.swift */; };
 		000000000000000000008106 /* AppUsageInsightsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008105 /* AppUsageInsightsSection.swift */; };
+		000000000000000000008134 /* FocusSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008133 /* FocusSessionManager.swift */; };
+		000000000000000000008136 /* FocusSessionOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008135 /* FocusSessionOverlayView.swift */; };
 		000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009001 /* GetHealthScoreIntent.swift */; };
 		000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009003 /* GetCPUUsageIntent.swift */; };
 		000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009005 /* GetBatteryHealthIntent.swift */; };
@@ -366,6 +368,8 @@
 		000000000000000000008077 /* HealthTrendCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/HealthTrendCard.swift; sourceTree = "<group>"; };
 		000000000000000000008103 /* AppUsageTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AppUsageTracker.swift; sourceTree = "<group>"; };
 		000000000000000000008105 /* AppUsageInsightsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/AppUsageInsightsSection.swift; sourceTree = "<group>"; };
+		000000000000000000008133 /* FocusSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/FocusSessionManager.swift; sourceTree = "<group>"; };
+		000000000000000000008135 /* FocusSessionOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/FocusSessionOverlayView.swift; sourceTree = "<group>"; };
 		000000000000000000009001 /* GetHealthScoreIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetHealthScoreIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009003 /* GetCPUUsageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetCPUUsageIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009005 /* GetBatteryHealthIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetBatteryHealthIntent.swift; sourceTree = "<group>"; };
@@ -551,6 +555,8 @@
 				000000000000000000008115 /* MemoryTrendsSection.swift */,
 				000000000000000000008021 /* IdleAppsSection.swift */,
 				000000000000000000008029 /* ActionShareManager.swift */,
+				000000000000000000008133 /* FocusSessionManager.swift */,
+				000000000000000000008135 /* FocusSessionOverlayView.swift */,
 				000000000000000000008013 /* CodeBeautifierView.swift */,
 				000000000000000000008015 /* CodeTheme.swift */,
 				000000000000000000008017 /* SyntaxHighlighter.swift */,
@@ -1005,6 +1011,8 @@
 				000000000000000000008114 /* MemoryTrendTracker.swift in Sources */,
 				000000000000000000008104 /* AppUsageTracker.swift in Sources */,
 				000000000000000000008106 /* AppUsageInsightsSection.swift in Sources */,
+				000000000000000000008134 /* FocusSessionManager.swift in Sources */,
+				000000000000000000008136 /* FocusSessionOverlayView.swift in Sources */,
 				000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */,
 				000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */,
 				000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */,

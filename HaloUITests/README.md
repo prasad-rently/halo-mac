@@ -103,6 +103,7 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 | `dashboard.backupHealth.card` · `.setup.button` · `.backupNow.button` · `.heatmap` | Dashboard → Backup Health / Time Machine (F-022) |
 | `dashboard.appUsageInsights` · `.disabledState` · `.collectingState` · `.chart` · `.backgroundHogs.list` | Dashboard → App Usage Insights (F-021) |
 | `settings.appUsageTracking.toggle` · `.clearHistory.button` | Settings → General → Privacy (F-021) |
+| `dashboard.focusSession.start` · `.end` · `dashboard.focusHistory` | Dashboard → Focus Session (F-028) |
 | `cleanup.cleanAll.button` · `fileListView` | Cleanup |
 | `protection.scan.button` | Protection |
 | `performance.idleApp.quit.button` | Performance → Idle Apps |

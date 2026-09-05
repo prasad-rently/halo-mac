@@ -132,5 +132,39 @@ final class DashboardUITests: HaloUITestCase {
         }
         XCTAssertFalse(element(id: "dashboard.appUsageInsights.chart").exists,
                        "The Top Apps chart must not render while tracking is off")
+                   }
+
+    // MARK: - Focus Session (F-028) — TC-DASH-09…19
+    //
+    // Starting a real session hides other running apps and starts real
+    // timers/notifications, so every test here stays at (or cancels out of)
+    // the confirmation gate — never actually starting a session.
+
+    // TC-DASH-09/10 — starting a focus session (which hides other apps) must
+    // confirm first; cancelling starts nothing.
+    func test_focusSession_start_requires_confirmation_and_cancel_starts_nothing() {
+        HaloSidebar(test: self).navigate(to: .dashboard)
+        guard tapID("dashboard.focusSession.start", timeout: 10) else {
+            XCTFail("Expected a 'Start Focus Session' button on the Dashboard")
+            return
+        }
+        XCTAssertTrue(confirmationSurfaceAppeared(),
+                      "Starting a focus session hides other apps — it must confirm first (TC-SAFE-02)")
+        cancelConfirmation()
+        XCTAssertTrue(element(id: "dashboard.focusSession.start").waitForExistence(timeout: 5),
+                      "Card should remain in idle state after cancelling — no session started")
+        XCTAssertFalse(element(id: "dashboard.focusSession.end").exists,
+                       "No session should be active after cancelling the start confirmation")
+    }
+
+    // TC-DASH-17 — the Focus History section only renders once at least one
+    // session has completed (it reads AlertLog filtered to kindRaw == "focus").
+    func test_focusHistory_section_renders_when_history_exists() throws {
+        HaloSidebar(test: self).navigate(to: .dashboard)
+        guard waitForID("dashboard.focusHistory", timeout: 5) != nil else {
+            throw XCTSkip("No completed Focus Sessions are recorded on this test machine yet — " +
+                          "the Focus History section is conditionally hidden when there's no history.")
+        }
+        XCTAssertTrue(element(id: "dashboard.focusHistory").exists)
     }
 }

@@ -73,6 +73,16 @@ struct HaloApp: App {
                     WeeklyDigestScheduler.shared.start(appState: appState)
                     // F-021: resume app-usage tracking if the user has opted in
                     AppUsageTracker.shared.startIfEnabled()
+                    // F-028: get hidden apps back on a clean quit. The persisted
+                    // session covers crashes and force-quits; this covers ⌘Q,
+                    // which is the common case and shouldn't wait for a relaunch.
+                    FocusSessionManager.shared.observeAppTermination()
+                    // F-028: resume a session a crash interrupted. Deliberately
+                    // here and not in the manager's `init` — starting a session
+                    // builds the overlay, and doing that from inside the
+                    // singleton's own initializer deadlocked the launch on a
+                    // reentrant `swift_once`. See `recoverInterruptedSession()`.
+                    FocusSessionManager.shared.resumeInterruptedSession()
                 }
                 // F-041: handle halo:// deep links for action sharing
                 .onOpenURL { url in
