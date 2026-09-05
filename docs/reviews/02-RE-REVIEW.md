@@ -18,10 +18,10 @@ Four of the six areas §6 flagged hold up. Two do not, and both fail hard:
 | §6 item | Holds? |
 |---|---|
 | #21 `SecurityPostureStore.shared` — retain cycles, redundant refreshes | Yes, no cycle. Three Lows. |
-| #17 bounded `withTaskGroup` for reverse DNS | **No — Critical + High.** Critical fixed, see below. |
+| #17 bounded `withTaskGroup` for reverse DNS | **No — Critical + High.** Both fixed, see below. |
 | #13 chained `asyncAfter` in `restart()` | Yes. Cannot double-fire or outlive. One Low. |
 | #14 init-time session recovery | **No — Critical.** Fixed, see below. |
-| #19 `UnsafeMutablePointer` lifetime | Yes, correct. (Separate High elsewhere in the same commit.) |
+| #19 `UnsafeMutablePointer` lifetime | Yes, correct. (Separate High elsewhere in the same commit — fixed, see below.) |
 | every added `nonisolated` (#10, #11, #13, #16) | Yes, all clean. |
 
 Both Criticals are **new defects introduced by the fix commits** — neither existed on the
@@ -36,8 +36,8 @@ the tests those commits added.
 |---|----|-----------|-------|------|
 | R1 | #17 | `NetworkTrafficMonitor.swift:144` | Infinite loop in the new bounded-concurrency scheduler | **Critical** · **fixed** `5562c5c` |
 | R2 | #14 | `FocusSessionManager.swift:88` | Session recovery deadlocks the app at launch | **Critical** · **fixed** `66bbe4e` |
-| R3 | #19 | `PerceptualDuplicateDetector.swift:517` | PhotoKit timeout does not bound anything | High |
-| R4 | #17 | `NetworkTrafficMonitor.swift:84` | Reverse-DNS timeout does not bound anything (same root cause as R3) | High |
+| R3 | #19 | `PerceptualDuplicateDetector.swift:517` | PhotoKit timeout does not bound anything | High · **fixed** `061eed4` |
+| R4 | #17 | `NetworkTrafficMonitor.swift:84` | Reverse-DNS timeout does not bound anything (same root cause as R3) | High · **fixed** `3691a24` |
 | R5 | #15 | `BrowserCleanerScanner.swift:105` | "Freed N bytes" over-reported by up to `paths.count`× | Medium |
 | R6 | — | `phase0/shared-singletons` | Silently breaks #13 and #14 compilation on merge (no git conflict) | Medium |
 | R7 | #21 | `ProtectionView.swift:51` | `ProtectionViewModel` reads the shared store without observing it | Low |
@@ -386,12 +386,14 @@ Recorded so a later pass does not redo them.
 
 ## Fixes applied
 
-R1 and R2 are fixed. R3–R10 are reported only.
+Both Criticals and both Highs are fixed. R5–R10 are reported only.
 
 | | Branch | Commit |
 |---|---|---|
-| R1 | `feat/f017-network-traffic-monitor` | `5562c5c` — one commit on `b638b9d` |
-| R2 | `feat/f028-focus-session` | `66bbe4e` — one commit on `d5aaec5` |
+| R1 | `feat/f017-network-traffic-monitor` | `5562c5c` — on `b638b9d` |
+| R4 | `feat/f017-network-traffic-monitor` | `3691a24` — on `5562c5c` |
+| R2 | `feat/f028-focus-session` | `66bbe4e` — on `d5aaec5` |
+| R3 | `feat/f025-duplicate-photos` | `061eed4` — on `5524fe6` |
 
 **R1.** The scheduling is extracted from `snapshot()` into
 `mapConcurrently(_:limit:work:)`, where `index` is the sole invariant — no second
@@ -422,8 +424,27 @@ the singleton is built once per process — so it is prevented structurally and 
 against the same model of the chain used to demonstrate it, which deadlocks before the change
 and completes after. `feat/f028` now runs 68 tests in 19 suites, up from 64 in 18.
 
-**Still open from this review:** R3 and R4 (High, one shared root cause), R5, R6, and the
-four Lows.
+**R3 and R4** share one root cause and got one shape. Both replaced the sleeper-sibling race
+with a single continuation resumed by whichever of the callback or the deadline arrives first,
+through a one-shot gate. The abandoned work still runs — nothing can interrupt a thread inside
+`getnameinfo`, and nothing can retract a PhotoKit request — but the *caller* is released on the
+deadline, which is what the ceiling was supposed to buy. On #17 the blocking core is now a
+plainly-labelled `reverseDNSLookup(ip:)`, and `resolveHost(ip:)`, which still reached the
+unbounded path, routes through the bounded one.
+
+The tests for both assert on **elapsed time**, not the returned value. That distinction is the
+whole point: both shapes return `nil`, so a value-only test passes against the broken one.
+Confirmed the new assertion discriminates — old shape 3.01 s (fails), new shape 0.32 s (passes).
+#17 goes to 85 tests in 18 suites; #19 to 64 in 16.
+
+The helper is **duplicated** across the two branches rather than shared. A shared version would
+need a new file and a pbxproj entry on both, coupling two PRs that currently merge
+independently — the exact contention `00-MERGE-ORDER.md` is built to avoid, and R6 already
+shows what a Phase 0 dependency costs. Both copies carry a comment pointing at the other and
+saying to lift it into one place once they have landed; it is a natural P0.2-style extraction
+alongside `ShellReader`.
+
+**Still open from this review:** R5, R6, and the four Lows.
 
 ## Recommendation
 
@@ -513,3 +534,25 @@ Deltas against the first sweep — everything else is unchanged:
 
 No branch regressed, and neither fix touches a file another branch depends on, so the merge
 order in `00-MERGE-ORDER.md` is unaffected.
+
+
+---
+
+## Re-verification after the R3/R4 fixes
+
+Third sweep, same procedure. `feat/f017-network-traffic-monitor`,
+`feat/f025-duplicate-photos` and `feat/f028-focus-session` from the local branches carrying
+the fix commits; the other fourteen from their unchanged `origin/` heads.
+
+**17/17 `BUILD SUCCEEDED`, 17/17 `TEST SUCCEEDED`, zero failures.**
+
+Cumulative deltas against the original sweep:
+
+| Branch | Original | Now |
+|---|---|---|
+| `feat/f017-network-traffic-monitor` | 75 tests in 16 suites | **85 in 18** (R1 + R4) |
+| `feat/f025-duplicate-photos` | 59 tests in 15 suites | **64 in 16** (R3) |
+| `feat/f028-focus-session` | 64 tests in 18 suites | **68 in 19** (R2) |
+
+No other branch moved. The new timing suites were each run four times in isolation to check
+for flakiness — stable at 0.81–0.86 s.
