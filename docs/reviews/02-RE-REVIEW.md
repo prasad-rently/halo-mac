@@ -18,9 +18,9 @@ Four of the six areas §6 flagged hold up. Two do not, and both fail hard:
 | §6 item | Holds? |
 |---|---|
 | #21 `SecurityPostureStore.shared` — retain cycles, redundant refreshes | Yes, no cycle. Three Lows. |
-| #17 bounded `withTaskGroup` for reverse DNS | **No — Critical + High** |
+| #17 bounded `withTaskGroup` for reverse DNS | **No — Critical + High.** Critical fixed, see below. |
 | #13 chained `asyncAfter` in `restart()` | Yes. Cannot double-fire or outlive. One Low. |
-| #14 init-time session recovery | **No — Critical** |
+| #14 init-time session recovery | **No — Critical.** Fixed, see below. |
 | #19 `UnsafeMutablePointer` lifetime | Yes, correct. (Separate High elsewhere in the same commit.) |
 | every added `nonisolated` (#10, #11, #13, #16) | Yes, all clean. |
 
@@ -34,8 +34,8 @@ the tests those commits added.
 
 | # | PR | File:Line | Issue | Risk |
 |---|----|-----------|-------|------|
-| R1 | #17 | `NetworkTrafficMonitor.swift:144` | Infinite loop in the new bounded-concurrency scheduler | **Critical** |
-| R2 | #14 | `FocusSessionManager.swift:88` | Session recovery deadlocks the app at launch | **Critical** |
+| R1 | #17 | `NetworkTrafficMonitor.swift:144` | Infinite loop in the new bounded-concurrency scheduler | **Critical** · **fixed** `5562c5c` |
+| R2 | #14 | `FocusSessionManager.swift:88` | Session recovery deadlocks the app at launch | **Critical** · **fixed** `66bbe4e` |
 | R3 | #19 | `PerceptualDuplicateDetector.swift:517` | PhotoKit timeout does not bound anything | High |
 | R4 | #17 | `NetworkTrafficMonitor.swift:84` | Reverse-DNS timeout does not bound anything (same root cause as R3) | High |
 | R5 | #15 | `BrowserCleanerScanner.swift:105` | "Freed N bytes" over-reported by up to `paths.count`× | Medium |
@@ -384,6 +384,47 @@ Recorded so a later pass does not redo them.
   thread-pool-starvation trap the header documents. No branch adopts it yet — each fixed its
   own call site locally — which is consistent with the plan.
 
+## Fixes applied
+
+R1 and R2 are fixed. R3–R10 are reported only.
+
+| | Branch | Commit |
+|---|---|---|
+| R1 | `feat/f017-network-traffic-monitor` | `5562c5c` — one commit on `b638b9d` |
+| R2 | `feat/f028-focus-session` | `66bbe4e` — one commit on `d5aaec5` |
+
+**R1.** The scheduling is extracted from `snapshot()` into
+`mapConcurrently(_:limit:work:)`, where `index` is the sole invariant — no second
+counter to fall out of step with it, and every loop bounded by `inputs.count`. Tested at
+0, 1, 2, 3, 7, 8, 9 and 20 inputs against a cap of 8, plus a concurrency-cap assertion and
+a nil-value case. The old code passed a 20-input fixture and hung on every count at or
+below the cap, which is exactly why nothing caught it. `feat/f017` now runs 80 tests in 17
+suites, up from 75 in 16.
+
+Note these new tests are hang-detectors rather than assertion failures: a regression stalls
+the suite instead of reddening it. Same shape as the `FileSystemScannerTests` problem — a
+per-suite timeout in P0.1's CI workflow would convert both into ordinary failures.
+
+**R2.** Fixed at both ends so the cycle cannot re-form through either half:
+
+- `recoverInterruptedSession()` only unhides (safe — `NSWorkspace` only) and parks the
+  session in `pendingResume`. `HaloApp` calls the new `resumeInterruptedSession()` after
+  launch, beside the existing `observeAppTermination()`, and it re-checks the deadline
+  because time passes between recovery and resume.
+- `FocusSessionOverlayView` is handed the manager instead of reading `.shared`. No
+  `= .shared` default argument — that is evaluated at the call site and would reintroduce
+  the same reentrancy.
+
+The resume decision is now pure (`isResumable`, `resumeMinutes`) and tested: the exclusive
+60-second boundary, round-up to whole minutes, and a session that ages out between recovery
+and resume. The deadlock itself is not unit-testable — a test reproducing it would hang, and
+the singleton is built once per process — so it is prevented structurally and verified
+against the same model of the chain used to demonstrate it, which deadlocks before the change
+and completes after. `feat/f028` now runs 68 tests in 19 suites, up from 64 in 18.
+
+**Still open from this review:** R3 and R4 (High, one shared root cause), R5, R6, and the
+four Lows.
+
 ## Recommendation
 
 R1 and R2 must be fixed before #17 and #14 merge; both are launch/usage hangs shipped by the
@@ -451,3 +492,24 @@ covered by any of it:
 
 `Package.resolved` again resolved Sentry **8.58.4** against the tree's 8.58.3, reproducing the
 drift the handoff recorded in §2.
+
+
+---
+
+## Re-verification after the R1/R2 fixes
+
+Same procedure, fresh worktree and fresh `derivedDataPath`. `feat/f017-network-traffic-monitor`
+and `feat/f028-focus-session` were taken from the local branches carrying the fix commits;
+the other fifteen from their unchanged `origin/` heads.
+
+**17/17 `BUILD SUCCEEDED`, 17/17 `TEST SUCCEEDED`, zero failures.**
+
+Deltas against the first sweep — everything else is unchanged:
+
+| Branch | Before | After |
+|---|---|---|
+| `feat/f017-network-traffic-monitor` | 75 tests in 16 suites | **80 in 17** |
+| `feat/f028-focus-session` | 64 tests in 18 suites | **68 in 19** |
+
+No branch regressed, and neither fix touches a file another branch depends on, so the merge
+order in `00-MERGE-ORDER.md` is unaffected.
