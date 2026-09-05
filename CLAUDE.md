@@ -55,7 +55,8 @@ Halo/
 │   │       ├── ProtectionScanner.swift   async; uses SignatureDatabase for threat detection
 │   │       ├── LoginItemScanner.swift    actor; enumerates LaunchAgent/Daemon plists
 │   │       ├── AppScanner.swift          actor; enumerates apps + leftover detection
-│   │       └── DriveSpeedTester.swift     actor; internal/external drive read+write benchmark (F-043)
+│   │       ├── DriveSpeedTester.swift     actor; internal/external drive read+write benchmark (F-043)
+│   │       └── SMARTDiskMonitor.swift     actor; diskutil-backed S.M.A.R.T./NVMe health reader (F-020)
 │   ├── DesignSystem/DesignSystem.swift   colours, components, typography
 │   ├── Intents/
 │   │   ├── GetHealthScoreIntent.swift
@@ -75,6 +76,7 @@ Halo/
 │   │   ├── Applications/ApplicationsView.swift AppScanner + deep uninstall
 │   │   ├── Files/FilesView.swift              SpaceLens + Duplicates + LargeFiles + Downloads + Drive Speed tabs
 │   │   ├── Files/DriveSpeedView.swift          drive read/write benchmark screen (F-043)
+│   │   ├── Files/DriveHealthSection.swift      S.M.A.R.T. drive health card, shown in Drive Speed tab (F-020)
 │   │   ├── Clipboard/
 │   │   │   ├── ClipboardView.swift
 │   │   │   ├── ClipboardMonitor.swift
@@ -396,6 +398,22 @@ codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
 
 ---
 
+## SMARTDiskMonitor (F-020)
+
+`Halo/Core/Scanner/SMARTDiskMonitor.swift` + `Halo/Features/Files/DriveHealthSection.swift`
+
+- `actor SMARTDiskMonitor` — read-only S.M.A.R.T./NVMe health reader. Surfaced as a **"Drive Health"** card in the Files → **Drive Speed** tab, below the volume picker (same tab as F-043, not Dashboard/Performance).
+- **Primary data path is `diskutil info -plist <path>` (a `Process` shell-out), NOT raw IOKit.** On Apple Silicon, `IOServiceMatching("IOBlockStorageDriver")` only exposes aggregate I/O `Statistics` (no SMART data), and `IONVMeBlockDevice`/`IOAHCIBlockDevice` (what the existing P3-07 `DiskHealthMonitor` in Cleanup matches against) don't resolve to any service at all — confirmed by hand with a standalone IOKit probe, this is why P3-07's panel always shows "N/A" here.
+- `IOServiceMatching("IONVMeController")` **does** work on Apple Silicon and is used only to recover the serial number (diskutil never reports one) — matched by "Model Number" against the model diskutil already gave us.
+- **Gotcha — `MediaName` is empty when queried by mount path.** `diskutil info -plist /` (or any volume mount path) returns SMART data fine but an **empty string** for `MediaName`; it's only populated when diskutil is queried by the physical whole-disk BSD id (e.g. `disk0`). `scan(path:id:)` computes `bsdWholeDiskID` anyway (for display) and now falls back to a second diskutil query against it whenever the first `MediaName` is empty — without this, `model` (and therefore the IOKit serial lookup, which matches by model) would always be `nil`.
+- **NVMe vs ATA:** reallocated/pending sector counts (ATA SMART attrs 5/197) are permanently `nil` — not a failed read, NVMe's Health Info Log has no equivalent concept. `AVAILABLE_SPARE`/`AVAILABLE_SPARE_THRESHOLD` and `MEDIA_ERRORS` are the NVMe analogs, surfaced instead. No manufacturer TBW-rating lookup table — NVMe's own `PERCENTAGE_USED` wear indicator is used directly for the lifespan-remaining bar (`100 - percentageUsed`).
+- Every field diskutil/IOKit doesn't report renders **"Not available on this drive"** in the UI — never a zeroed or guessed value.
+- `SMARTTemperatureHistory` — `@MainActor` singleton, rolling 24h sample store (max 288 samples @ 5-min cadence), persisted to `UserDefaults["haloSMARTTemperatureHistory"]`. Internal boot drive only — external drives aren't guaranteed to stay connected.
+- `AppState.startSMARTMonitoring()` — one check at launch + a 300s timer against the boot volume (`path: "/"`); feeds `SMARTTemperatureHistory.record(celsius:)` and `AlertManager.evaluateSMART(model:healthLevel:)`. `diskutil info` is cheap but there's no reason to run it on the 2s metrics loop.
+- `AlertManager.evaluateSMART` — fires `.diskSmartFailing` (1h cooldown) or `.diskSmartWarning` (24h cooldown); `.good`/`.unknown` never fire (an unreadable status isn't evidence of a problem).
+
+---
+
 ## MenuBar Display Styles
 
 `Halo/Features/MenuBar/MenuBarView.swift`
@@ -484,7 +502,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | Applications | ✅ | ApplicationsViewModel | AppScanner | — |
 | Files (SpaceLens) | ✅ | SpaceLensViewModel | — | — |
 | Files (Duplicates) | ✅ | DuplicateFinderViewModel | DuplicateDetector | ✅ |
-| Files (Drive Speed) | ✅ | DriveSpeedViewModel | DriveSpeedTester | ✅ |
+| Files (Drive Speed) | ✅ | DriveSpeedViewModel | DriveSpeedTester + SMARTDiskMonitor (F-020) | ✅ |
 | Clipboard | ✅ | ClipboardViewModel | ClipboardMonitor | ✅ |
 | Actions | ✅ | ActionsViewModel | ActionRunner + ActionLibrary | — |
 | Ports | ✅ | PortManagerViewModel | PortScanner | — |
@@ -543,6 +561,8 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `8025` / `8026` | SnippetEditorView.swift file ref / sources build file |
 | `8027` / `8028` | SnippetListSection.swift file ref / sources build file |
 | `8029` / `8030` | ActionShareManager.swift file ref / sources build file |
+| `8043` / `8044` | SMARTDiskMonitor.swift file ref / sources build file |
+| `8045` / `8046` | DriveHealthSection.swift file ref / sources build file |
 | `8163` / `8164` | ShellReader.swift file ref / sources build file |
 | `9001` / `9002` | GetHealthScoreIntent.swift file ref / sources build file |
 | `9003` / `9004` | GetCPUUsageIntent.swift file ref / sources build file |
@@ -699,14 +719,19 @@ ancestor, so real collisions still print.
 17. **VPN detection** — use two-rule strategy: (1) definitive protocol prefixes (`ppp`, `ipsec`, `tap`), then (2) `utun` with active IPv4 AND `path.usesInterfaceType(.other)`. iCloud Private Relay uses `utun` but `.cellular`/`.wifi` path type, so rule 2 correctly excludes it.
 18. **Battery health label** — factor cycle count FIRST, then capacity ratio. Cycles < 100 → "Excellent"; < 300 → "Good"; only fall back to capacity ratio for older batteries with known cycles.
 19. **Drive speed benchmark accuracy** — the scratch fd MUST set `fcntl(fd, F_NOCACHE, 1)` (else reads measure RAM) and `fcntl(fd, F_FULLFSYNC)` after writes (else writes measure the SSD's DRAM cache). Write buffer must be random (`arc4random_buf`), not zeros — zeros let compressing controllers report fake speeds. The scratch file is `unlink`-ed (not trashed) — the only sanctioned exception to the trashItem rule, because it's Halo's own temp data that must vanish immediately.
+20. **`diskutil info -plist` by mount path returns an empty `MediaName`** — only populated when queried by the physical whole-disk BSD id (e.g. `disk0`). `SMARTDiskMonitor.scan(path:id:)` must fall back to a second `diskutil` query against the resolved whole-disk id whenever the first `MediaName` is empty, or `model` (and the IOKit serial-number lookup, which matches by model) silently comes back `nil` for every scan.
+21. **NVMe vs ATA SMART fields** — `IOBlockStorageDriver`/`IONVMeBlockDevice`/`IOAHCIBlockDevice` do not expose SMART data on Apple Silicon (confirmed via IOKit probe); only `diskutil info -plist` and `IONVMeController` (for serial number only) do. Reallocated/pending sector counts (ATA attrs 5/197) don't exist for NVMe — always `nil`, never fake a value.
+22. **`AVAILABLE_SPARE_THRESHOLD` is 99 on Apple Silicon — never compare against it literally.** Verified on this Mac: `diskutil info -plist /` reports `AVAILABLE_SPARE = 100` with `AVAILABLE_SPARE_THRESHOLD = 99`, nothing like the ~10% the NVMe spec's own examples use. A literal `spare <= threshold` check therefore declares a perfectly healthy drive **Failing** the first time spare ticks 100 → 99 on normal wear, which then fires `.diskSmartFailing` ("back up your data immediately") every hour indefinitely. `SMARTDiskInfo.classify` guards this two ways: it ignores any threshold above `maxCredibleSpareThreshold` (50) and uses the spec's strict `<` rather than `<=`, with a threshold-independent `criticalSparePercent` (10) backstop for genuinely low spare. Regression-tested in `HaloTests`.
+23. **`SMARTStatus = "Not Supported"` is the healthy state for USB/Thunderbolt enclosures, not a warning.** Verified on this Mac: an external USB SSD reports `"Not Supported"` and publishes no SMART dictionary at all, because bridge chipsets don't pass the health log through. Mapping an unrecognised status to `.warning` puts an amber badge on a perfectly good drive — `.other` must classify as `.unknown` ("can't tell"), the same discipline F-019's security checks use for values Halo cannot verify. The status check must also sit *after* the wear/spare/error checks so it can't mask a signal that was successfully read.
+24. **Card badge vs system notification are different bars.** `SMARTDiskInfo.healthLevel` drives the Drive Health card (a surface the user chose to open, so it can surface anything notable); `SMARTDiskInfo.alertLevel` is what `AlertManager.evaluateSMART` acts on and is deliberately stricter. A non-zero `MEDIA_ERRORS` count colours the badge but does **not** notify — one unrecovered read over a drive's lifetime isn't evidence of failure, and with `.diskSmartWarning`'s 24 h cooldown it would otherwise nag daily forever with no action the user can take. Pass `alertLevel`, never `healthLevel`, to `evaluateSMART`.
 
-20. **Never hand-roll a `Process`. Use `ShellReader`.** `Halo/Core/ShellReader.swift` is the only place in the app that should spawn a subprocess, because three separate traps have to be handled together and each one was live in shipped code before it was extracted:
+25. **Never hand-roll a `Process`. Use `ShellReader`.** `Halo/Core/ShellReader.swift` is the only place in the app that should spawn a subprocess, because three separate traps have to be handled together and each one was live in shipped code before it was extracted:
     - **Pipe deadlock.** `waitUntilExit()` *before* `readDataToEndOfFile()` hangs forever once the child writes past the 64 KB pipe buffer — the child blocks in `write(2)`, the parent is parked in `waitUntilExit()`, and `Task.cancel()` cannot interrupt a thread blocked there. Measured: `lsof -i -n -P` is ~10 KB across 87 connections, so ~550 connections reaches the limit — a loaded machine, not a typical one, but unrecoverable when it happens. Reading before waiting fixes stdout only; an undrained stderr (`process.standardError = Pipe()` that nothing reads) deadlocks identically.
     - **No timeout.** The hazard that survives fixing the pipe order. `waitUntilExit()` takes no deadline, so `lsof` on a dead NFS mount or `diskutil` on a failing drive blocks the caller forever. Every `ShellReader` call is bounded and escalates SIGTERM → SIGKILL.
     - **Thread-pool starvation.** The natural fix — one blocking read dispatched per pipe onto `DispatchQueue.global()`, joined with a `DispatchGroup` — *also* deadlocks, and this one is subtle: each call parks two pool threads on a blocking read while a third waits on them, so once enough calls overlap the pool has no thread left to run a drain block and `leave()` is never reached. Halo genuinely has several in flight at once (AppState's SMART timer, `SystemControlsManager`'s poll loop, an AI tool call), and a parallel test run reproduced it in seconds. `ShellReader` therefore multiplexes both descriptors with `poll(2)` **on the calling thread** — no worker threads, nothing to starve. Do not "tidy" this back into a worker-per-pipe design; `HaloTests`' ShellReader suite has explicit regression tests for all three traps.
 
     Also: `ShellReader` is synchronous and blocking by design (callers are already inside an `actor` or a detached `Task`) — **never call it from the main actor**. It reports a denied `posix_spawn` as `launchFailure`, which is how every call behaves under the release App Sandbox, so callers can distinguish "we were not allowed to ask" from "the tool found nothing". The one sanctioned exception is `ActionRunner`'s live-output path, which needs `readabilityHandler` streaming to relay stdout line-by-line to the UI and so cannot use a batch reader.
-21. **Timing out callback work** — never race a `Task.sleep` sibling inside a
+26. **Timing out callback work** — never race a `Task.sleep` sibling inside a
    `withTaskGroup` and take `group.next()`. It bounds the returned *value* but not
    the *time*: `withTaskGroup` joins every child before returning, and
    `group.cancelAll()` cannot interrupt a `withCheckedContinuation` around a

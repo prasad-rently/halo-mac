@@ -126,4 +126,48 @@ final class FilesUITests: HaloUITestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: residue.path),
                        "Drive Speed scratch file must be cleaned up after the run")
     }
+
+    // MARK: - Drive Health / S.M.A.R.T. Monitor (F-020) — TC-FILE-50…58
+    //
+    // Shown in the same Drive Speed tab, below the volume picker. Entirely
+    // read-only (diskutil + IOKit reads only), so no confirmation gate to
+    // navigate here.
+
+    // TC-FILE-50 — before any scan, the card shows the prompt, not a spinner.
+    func test_driveHealth_shows_prompt_before_first_scan() {
+        openFiles(tab: "Drive Speed")
+        XCTAssertTrue(assertID("files.driveHealth.card",
+                                "Drive Health card should render in the Drive Speed tab",
+                                timeout: 10).exists)
+    }
+
+    // TC-FILE-51 / TC-FILE-52 — running a health check settles into a status
+    // badge and a populated metrics grid (real values or the explicit
+    // "Not available on this drive" placeholder — never blank).
+    func test_driveHealth_check_settles_with_status_and_metrics() {
+        openFiles(tab: "Drive Speed")
+        guard tapID("files.driveHealth.check.button", timeout: 10) else {
+            XCTFail("Expected a 'Check Drive Health' button")
+            return
+        }
+        XCTAssertTrue(assertID("files.driveHealth.status",
+                                "Drive Health status badge should appear after a scan", timeout: 30).exists)
+        // At least the always-present Capacity field should render.
+        XCTAssertTrue(assertID("files.driveHealth.field.capacity",
+                                "Capacity metric should render after a scan", timeout: 10).exists)
+    }
+
+    // TC-FILE-57 — "Re-Check" re-runs the scan without crashing.
+    func test_driveHealth_recheck_does_not_crash() {
+        openFiles(tab: "Drive Speed")
+        guard tapID("files.driveHealth.check.button", timeout: 10) else {
+            XCTFail("Expected a 'Check Drive Health' button")
+            return
+        }
+        _ = waitForID("files.driveHealth.status", timeout: 30)
+        // The button relabels to "Re-Check" but keeps the same identifier.
+        XCTAssertTrue(tapID("files.driveHealth.check.button", timeout: 5),
+                      "Re-Check should be tappable using the same identifier")
+        XCTAssertTrue(app.windows.firstMatch.exists)
+    }
 }

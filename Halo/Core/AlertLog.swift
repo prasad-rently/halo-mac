@@ -28,6 +28,16 @@ struct AlertEntry: Identifiable, Codable {
         case "battery_low":       return "battery.25"
         case "battery_critical":  return "battery.0"
         case "charging_done":     return "bolt.fill"
+        // Severity-shaped rather than drive-shaped, deliberately. The obvious
+        // pick is `internaldrive.badge.exclamationmark` / `.badge.xmark` — but
+        // neither exists in SF Symbols, and an unresolvable name renders as a
+        // blank, not an error. The disk-shaped alternatives that do exist are
+        // all `externaldrive.*`, and F-020 monitors internal drives too: an
+        // "external drive" glyph on a failing internal SSD is a misleading
+        // signal on precisely the alert a user must not misread. The drive is
+        // named in the alert title.
+        case "disk_smart_warning": return "exclamationmark.triangle.fill"   // F-020
+        case "disk_smart_failing": return "xmark.octagon.fill"              // F-020
         default:                  return "bell.fill"
         }
     }
@@ -38,6 +48,8 @@ struct AlertEntry: Identifiable, Codable {
         case "disk_low", "battery_low":      return .haloAmber
         case "battery_critical":             return .haloRed
         case "charging_done":                return .haloGreen
+        case "disk_smart_warning":           return .haloAmber   // F-020
+        case "disk_smart_failing":           return .haloRed     // F-020
         default:                             return .haloAccent
         }
     }

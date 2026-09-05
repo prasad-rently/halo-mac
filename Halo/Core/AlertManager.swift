@@ -35,6 +35,8 @@ final class AlertManager {
         case batteryLow     = "battery_low"
         case batteryCritical = "battery_critical"
         case chargingDone   = "charging_done"
+        case diskSmartWarning = "disk_smart_warning"
+        case diskSmartFailing = "disk_smart_failing"
     }
 
     // MARK: - State
@@ -126,6 +128,38 @@ final class AlertManager {
                  title: "Battery Low — \(percent)%",
                  body: "Connect your charger soon.",
                  cooldown: 1800)
+        }
+    }
+
+    // MARK: - S.M.A.R.T. disk health (F-020)
+
+    /// Called from AppState's 5-minute SMART poll (not the 2 s metrics loop —
+    /// `diskutil info` is cheap but there's no reason to shell out that often).
+    /// Only ever fires for health levels Halo actually verified; `.unknown`
+    /// (SMART data unreadable) never fires an alert — an unreadable status
+    /// isn't evidence of a problem.
+    ///
+    /// Callers should pass `SMARTDiskInfo.alertLevel`, not `healthLevel` — the
+    /// former is deliberately stricter, so a condition that merely colours the
+    /// Drive Health card doesn't also push a banner at the user.
+    ///
+    /// `model` is nil when diskutil reported no MediaName; the title then omits
+    /// the dash rather than reading "Drive Health Critical — your internal drive".
+    func evaluateSMART(model: String?, healthLevel: SMARTDiskMonitor.DriveHealthLevel) {
+        let suffix = model.map { " — \($0)" } ?? ""
+        switch healthLevel {
+        case .failing:
+            fire(.diskSmartFailing,
+                 title: "Drive Health Critical\(suffix)",
+                 body: "S.M.A.R.T. reports a failing condition on your drive. Back up your data immediately.",
+                 cooldown: 3600)
+        case .warning:
+            fire(.diskSmartWarning,
+                 title: "Drive Health Warning\(suffix)",
+                 body: "S.M.A.R.T. attributes show early signs of wear. Consider backing up important files soon.",
+                 cooldown: 86400)
+        case .good, .unknown:
+            break
         }
     }
 
