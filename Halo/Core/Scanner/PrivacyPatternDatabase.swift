@@ -63,7 +63,6 @@ actor PrivacyPatternDatabase {
 
     /// Remote endpoint for delta updates (responds with the same JSON schema). Never
     /// contacted during a scan — only via the explicit `checkForUpdate()` call.
-    private let updateURL = URL(string: "https://api.halo.mac/privacy-patterns/latest.json")!
 
     private var cacheURL: URL {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
@@ -92,18 +91,20 @@ actor PrivacyPatternDatabase {
 
     // MARK: - Delta Update (never called mid-scan)
 
-    func checkForUpdate() async {
-        do {
-            let (data, response) = try await URLSession.shared.data(from: updateURL)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
-            let file = try JSONDecoder().decode(PatternFile.self, from: data)
-            guard file.version > loadedVersion else { return }
-            persistToDisk(data: data)
-            applyFile(file)
-        } catch {
-            // Network unavailable / bad JSON — swallow and continue with what's loaded.
-        }
-    }
+    // `checkForUpdate()` was removed rather than fixed.
+    //
+    // It was dead code — nothing ever called it, and nothing read
+    // `lastUpdatedDate` either — but it was dead code with real teeth: it
+    // fetched from `https://api.halo.mac/...` (`.mac` is not a delegated TLD, so
+    // the host cannot resolve), accepted the response with no signature
+    // verification and no size limit, and compiled arbitrary downloaded strings
+    // into `NSRegularExpression` to run against every file on disk. A single
+    // catastrophically-backtracking pattern would hang every future scan.
+    //
+    // The pattern is inherited from SignatureDatabase, but replicating it here
+    // doubles the surface for no benefit while there is no endpoint. Restore it
+    // only alongside a signed endpoint, a response size cap, and a per-pattern
+    // match deadline.
 
     // MARK: - Query
 
@@ -127,8 +128,19 @@ actor PrivacyPatternDatabase {
             switch pattern.match {
             case .exact(let needle):
                 if text.contains(needle) {
+                    // Through `redact`, like the other two branches.
+                    //
+                    // This constructed the hit directly with the raw matched
+                    // text. Benign with today's patterns — the only `.exact`
+                    // entries are PEM headers, which are public markers — but
+                    // the "redact is the only path that produces a hit"
+                    // invariant was being enforced by the current contents of a
+                    // remotely-updatable JSON file rather than by code. One
+                    // `.exact` pattern for a card or token prefix, shipped
+                    // through an update with no app release, and raw matched
+                    // text flows into @Published UI state.
                     hits.append(PrivacyPatternHit(category: pattern.category, risk: pattern.risk,
-                                                   redactedPreview: needle))
+                                                   redactedPreview: Self.redact(needle, category: pattern.category)))
                 }
 
             case .regex(let regex):
@@ -189,7 +201,11 @@ actor PrivacyPatternDatabase {
     //
     // Never returns the full matched value. Only enough of it to help the user
     // recognize *which* secret this is (prefix and/or last 4 characters).
-    private static func redact(_ raw: String, category: PrivacyExposureCategory) -> String {
+    /// Internal rather than private so the "never returns the full matched
+    /// value" invariant can be tested directly. It is the security property
+    /// this whole type rests on, and it was previously only assertable by
+    /// reading the code.
+    static func redact(_ raw: String, category: PrivacyExposureCategory) -> String {
         switch category {
         case .creditCard:
             let last4 = String(raw.suffix(4))
@@ -209,9 +225,13 @@ actor PrivacyPatternDatabase {
             let last4 = String(raw.suffix(4))
             return "•••-••-\(last4)"
         case .sshPrivateKey:
-            // The PEM header itself is a public marker, not a secret — the key
-            // material that follows it is never read or matched against.
-            return raw
+            // A fixed marker, not `raw`. The PEM header genuinely is a public
+            // marker rather than a secret, so returning it was defensible — but
+            // this function is documented as "never returns the full matched
+            // value", and an unredacted `return raw` inside it is a trap for
+            // whoever adds the next category. Nothing downstream needs the
+            // literal header text.
+            return "PRIVATE KEY BLOCK"
         }
     }
 
@@ -230,12 +250,6 @@ actor PrivacyPatternDatabase {
         return try? JSONDecoder().decode(PatternFile.self, from: data)
     }
 
-    private func persistToDisk(data: Data) {
-        let dir = cacheURL.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try? data.write(to: cacheURL, options: .atomic)
-    }
-
     private func applyFile(_ file: PatternFile) {
         var newTable: [String: CompiledPattern] = [:]
         for entry in file.patterns {
@@ -244,9 +258,18 @@ actor PrivacyPatternDatabase {
                   let match = Self.compile(matchType: entry.matchType, value: entry.value) else { continue }
             newTable[entry.id] = CompiledPattern(category: category, risk: risk, match: match)
         }
-        for (k, v) in newTable { table[k] = v }
-        if file.version >= loadedVersion { updatedString = file.updated }
-        loadedVersion = max(loadedVersion, file.version)
+        // Replace, don't merge.
+        //
+        // Merging meant a pattern could be *fixed* by id but never *retracted*:
+        // ship a new JSON without it and the old compiled entry stayed live
+        // forever, so a pattern causing mass false positives could not be
+        // withdrawn. It also meant that after a cached update at v5, `load()`
+        // correctly skipped a bundled v3 — but any pattern existing only in the
+        // bundle was then silently absent with no way to get it back.
+        guard file.version >= loadedVersion else { return }
+        table = newTable
+        updatedString = file.updated
+        loadedVersion = file.version
     }
 
     private static func compile(matchType: String, value: String) -> CompiledMatch? {

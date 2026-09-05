@@ -22,7 +22,7 @@ actor PrivacyExposureScanner {
     enum ScanEvent: Sendable {
         case progress(filesScanned: Int, currentPath: String)
         case finding(PrivacyExposureFinding)
-        case completed(filesScanned: Int, findingsCount: Int)
+        case completed(filesScanned: Int, findingsCount: Int, truncated: Bool)
         case error(String)
     }
 
@@ -30,6 +30,16 @@ actor PrivacyExposureScanner {
 
     struct ScanConfig: Sendable {
         var maxDepth: Int = 8
+        /// Hard ceiling on files examined.
+        ///
+        /// `maxDepth` alone does not bound the work: `~/Documents` on a
+        /// developer machine routinely holds hundreds of thousands of files
+        /// within 8 levels, and every non-binary one under the size cap was read
+        /// into a String and matched against every pattern. Sibling F-025 caps
+        /// enumeration at 20,000 for the same reason. `.completed` reports
+        /// whether the cap was reached, so a truncated scan is never presented
+        /// as exhaustive.
+        var maxFiles: Int = 20_000
         /// Files larger than this are skipped outright — keeps scans fast and avoids
         /// loading huge files into memory.
         var maxFileSizeBytes: Int64 = 10 * 1024 * 1024
@@ -77,13 +87,28 @@ actor PrivacyExposureScanner {
 
     // MARK: - Main Scan Entry Point
 
+    /// `bufferingNewest` rather than the default `.unbounded`: one `.progress`
+    /// event is yielded per file examined, and against a slow consumer an
+    /// unbounded buffer accumulates every one of them in memory. Progress is
+    /// disposable by nature — the newest is the only one worth showing.
     func scan(locations: [URL], config: ScanConfig = ScanConfig()) -> AsyncStream<ScanEvent> {
-        AsyncStream { continuation in
-            Task {
+        AsyncStream(bufferingPolicy: .bufferingNewest(256)) { continuation in
+            let task = Task {
                 await self.patternDB.load()
+
+                // An empty table matches nothing, so every scan would report
+                // "No exposed sensitive data found" in green — a security
+                // feature reporting all-clear because it failed to load is the
+                // worst possible failure mode.
+                guard await self.patternDB.patternCount > 0 else {
+                    continuation.yield(.error("Halo couldn't load its privacy pattern database, so nothing was scanned."))
+                    continuation.finish()
+                    return
+                }
 
                 var filesScanned = 0
                 var findingsCount = 0
+                var hitFileCap = false
 
                 for root in locations {
                     guard !Task.isCancelled else { break }
@@ -98,13 +123,30 @@ actor PrivacyExposureScanner {
                         onFinding: { finding in
                             findingsCount += 1
                             continuation.yield(.finding(finding))
+                        },
+                        shouldStop: {
+                            guard filesScanned >= config.maxFiles else { return false }
+                            hitFileCap = true
+                            return true
                         }
                     )
+                    if hitFileCap { break }
                 }
 
-                continuation.yield(.completed(filesScanned: filesScanned, findingsCount: findingsCount))
+                continuation.yield(.completed(filesScanned: filesScanned,
+                                              findingsCount: findingsCount,
+                                              truncated: hitFileCap))
                 continuation.finish()
             }
+
+            // The producer above is an unstructured Task, so it is not a child
+            // of the consumer and the `Task.isCancelled` checks inside
+            // `traverse` were never true when the consumer cancelled.
+            // `cancelPrivacyScan()` reset the UI while the recursive walk over
+            // Downloads/Documents/Desktop carried on to completion, reading and
+            // pattern-matching every file. The cancel test passed visually while
+            // the work kept running.
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 
@@ -115,27 +157,39 @@ actor PrivacyExposureScanner {
         depth: Int,
         config: ScanConfig,
         onProgress: @escaping (String) -> Void,
-        onFinding: @escaping (PrivacyExposureFinding) -> Void
+        onFinding: @escaping (PrivacyExposureFinding) -> Void,
+        shouldStop: @escaping () -> Bool
     ) async {
-        guard !Task.isCancelled, depth <= config.maxDepth else { return }
+        guard !Task.isCancelled, depth <= config.maxDepth, !shouldStop() else { return }
 
         let fm = FileManager.default
+        // `.skipsHiddenFiles` is deliberately NOT passed — scanning dotfiles is
+        // the point, since `.env` and `.npmrc` are where credentials actually
+        // live. `.skipsPackageDescendants` is passed but does nothing here: it
+        // only applies to `enumerator(at:)`, and this recurses manually, so
+        // packages are filtered explicitly in the directory branch below.
         let keys: [URLResourceKey] = [.isDirectoryKey, .isSymbolicLinkKey, .isRegularFileKey,
-                                       .fileSizeKey, .contentModificationDateKey]
+                                       .fileSizeKey, .contentModificationDateKey, .isPackageKey]
         guard let entries = try? fm.contentsOfDirectory(
-            at: url, includingPropertiesForKeys: keys, options: [.skipsPackageDescendants]
+            at: url, includingPropertiesForKeys: keys, options: []
         ) else { return }
 
         for entry in entries {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, !shouldStop() else { return }
             guard let values = try? entry.resourceValues(forKeys: Set(keys)) else { continue }
 
             if values.isSymbolicLink == true { continue }   // never follow symlinks
 
             if values.isDirectory == true {
                 if Self.excludedDirectoryNames.contains(entry.lastPathComponent) { continue }
+                // Packages (.app, .rtfd, .photoslibrary) are directories, and
+                // recursing manually means `.skipsPackageDescendants` never
+                // applied — so app bundles were walked in full, costing time and
+                // surfacing findings inside bundles the user cannot act on.
+                if values.isPackage == true { continue }
                 await traverse(url: entry, depth: depth + 1, config: config,
-                               onProgress: onProgress, onFinding: onFinding)
+                               onProgress: onProgress, onFinding: onFinding,
+                               shouldStop: shouldStop)
                 continue
             }
 
@@ -179,9 +233,16 @@ actor PrivacyExposureScanner {
 
     private func evaluateFile(_ url: URL, config: ScanConfig) async -> [PrivacyPatternHit] {
         guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return [] }
-        guard let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else {
-            return []   // undecodable as text — treat as binary, never scan raw bytes
-        }
+        // Latin-1 maps all 256 byte values, so this decode cannot fail and the
+        // old `else { return [] }` branch — with its comment about treating
+        // undecodable data as binary — was unreachable. Anything surviving the
+        // null-byte peek in `shouldScan` is scanned regardless, which is the
+        // real behaviour; the guard against binary content is that peek, not
+        // this decode.
+        let text = String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .isoLatin1)
+            ?? ""
+        guard !text.isEmpty else { return [] }
         return await patternDB.evaluate(text: text)
     }
 }

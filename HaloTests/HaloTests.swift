@@ -268,14 +268,23 @@ struct PrivacyPatternDatabaseTests {
         #expect(hit?.redactedPreview == "pk_live_••••••••uvwx")
     }
 
-    @Test("Matches an SSH RSA private key header and does NOT redact it")
-    func testSSHPrivateKeyExactMatchIsUnredacted() async {
+    // Deliberate behaviour change from the original test, which asserted the
+    // PEM header was passed through verbatim.
+    //
+    // The reasoning for passing it through was sound — a PEM header is a public
+    // marker, not a secret. What the review pointed out is that it required an
+    // unredacted `return raw` to sit inside a function documented as "never
+    // returns the full matched value", where it is a trap for whoever adds the
+    // next category. Nothing downstream needs the literal header text, so the
+    // invariant is now absolute and the marker is fixed.
+    @Test("An SSH private key header is reported as a fixed marker, never verbatim")
+    func testSSHPrivateKeyIsRedactedToAMarker() async {
         let db = await loadedDB()
         let hits = await db.evaluate(text: "-----BEGIN RSA PRIVATE KEY-----\nMIIEow...\n-----END RSA PRIVATE KEY-----")
         let hit = try? #require(hits.first { $0.category == .sshPrivateKey })
         #expect(hit?.risk == .critical)
-        // The PEM header is a public marker, not a secret — it's shown as-is.
-        #expect(hit?.redactedPreview == "-----BEGIN RSA PRIVATE KEY-----")
+        #expect(hit?.redactedPreview == "PRIVATE KEY BLOCK")
+        #expect(hit?.redactedPreview.contains("BEGIN") == false)
     }
 
     @Test("Matches an SSN and redacts to last 4 only")
@@ -332,5 +341,48 @@ struct PrivacyExposureRiskLevelTests {
     func testSeverityOrdering() {
         let shuffled: [PrivacyExposureRiskLevel] = [.info, .warning, .critical]
         #expect(shuffled.sorted() == [.critical, .warning, .info])
+    }
+}
+
+// MARK: - F-018 review fixes
+
+@Suite("PrivacyPatternDatabase redaction")
+struct PrivacyRedactionTests {
+
+    // The PR body claims redact() is the only path producing a hit; the .exact
+    // branch bypassed it, so the invariant was enforced by the current contents
+    // of a remotely-updatable JSON file rather than by code.
+    @Test("Redaction never returns the full matched value")
+    func testRedactionHidesValue() {
+        let card = "4111111111111111"
+        let redacted = PrivacyPatternDatabase.redact(card, category: .creditCard)
+        #expect(redacted != card)
+        #expect(redacted.contains(card) == false)
+    }
+
+    @Test("SSN redaction keeps only the last four digits")
+    func testSSNRedaction() {
+        let redacted = PrivacyPatternDatabase.redact("123-45-6789", category: .ssn)
+        #expect(redacted.contains("6789"))
+        #expect(redacted.contains("123") == false)
+    }
+
+    // Was `return raw` inside a function documented as never returning the full
+    // matched value.
+    @Test("Private-key redaction returns a fixed marker, not the matched text")
+    func testPrivateKeyRedaction() {
+        let header = "-----BEGIN OPENSSH PRIVATE KEY-----"
+        let redacted = PrivacyPatternDatabase.redact(header, category: .sshPrivateKey)
+        #expect(redacted == "PRIVATE KEY BLOCK")
+        #expect(redacted.contains("BEGIN") == false)
+    }
+
+    @Test("Every category redacts to something other than the input")
+    func testAllCategoriesRedact() {
+        let sample = "SENSITIVE-VALUE-1234567890"
+        for category in PrivacyExposureCategory.allCases {
+            #expect(PrivacyPatternDatabase.redact(sample, category: category) != sample,
+                    "\(category) returned the raw value")
+        }
     }
 }

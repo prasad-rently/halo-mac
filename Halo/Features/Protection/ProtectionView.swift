@@ -51,6 +51,12 @@ final class ProtectionViewModel: ObservableObject {
     @Published var privacyLastScanDate: Date? = nil
     @Published var privacyIncludeICloud: Bool = false
     @Published var privacyCurrentPath: String = ""
+    /// Set when the scan stopped at `maxFiles` — the result is a sample, not an
+    /// exhaustive answer, and must not be shown as one.
+    @Published var privacyScanTruncated = false
+    /// Set when the scan could not run at all. Distinct from "finished with no
+    /// findings", which is what this used to be reported as.
+    @Published var privacyScanError: String?
 
     private let scanner = ProtectionScanner()
     private let privacyScanner = PrivacyExposureScanner()
@@ -207,21 +213,40 @@ final class ProtectionViewModel: ObservableObject {
                 if Task.isCancelled { break }
                 switch event {
                 case .progress(let filesScanned, let currentPath):
-                    privacyScanState = .scanning(filesScanned: filesScanned)
-                    privacyCurrentPath = currentPath
+                    // Throttled to ~5 Hz. This loop runs on the main actor and
+                    // the scanner yields one `.progress` per file examined, so
+                    // publishing each one meant ~80,000 objectWillChange
+                    // emissions and view invalidations for an 80,000-file
+                    // Documents tree — the UI unusable for the duration and the
+                    // path label an unreadable blur. The count stays honest; it
+                    // just doesn't need publishing at file granularity.
+                    let now = Date()
+                    if now.timeIntervalSince(lastPrivacyProgressPublish) > 0.2 {
+                        lastPrivacyProgressPublish = now
+                        privacyScanState = .scanning(filesScanned: filesScanned)
+                        privacyCurrentPath = currentPath
+                    }
                 case .finding(let finding):
                     privacyFindings.append(finding)
-                case .completed(_, let findingsCount):
+                case .completed(_, let findingsCount, let truncated):
                     privacyLastScanDate = Date()
                     privacyScanState = .complete(findingsCount: findingsCount)
+                    privacyScanTruncated = truncated
                     privacyCurrentPath = ""
-                case .error:
-                    privacyScanState = .complete(findingsCount: privacyFindings.count)
+                case .error(let message):
+                    // A scan that failed used to be presented as a scan that
+                    // finished cleanly — the one thing a security feature can
+                    // least afford to get wrong.
+                    privacyScanError = message
+                    privacyScanState = .idle
                     privacyCurrentPath = ""
                 }
             }
         }
     }
+
+    /// Rate-limits the main-actor republish of scan progress.
+    private var lastPrivacyProgressPublish = Date.distantPast
 
     func cancelPrivacyScan() {
         privacyScanTask?.cancel()
