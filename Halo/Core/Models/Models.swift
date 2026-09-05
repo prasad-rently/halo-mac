@@ -222,7 +222,11 @@ enum PermissionKind: String, CaseIterable {
 // MARK: - Security Posture (F-019)
 
 struct SecurityCheck: Identifiable {
-    let id: UUID = UUID()
+    /// The kind, not a fresh UUID. `loadSecurityPosture()` replaces the whole
+    /// array on every Refresh, so a generated id made all eight rows look brand
+    /// new to `ForEach` — a full teardown and rebuild rather than a diff, visible
+    /// as a flicker. One kind is one row.
+    var id: SecurityCheckKind { kind }
     let kind: SecurityCheckKind
     let state: SecurityCheckState
     /// One-line, human-readable statement of the current value (not a description of the setting).

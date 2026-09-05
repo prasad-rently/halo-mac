@@ -115,7 +115,7 @@ final class AppState: ObservableObject {
     // Phase 3
     private let alertManager = AlertManager()
     private let networkMonitor = NetworkDetailMonitor()
-    private let securityScanner = SecurityPostureScanner()
+    private var securityStoreObserver: AnyCancellable?
 
     init() {
         systemMonitor = SystemMonitor()
@@ -216,10 +216,18 @@ final class AppState: ObservableObject {
     /// value in re-checking on the 2 s metrics timer. The Protection module's
     /// own "Refresh" button re-scans independently for the on-screen checklist.
     private func startSecurityPostureCheck() {
-        Task {
-            let checks = await securityScanner.scan()
-            let score = SecurityPostureScanner.score(for: checks)
-            await MainActor.run { self.securityScore = score }
+        Task { @MainActor in
+            await SecurityPostureStore.shared.refresh()
+            self.securityScore = SecurityPostureStore.shared.score
+            // Keep the Dashboard score in step with later refreshes from the
+            // Protection module, instead of holding the launch-time value until
+            // the next relaunch.
+            self.securityStoreObserver = SecurityPostureStore.shared.objectWillChange
+                .receive(on: RunLoop.main)
+                .sink { [weak self] _ in
+                    guard let self else { return }
+                    Task { @MainActor in self.securityScore = SecurityPostureStore.shared.score }
+                }
         }
     }
 

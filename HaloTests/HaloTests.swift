@@ -329,3 +329,49 @@ struct SecurityPostureScannerTests {
         #expect(slugs.count == 8)
     }
 }
+
+// MARK: - F-019 review fixes
+
+@Suite("SecurityCheck identity")
+struct SecurityCheckIdentityTests {
+
+    // loadSecurityPosture() replaces the whole array on every Refresh, so a
+    // generated UUID id made all eight rows look brand new to ForEach.
+    @Test("Identity is the check kind, stable across rescans")
+    func testIdentityIsKind() {
+        let a = SecurityCheck(kind: .firewall, state: .pass, detail: "On")
+        let b = SecurityCheck(kind: .firewall, state: .fail, detail: "Off")
+        #expect(a.id == b.id)
+        #expect(a.id == .firewall)
+    }
+
+    @Test("Different kinds have different identities")
+    func testDistinctKinds() {
+        let checks = SecurityCheckKind.allCases.map {
+            SecurityCheck(kind: $0, state: .unknown, detail: "")
+        }
+        #expect(Set(checks.map(\.id)).count == checks.count)
+    }
+}
+
+@Suite("SecurityPostureScanner scoring")
+struct SecurityPostureScoringTests {
+
+    // `.unknown` must never be scored — under the sandbox every automated check
+    // reads unknown, and scoring them as failures would invent a bad verdict
+    // from an absence of information.
+    @Test("Unknown checks do not reduce the score")
+    func testUnknownIsNotPenalised() {
+        let checks = SecurityCheckKind.allCases.map {
+            SecurityCheck(kind: $0, state: .unknown, detail: "")
+        }
+        #expect(SecurityPostureScanner.score(for: checks) == 100)
+    }
+
+    @Test("A failing check reduces the score")
+    func testFailReducesScore() {
+        let passing = [SecurityCheck(kind: .firewall, state: .pass, detail: "")]
+        let failing = [SecurityCheck(kind: .firewall, state: .fail, detail: "")]
+        #expect(SecurityPostureScanner.score(for: failing) < SecurityPostureScanner.score(for: passing))
+    }
+}

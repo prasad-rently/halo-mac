@@ -45,13 +45,14 @@ final class ProtectionViewModel: ObservableObject {
     @Published var launchAgents: [RealLaunchAgentItem] = []
     @Published var isLoadingAgents = false
 
-    // Security Posture (F-019)
-    @Published var securityChecks: [SecurityCheck] = []
+    // Security Posture (F-019) — read through the shared store so the checklist
+    // and the Dashboard health score can never disagree.
     @Published var isLoadingSecurity = false
-    var securityScore: Int { SecurityPostureScanner.score(for: securityChecks) }
+    var securityChecks: [SecurityCheck] { SecurityPostureStore.shared.checks }
+    var securityScore: Int { SecurityPostureStore.shared.score }
+    var securityAutomationAvailable: Bool { SecurityPostureStore.shared.automationAvailable }
 
     private let scanner = ProtectionScanner()
-    private let securityScanner = SecurityPostureScanner()
 
     enum ScanState: Equatable {
         case idle, scanning(progress: Double), complete(clean: Bool), found(count: Int)
@@ -157,7 +158,8 @@ final class ProtectionViewModel: ObservableObject {
 
     func loadSecurityPosture() async {
         isLoadingSecurity = true
-        securityChecks = await securityScanner.scan()
+        await SecurityPostureStore.shared.refresh()
+        objectWillChange.send()   // securityChecks/-Score are computed off the store
         isLoadingSecurity = false
     }
 }
@@ -646,10 +648,16 @@ struct SecurityPostureSection: View {
                 Spacer()
                 if viewModel.isLoadingSecurity {
                     ProgressView().scaleEffect(0.6).tint(.haloAccent)
-                } else if !viewModel.securityChecks.isEmpty {
+                } else {
                     HStack(spacing: 6) {
-                        HaloBadge(text: "\(viewModel.securityScore)/100", color: scoreColor)
-                            .accessibilityIdentifier("protection.securityPosture.score")
+                        // Only the badge is gated on having checks. Refresh was
+                        // gated on the same condition, so an empty result — the
+                        // one state where you most need to re-run — left no way
+                        // to do it.
+                        if !viewModel.securityChecks.isEmpty {
+                            HaloBadge(text: "\(viewModel.securityScore)/100", color: scoreColor)
+                                .accessibilityIdentifier("protection.securityPosture.score")
+                        }
                         Button {
                             Task { await viewModel.loadSecurityPosture() }
                         } label: {
@@ -658,6 +666,7 @@ struct SecurityPostureSection: View {
                                 .foregroundColor(.haloText2)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("protection.securityPosture.refresh")
                     }
                 }
             }
@@ -674,6 +683,28 @@ struct SecurityPostureSection: View {
                 .background(Color.haloSurface2)
                 .cornerRadius(12)
             } else {
+                // Under the App Sandbox every automated check degrades to
+                // "unknown" and the score sits at a permanent 100/100. Saying so
+                // is the honest thing — eight silent "unknown"s otherwise read as
+                // "this Mac can't be verified" rather than "Halo wasn't allowed
+                // to look".
+                if !viewModel.securityAutomationAvailable {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "lock.slash")
+                            .font(.system(size: 12))
+                            .foregroundColor(.haloAmber)
+                        Text("This build can't read your security settings automatically, so every row below needs checking by hand and the score isn't meaningful.")
+                            .font(HaloFont.body(11))
+                            .foregroundColor(.haloText2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.haloSurface2)
+                    .cornerRadius(10)
+                    .accessibilityIdentifier("protection.securityPosture.sandboxNotice")
+                }
+
                 LazyVStack(spacing: 6) {
                     ForEach(viewModel.securityChecks) { check in
                         SecurityCheckRow(check: check)
