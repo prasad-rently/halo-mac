@@ -29,10 +29,16 @@ protocol AIMetricsSource: AnyObject {
 enum AIToolError: LocalizedError {
     case unknownTool(String)
     case unavailable(String)
+    /// A shell-backed tool couldn't run — the binary is missing, the sandbox
+    /// denied the spawn, or it overran its time limit. Distinct from
+    /// `.unavailable` (a Halo subsystem isn't ready) so the model gets an
+    /// accurate reason fed back into the loop rather than a generic one.
+    case shellFailed(String)
     var errorDescription: String? {
         switch self {
         case .unknownTool(let n): return "Unknown tool: \(n)"
         case .unavailable(let m): return m
+        case .shellFailed(let m): return m
         }
     }
 }
@@ -141,16 +147,20 @@ final class AIToolExecutor {
         return obj
     }
 
+    /// This one already had the pipe ordering right (read, then wait) — routing
+    /// it through ShellReader adds the two things it was missing: stderr is
+    /// drained rather than inherited, and the call is bounded, which matters
+    /// because the agent loop is driven by model output and can invoke this
+    /// repeatedly without a human watching.
     private static func shell(_ path: String, _ args: [String]) throws -> String {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: path)
-        p.arguments = args
-        let pipe = Pipe()
-        p.standardOutput = pipe
-        try p.run()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
-        return String(data: data, encoding: .utf8) ?? ""
+        let result = ShellReader.run(path, args)
+        if let failure = result.launchFailure {
+            throw AIToolError.shellFailed(failure)
+        }
+        if result.didTimeOut {
+            throw AIToolError.shellFailed("`\(path)` exceeded its time limit and was terminated.")
+        }
+        return result.standardOutput
     }
 }
 

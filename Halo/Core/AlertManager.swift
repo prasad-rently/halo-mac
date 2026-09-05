@@ -10,6 +10,22 @@ import UserNotifications
 @MainActor
 final class AlertManager {
 
+    // MARK: - Singleton
+    //
+    // One instance, app-wide — matching `AlertLog.shared` beside it, which this
+    // class already writes every alert into.
+    //
+    // The cooldowns in `lastFired` are the whole point of this type, and they
+    // are per-instance state: a second `AlertManager` carries its own empty
+    // dictionary, so the same alert can fire from both within the cooldown
+    // window and the user gets it twice. Features queued behind this one add
+    // their own `evaluate*` entry points (SMART disk health, Time Machine
+    // staleness, per-app memory), each called from a different subsystem — so
+    // they must all reach the same instance for "once per hour" to mean once
+    // per hour. `init` is private so it stays that way.
+    static let shared = AlertManager()
+    private init() {}
+
     // MARK: - Alert kinds
 
     enum AlertKind: String, CaseIterable {

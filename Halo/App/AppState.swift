@@ -110,7 +110,7 @@ final class AppState: ObservableObject {
     private var wasAxTrusted = false
 
     // Phase 3
-    private let alertManager = AlertManager()
+    private let alertManager = AlertManager.shared
     private let networkMonitor = NetworkDetailMonitor()
 
     // F-020: S.M.A.R.T. disk health — boot volume only, on a 5-minute cadence
