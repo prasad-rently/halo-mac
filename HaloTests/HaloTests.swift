@@ -193,6 +193,86 @@ struct ModelTests {
     }
 }
 
+// MARK: - PhotoKit request timeout (F-025)
+//
+// The timeout used to race the PhotoKit request against a `Task.sleep` sibling
+// inside a `withTaskGroup` and return `group.next()`. That bounds the value but
+// not the time: the group waits for every child before returning, and
+// `cancelAll()` cannot interrupt a `withCheckedContinuation` waiting on a
+// callback. If PhotoKit never called back — an unavailable asset, a dropped
+// network — the caller blocked forever, which is precisely the wedge the
+// timeout was added to prevent.
+//
+// `requestHash` itself needs a real PHAsset and a photo library, so what is
+// pinned here is `withTimeout`, which carries all of the logic. The assertions
+// are on ELAPSED TIME: a value-only test passes against the broken version,
+// because both shapes return nil.
+@Suite("PerceptualDuplicateDetector request timeout")
+struct PerceptualDuplicateTimeoutTests {
+
+    /// The case that used to hang forever: PhotoKit never calls back at all.
+    @Test("A callback that never fires returns nil at the deadline")
+    func testNeverDelivered() async {
+        let started = Date()
+        let value: UInt64? = await PerceptualDuplicateDetector.withTimeout(seconds: 0.3) { _ in }
+
+        #expect(value == nil)
+        #expect(Date().timeIntervalSince(started) < 2.0)
+    }
+
+    @Test("A callback slower than the deadline releases the caller at the deadline")
+    func testSlowDeliveryDoesNotBlock() async {
+        let slowWork: TimeInterval = 3.0
+        let started = Date()
+        let value: UInt64? = await PerceptualDuplicateDetector.withTimeout(seconds: 0.3) { done in
+            DispatchQueue.global().async {
+                Thread.sleep(forTimeInterval: slowWork)
+                done(99)
+            }
+        }
+        let elapsed = Date().timeIntervalSince(started)
+
+        #expect(value == nil)
+        #expect(elapsed < slowWork / 2, "waited \(elapsed)s for an abandoned request")
+    }
+
+    @Test("A prompt result is returned immediately, not held until the deadline")
+    func testFastPathIsNotDelayed() async {
+        let started = Date()
+        let value: UInt64? = await PerceptualDuplicateDetector.withTimeout(seconds: 10) { done in
+            done(0xDEAD_BEEF)
+        }
+        #expect(value == 0xDEAD_BEEF)
+        #expect(Date().timeIntervalSince(started) < 1.0)
+    }
+
+    // PhotoKit may invoke its handler more than once — with
+    // isNetworkAccessAllowed an iCloud asset can deliver nil then a real image.
+    // A second resume on a checked continuation is a fatalError, so the process
+    // surviving these is the assertion.
+    @Test("Repeated deliveries resolve to the first and do not crash")
+    func testDoubleDeliveryTakesFirst() async {
+        let value: UInt64? = await PerceptualDuplicateDetector.withTimeout(seconds: 10) { done in
+            done(nil)
+            done(7)
+            done(8)
+        }
+        #expect(value == nil)   // the first delivery wins, even when it is nil
+    }
+
+    @Test("A delivery after the deadline is ignored rather than crashing")
+    func testLateDeliveryIgnored() async {
+        let value: UInt64? = await PerceptualDuplicateDetector.withTimeout(seconds: 0.2) { done in
+            DispatchQueue.global().async {
+                Thread.sleep(forTimeInterval: 0.5)
+                done(1)
+            }
+        }
+        #expect(value == nil)
+        try? await Task.sleep(nanoseconds: 600_000_000)   // let the late delivery land
+    }
+}
+
 // MARK: - PerceptualDuplicateDetector Tests (F-025)
 //
 // `hammingDistance` is already `nonisolated static` and directly testable.

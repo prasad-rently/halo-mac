@@ -475,48 +475,78 @@ extension PerceptualDuplicateDetector {
     /// (asset unavailable, network drops) the continuation leaks and
     /// `detectInPhotosLibrary` hangs forever with no timeout and no cancel.
     ///
-    /// So: a one-shot guard makes any extra callback a no-op, and a timeout
-    /// resumes with nil so a missing callback cannot wedge the scan.
+    /// So: a one-shot gate makes any extra callback a no-op, and the deadline
+    /// resumes the *same* continuation with nil so a missing callback cannot
+    /// wedge the scan. Both live in `withTimeout` — see there for why racing a
+    /// sibling task, which is what this used to do, bounded neither.
     nonisolated private static func requestHash(
         for asset: PHAsset, imageManager: PHImageManager, options: PHImageRequestOptions
     ) async -> UInt64? {
-        let resumed = OSAllocatedUnfairLock(initialState: false)
-
-        return await withTaskGroup(of: UInt64?.self) { group in
-            group.addTask {
-                await withCheckedContinuation { (continuation: CheckedContinuation<UInt64?, Never>) in
-                    imageManager.requestImage(
-                        for: asset, targetSize: CGSize(width: 64, height: 64),
-                        contentMode: .aspectFit, options: options
-                    ) { image, _ in
-                        // Only the first delivery resumes; PhotoKit is free to
-                        // call this again and we must not crash when it does.
-                        let alreadyResumed = resumed.withLock { wasResumed -> Bool in
-                            if wasResumed { return true }
-                            wasResumed = true
-                            return false
-                        }
-                        guard !alreadyResumed else { return }
-
-                        // NSImage (unlike UIImage) has no `.cgImage` property — it must be
-                        // rendered via `cgImage(forProposedRect:context:hints:)`.
-                        guard let image,
-                              let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
-                              let grid = grayscale32x32(cgImage) else {
-                            continuation.resume(returning: nil)
-                            return
-                        }
-                        continuation.resume(returning: perceptualHash(from: grid))
-                    }
+        await withTimeout(seconds: assetRequestTimeoutSeconds) { done in
+            imageManager.requestImage(
+                for: asset, targetSize: CGSize(width: 64, height: 64),
+                contentMode: .aspectFit, options: options
+            ) { image, _ in
+                // `done` is one-shot, so PhotoKit calling back again — which it
+                // is free to do — is a no-op rather than a second resume.
+                //
+                // NSImage (unlike UIImage) has no `.cgImage` property — it must be
+                // rendered via `cgImage(forProposedRect:context:hints:)`.
+                guard let image,
+                      let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+                      let grid = grayscale32x32(cgImage) else {
+                    done(nil)
+                    return
                 }
+                done(perceptualHash(from: grid))
             }
-            group.addTask {
-                try? await Task.sleep(nanoseconds: UInt64(assetRequestTimeoutSeconds * 1_000_000_000))
-                return nil
+        }
+    }
+
+    /// Bounds `start` in wall-clock time: whichever of the callback or the
+    /// deadline arrives first wins, and the loser is ignored.
+    ///
+    /// The version this replaces raced the PhotoKit request against a
+    /// `Task.sleep` sibling inside a `withTaskGroup` and returned
+    /// `group.next()`. That bounds the *value* but not the *time*, because
+    /// `withTaskGroup` waits for every child before it returns and
+    /// `group.cancelAll()` cannot interrupt a `withCheckedContinuation` waiting
+    /// on a callback. So the timeout produced nil and the group then blocked on
+    /// the sibling — and if PhotoKit never called back at all, blocked forever.
+    /// That is the exact wedge the timeout was added to prevent: *"a timeout
+    /// resumes with nil so a missing callback cannot wedge the scan"* — it did
+    /// not resume the continuation, it resumed a sibling.
+    ///
+    /// Resuming the *same* continuation from both sides is what actually bounds
+    /// it. The one-shot gate is what makes that safe: `start` may fire any
+    /// number of times, including zero, and every call after the first is a
+    /// no-op — so a late delivery cannot double-resume (a hard trap on a checked
+    /// continuation) and a delivery that never comes cannot wedge the caller.
+    ///
+    /// The same shape exists on `NetworkTrafficMonitor` (F-017), which had the
+    /// identical defect. Worth lifting into one place once both have landed;
+    /// duplicated for now so these two PRs stay independently mergeable.
+    nonisolated static func withTimeout<Value: Sendable>(
+        seconds: TimeInterval,
+        _ start: @escaping @Sendable (@escaping @Sendable (Value?) -> Void) -> Void
+    ) async -> Value? {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Value?, Never>) in
+            let resumed = OSAllocatedUnfairLock(initialState: false)
+
+            @Sendable func resumeOnce(_ value: Value?) {
+                let alreadyResumed = resumed.withLock { wasResumed -> Bool in
+                    if wasResumed { return true }
+                    wasResumed = true
+                    return false
+                }
+                guard !alreadyResumed else { return }
+                continuation.resume(returning: value)
             }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first
+
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + seconds) {
+                resumeOnce(nil)
+            }
+            start(resumeOnce)
         }
     }
 
