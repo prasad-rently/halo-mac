@@ -625,6 +625,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `8025` / `8026` | SnippetEditorView.swift file ref / sources build file |
 | `8027` / `8028` | SnippetListSection.swift file ref / sources build file |
 | `8029` / `8030` | ActionShareManager.swift file ref / sources build file |
+| `8031` / `8032` | PermissionAuditor.swift file ref / sources build file |
 | `8031` / `8032` | SecurityPostureScanner.swift file ref / sources build file |
 | `8031` / `8032` | MemoryTrendTracker.swift file ref / sources build file |
 | `8033` / `8034` | MemoryTrendsSection.swift file ref / sources build file |

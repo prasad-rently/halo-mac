@@ -218,6 +218,34 @@ enum PermissionKind: String, CaseIterable {
     }
 }
 
+// MARK: - Permission Auditor (F-016)
+
+/// One real per-app TCC grant, read from `TCC.db` when Halo can access it.
+/// Only ever constructed from an actual database row — never fabricated.
+struct TCCGrant: Identifiable, Sendable {
+    let id = UUID()
+    let kind: PermissionKind
+    let bundleID: String
+    /// Starts as the bundle ID; replaced with the display name by
+    /// `PermissionAuditor.resolveAppNames(for:)` on the MainActor.
+    var appName: String
+    /// Heuristic flag: this permission looks excessive for what the app is
+    /// (e.g. a non-browser, non-communication app holding Screen Recording
+    /// or Accessibility).
+    let isElevatedRisk: Bool
+}
+
+/// Outcome of attempting a real per-app permission audit. `TCC.db` is
+/// SIP-protected and requires Full Disk Access to read, so both cases must be
+/// handled by callers — there is no "fake it" fallback when the read fails.
+enum PermissionAuditResult {
+    /// Real per-app grants were read successfully.
+    case available(grants: [TCCGrant])
+    /// The database couldn't be read (sandboxed, no Full Disk Access, locked,
+    /// or no usable rows) — `reason` is shown to the user verbatim.
+    case unavailable(reason: String)
+}
+
 // MARK: - Privacy Exposure Scanner (F-018)
 
 /// A single sensitive-data hit found on disk. The full matched secret is NEVER

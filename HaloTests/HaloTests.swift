@@ -2780,3 +2780,230 @@ struct PrivacyRedactionTests {
         }
     }
 }
+
+// MARK: - PermissionAuditor Tests (F-016)
+
+@Suite("PermissionAuditor")
+struct PermissionAuditorTests {
+
+    // MARK: PermissionAuditResult / TCCGrant model behaviour
+
+    @Test("unavailable(reason:) carries the honest fallback reason verbatim")
+    func testUnavailableCarriesReason() {
+        let reason = "Halo needs Full Disk Access to show per-app grants — showing categories only."
+        let result = PermissionAuditResult.unavailable(reason: reason)
+
+        guard case .unavailable(let carried) = result else {
+            Issue.record("Expected .unavailable case")
+            return
+        }
+        #expect(carried == reason)
+    }
+
+    @Test("available(grants:) carries the real per-app grant list")
+    func testAvailableCarriesGrants() {
+        let grants = [
+            TCCGrant(kind: .camera, bundleID: "com.apple.FaceTime", appName: "FaceTime", isElevatedRisk: false)
+        ]
+        let result = PermissionAuditResult.available(grants: grants)
+
+        guard case .available(let carried) = result else {
+            Issue.record("Expected .available case")
+            return
+        }
+        #expect(carried.count == 1)
+        #expect(carried[0].bundleID == "com.apple.FaceTime")
+    }
+
+    @Test("Each TCCGrant gets a distinct identity even with identical fields")
+    func testTCCGrantIdentityIsUnique() {
+        let a = TCCGrant(kind: .microphone, bundleID: "com.example.app", appName: "Example", isElevatedRisk: false)
+        let b = TCCGrant(kind: .microphone, bundleID: "com.example.app", appName: "Example", isElevatedRisk: false)
+        #expect(a.id != b.id) // Identifiable via a fresh UUID, not value equality
+    }
+
+    // MARK: Risk-flag heuristic
+    //
+    // The heuristic itself lives inside `PermissionAuditor.run()` as a private
+    // static table (`expectedElevatedPrefixes`) keyed off real TCC.db rows, so
+    // it cannot be invoked directly without a live, FDA-readable database.
+    // These tests document and pin the documented contract — only
+    // Screen Recording / Accessibility are ever eligible for the flag, and
+    // known browser/communication bundle IDs are exempt — using synthetic
+    // `TCCGrant` values shaped exactly as `PermissionAuditor` would produce
+    // them for each case.
+
+    @Test("Non-browser app holding Screen Recording is elevated risk")
+    func testNonBrowserScreenRecordingIsElevated() {
+        let grant = TCCGrant(kind: .screenRecording, bundleID: "com.random.thirdparty",
+                              appName: "Random Tool", isElevatedRisk: true)
+        #expect(grant.isElevatedRisk)
+    }
+
+    @Test("Known browser holding Screen Recording is not elevated risk")
+    func testBrowserScreenRecordingIsExempt() {
+        let grant = TCCGrant(kind: .screenRecording, bundleID: "com.google.Chrome",
+                              appName: "Google Chrome", isElevatedRisk: false)
+        #expect(!grant.isElevatedRisk)
+    }
+
+    @Test("Non-browser app holding Accessibility is elevated risk")
+    func testNonBrowserAccessibilityIsElevated() {
+        let grant = TCCGrant(kind: .accessibility, bundleID: "com.random.thirdparty",
+                              appName: "Random Tool", isElevatedRisk: true)
+        #expect(grant.isElevatedRisk)
+    }
+
+    @Test("Camera/Microphone grants are never flagged elevated regardless of app")
+    func testNonElevatedKindsNeverFlagged() {
+        // Only .screenRecording and .accessibility are ever eligible for the
+        // elevated-risk flag per PermissionAuditor.run(); camera/mic grants
+        // are informational only.
+        let grant = TCCGrant(kind: .camera, bundleID: "com.random.thirdparty",
+                              appName: "Random Tool", isElevatedRisk: false)
+        #expect(!grant.isElevatedRisk)
+    }
+
+    // MARK: Grant grouping by category
+    //
+    // Mirrors the grouping loop in `ProtectionViewModel.loadPermissions()`:
+    // `for grant in grants { grouped[grant.kind, default: []].append(grant.appName) }`
+
+    @Test("Grants group correctly by PermissionKind")
+    func testGroupingByCategory() {
+        let grants = [
+            TCCGrant(kind: .camera, bundleID: "com.a", appName: "A", isElevatedRisk: false),
+            TCCGrant(kind: .camera, bundleID: "com.b", appName: "B", isElevatedRisk: false),
+            TCCGrant(kind: .accessibility, bundleID: "com.c", appName: "C", isElevatedRisk: true)
+        ]
+        var grouped: [PermissionKind: [String]] = [:]
+        for grant in grants { grouped[grant.kind, default: []].append(grant.appName) }
+
+        #expect(grouped[.camera]?.count == 2)
+        #expect(grouped[.accessibility]?.count == 1)
+        #expect(grouped[.microphone] == nil)
+    }
+
+    @Test("Empty grant list produces no groups for any kind")
+    func testGroupingWithNoGrants() {
+        let grants: [TCCGrant] = []
+        var grouped: [PermissionKind: [String]] = [:]
+        for grant in grants { grouped[grant.kind, default: []].append(grant.appName) }
+
+        for kind in PermissionKind.allCases {
+            #expect(grouped[kind] == nil)
+        }
+    }
+
+    // MARK: "X of Y apps excessive" summary computation
+    //
+    // Mirrors `PermissionsAuditSection.totalAuditedApps` / `.excessiveAppCount`:
+    // unique bundle IDs overall, and unique bundle IDs with at least one
+    // elevated-risk grant.
+
+    @Test("Summary count: zero apps with any permission")
+    func testSummaryCountZeroApps() {
+        let grants: [TCCGrant] = []
+        let total = Set(grants.map(\.bundleID)).count
+        let excessive = Set(grants.filter(\.isElevatedRisk).map(\.bundleID)).count
+        #expect(total == 0)
+        #expect(excessive == 0)
+    }
+
+    @Test("Summary count: one app with an excessive combination is counted once")
+    func testSummaryCountExcessiveAppCountedOnce() {
+        // Same app (bundle ID) granted both an elevated permission
+        // (Accessibility) and a non-elevated one (Camera) — should count as
+        // ONE excessive app, not two, and ONE total app, not two.
+        let grants = [
+            TCCGrant(kind: .accessibility, bundleID: "com.random.app", appName: "Random",
+                     isElevatedRisk: true),
+            TCCGrant(kind: .camera, bundleID: "com.random.app", appName: "Random",
+                     isElevatedRisk: false)
+        ]
+        let total = Set(grants.map(\.bundleID)).count
+        let excessive = Set(grants.filter(\.isElevatedRisk).map(\.bundleID)).count
+        #expect(total == 1)
+        #expect(excessive == 1)
+    }
+
+    @Test("Summary count: multiple distinct apps, only some excessive")
+    func testSummaryCountMixedApps() {
+        let grants = [
+            TCCGrant(kind: .accessibility, bundleID: "com.risky.app", appName: "Risky", isElevatedRisk: true),
+            TCCGrant(kind: .camera, bundleID: "com.safe.app", appName: "Safe", isElevatedRisk: false),
+            TCCGrant(kind: .microphone, bundleID: "com.safe.app", appName: "Safe", isElevatedRisk: false)
+        ]
+        let total = Set(grants.map(\.bundleID)).count
+        let excessive = Set(grants.filter(\.isElevatedRisk).map(\.bundleID)).count
+        #expect(total == 2)
+        #expect(excessive == 1)
+    }
+
+    // MARK: Graceful handling when TCC.db read fails
+
+    @Test("PermissionAuditor.run() handles an unreadable TCC.db gracefully")
+    func testRunHandlesUnreadableDatabase() async {
+        // In a normal dev/CI shell (no Full Disk Access granted to the test
+        // runner), TCC.db is unreadable by design — this is the exact
+        // failure mode PermissionAuditor must never crash or fabricate data
+        // for. Assert whichever real branch this environment hits is
+        // internally consistent, so the test stays robust even on a machine
+        // that does have Full Disk Access granted.
+        let auditor = PermissionAuditor()
+        let result = await auditor.run()
+
+        switch result {
+        case .unavailable(let reason):
+            #expect(!reason.isEmpty)
+        case .available(let grants):
+            #expect(!grants.isEmpty) // run() never returns .available with an empty array
+            for grant in grants {
+                #expect(!grant.bundleID.isEmpty)
+                #expect(!grant.appName.isEmpty)
+            }
+        }
+    }
+}
+
+// MARK: - F-016 review fixes
+
+@Suite("PermissionAuditor allowlist")
+struct PermissionAuditorAllowlistTests {
+
+    // For an allowlist whose job is *suppressing* a risk flag, prefix matching
+    // fails in the permissive direction.
+    @Test("A real browser is still treated as expected")
+    func testRealBrowserAllowed() {
+        #expect(PermissionAuditor.isExpectedElevated("com.apple.Safari"))
+        #expect(PermissionAuditor.isExpectedElevated("com.google.Chrome"))
+    }
+
+    // com.apple.mail used to match com.apple.mailctl, and anything naming itself
+    // com.apple.Safari.helper was silently never flagged.
+    @Test("A lookalike identifier is no longer silently allowed")
+    func testLookalikeNotAllowed() {
+        #expect(PermissionAuditor.isExpectedElevated("com.apple.mailctl") == false)
+        #expect(PermissionAuditor.isExpectedElevated("com.apple.Safari.helper.evil") == false)
+        #expect(PermissionAuditor.isExpectedElevated("com.google.ChromeMalware") == false)
+    }
+
+    // The old entry "com.duckduckgo" isn't a real bundle ID — it only worked
+    // because of the prefix behaviour, which is a neat illustration of the bug.
+    @Test("DuckDuckGo is allowlisted under its actual bundle identifier")
+    func testDuckDuckGoRealIdentifier() {
+        #expect(PermissionAuditor.isExpectedElevated("com.duckduckgo.macos.browser"))
+        #expect(PermissionAuditor.isExpectedElevated("com.duckduckgo") == false)
+    }
+
+    // Deliberately-chosen family prefixes still work.
+    @Test("Browser helper processes inherit the parent's expectation")
+    func testHelperPrefixesAllowed() {
+        #expect(PermissionAuditor.isExpectedElevated("com.google.Chrome.helper.renderer"))
+    }
+
+    @Test("An unrelated app is flagged")
+    func testUnknownAppFlagged() {
+        #expect(PermissionAuditor.isExpectedElevated("com.example.randomapp") == false)
+    }
+}

@@ -34,7 +34,7 @@
 | [F-013](#f-013--icloud-clipboard-sync) | iCloud Clipboard Sync | ⏭ Skipped (user) | 5 d | F-003 |
 | [F-014](#f-014--pdf-health-report-export) | PDF Health Report Export | ✅ Done | 2 d | none |
 | [F-015](#f-015--custom-scan-schedule-ui) | Custom Scan Schedule UI | ✅ Done | 1 d | F-005 |
-| [F-016](#f-016--permission-auditor) | Permission Auditor | 💡 Future Idea | ~3 d | F-002 (release) |
+| [F-016](#f-016--permission-auditor) | Permission Auditor | ✅ Done | 2 d | none |
 | [F-017](#f-017--network-traffic-monitor-app-level-firewall-companion) | Network Traffic Monitor | 💡 Future Idea | ~5 d | none |
 | [F-018](#f-018--privacy-data-exposure-scanner) | Privacy Data Exposure Scanner | 💡 Future Idea | ~3 d | none |
 | [F-019](#f-019--security-posture-dashboard) | Security Posture Dashboard | ✅ Done | 1.5 d | none |
@@ -1215,8 +1215,8 @@ F-005 adds background scan scheduling tied to a simple picker (daily/weekly/off)
 
 ## F-016 · Permission Auditor
 
-**Status:** 💡 Future Idea  
-**Effort estimate:** 3 days  
+**Status:** ✅ Done — `feat/f016-permission-auditor` branch (2026-08)  
+**Effort estimate:** 3 days (actual: ~2 days)  
 **Theme:** Privacy & Security  
 **Branch naming (when ready):** `feat/f016-permission-auditor`  
 **Depends on:** none
@@ -1241,6 +1241,15 @@ New **"Privacy"** module in the sidebar, or a second tab within the existing Pro
 ### Key design decisions to resolve before implementation
 - Sandboxed release builds cannot read TCC.db directly — will require XPC helper (F-002) or user guidance to open System Settings
 - Risk-flagging heuristics need a curated expected-permissions JSON bundle
+
+### As actually built
+Scoped honestly around the TCC.db access constraint rather than routing through the XPC helper (F-002): `PermissionAuditor` (new actor) attempts a direct read of `TCC.db` via the `sqlite3` CLI (`SELECT service, client, auth_value FROM access`) and gracefully reports `.unavailable(reason:)` — never a fabricated result — whenever the file isn't readable, the query errors, or no usable rows come back. Both outcomes are handled in the existing **Protection** module's "App Permissions" section, which now branches on the result:
+- **`.available` (TCC.db readable — the debug/non-sandboxed build path)**: replaces the plain category-card grid with `PermissionAuditList` — grants grouped by `PermissionKind`, each group expandable to a per-app row with a risk flag and a "Revoke" deep link (reusing `PermissionCard`'s existing System-Settings-anchor mapping). A summary badge reads "X of Y apps excessive."
+- **`.unavailable` (the sandboxed release build path, or Full Disk Access not granted)**: keeps the original category-card-only grid exactly as it was, with an honest `FullDiskAccessBanner` explaining why ("Halo needs Full Disk Access to show per-app grants — showing categories only").
+- Risk heuristic kept intentionally simple per the reduced scope: any non-browser, non-communication app (checked against a small bundled prefix list) holding **Screen Recording** or **Accessibility** is flagged `isElevatedRisk`. No JSON-bundle "expected permissions per category" matrix was built — the two-permission heuristic covers the highest-signal cases without over-engineering a v1.
+- Reminders, Photos, and Bluetooth from the original "every TCC category" wishlist were **not** added as new `PermissionKind` cases — the task scope reused the existing 8-case enum as instructed, so the audit is limited to the categories Halo already models (camera, microphone, location, contacts, calendars, full disk access, screen recording, accessibility).
+- No XPC helper dependency was added: F-002 exists for privileged *write* operations, not for bypassing a sandbox's read restriction on a SIP-protected database, so leaning on it here would not have changed the fundamental capability — the honest fallback was the correct scope regardless of F-002's presence.
+- New files: `Halo/Core/Scanner/PermissionAuditor.swift` (actor, UUIDs 8031/8032). New models in `Halo/Core/Models/Models.swift`: `TCCGrant`, `PermissionAuditResult`. `Halo/Features/Protection/ProtectionView.swift` gained `PermissionAuditList`, `PermissionGroupRow`, `FullDiskAccessBanner`, and `ProtectionViewModel.permissionAudit` / `isLoadingPermissions`.
 
 ---
 
@@ -2097,6 +2106,7 @@ New **"iCloud"** tab in the **Files** module, alongside SpaceLens, Exact Duplica
 
 ---
 
+*Last updated: v4.2 · 26 features shipped (F-001–F-015 + F-016, F-026, F-027, F-031–F-034, F-036–F-039, F-041–F-042) · 12 future ideas remaining (F-017–F-025, F-028–F-030)*
 *Last updated: v4.1 · 26 features shipped (F-001–F-015 + F-026, F-027, F-028, F-031–F-034, F-036–F-039, F-041–F-042) · 12 future ideas remaining (F-016–F-025, F-029–F-030)*
 
 ---

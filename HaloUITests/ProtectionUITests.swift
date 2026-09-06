@@ -3,7 +3,8 @@
 //  HaloUITests
 //
 //  Protection module (malware / adware / PUP scanner backed by
-//  SignatureDatabase). Maps to MANUAL_TEST_PLAN.md §4 (TC-PROT-01…07).
+//  SignatureDatabase, plus the F-016 Permission Auditor). Maps to
+//  MANUAL_TEST_PLAN.md §4 (TC-PROT-01…07) and §4.1 (TC-PROT-08…16).
 //
 //  Scanning is read-only; quarantine/removal is destructive and therefore
 //  exercised only up to its confirmation gate (cancel-at-confirmation).
@@ -65,6 +66,83 @@ final class ProtectionUITests: HaloUITestCase {
             throw XCTSkip("Signature-count label not exposed by name; annotate with " +
                           "an identifier such as `protection.signatureCount.text`.")
         }
+    }
+
+    // MARK: - Permission Auditor (F-016) — TC-PROT-08…16
+
+    // TC-PROT-08 / TC-PROT-13 — the "App Permissions" section always renders
+    // one of its two honest states: the rich per-app list (TCC.db readable)
+    // or the fallback category grid + Full Disk Access banner (unreadable).
+    // Which branch appears depends entirely on whether this machine/build has
+    // granted Full Disk Access — the test accepts either, since both are
+    // valid, non-fabricated outcomes.
+    func test_permissions_section_renders_either_state() {
+        XCTAssertTrue(HaloSidebar(test: self).navigate(to: .protection))
+
+        let bannerAppeared = waitForID("protection.permissions.banner", timeout: 10) != nil
+        let summaryAppeared = waitForID("protection.permissions.summary", timeout: 2) != nil
+        let sectionHeaderAppeared = element(labeled: "App Permissions", timeout: 2) != nil
+
+        XCTAssertTrue(bannerAppeared || summaryAppeared || sectionHeaderAppeared,
+                      "Protection should show the App Permissions section in either its " +
+                      "fallback (banner + category grid) or rich (per-app list) state")
+    }
+
+    // TC-PROT-13 — TCC.db-unreadable path: the honest banner plus the
+    // original category-card grid (never a fabricated per-app list).
+    func test_permissions_fallback_shows_banner_and_category_grid() throws {
+        HaloSidebar(test: self).navigate(to: .protection)
+
+        guard waitForID("protection.permissions.banner", timeout: 10) != nil else {
+            throw XCTSkip("This run has Full Disk Access granted, so the rich per-app " +
+                          "list renders instead of the fallback — see " +
+                          "test_permissions_rich_list_shows_revoke_links for that branch.")
+        }
+        // At least one category card ("Open in Settings" deep link) should be
+        // present alongside the banner.
+        let anyCard = ["camera", "microphone", "location", "contacts", "calendar",
+                       "fulldiskaccess", "screenrecording", "accessibility"]
+            .contains { waitForID("protection.permissions.card.\($0)", timeout: 2) != nil }
+        XCTAssertTrue(anyCard, "Fallback state should still show the category-card grid")
+    }
+
+    // TC-PROT-08 / TC-PROT-11 / TC-PROT-12 — TCC.db-readable path: the
+    // grouped per-app list renders with a summary badge, and "Revoke" links
+    // are present and tappable.
+    func test_permissions_rich_list_shows_revoke_links() throws {
+        HaloSidebar(test: self).navigate(to: .protection)
+
+        guard waitForID("protection.permissions.summary", timeout: 10) != nil else {
+            throw XCTSkip("Full Disk Access is not granted on this machine, so the rich " +
+                          "per-app audit is unavailable — the honest fallback banner is " +
+                          "shown instead (covered by " +
+                          "test_permissions_fallback_shows_banner_and_category_grid).")
+        }
+
+        // Expand the first permission-kind group that has any grants.
+        let kinds = ["camera", "microphone", "location", "contacts", "calendar",
+                    "fulldiskaccess", "screenrecording", "accessibility"]
+        var expandedKind: String?
+        for kind in kinds {
+            if let row = waitForID("protection.permissions.row.\(kind)", timeout: 1) {
+                row.click()
+                expandedKind = kind
+                break
+            }
+        }
+        guard let expandedKind else {
+            XCTFail("Summary badge implies grants exist, but no permission group row was found")
+            return
+        }
+
+        guard let revoke = waitForID("protection.permissions.revoke.\(expandedKind)", timeout: 5) else {
+            XCTFail("Expanding a permission group with grants should reveal a Revoke link")
+            return
+        }
+        XCTAssertTrue(revoke.isHittable, "Revoke link should be tappable")
+        // Do not actually click Revoke — it opens System Settings, an
+        // external app switch outside this suite's scope. Existence +
+        // hittability is the assertion (TC-PROT-11).
     }
 
     // MARK: - Sensitive Data Scanner (F-018) — TC-PROT-08…20

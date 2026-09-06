@@ -111,6 +111,7 @@
 		000000000000000000008026 /* SnippetEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008025 /* SnippetEditorView.swift */; };
 		000000000000000000008028 /* SnippetListSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008027 /* SnippetListSection.swift */; };
 		000000000000000000008030 /* ActionShareManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008029 /* ActionShareManager.swift */; };
+		000000000000000000008154 /* PermissionAuditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008153 /* PermissionAuditor.swift */; };
 		000000000000000000008084 /* PrivacyExposureScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008083 /* PrivacyExposureScanner.swift */; };
 		000000000000000000008086 /* PrivacyPatternDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008085 /* PrivacyPatternDatabase.swift */; };
 		000000000000000000008088 /* privacy-patterns.json in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008087 /* privacy-patterns.json */; };
@@ -363,6 +364,7 @@
 		000000000000000000008025 /* SnippetEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/SnippetEditorView.swift; sourceTree = "<group>"; };
 		000000000000000000008027 /* SnippetListSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/SnippetListSection.swift; sourceTree = "<group>"; };
 		000000000000000000008029 /* ActionShareManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/ActionShareManager.swift; sourceTree = "<group>"; };
+		000000000000000000008153 /* PermissionAuditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PermissionAuditor.swift; sourceTree = "<group>"; };
 		000000000000000000008083 /* PrivacyExposureScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PrivacyExposureScanner.swift; sourceTree = "<group>"; };
 		000000000000000000008085 /* PrivacyPatternDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PrivacyPatternDatabase.swift; sourceTree = "<group>"; };
 		000000000000000000008087 /* privacy-patterns.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Halo/Resources/privacy-patterns.json; sourceTree = "<group>"; };
@@ -528,6 +530,7 @@
 				000000000000000000008043 /* SMARTDiskMonitor.swift */,
 				000000000000000000008001 /* PortScanner.swift */,
 				000000000000000000008019 /* IdleAppMonitor.swift */,
+				000000000000000000008153 /* PermissionAuditor.swift */,
 				000000000000000000008083 /* PrivacyExposureScanner.swift */,
 				000000000000000000008085 /* PrivacyPatternDatabase.swift */,
 				000000000000000000008031 /* SecurityPostureScanner.swift */,
@@ -1021,6 +1024,7 @@
 				000000000000000000008026 /* SnippetEditorView.swift in Sources */,
 				000000000000000000008028 /* SnippetListSection.swift in Sources */,
 				000000000000000000008030 /* ActionShareManager.swift in Sources */,
+				000000000000000000008154 /* PermissionAuditor.swift in Sources */,
 				000000000000000000008032 /* SecurityPostureScanner.swift in Sources */,
 				000000000000000000008134 /* FocusSessionManager.swift in Sources */,
 				000000000000000000008136 /* FocusSessionOverlayView.swift in Sources */,

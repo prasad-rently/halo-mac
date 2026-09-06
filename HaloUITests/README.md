@@ -106,6 +106,9 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 | `dashboard.backupHealth.card` · `.setup.button` · `.backupNow.button` · `.heatmap` | Dashboard → Backup Health / Time Machine (F-022) |
 | `cleanup.cleanAll.button` · `fileListView` | Cleanup |
 | `protection.scan.button` | Protection |
+| `protection.permissions.summary` · `protection.permissions.banner` | Protection → Permission Auditor (F-016) header/fallback |
+| `protection.permissions.row.<kind>` · `protection.permissions.revoke.<kind>` | Protection → Permission Auditor per-app list (rich state) |
+| `protection.permissions.card.<kind>` | Protection → Permission Auditor category grid (fallback state) |
 | `protection.privacyscan.button` · `.icloudToggle` · `.status` · `.findings.list` · `.emptyState` · `.row.<id>` · `.reveal.<id>` | Protection → Sensitive Data Scanner (F-018) |
 | `protection.securityPosture.score` · `protection.securityPosture.list` · `protection.securityPosture.check.<slug>` (`.state` / `.fix`) | Protection → Security Posture (F-019) |
 | `performance.idleApp.quit.button` | Performance → Idle Apps |
