@@ -175,4 +175,61 @@ final class PerformanceUITests: HaloUITestCase {
         XCTAssertTrue(clickAny(of: ["Show"], timeout: 5))
         XCTAssertTrue(app.windows.firstMatch.exists)
     }
+
+    // MARK: - Memory Trends (F-023) — TC-PERF-70…79
+    //
+    // MemoryTrendTracker samples continuously in the background from launch,
+    // so by the time the Performance view is opened there may already be
+    // rows with real sparklines, or the section may still show its
+    // "Collecting data" state — both are acceptable, never-crashing outcomes.
+
+    // TC-PERF-70 — the section renders below Top Processes.
+    func test_memoryTrends_section_renders() {
+        openPerformance()
+        XCTAssertTrue(assertID("performance.memoryTrends.tab",
+                                "Memory Trends section should render", timeout: 10).exists)
+        XCTAssertNotNil(element(labeled: "Memory Trends", timeout: 5),
+                        "Memory Trends header text should be visible")
+    }
+
+    // TC-PERF-80 — the alert-threshold Stepper renders and defaults sanely.
+    func test_memoryTrends_alertThreshold_stepper_renders() {
+        openPerformance()
+        XCTAssertTrue(assertID("performance.memoryTrends.alertThreshold.stepper",
+                                "Alert threshold stepper should render", timeout: 10).exists)
+    }
+
+    // TC-PERF-71 — either the collecting-data empty state or at least one
+    // populated app row is shown; never a stuck spinner with neither.
+    func test_memoryTrends_shows_collecting_or_populated_state() {
+        openPerformance()
+        _ = waitForID("performance.memoryTrends.tab", timeout: 10)
+        let collecting = element(labeled: "Collecting data", timeout: 5)
+        let anyRow = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "performance.memoryTrends.row.")
+        ).firstMatch
+        XCTAssertTrue(collecting != nil || anyRow.waitForExistence(timeout: 5),
+                      "Memory Trends should show either the collecting-data state or populated rows")
+    }
+
+    // TC-PERF-77 / TC-PERF-78 / TC-SAFE-02 — "Restart App" (only offered on a
+    // flagged row) must confirm before terminating anything; cancelling must
+    // not restart the app.
+    func test_memoryTrends_restart_requires_confirmation() throws {
+        openPerformance()
+        _ = waitForID("performance.memoryTrends.tab", timeout: 10)
+        let restartButtons = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "performance.memoryTrends.restart.")
+        )
+        guard restartButtons.count > 0, restartButtons.firstMatch.isHittable else {
+            throw XCTSkip("No app has been flagged with a possible memory leak yet (needs >1h of " +
+                          "monotonic growth), so there's no 'Restart App' button to exercise. " +
+                          "Expectation: clicking it shows a confirmation dialog before terminating " +
+                          "anything (TC-SAFE-02).")
+        }
+        restartButtons.firstMatch.click()
+        XCTAssertTrue(confirmationSurfaceAppeared(),
+                      "Restarting a flagged app must confirm first (TC-SAFE-02)")
+        cancelConfirmation()   // never actually terminate the user's app
+    }
 }

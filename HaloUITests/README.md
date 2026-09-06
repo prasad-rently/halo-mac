@@ -100,15 +100,28 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 |------------|-------|
 | `sidebar.row.<AppModule.rawValue>` | every sidebar row (drives all navigation) |
 | `dashboard.smartScan.button` / `dashboard.exportReport.button` / `dashboard.alertHistory` | Dashboard |
+| `dashboard.focusSession.start` · `.end` · `dashboard.focusHistory` | Dashboard → Focus Session (F-028) |
+| `dashboard.appUsageInsights` · `.disabledState` · `.collectingState` · `.chart` · `.backgroundHogs.list` | Dashboard → App Usage Insights (F-021) |
+| `settings.appUsageTracking.toggle` · `.clearHistory.button` | Settings → General → Privacy (F-021) |
+| `dashboard.backupHealth.card` · `.setup.button` · `.backupNow.button` · `.heatmap` | Dashboard → Backup Health / Time Machine (F-022) |
 | `cleanup.cleanAll.button` · `fileListView` | Cleanup |
+| `cleanup.category.browsers.button` · `browserCleaner.cleanAll.button` · `browserCleaner.clearSelected.button` | Cleanup → Browsers (F-024) |
 | `protection.scan.button` | Protection |
+| `protection.permissions.summary` · `protection.permissions.banner` | Protection → Permission Auditor (F-016) header/fallback |
+| `protection.permissions.row.<kind>` · `protection.permissions.revoke.<kind>` | Protection → Permission Auditor per-app list (rich state) |
+| `protection.permissions.card.<kind>` | Protection → Permission Auditor category grid (fallback state) |
+| `protection.privacyscan.button` · `.icloudToggle` · `.status` · `.findings.list` · `.emptyState` · `.row.<id>` · `.reveal.<id>` | Protection → Sensitive Data Scanner (F-018) |
+| `protection.securityPosture.score` · `protection.securityPosture.list` · `protection.securityPosture.check.<slug>` (`.state` / `.fix`) | Protection → Security Posture (F-019) |
 | `performance.idleApp.quit.button` | Performance → Idle Apps |
 | `performance.networkTraffic.filter.field` · `.sort.picker` · `.topTalker.text` · `.list` · `.loading` · `.empty` · `.row.<pid>` | Performance → Network Traffic Monitor (F-017) |
+| `performance.memoryTrends.tab` · `performance.memoryTrends.row.<bundleID>` · `performance.memoryTrends.sparkline.<bundleID>` · `performance.memoryTrends.restart.<bundleID>` | Performance → Memory Trends (F-023) |
 | `applications.row.<bundleId>` · `applications.uninstall.button` · `applications.leftover.<kind>` | Applications |
 | `files.tab.<TabTitle>` | Files tab bar |
 | `files.duplicates.deleteMarked.button` | Files → Duplicates |
 | `files.downloads.row` · `files.downloads.trash.button` · `files.downloads.cleanStale.button` | Files → Downloads |
 | `files.largeFiles.row` · `files.largeFiles.trash.button` | Files → Large Files |
+| `files.similarPhotos.scan.button` · `.scanLibrary.button` · `.deleteMarked.button` · `.deleteMarkedAssets.button` | Files → Similar Photos (F-025) |
+| `files.driveHealth.card` · `.check.button` · `.status` · `.field.<id>` | Files → Drive Speed → Drive Health (F-020) |
 | `ports.row.<port>` · `ports.kill.<port>` · `ports.refresh.button` · `ports.search` | Ports |
 | `actions.newCustom.button` | Actions |
 | `ai.providerPicker` · `ai.modelPicker` · `ai.composer` · `ai.send.button` · `ai.keySetup.title` | AI Assistant |

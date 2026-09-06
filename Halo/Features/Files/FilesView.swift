@@ -5,11 +5,16 @@ struct FilesView: View {
     @State private var activeTab: FilesTab = .spaceLens
 
     enum FilesTab: String, CaseIterable {
-        case spaceLens  = "Space Lens"
-        case duplicates = "Duplicates"
-        case largeFiles = "Large Files"
-        case downloads  = "Downloads"
-        case driveSpeed = "Drive Speed"
+        case spaceLens      = "Space Lens"
+        // Renamed by F-025: with a "Similar Photos" tab beside it, a bare
+        // "Duplicates" no longer says which kind. The rename is deliberate and
+        // is kept over the release branch's older label.
+        case duplicates     = "Exact Duplicates"
+        case similarPhotos  = "Similar Photos"      // F-025
+        case largeFiles     = "Large Files"
+        case downloads      = "Downloads"
+        case driveSpeed     = "Drive Speed"
+        case iCloudDrive    = "iCloud Drive"        // F-030
     }
 
     var body: some View {
@@ -44,11 +49,13 @@ struct FilesView: View {
 
             // Content
             switch activeTab {
-            case .spaceLens:  SpaceLensView()
-            case .duplicates: DuplicateFinderView()
-            case .largeFiles: LargeFilesView()
-            case .downloads:  DownloadsView()
-            case .driveSpeed: DriveSpeedView()
+            case .spaceLens:     SpaceLensView()
+            case .duplicates:    DuplicateFinderView()
+            case .similarPhotos: SimilarPhotosView()   // F-025
+            case .largeFiles:    LargeFilesView()
+            case .downloads:     DownloadsView()
+            case .driveSpeed:    DriveSpeedView()
+            case .iCloudDrive:   ICloudDriveView()     // F-030
             }
         }
         .background(Color.haloSurface)

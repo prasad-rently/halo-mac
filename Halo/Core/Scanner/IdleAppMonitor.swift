@@ -167,22 +167,11 @@ actor IdleAppMonitor {
     }
 
     private func getProcessRAM(pid: pid_t) -> Double {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/ps")
-        process.arguments = ["-p", "\(pid)", "-o", "rss="]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let str = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-               let kb = Double(str) {
-                return kb / 1024.0  // Convert KB to MB
-            }
-        } catch {}
-        return 0
+        // `ps` exits non-zero once the pid is gone, so a 0 return covers both
+        // "no longer running" and "couldn't read" — same as before.
+        guard let raw = ShellReader.output("/bin/ps", ["-p", "\(pid)", "-o", "rss="]),
+              let kb = Double(raw.trimmingCharacters(in: .whitespacesAndNewlines))
+        else { return 0 }
+        return kb / 1024.0  // ps reports KB
     }
 }
