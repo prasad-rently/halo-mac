@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "updated": "2026-08-14",
+  "patterns": [
+    {
+      "id": "credit_card_luhn",
+      "category": "creditCard",
+      "matchType": "luhnCandidate",
+      "value": "\\b(?:\\d[ -]?){13,19}\\b",
+      "risk": "critical",
+      "label": "Credit Card Number"
+    },
+    {
+      "id": "aws_access_key",
+      "category": "awsKey",
+      "matchType": "regex",
+      "value": "AKIA[0-9A-Z]{16}",
+      "risk": "critical",
+      "label": "AWS Access Key"
+    },
+    {
+      "id": "github_token",
+      "category": "githubToken",
+      "matchType": "regex",
+      "value": "\\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,255}\\b",
+      "risk": "critical",
+      "label": "GitHub Token"
+    },
+    {
+      "id": "stripe_secret_key",
+      "category": "stripeKey",
+      "matchType": "regex",
+      "value": "\\bsk_live_[A-Za-z0-9]{20,}\\b",
+      "risk": "critical",
+      "label": "Stripe Secret Key"
+    },
+    {
+      "id": "stripe_publishable_key",
+      "category": "stripeKey",
+      "matchType": "regex",
+      "value": "\\bpk_live_[A-Za-z0-9]{20,}\\b",
+      "risk": "critical",
+      "label": "Stripe Publishable Key"
+    },
+    {
+      "id": "ssh_rsa_private_key",
+      "category": "sshPrivateKey",
+      "matchType": "exact",
+      "value": "-----BEGIN RSA PRIVATE KEY-----",
+      "risk": "critical",
+      "label": "SSH RSA Private Key"
+    },
+    {
+      "id": "ssh_openssh_private_key",
+      "category": "sshPrivateKey",
+      "matchType": "exact",
+      "value": "-----BEGIN OPENSSH PRIVATE KEY-----",
+      "risk": "critical",
+      "label": "SSH OpenSSH Private Key"
+    },
+    {
+      "id": "ssh_ec_private_key",
+      "category": "sshPrivateKey",
+      "matchType": "exact",
+      "value": "-----BEGIN EC PRIVATE KEY-----",
+      "risk": "critical",
+      "label": "SSH EC Private Key"
+    },
+    {
+      "id": "ssn",
+      "category": "ssn",
+      "matchType": "regex",
+      "value": "\\b\\d{3}-\\d{2}-\\d{4}\\b",
+      "risk": "warning",
+      "label": "Social Security Number"
+    }
+  ]
+}

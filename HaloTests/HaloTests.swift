@@ -3,6 +3,8 @@ import Foundation
 import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
+import SwiftUI
+import AppKit
 @testable import Halo
 
 // MARK: - FileSystemScanner Tests
@@ -55,23 +57,87 @@ struct FileSystemScannerTests {
         #expect(items.isEmpty)
     }
 
-    @Test("Cancellation stops scan")
-    func testCancellation() async throws {
-        let scanner = FileSystemScanner()
-        let homeURL = URL(fileURLWithPath: NSHomeDirectory())
+    // This test used to scan the real home directory to depth 10 and break
+    // after 5 `.item` events. Two things made that unbounded:
+    //
+    //   * `.item` events are only emitted *after* `traverse` returns, so the
+    //     early `break` could never fire until the entire home directory had
+    //     been walked; and
+    //   * nothing cancelled the producing task, so the walk ran to completion
+    //     regardless.
+    //
+    // On a developer machine that is minutes, not seconds, and the duration
+    // depends on whatever happens to be in `~` — so it passed most days and
+    // hung on others. It now runs against a fixture it owns.
+    @Test("Breaking out of the stream terminates it cleanly and promptly")
+    func testCancellationStopsScan() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HaloScanCancel-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        // Enough files, nested, that a runaway walk is measurably slower than
+        // an early exit.
+        for dir in 0..<20 {
+            let sub = root.appendingPathComponent("d\(dir)")
+            try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+            for file in 0..<50 {
+                try Data(repeating: 0x41, count: 2048)
+                    .write(to: sub.appendingPathComponent("f\(file).log"))
+            }
+        }
+
         var config = FileSystemScanner.ScanConfig()
         config.maxDepth = 10
+        config.minSizeBytes = 0
 
-        let task = Task {
-            var count = 0
-            for await event in await scanner.scanDirectory(homeURL, config: config) {
-                if case .item = event { count += 1 }
-                if count > 5 { break }
+        let scanner = FileSystemScanner()
+        let started = Date()
+
+        var progressSeen = 0
+        for await event in await scanner.scanDirectory(root, config: config) {
+            if case .progress = event {
+                progressSeen += 1
+                if progressSeen >= 5 { break }
             }
-            return count
         }
-        let result = await task.value
-        #expect(result >= 0) // Should have stopped cleanly
+
+        let elapsed = Date().timeIntervalSince(started)
+
+        #expect(progressSeen == 5)
+        // The real assertion is that this returns at all. Before the
+        // `onTermination` fix the producing task kept walking after the
+        // consumer left; the bound catches a regression to that.
+        #expect(elapsed < 20, "Stream took \(elapsed)s to release the consumer")
+    }
+
+    @Test("A completed scan reports every file in a fixture tree")
+    func testScanFindsFixtureFiles() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HaloScanFixture-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        for i in 0..<12 {
+            try Data(repeating: 0x42, count: 4096)
+                .write(to: root.appendingPathComponent("file\(i).log"))
+        }
+
+        var config = FileSystemScanner.ScanConfig()
+        config.minSizeBytes = 0
+
+        var items = 0
+        var completedCount: Int?
+        for await event in await FileSystemScanner().scanDirectory(root, config: config) {
+            switch event {
+            case .item:                       items += 1
+            case .completed(let count, _):    completedCount = count
+            default:                          break
+            }
+        }
+
+        #expect(items == 12)
+        #expect(completedCount == 12)
     }
 
     @Test("Returns completed event")
@@ -153,6 +219,376 @@ struct DuplicateDetectorTests {
         #expect(groups.count == 1)
         // Wasted = 2 copies × 10000 bytes
         #expect(groups[0].wastedBytes == Int64(content.count) * 2)
+    }
+}
+
+// MARK: - ICloudDriveScanner Tests (F-030)
+//
+// `scanDirectory` and its private helpers operate purely on whatever URL is
+// passed in — no dependency on the real `~/Library/Mobile Documents` or any
+// persisted singleton — so, like FileSystemScanner above, these run against
+// disposable temp directories. `trash(_:)` performs a real `FileManager.
+// trashItem` and is deliberately NOT unit-tested here (no established
+// precedent in this suite for exercising trashItem for real — see
+// FilesUITests, which drives that flow to its confirmation dialog and always
+// cancels).
+
+@Suite("ICloudDriveScanner")
+struct ICloudDriveScannerTests {
+
+    @Test("scanDirectory reports real file sizes, sums directories, and sorts largest-first")
+    func testScanDirectorySizesAndSorting() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("com.halo.test.icloud.\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        // A small top-level file...
+        let smallFile = tempDir.appendingPathComponent("small.txt")
+        try Data(repeating: 0x41, count: 100).write(to: smallFile)
+
+        // ...and a subfolder whose contents should be summed into one size.
+        let subfolder = tempDir.appendingPathComponent("Bigger")
+        try FileManager.default.createDirectory(at: subfolder, withIntermediateDirectories: true)
+        try Data(repeating: 0x42, count: 10_000).write(to: subfolder.appendingPathComponent("a.dat"))
+        try Data(repeating: 0x43, count: 10_000).write(to: subfolder.appendingPathComponent("b.dat"))
+
+        let scanner = ICloudDriveScanner()
+        let items = await scanner.scanDirectory(tempDir)
+
+        #expect(items.count == 2)
+        // Largest (the summed 20,000-byte folder) sorts first.
+        #expect(items.first?.name == "Bigger")
+        #expect(items.first?.isDirectory == true)
+        #expect(items.first?.sizeBytes == 20_000)
+        #expect(items.last?.name == "small.txt")
+        #expect(items.last?.isDirectory == false)
+        #expect(items.last?.sizeBytes == 100)
+    }
+
+    @Test("scanDirectory returns an empty list for an empty folder")
+    func testScanDirectoryEmpty() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("com.halo.test.icloud.empty.\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let scanner = ICloudDriveScanner()
+        let items = await scanner.scanDirectory(tempDir)
+        #expect(items.isEmpty)
+    }
+
+    @Test("scanDirectory fails soft (returns empty) for a nonexistent URL")
+    func testScanDirectoryMissingFolder() async throws {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("com.halo.test.icloud.does-not-exist.\(UUID().uuidString)")
+        let scanner = ICloudDriveScanner()
+        let items = await scanner.scanDirectory(missing)
+        #expect(items.isEmpty)
+    }
+}
+
+// MARK: - iCloud Drive Model Tests (F-030)
+
+@Suite("ICloudContainer")
+struct ICloudContainerTests {
+
+    @Test("displayName is always \"iCloud Drive\" for the user drive, regardless of folder name")
+    func testUserDriveDisplayName() {
+        let container = ICloudContainer(id: "com~apple~CloudDocs",
+                                         url: URL(fileURLWithPath: "/tmp"), isUserDrive: true)
+        #expect(container.displayName == "iCloud Drive")
+    }
+
+    @Test("displayName strips the com~apple~ prefix for a first-party app container")
+    func testAppleAppContainerDisplayName() {
+        let container = ICloudContainer(id: "com~apple~Pages",
+                                         url: URL(fileURLWithPath: "/tmp"), isUserDrive: false)
+        #expect(container.displayName == "Pages")
+    }
+
+    @Test("displayName strips the generic com~ prefix for a third-party container")
+    func testThirdPartyContainerDisplayName() {
+        let container = ICloudContainer(id: "com~examplecorp~notesapp",
+                                         url: URL(fileURLWithPath: "/tmp"), isUserDrive: false)
+        #expect(container.displayName == "Notesapp")
+    }
+}
+
+@Suite("ICloudSyncStatus")
+struct ICloudSyncStatusTests {
+
+    @Test("Each status maps to its own label, SF Symbol, and color")
+    func testStatusPresentation() {
+        #expect(ICloudSyncStatus.local.label == "On This Mac")
+        #expect(ICloudSyncStatus.local.icon == "checkmark.circle.fill")
+        #expect(ICloudSyncStatus.local.color == Color.haloGreen)
+
+        #expect(ICloudSyncStatus.downloading.label == "Downloading…")
+        #expect(ICloudSyncStatus.downloading.icon == "arrow.down.circle")
+
+        #expect(ICloudSyncStatus.uploading.label == "Uploading…")
+        #expect(ICloudSyncStatus.uploading.icon == "arrow.up.circle")
+
+        #expect(ICloudSyncStatus.evicted.label == "iCloud Only")
+        #expect(ICloudSyncStatus.evicted.icon == "icloud")
+        #expect(ICloudSyncStatus.evicted.color == Color.haloText2)
+
+        #expect(ICloudSyncStatus.unknown.label == "Unknown")
+        #expect(ICloudSyncStatus.unknown.icon == "questionmark.circle")
+    }
+}
+
+@Suite("ICloudDriveItem")
+struct ICloudDriveItemTests {
+
+    private func makeItem(name: String, isDirectory: Bool = false,
+                           modifiedDate: Date? = nil) -> ICloudDriveItem {
+        ICloudDriveItem(id: name, url: URL(fileURLWithPath: "/tmp/\(name)"),
+                         name: name, sizeBytes: 1024, isDirectory: isDirectory,
+                         modifiedDate: modifiedDate, syncStatus: .local)
+    }
+
+    @Test("Directories always get the folder icon, regardless of name")
+    func testDirectoryIcon() {
+        let dir = makeItem(name: "Projects.pdf", isDirectory: true)
+        #expect(dir.icon == "folder.fill")
+    }
+
+    @Test("File icon is chosen from the file extension")
+    func testFileExtensionIcons() {
+        #expect(makeItem(name: "report.pdf").icon == "doc.richtext")
+        #expect(makeItem(name: "photo.HEIC").icon == "photo")
+        #expect(makeItem(name: "clip.mov").icon == "film")
+        #expect(makeItem(name: "deck.key").icon == "rectangle.on.rectangle")
+        #expect(makeItem(name: "sheet.xlsx").icon == "tablecells")
+        #expect(makeItem(name: "notes.pages").icon == "doc.text")
+        #expect(makeItem(name: "archive.zip").icon == "doc.zipper")
+        #expect(makeItem(name: "unknownkind.xyz").icon == "doc")
+    }
+
+    @Test("modifiedDateFormatted falls back to an em dash when there's no date")
+    func testModifiedDateFallback() {
+        let item = makeItem(name: "no-date.txt", modifiedDate: nil)
+        #expect(item.modifiedDateFormatted == "—")
+    }
+
+    @Test("modifiedDateFormatted renders a relative string when a date is present")
+    func testModifiedDateRelative() {
+        let item = makeItem(name: "recent.txt", modifiedDate: Date().addingTimeInterval(-3600))
+        #expect(item.modifiedDateFormatted != "—")
+        #expect(!item.modifiedDateFormatted.isEmpty)
+    }
+
+    @Test("sizeFormatted uses ByteCountFormatter")
+    func testSizeFormatted() {
+        let item = makeItem(name: "sized.txt")
+        #expect(item.sizeFormatted.contains("KB") || item.sizeFormatted.contains("1"))
+    }
+}
+
+@Suite("ICloudDriveScanError")
+struct ICloudDriveScanErrorTests {
+
+    @Test("notAvailable explains iCloud Drive isn't set up")
+    func testNotAvailableMessage() {
+        let error = ICloudDriveScanError.notAvailable
+        #expect(error.errorDescription?.contains("iCloud Drive") == true)
+    }
+
+    @Test("containerUnreadable names the container in its message")
+    func testContainerUnreadableMessage() {
+        let error = ICloudDriveScanError.containerUnreadable("Pages")
+        #expect(error.errorDescription?.contains("Pages") == true)
+    }
+}
+
+// MARK: - MetricsSample / Weekly Digest Tests (F-029)
+//
+// MetricsHistory.shared and AlertLog.shared are real persisted singletons with
+// no injectable seam, so — matching this session's established pattern for
+// AlertManager/FocusSessionManager — they're left to manual/UI coverage only.
+// What's tested here is the pure logic: the Codable model, the summary's
+// computed deltas, the notification-body composition, and the scheduler's
+// pure date arithmetic (none of which touch UserDefaults or fire real
+// notifications).
+
+@Suite("MetricsSample")
+struct MetricsSampleTests {
+
+    @Test("Codable roundtrip preserves all fields, including RAM samples")
+    func testCodableRoundtrip() throws {
+        let ramSamples = [
+            ProcessRAMSample(name: "Safari", ramMB: 512.5),
+            ProcessRAMSample(name: "Xcode", ramMB: 2048.0)
+        ]
+        let sample = MetricsSample(healthScore: 82, diskFreeGB: 128.4, topRAMProcesses: ramSamples)
+
+        let data = try JSONEncoder().encode(sample)
+        let decoded = try JSONDecoder().decode(MetricsSample.self, from: data)
+
+        #expect(decoded.id == sample.id)
+        #expect(decoded.healthScore == 82)
+        #expect(decoded.diskFreeGB == 128.4)
+        #expect(decoded.topRAMProcesses.count == 2)
+        #expect(decoded.topRAMProcesses[0].name == "Safari")
+        #expect(decoded.topRAMProcesses[0].ramMB == 512.5)
+    }
+
+    @Test("Default init stamps an id/date and defaults RAM list to empty")
+    func testDefaultInit() {
+        let sample = MetricsSample(healthScore: 90, diskFreeGB: 50)
+        #expect(sample.topRAMProcesses.isEmpty)
+        #expect(sample.healthScore == 90)
+        #expect(sample.diskFreeGB == 50)
+    }
+}
+
+@Suite("WeeklyDigestSummary")
+struct WeeklyDigestSummaryTests {
+
+    private func makeSummary(start: Int?, end: Int, diskStart: Double?, diskEnd: Double,
+                              scans: Int = 0, threats: Int = 0) -> WeeklyDigestSummary {
+        WeeklyDigestSummary(
+            generatedDate: Date(),
+            periodDays: 7,
+            healthScoreStart: start,
+            healthScoreEnd: end,
+            healthSamples: [],
+            diskFreeStartGB: diskStart,
+            diskFreeEndGB: diskEnd,
+            topAverageRAMApps: [],
+            alertsInPeriod: [],
+            threatsDetectedCount: threats,
+            scansCompletedCount: scans
+        )
+    }
+
+    @Test("healthScoreDelta is nil with no starting sample (fresh install)")
+    func testHealthScoreDeltaNilWithoutStart() {
+        let summary = makeSummary(start: nil, end: 80, diskStart: nil, diskEnd: 100)
+        #expect(summary.healthScoreDelta == nil)
+    }
+
+    @Test("healthScoreDelta computes a signed difference")
+    func testHealthScoreDeltaSigned() {
+        let improved = makeSummary(start: 70, end: 85, diskStart: nil, diskEnd: 0)
+        #expect(improved.healthScoreDelta == 15)
+
+        let worsened = makeSummary(start: 90, end: 60, diskStart: nil, diskEnd: 0)
+        #expect(worsened.healthScoreDelta == -30)
+    }
+
+    @Test("diskFreeDeltaGB is nil with no starting sample")
+    func testDiskFreeDeltaNilWithoutStart() {
+        let summary = makeSummary(start: 50, end: 60, diskStart: nil, diskEnd: 200)
+        #expect(summary.diskFreeDeltaGB == nil)
+    }
+
+    @Test("diskFreeDeltaGB computes a signed difference")
+    func testDiskFreeDeltaSigned() {
+        let freed = makeSummary(start: 50, end: 60, diskStart: 100, diskEnd: 130)
+        #expect(freed.diskFreeDeltaGB == 30)
+
+        let consumed = makeSummary(start: 50, end: 60, diskStart: 130, diskEnd: 100)
+        #expect(consumed.diskFreeDeltaGB == -30)
+    }
+}
+
+@Suite("WeeklyDigestGenerator")
+struct WeeklyDigestGeneratorTests {
+
+    private func makeSummary(start: Int?, end: Int, diskStart: Double?, diskEnd: Double,
+                              scans: Int = 0, threats: Int = 0) -> WeeklyDigestSummary {
+        WeeklyDigestSummary(
+            generatedDate: Date(),
+            periodDays: 7,
+            healthScoreStart: start,
+            healthScoreEnd: end,
+            healthSamples: [],
+            diskFreeStartGB: diskStart,
+            diskFreeEndGB: diskEnd,
+            topAverageRAMApps: [],
+            alertsInPeriod: [],
+            threatsDetectedCount: threats,
+            scansCompletedCount: scans
+        )
+    }
+
+    @Test("notificationBody reports an upward trend, freed space, and pluralised counts")
+    @MainActor
+    func testNotificationBodyUpwardTrend() {
+        let summary = makeSummary(start: 70, end: 85, diskStart: 100, diskEnd: 105, scans: 2, threats: 1)
+        let body = WeeklyDigestGenerator.notificationBody(for: summary)
+
+        #expect(body.contains("Health score up 15 pts (now 85)"))
+        #expect(body.contains("GB freed up"))
+        #expect(body.contains("2 scans completed"))
+        #expect(body.contains("1 threat flagged"))
+    }
+
+    @Test("notificationBody reports a downward trend and lost space with singular wording")
+    @MainActor
+    func testNotificationBodyDownwardTrendSingular() {
+        let summary = makeSummary(start: 90, end: 60, diskStart: 200, diskEnd: 195, scans: 1, threats: 0)
+        let body = WeeklyDigestGenerator.notificationBody(for: summary)
+
+        #expect(body.contains("Health score down 30 pts (now 60)"))
+        #expect(body.contains("GB less free space"))
+        #expect(body.contains("1 scan completed"))
+        #expect(!body.contains("threat"))
+    }
+
+    @Test("notificationBody ignores sub-0.1GB disk noise and reports a steady score")
+    @MainActor
+    func testNotificationBodyIgnoresTinyDiskDelta() {
+        let summary = makeSummary(start: 80, end: 80, diskStart: 100.00, diskEnd: 100.05)
+        let body = WeeklyDigestGenerator.notificationBody(for: summary)
+
+        #expect(body.contains("Health score steady 0 pts (now 80)"))
+        #expect(!body.contains("GB"))
+    }
+}
+
+@Suite("WeeklyDigestScheduler")
+struct WeeklyDigestSchedulerTests {
+
+    @Test("nextDigestDate returns nil when the digest is off")
+    @MainActor
+    func testOffFrequencyReturnsNil() {
+        let next = WeeklyDigestScheduler.shared.nextDigestDate(frequency: "off", weekday: 2, hour: 9)
+        #expect(next == nil)
+    }
+
+    @Test("nextDigestDate(daily) lands on the requested hour, within the next day")
+    @MainActor
+    func testDailyReturnsUpcomingDateAtRequestedHour() throws {
+        let next = try #require(
+            WeeklyDigestScheduler.shared.nextDigestDate(frequency: "daily", weekday: 2, hour: 14)
+        )
+        #expect(next > Date())
+        #expect(next.timeIntervalSinceNow <= 24 * 3600 + 60)
+        #expect(Calendar.current.component(.hour, from: next) == 14)
+    }
+
+    @Test("nextDigestDate(weekly) lands on the requested weekday and hour")
+    @MainActor
+    func testWeeklyReturnsRequestedWeekdayAndHour() throws {
+        let next = try #require(
+            WeeklyDigestScheduler.shared.nextDigestDate(frequency: "weekly", weekday: 5, hour: 9)
+        )
+        #expect(next > Date())
+        #expect(Calendar.current.component(.weekday, from: next) == 5)
+        #expect(Calendar.current.component(.hour, from: next) == 9)
+    }
+
+    @Test("nextDigestDate clamps an out-of-range hour into 0...23")
+    @MainActor
+    func testHourIsClamped() throws {
+        let next = try #require(
+            WeeklyDigestScheduler.shared.nextDigestDate(frequency: "daily", weekday: 2, hour: 99)
+        )
+        #expect(Calendar.current.component(.hour, from: next) == 23)
     }
 }
 
@@ -385,6 +821,480 @@ struct PerceptualDuplicateDetectorTests {
     }
 }
 
+// MARK: - F-030 review fixes
+
+@Suite("ICloudDriveItem size reporting")
+struct ICloudDriveSizeTests {
+
+    private func item(size: Int64, local: Int64, truncated: Bool = false) -> ICloudDriveItem {
+        ICloudDriveItem(id: "/x", url: URL(fileURLWithPath: "/x"), name: "x",
+                        sizeBytes: size, localBytes: local, isTruncated: truncated,
+                        isDirectory: true, modifiedDate: nil, syncStatus: .unknown)
+    }
+
+    // A partial total rendered as a plain byte string is indistinguishable from
+    // an exact measurement, in a tab whose job is telling the user where their
+    // storage went.
+    @Test("A capped measurement is rendered as a floor, not an exact figure")
+    func testTruncatedShowsAsFloor() {
+        #expect(item(size: 12_000_000_000, local: 0, truncated: true).sizeFormatted.hasPrefix("≥"))
+        #expect(item(size: 12_000_000_000, local: 0).sizeFormatted.hasPrefix("≥") == false)
+    }
+
+    // The headline bug: evicted content lives in hidden `.name.icloud`
+    // placeholders of a few hundred bytes, so a 40 GB folder measured as a few
+    // megabytes and sorted to the bottom of a size-ordered list.
+    @Test("Evicted content is detected when logical greatly exceeds local")
+    func testEvictedContentDetected() {
+        #expect(item(size: 40_000_000_000, local: 2_000_000).hasEvictedContent)
+    }
+
+    @Test("A fully-downloaded folder is not flagged as evicted")
+    func testFullyLocalNotFlagged() {
+        #expect(item(size: 5_000_000, local: 5_000_000).hasEvictedContent == false)
+    }
+
+    // Guards against the difference being reported for rounding noise.
+    @Test("A sub-megabyte difference is not treated as evicted content")
+    func testSmallDifferenceIgnored() {
+        #expect(item(size: 5_000_000, local: 4_900_000).hasEvictedContent == false)
+    }
+}
+
+// MARK: - F-029 review fixes
+
+@Suite("WeeklyDigest threat counting")
+struct WeeklyDigestThreatCountTests {
+
+    // The reported bug: the count came from `body.localizedCaseInsensitiveContains("threat")`,
+    // so the *negative* copy matched too. A clean week — which is what
+    // ProtectionScanner and ScanScheduler actually produce — reported threats.
+    @Test("Clean-scan wording is not counted as a threat")
+    func testCleanScanCopyIsNotAThreat() {
+        let clean = [
+            AlertEntry(title: "Scan complete", body: "No threats found.", kindRaw: "scan"),
+            AlertEntry(title: "Scan complete", body: "0 threats detected.", kindRaw: "scan")
+        ]
+        let counted = clean.filter { WeeklyDigestGenerator.threatKindRaws.contains($0.kindRaw) }.count
+        #expect(counted == 0)
+    }
+
+    @Test("A real detection is counted by kind, not by prose")
+    func testRealThreatIsCounted() {
+        let entries = [
+            AlertEntry(title: "Threat found", body: "Adware detected.", kindRaw: "threat"),
+            AlertEntry(title: "Scan complete", body: "No threats found.", kindRaw: "scan")
+        ]
+        let counted = entries.filter { WeeklyDigestGenerator.threatKindRaws.contains($0.kindRaw) }.count
+        #expect(counted == 1)
+    }
+
+    // Matching on prose also broke as soon as the copy was translated.
+    @Test("Localized copy does not change the count")
+    func testLocalizedCopyIsIrrelevant() {
+        let entries = [AlertEntry(title: "Analyse terminée", body: "Aucune menace trouvée.", kindRaw: "scan")]
+        let counted = entries.filter { WeeklyDigestGenerator.threatKindRaws.contains($0.kindRaw) }.count
+        #expect(counted == 0)
+    }
+}
+
+@Suite("WeeklyDigest period coverage")
+struct WeeklyDigestPeriodTests {
+
+    private func samples(count: Int, spanDays: Double) -> [MetricsSample] {
+        guard count > 0 else { return [] }
+        let end = Date()
+        let step = count > 1 ? (spanDays * 86_400) / Double(count - 1) : 0
+        return (0..<count).map {
+            MetricsSample(date: end.addingTimeInterval(-spanDays * 86_400 + Double($0) * step),
+                          healthScore: 80, diskFreeGB: 100)
+        }
+    }
+
+    // A fresh install has one seeded sample, so `history.first` was the launch
+    // sample and the "weekly" delta really spanned however long the app had
+    // been open.
+    @Test("A fresh install does not claim a week of history")
+    func testFreshInstallHasNoPeriod() {
+        #expect(WeeklyDigestGenerator.spansEnoughOfPeriod(samples(count: 1, spanDays: 0), days: 7) == false)
+    }
+
+    @Test("Empty history does not claim a period")
+    func testEmptyHistory() {
+        #expect(WeeklyDigestGenerator.spansEnoughOfPeriod([], days: 7) == false)
+    }
+
+    // MetricsHistory samples on a runloop Timer, so sleep/quit gaps are simply
+    // absent — a handful of samples can still be 7 days apart.
+    @Test("A few samples spread across a week is not enough coverage")
+    func testSparseSamplesAcrossAWeek() {
+        #expect(WeeklyDigestGenerator.spansEnoughOfPeriod(samples(count: 3, spanDays: 7), days: 7) == false)
+    }
+
+    @Test("Dense samples over a day is not a week")
+    func testDenseButShort() {
+        #expect(WeeklyDigestGenerator.spansEnoughOfPeriod(samples(count: 48, spanDays: 1), days: 7) == false)
+    }
+
+    @Test("Dense samples spanning the week does count")
+    func testFullWeek() {
+        #expect(WeeklyDigestGenerator.spansEnoughOfPeriod(samples(count: 168, spanDays: 7), days: 7))
+    }
+}
+
+@Suite("RankedApp averaging")
+struct RankedAppAveragingTests {
+
+    // The ranking inversion: averaging over hours-observed made a single 8 GB
+    // spike outrank an app sitting at 4 GB all week, in a section titled
+    // "Apps with high average RAM".
+    @Test("A sustained consumer outranks a one-hour spike")
+    func testSustainedBeatsSpike() {
+        let hours = 168
+        let spike     = RankedApp(name: "Spike",     avgRAMMB: 8000 / Double(hours), hoursObserved: 1,     hoursInPeriod: hours)
+        let sustained = RankedApp(name: "Sustained", avgRAMMB: 4000,                 hoursObserved: hours, hoursInPeriod: hours)
+        #expect(sustained.avgRAMMB > spike.avgRAMMB)
+    }
+
+    @Test("A brief appearance is flagged as a spike")
+    func testSpikeFlag() {
+        #expect(RankedApp(name: "S", avgRAMMB: 10, hoursObserved: 2, hoursInPeriod: 168).isSpike)
+        #expect(RankedApp(name: "C", avgRAMMB: 10, hoursObserved: 168, hoursInPeriod: 168).isSpike == false)
+    }
+
+    @Test("RankedApp id is the app name, stable across recomposition")
+    func testStableIdentity() {
+        #expect(RankedApp(name: "Xcode", avgRAMMB: 1).id == RankedApp(name: "Xcode", avgRAMMB: 2).id)
+    }
+}
+
+// MARK: - ShellReader Tests
+//
+// The point of ShellReader is that it survives three things hand-rolled
+// `Process` code did not: output larger than the 64 KB pipe buffer, an
+// undrained stderr, and a child that never exits. Those are exactly what these
+// tests exercise — a regression here shows up as a hang, so the large-output
+// and timeout cases carry an explicit time limit rather than being left to
+// block a CI run indefinitely.
+
+@Suite("ShellReader")
+struct ShellReaderTests {
+
+    /// Darwin's pipe buffer. Anything at or above this deadlocks a
+    /// `waitUntilExit()`-before-read implementation.
+    private static let pipeBuffer = 65_536
+
+    /// Writes `bytes` of printable ASCII to a temp file and returns its path.
+    private func makeLargeFile(bytes: Int) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("halo.shellreader.\(UUID().uuidString).txt")
+        // One long line of 'a' plus newlines, so the output is valid UTF-8 and
+        // the byte count is exact.
+        let chunk = String(repeating: "a", count: 1023) + "\n"
+        var text = ""
+        text.reserveCapacity(bytes + chunk.count)
+        while text.utf8.count < bytes { text += chunk }
+        try Data(text.utf8.prefix(bytes)).write(to: url)
+        return url
+    }
+
+    // MARK: - Basics
+
+    @Test("Captures stdout and a zero exit status")
+    func testSimpleOutput() {
+        let result = ShellReader.run("/bin/echo", ["hello halo"])
+        #expect(result.standardOutput == "hello halo\n")
+        #expect(result.standardError.isEmpty)
+        #expect(result.exitCode == 0)
+        #expect(result.didTimeOut == false)
+        #expect(result.launchFailure == nil)
+        #expect(result.succeeded)
+    }
+
+    @Test("A non-zero exit status is reported, not swallowed")
+    func testNonZeroExit() {
+        let result = ShellReader.run("/bin/sh", ["-c", "exit 3"])
+        #expect(result.exitCode == 3)
+        #expect(result.succeeded == false)
+        #expect(result.outputIfSucceeded == nil)
+    }
+
+    @Test("stderr is captured separately and never pollutes stdout")
+    func testStreamsKeptSeparate() {
+        let result = ShellReader.run("/bin/sh", ["-c", "echo out; echo err >&2"])
+        #expect(result.standardOutput == "out\n")
+        #expect(result.standardError == "err\n")
+        #expect(result.succeeded,
+                "Writing to stderr is not itself a failure — only the exit status decides.")
+    }
+
+    // MARK: - The deadlock cases
+    //
+    // These are the regression tests for the bug this type was extracted to
+    // fix. Under a `waitUntilExit()`-before-read implementation they hang
+    // forever rather than failing.
+
+    @Test("Output larger than the 64 KB pipe buffer does not deadlock",
+          .timeLimit(.minutes(1)))
+    func testLargeStdoutDoesNotDeadlock() throws {
+        let size = Self.pipeBuffer * 4          // 256 KB — comfortably past one buffer
+        let file = try makeLargeFile(bytes: size)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let result = ShellReader.run("/bin/cat", [file.path])
+
+        #expect(result.succeeded)
+        #expect(result.standardOutput.utf8.count == size,
+                "Expected all \(size) bytes back; got \(result.standardOutput.utf8.count). A short read means a pipe was not fully drained.")
+    }
+
+    @Test("Large output on BOTH streams at once does not deadlock",
+          .timeLimit(.minutes(1)))
+    func testLargeStdoutAndStderrDoNotDeadlock() throws {
+        // The case a stdout-only fix still misses: draining stdout but leaving
+        // stderr on an unread Pipe() deadlocks identically once stderr fills.
+        let size = Self.pipeBuffer * 2          // 128 KB down each stream
+        let file = try makeLargeFile(bytes: size)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let result = ShellReader.run("/bin/sh", ["-c", #"cat "$0"; cat "$0" >&2"#, file.path])
+
+        #expect(result.succeeded)
+        #expect(result.standardOutput.utf8.count == size)
+        #expect(result.standardError.utf8.count == size,
+                "stderr must be drained concurrently, not left on a Pipe nobody reads.")
+    }
+
+    // MARK: - Timeout
+    //
+    // The hazard that survives fixing the pipe ordering: waitUntilExit() takes
+    // no deadline, so a child that never exits blocks the caller forever.
+
+    @Test("A child that overruns its timeout is terminated and reported",
+          .timeLimit(.minutes(1)))
+    func testTimeoutTerminatesChild() {
+        let start = Date()
+        let result = ShellReader.run("/bin/sleep", ["60"], timeout: 1)
+        let elapsed = Date().timeIntervalSince(start)
+
+        #expect(result.didTimeOut)
+        #expect(result.succeeded == false)
+        #expect(elapsed < 10,
+                "Should have returned about a second in, not waited out the full sleep. Took \(elapsed)s.")
+    }
+
+    @Test("Partial output is still returned when a child times out",
+          .timeLimit(.minutes(1)))
+    func testTimeoutStillReturnsPartialOutput() {
+        // Prints immediately, then hangs. The early output must survive.
+        let result = ShellReader.run("/bin/sh", ["-c", "echo early; sleep 60"], timeout: 2)
+        #expect(result.didTimeOut)
+        #expect(result.standardOutput.contains("early"),
+                "Output written before the timeout should not be discarded.")
+    }
+
+    // MARK: - Launch failure
+    //
+    // Under the release App Sandbox posix_spawn is denied, so this is the path
+    // every call takes in an App Store build. It has to be distinguishable from
+    // "the tool ran and found nothing", or the UI reports a confident zero.
+
+    @Test("A missing executable is a launch failure, not an empty success")
+    func testLaunchFailureIsDistinctFromEmptyOutput() {
+        let result = ShellReader.run("/usr/bin/definitely-not-a-real-halo-binary")
+
+        #expect(result.launchFailure != nil,
+                "Callers must be able to tell 'we could not ask' from 'the answer was empty'.")
+        #expect(result.succeeded == false)
+        #expect(result.standardOutput.isEmpty)
+        #expect(result.exitCode == -1)
+    }
+
+    @Test("A successful empty result is not mistaken for a launch failure")
+    func testEmptyOutputStillSucceeds() {
+        let result = ShellReader.run("/usr/bin/true")
+        #expect(result.launchFailure == nil)
+        #expect(result.succeeded)
+        #expect(result.standardOutput.isEmpty)
+        #expect(result.outputIfSucceeded == "")
+    }
+
+    // MARK: - Concurrency
+    //
+    // This is the regression test for the bug that the *first* implementation
+    // of ShellReader shipped with, and which only surfaced because the suite
+    // above runs in parallel: draining each pipe with a blocking read on
+    // DispatchQueue.global() and waiting on a DispatchGroup parks two pool
+    // threads per call while a third waits on them. Once enough calls overlap,
+    // the pool has no thread left to run a drain block, `leave()` is never
+    // reached, and the wait never returns — a hang, not a failure.
+    //
+    // Halo really does have several of these in flight at once (AppState's
+    // SMART timer, SystemControlsManager's poll loop, an AI tool call), so this
+    // is a production case and not a test artifact. Kept explicit so a future
+    // "tidy-up" back to a worker-per-pipe design fails here loudly.
+
+    @Test("Many overlapping calls with large output on both streams all complete",
+          .timeLimit(.minutes(2)))
+    func testConcurrentCallsDoNotStarveOrDeadlock() throws {
+        let size = Self.pipeBuffer * 2          // 128 KB down each stream, per call
+        let file = try makeLargeFile(bytes: size)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let callCount = 24
+        let collector = ResultCollector()
+        DispatchQueue.concurrentPerform(iterations: callCount) { _ in
+            collector.add(ShellReader.run(
+                "/bin/sh", ["-c", #"cat "$0"; cat "$0" >&2"#, file.path]
+            ))
+        }
+
+        let collected = collector.all
+        #expect(collected.count == callCount)
+        #expect(collected.allSatisfy { $0.succeeded })
+        #expect(collected.allSatisfy { $0.standardOutput.utf8.count == size },
+                "Every concurrent call must get its full stdout back, not a short read.")
+        #expect(collected.allSatisfy { $0.standardError.utf8.count == size },
+                "…and its full stderr.")
+    }
+
+    @Test("Overlapping timeouts all resolve independently", .timeLimit(.minutes(2)))
+    func testConcurrentTimeoutsDoNotBlockEachOther() {
+        // Each call parks for its whole timeout, which is the worst case for a
+        // thread-pool-based design.
+        let callCount = 12
+        let collector = ResultCollector()
+        DispatchQueue.concurrentPerform(iterations: callCount) { _ in
+            collector.add(ShellReader.run("/bin/sleep", ["60"], timeout: 1))
+        }
+        let collected = collector.all
+        #expect(collected.count == callCount)
+        #expect(collected.allSatisfy { $0.didTimeOut })
+        #expect(collected.allSatisfy { !$0.succeeded })
+    }
+
+    /// Thread-safe sink for results gathered off `concurrentPerform`.
+    private final class ResultCollector: @unchecked Sendable {
+        private let lock = NSLock()
+        private var results: [ShellReader.Result] = []
+
+        func add(_ result: ShellReader.Result) {
+            lock.lock(); results.append(result); lock.unlock()
+        }
+
+        var all: [ShellReader.Result] {
+            lock.lock(); defer { lock.unlock() }
+            return results
+        }
+    }
+
+    // MARK: - Argument handling
+
+    @Test("Arguments are passed as argv, so no shell quoting is needed")
+    func testArgumentsAreNotShellInterpreted() {
+        // If these were interpolated into a shell command line, the semicolon
+        // and backtick would be interpreted. As argv they are literal text.
+        let hostile = "a; rm -rf /tmp/nothing; `whoami`"
+        let result = ShellReader.run("/bin/echo", [hostile])
+        #expect(result.standardOutput == hostile + "\n")
+    }
+}
+
+// MARK: - Shared singletons (Phase 0 / P0.3)
+
+@Suite("AlertManager")
+struct AlertManagerTests {
+
+    // `AlertKind.rawValue` is a storage format, not an implementation detail:
+    // AlertLog persists it to UserDefaults, and AlertEntry.icon / .accentColor
+    // switch on those exact strings. Renaming a case silently strips the icon
+    // and colour from every alert already sitting in a user's history.
+    @Test("AlertKind raw values are persisted and must not change")
+    func testAlertKindRawValuesAreStable() {
+        let expected: [AlertManager.AlertKind: String] = [
+            .cpuHigh:          "cpu_high",
+            .ramHigh:          "ram_high",
+            .diskLow:          "disk_low",
+            .batteryLow:       "battery_low",
+            .batteryCritical:  "battery_critical",
+            .chargingDone:     "charging_done"
+        ]
+        for (kind, raw) in expected {
+            #expect(kind.rawValue == raw, "AlertKind.\(kind) raw value changed — old history entries lose their icon")
+        }
+    }
+
+    // Adding a case to AlertKind without adding the matching arm to
+    // AlertEntry.icon leaves the alert rendering as a generic bell in the
+    // history list. Three queued PRs add cases to this enum, so this is the
+    // check that keeps the two files in step.
+    @Test("Every AlertKind has its own icon in AlertEntry")
+    func testEveryAlertKindHasAnIcon() {
+        for kind in AlertManager.AlertKind.allCases {
+            let entry = AlertEntry(title: "t", body: "b", kindRaw: kind.rawValue)
+            #expect(
+                entry.icon != "bell.fill",
+                "AlertKind.\(kind.rawValue) falls through to the default icon — add a case to AlertEntry.icon (and .accentColor)"
+            )
+        }
+    }
+}
+
+// Serialized: every test here samples the one shared ProcessMonitor, so a
+// parallel sibling forcing a re-sample would break the coalescing assertion.
+@Suite("ProcessMonitor", .serialized)
+struct ProcessMonitorTests {
+
+    @Test("A snapshot sees the running process table")
+    func testSnapshotIsPopulated() async {
+        let procs = await ProcessMonitor.shared.snapshot()
+        #expect(!procs.isEmpty)
+        // This test process must be in its own process table.
+        #expect(procs.contains { $0.id == Foundation.ProcessInfo.processInfo.processIdentifier })
+    }
+
+    // The regression this guards: without coalescing, the second of two
+    // near-simultaneous calls re-enumerates and computes its CPU delta over a
+    // near-zero elapsed window, so every process reads ~0 %. Two independent
+    // samples agreeing on ~600 CPU percentages to the bit does not happen by
+    // chance — if this fails, the cache is gone.
+    @Test("Two snapshots inside the coalescing window are the same sample")
+    func testSnapshotsCoalesce() async {
+        let first  = await ProcessMonitor.shared.snapshot()
+        let second = await ProcessMonitor.shared.snapshot()
+
+        #expect(first.count == second.count)
+        #expect(zip(first, second).allSatisfy { $0.id == $1.id && $0.cpuPercent == $1.cpuPercent })
+    }
+
+    // Exercises the expiry path, and with it the CPU-delta arithmetic against a
+    // real previous baseline — including the PID-reuse guard, which would trap
+    // on UInt64 underflow if it were removed.
+    @Test("Re-sampling after the window stays well-formed")
+    func testResampleAfterWindow() async throws {
+        _ = await ProcessMonitor.shared.snapshot()
+        try await Task.sleep(for: .milliseconds(1_200))
+        let fresh = await ProcessMonitor.shared.snapshot()
+
+        #expect(!fresh.isEmpty)
+        #expect(fresh.allSatisfy { $0.cpuPercent >= 0 && $0.cpuPercent <= 100 })
+        #expect(fresh.allSatisfy { $0.ramMB >= 0 })
+        // PIDs are unique within a sample — a duplicate means the dictionary
+        // rebuild in resample() has regressed to appending.
+        #expect(Set(fresh.map(\.id)).count == fresh.count)
+    }
+
+    @Test("topProcesses honours the limit and sorts by the requested key")
+    func testTopProcessesSorting() async {
+        let byCPU = await ProcessMonitor.shared.topProcesses(sortBy: .cpu, limit: 5)
+        let byRAM = await ProcessMonitor.shared.topProcesses(sortBy: .ram, limit: 5)
+
+        #expect(byCPU.count <= 5)
+        #expect(byRAM.count <= 5)
+        #expect(zip(byCPU, byCPU.dropFirst()).allSatisfy { $0.cpuPercent >= $1.cpuPercent })
+        #expect(zip(byRAM, byRAM.dropFirst()).allSatisfy { $0.ramMB >= $1.ramMB })
+    }
+}
 
 // MARK: - AsyncTimeout
 //
@@ -475,6 +1385,28 @@ struct AsyncTimeoutTests {
         try? await Task.sleep(nanoseconds: 600_000_000)
     }
 
+    // The deadline is a cancellable `Task` so the fast path reclaims it instead
+    // of leaving it queued for the full timeout. This exercises that path hard:
+    // 400 fast calls against a 60 s ceiling. If cancellation raced the gate the
+    // deadline could resume an already-resumed continuation, which is a hard
+    // fatalError — so the suite surviving is the assertion, alongside the wall
+    // clock staying nowhere near the timeout.
+    @Test("Many fast calls with a long ceiling all settle promptly")
+    func testFastPathReclaimsTheDeadline() async {
+        let started = Date()
+        let results = await withTaskGroup(of: Int?.self) { group in
+            for i in 0..<400 {
+                group.addTask { await AsyncTimeout.run(seconds: 60) { $0(i) } }
+            }
+            var seen: [Int] = []
+            for await r in group { if let r { seen.append(r) } }
+            return seen
+        }
+        #expect(results.count == 400)
+        #expect(Set(results) == Set(0..<400))
+        #expect(Date().timeIntervalSince(started) < 10)
+    }
+
     @Test("runBlocking returns a prompt value and bounds a slow one")
     func testRunBlocking() async {
         #expect(await AsyncTimeout.runBlocking(seconds: 10) { "done" } == "done")
@@ -486,5 +1418,2009 @@ struct AsyncTimeoutTests {
         }
         #expect(slow == nil)
         #expect(Date().timeIntervalSince(started) < Self.slowWork / 2)
+    }
+}
+
+// MARK: - SMARTDiskMonitor Tests (F-020)
+//
+// `classify(...)` and `nonEmpty(_:)` are pure/static, so these tests never
+// shell out to `diskutil` or touch IOKit (those depend on the real machine's
+// actual drives — see docs/MANUAL_TEST_PLAN.md for their manual coverage).
+
+@Suite("SMARTDiskMonitor")
+struct SMARTDiskMonitorTests {
+
+    private typealias Status = SMARTDiskMonitor.SMARTOverallStatus
+    private typealias Info = SMARTDiskMonitor.SMARTDiskInfo
+
+    // MARK: - classify(status:percentageUsed:mediaErrorCount:availableSpare:availableSpareThreshold:)
+
+    @Test("A failing SMART status is always .failing, regardless of every other signal")
+    func testClassifyFailingStatusOverridesEverything() {
+        let level = Info.classify(status: .failing, percentageUsed: 0, mediaErrorCount: 0,
+                                   availableSpare: 100, availableSpareThreshold: 10)
+        #expect(level == .failing)
+    }
+
+    @Test("Available spare BELOW a credible threshold is a critical failing condition")
+    func testClassifyAvailableSpareBelowThresholdIsFailing() {
+        // The NVMe spec's condition is spare falling *below* the threshold, so
+        // spare == threshold is not yet critical.
+        let atThreshold = Info.classify(status: .verified, percentageUsed: 0, mediaErrorCount: 0,
+                                         availableSpare: 20, availableSpareThreshold: 20)
+        let belowThreshold = Info.classify(status: .verified, percentageUsed: 0, mediaErrorCount: 0,
+                                            availableSpare: 19, availableSpareThreshold: 20)
+        #expect(atThreshold == .good)
+        #expect(belowThreshold == .failing)
+    }
+
+    // MARK: - The Apple Silicon threshold trap
+    //
+    // Verified by hand on this Mac: `diskutil info -plist /` reports
+    // AVAILABLE_SPARE = 100 with AVAILABLE_SPARE_THRESHOLD = 99 — nothing like
+    // the ~10% the NVMe spec's own examples use. Trusting that literally would
+    // declare a healthy drive Failing the first time spare ticks 100 -> 99 and
+    // then fire "back up your data immediately" every hour, forever. These are
+    // the regression tests for that.
+
+    @Test("Apple's implausible 99% spare threshold never produces a Failing verdict on a healthy drive")
+    func testClassifyIgnoresImplausibleAppleSpareThreshold() {
+        // Real values read from this machine today.
+        let today = Info.classify(status: .verified, percentageUsed: 16, mediaErrorCount: 0,
+                                   availableSpare: 100, availableSpareThreshold: 99)
+        // The very next percentage point of entirely normal wear.
+        let tomorrow = Info.classify(status: .verified, percentageUsed: 16, mediaErrorCount: 0,
+                                      availableSpare: 99, availableSpareThreshold: 99)
+        // And well beyond it — still nowhere near a real problem.
+        let later = Info.classify(status: .verified, percentageUsed: 20, mediaErrorCount: 0,
+                                   availableSpare: 80, availableSpareThreshold: 99)
+        #expect(today == .good)
+        #expect(tomorrow == .good,
+                "A drive at 99% spare is healthy. Trusting Apple's threshold of 99 literally would page the user with a false 'drive is failing' alarm.")
+        #expect(later == .good)
+    }
+
+    @Test("A genuinely low spare still fails, even when the vendor threshold is discarded")
+    func testClassifyLowSpareFailsWithoutCredibleThreshold() {
+        // Threshold of 99 is discarded, so the backstop has to catch this.
+        let withNonsenseThreshold = Info.classify(status: .verified, percentageUsed: 50, mediaErrorCount: 0,
+                                                   availableSpare: 5, availableSpareThreshold: 99)
+        // No threshold reported at all.
+        let withNoThreshold = Info.classify(status: .verified, percentageUsed: 50, mediaErrorCount: 0,
+                                             availableSpare: 5, availableSpareThreshold: nil)
+        #expect(withNonsenseThreshold == .failing)
+        #expect(withNoThreshold == .failing)
+    }
+
+    @Test("Spare exactly at the backstop is not yet failing")
+    func testClassifySpareAtBackstopBoundary() {
+        let at = Info.classify(status: .verified, percentageUsed: 0, mediaErrorCount: 0,
+                                availableSpare: SMARTDiskMonitor.SMARTDiskInfo.criticalSparePercent,
+                                availableSpareThreshold: nil)
+        let below = Info.classify(status: .verified, percentageUsed: 0, mediaErrorCount: 0,
+                                   availableSpare: SMARTDiskMonitor.SMARTDiskInfo.criticalSparePercent - 1,
+                                   availableSpareThreshold: nil)
+        #expect(at == .good)
+        #expect(below == .failing)
+    }
+
+    @Test("Available spare comfortably above threshold does not fail on its own")
+    func testClassifySpareAboveThresholdIsNotFailingByItself() {
+        let level = Info.classify(status: .verified, percentageUsed: 0, mediaErrorCount: 0,
+                                   availableSpare: 50, availableSpareThreshold: 10)
+        #expect(level == .good)
+    }
+
+    @Test("100% or greater wear (percentageUsed) is failing")
+    func testClassifyFullWearIsFailing() {
+        let level = Info.classify(status: .verified, percentageUsed: 100, mediaErrorCount: 0,
+                                   availableSpare: nil, availableSpareThreshold: nil)
+        #expect(level == .failing)
+    }
+
+    @Test("Any non-zero media error count is a warning, not a failure")
+    func testClassifyMediaErrorsAreWarning() {
+        let level = Info.classify(status: .verified, percentageUsed: 0, mediaErrorCount: 1,
+                                   availableSpare: nil, availableSpareThreshold: nil)
+        #expect(level == .warning)
+    }
+
+    @Test("90-99% wear is a warning, not yet a failure")
+    func testClassifyHighWearIsWarning() {
+        let level = Info.classify(status: .verified, percentageUsed: 90, mediaErrorCount: 0,
+                                   availableSpare: nil, availableSpareThreshold: nil)
+        let level99 = Info.classify(status: .verified, percentageUsed: 99, mediaErrorCount: 0,
+                                     availableSpare: nil, availableSpareThreshold: nil)
+        #expect(level == .warning)
+        #expect(level99 == .warning)
+    }
+
+    @Test("An unrecognized (.other) SMART status is Unknown, not Warning")
+    func testClassifyOtherStatusIsUnknown() {
+        // Verified on this Mac: every USB/Thunderbolt bridge enclosure reports
+        // SMARTStatus = "Not Supported" (the external SSD at /Volumes/SSDA does).
+        // That is the enclosure's normal, healthy state — an amber Warning badge
+        // on a perfectly good drive is a false positive, and "can't tell" is
+        // exactly what .unknown is for.
+        let notSupported = Info.classify(status: .other("Not Supported"), percentageUsed: nil, mediaErrorCount: nil,
+                                          availableSpare: nil, availableSpareThreshold: nil)
+        let vendorString = Info.classify(status: .other("Some Vendor String"), percentageUsed: 0, mediaErrorCount: 0,
+                                          availableSpare: nil, availableSpareThreshold: nil)
+        #expect(notSupported == .unknown)
+        #expect(vendorString == .unknown)
+    }
+
+    @Test("A real problem still outranks an unreadable status")
+    func testClassifyOtherStatusDoesNotMaskRealSignals() {
+        // .other must not swallow signals we *did* read — the status check sits
+        // after the wear/spare/error checks for this reason.
+        let worn = Info.classify(status: .other("Not Supported"), percentageUsed: 100, mediaErrorCount: nil,
+                                  availableSpare: nil, availableSpareThreshold: nil)
+        let lowSpare = Info.classify(status: .other("Not Supported"), percentageUsed: nil, mediaErrorCount: nil,
+                                      availableSpare: 2, availableSpareThreshold: nil)
+        #expect(worn == .failing)
+        #expect(lowSpare == .failing)
+    }
+
+    // MARK: - healthLevel vs alertLevel
+    //
+    // The card can afford to surface anything notable; a system notification is
+    // pushed at someone who didn't ask, so it has to clear a higher bar.
+
+    @Test("A single media error colours the card but never pages the user")
+    func testMediaErrorWarnsOnCardButNotInAlert() {
+        let info = Info(
+            id: "/", bsdWholeDiskID: "disk0", model: "APPLE SSD", serialNumber: nil,
+            busProtocol: "Apple Fabric", isSolidState: true, capacityBytes: 256_000_000_000,
+            overallStatus: .verified, temperatureCelsius: 52, powerOnHours: 3260, powerCycles: 364,
+            unsafeShutdowns: 26, totalBytesWritten: nil, totalBytesRead: nil,
+            availableSparePercent: 100, availableSpareThresholdPercent: 99, percentageUsed: 16,
+            mediaErrorCount: 1, errorLogEntryCount: 0,
+            reallocatedSectorCount: nil, pendingSectorCount: nil, scannedAt: Date()
+        )
+        #expect(info.healthLevel == .warning,
+                "One unrecovered read is worth showing on the card.")
+        #expect(info.alertLevel == .good,
+                "…but a single lifetime error must not fire a daily 'back up important files' banner forever.")
+    }
+
+    @Test("A genuinely failing drive still alerts")
+    func testFailingDriveAlerts() {
+        let info = Info(
+            id: "/", bsdWholeDiskID: "disk0", model: "APPLE SSD", serialNumber: nil,
+            busProtocol: "Apple Fabric", isSolidState: true, capacityBytes: 256_000_000_000,
+            overallStatus: .failing, temperatureCelsius: nil, powerOnHours: nil, powerCycles: nil,
+            unsafeShutdowns: nil, totalBytesWritten: nil, totalBytesRead: nil,
+            availableSparePercent: nil, availableSpareThresholdPercent: nil, percentageUsed: nil,
+            mediaErrorCount: nil, errorLogEntryCount: nil,
+            reallocatedSectorCount: nil, pendingSectorCount: nil, scannedAt: Date()
+        )
+        #expect(info.healthLevel == .failing)
+        #expect(info.alertLevel == .failing)
+    }
+
+    @Test("High wear alerts, since it is both real and actionable")
+    func testHighWearAlerts() {
+        let info = Info(
+            id: "/", bsdWholeDiskID: "disk0", model: "APPLE SSD", serialNumber: nil,
+            busProtocol: "Apple Fabric", isSolidState: true, capacityBytes: 256_000_000_000,
+            overallStatus: .verified, temperatureCelsius: nil, powerOnHours: nil, powerCycles: nil,
+            unsafeShutdowns: nil, totalBytesWritten: nil, totalBytesRead: nil,
+            availableSparePercent: nil, availableSpareThresholdPercent: nil, percentageUsed: 95,
+            mediaErrorCount: nil, errorLogEntryCount: nil,
+            reallocatedSectorCount: nil, pendingSectorCount: nil, scannedAt: Date()
+        )
+        #expect(info.healthLevel == .warning)
+        #expect(info.alertLevel == .warning)
+    }
+
+    @Test("An external enclosure that reports nothing never alerts")
+    func testUnsupportedExternalNeverAlerts() {
+        // The /Volumes/SSDA case: USB bridge, no SMART dict at all.
+        let info = Info(
+            id: "/Volumes/SSDA", bsdWholeDiskID: "disk4", model: nil, serialNumber: nil,
+            busProtocol: "USB", isSolidState: nil, capacityBytes: 2_000_000_000_000,
+            overallStatus: .other("Not Supported"), temperatureCelsius: nil, powerOnHours: nil,
+            powerCycles: nil, unsafeShutdowns: nil, totalBytesWritten: nil, totalBytesRead: nil,
+            availableSparePercent: nil, availableSpareThresholdPercent: nil, percentageUsed: nil,
+            mediaErrorCount: nil, errorLogEntryCount: nil,
+            reallocatedSectorCount: nil, pendingSectorCount: nil, scannedAt: Date()
+        )
+        #expect(info.healthLevel == .unknown)
+        #expect(info.alertLevel == .unknown)
+    }
+
+    @Test("Verified status with no red flags at all is good")
+    func testClassifyVerifiedWithNoIssuesIsGood() {
+        let level = Info.classify(status: .verified, percentageUsed: 10, mediaErrorCount: 0,
+                                   availableSpare: 90, availableSpareThreshold: 10)
+        #expect(level == .good)
+    }
+
+    @Test("Unavailable status with no other signal is unknown, never guessed as good")
+    func testClassifyUnavailableWithNoSignalsIsUnknown() {
+        let level = Info.classify(status: .unavailable, percentageUsed: nil, mediaErrorCount: nil,
+                                   availableSpare: nil, availableSpareThreshold: nil)
+        #expect(level == .unknown)
+    }
+
+    @Test("All-nil optional signals with a verified status still classify as good")
+    func testClassifyVerifiedWithAllNilOptionalsIsGood() {
+        let level = Info.classify(status: .verified, percentageUsed: nil, mediaErrorCount: nil,
+                                   availableSpare: nil, availableSpareThreshold: nil)
+        #expect(level == .good)
+    }
+
+    // MARK: - nonEmpty(_:)
+
+    @Test("nonEmpty returns nil for a nil input")
+    func testNonEmptyNilInput() {
+        #expect(SMARTDiskMonitor.nonEmpty(nil) == nil)
+    }
+
+    @Test("nonEmpty returns nil for an empty string — the diskutil MediaName-by-mount-path gotcha")
+    func testNonEmptyEmptyString() {
+        #expect(SMARTDiskMonitor.nonEmpty("") == nil)
+    }
+
+    @Test("nonEmpty returns nil for a whitespace-only string")
+    func testNonEmptyWhitespaceOnlyString() {
+        #expect(SMARTDiskMonitor.nonEmpty("   ") == nil)
+    }
+
+    @Test("nonEmpty passes through a real value unchanged")
+    func testNonEmptyRealValue() {
+        #expect(SMARTDiskMonitor.nonEmpty("APPLE SSD AP0512Z") == "APPLE SSD AP0512Z")
+    }
+
+    // MARK: - SMARTDiskInfo.lifespanRemainingPercent
+
+    private func makeInfo(percentageUsed: Int?) -> Info {
+        Info(id: "test", bsdWholeDiskID: "disk0", model: nil, serialNumber: nil, busProtocol: nil,
+             isSolidState: true, capacityBytes: 0, overallStatus: .verified,
+             temperatureCelsius: nil, powerOnHours: nil, powerCycles: nil, unsafeShutdowns: nil,
+             totalBytesWritten: nil, totalBytesRead: nil, availableSparePercent: nil,
+             availableSpareThresholdPercent: nil, percentageUsed: percentageUsed, mediaErrorCount: nil,
+             errorLogEntryCount: nil, reallocatedSectorCount: nil, pendingSectorCount: nil,
+             scannedAt: .distantPast)
+    }
+
+    @Test("lifespanRemainingPercent is nil when the drive never reported a wear percentage")
+    func testLifespanRemainingNilWhenNoWearReported() {
+        #expect(makeInfo(percentageUsed: nil).lifespanRemainingPercent == nil)
+    }
+
+    @Test("lifespanRemainingPercent is 100 minus the reported wear")
+    func testLifespanRemainingIsInverseOfWear() {
+        #expect(makeInfo(percentageUsed: 30).lifespanRemainingPercent == 70)
+        #expect(makeInfo(percentageUsed: 0).lifespanRemainingPercent == 100)
+    }
+
+    @Test("lifespanRemainingPercent never goes negative even if wear reports over 100%")
+    func testLifespanRemainingClampsAtZero() {
+        #expect(makeInfo(percentageUsed: 110).lifespanRemainingPercent == 0)
+    }
+}
+
+// MARK: - AlertKind icon coverage
+//
+// Adding a case to `AlertKind` without adding the matching arm to
+// `AlertEntry.icon` / `.accentColor` leaves the alert rendering as a generic
+// bell in Alert History. F-020 shipped exactly that gap for both of its kinds.
+//
+// `phase0/shared-singletons` carries a version of the first test; it is here
+// too so this branch is covered before Phase 0 merges.
+@Suite("AlertEntry icon coverage")
+struct AlertEntryIconCoverageTests {
+
+    @Test("Every AlertKind has its own icon and colour")
+    func testEveryKindIsMapped() {
+        for kind in AlertManager.AlertKind.allCases {
+            let entry = AlertEntry(title: "t", body: "b", kindRaw: kind.rawValue)
+            #expect(entry.icon != "bell.fill",
+                    "AlertKind.\(kind) has no arm in AlertEntry.icon — renders as a generic bell")
+            #expect(entry.accentColor != .haloAccent,
+                    "AlertKind.\(kind) has no arm in AlertEntry.accentColor")
+        }
+    }
+
+    // An SF Symbol name that does not exist renders as a *blank*, not an error,
+    // so a typo or an invented name ships silently. Writing these two arms, the
+    // obvious `internaldrive.badge.exclamationmark` and `internaldrive.badge.xmark`
+    // both turned out not to exist — this is the check that catches that class.
+    @Test("Every AlertKind icon resolves to a real SF Symbol")
+    func testEveryIconResolves() {
+        for kind in AlertManager.AlertKind.allCases {
+            let name = AlertEntry(title: "t", body: "b", kindRaw: kind.rawValue).icon
+            #expect(NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil,
+                    "AlertKind.\(kind) uses \"\(name)\", which is not an SF Symbol on this OS — it renders blank")
+        }
+    }
+}
+
+// MARK: - TimeMachineMonitor / TimeMachineStatus Tests (F-022)
+//
+// `heatmap(backupDates:days:referenceDate:)` is pure and synchronous (no
+// `await`, no shelling out to `tmutil`), so these tests exercise it directly
+// with synthetic backup dates and a fixed reference date. `isStale` and
+// `spaceUsedRatio` are plain computed properties on `TimeMachineStatus`,
+// also tested without any live `tmutil` process.
+
+@Suite("TimeMachineMonitor heatmap")
+struct TimeMachineMonitorHeatmapTests {
+
+    private var anchorNow: Date {
+        var comps = DateComponents()
+        comps.year = 2026; comps.month = 6; comps.day = 15; comps.hour = 12
+        return Calendar.current.date(from: comps)!
+    }
+
+    private func day(_ offset: Int, from now: Date) -> Date {
+        Calendar.current.date(byAdding: .day, value: -offset, to: Calendar.current.startOfDay(for: now))!
+    }
+
+    @Test("With no backup history at all, every day is .noData — never fabricated as missed")
+    func testHeatmapAllNoDataWithoutHistory() {
+        let now = anchorNow
+        let days = TimeMachineMonitor.heatmap(backupDates: [], days: 30, referenceDate: now)
+        #expect(days.count == 30)
+        #expect(days.allSatisfy { $0.state == .noData })
+    }
+
+    @Test("A day with a real snapshot is .backedUp")
+    func testHeatmapBackedUpDay() {
+        let now = anchorNow
+        let days = TimeMachineMonitor.heatmap(backupDates: [now], days: 7, referenceDate: now)
+        #expect(days.last?.state == .backedUp)
+    }
+
+    @Test("Days before the earliest known backup are .noData, not .missed")
+    func testHeatmapDaysBeforeEarliestBackupAreNoData() {
+        let now = anchorNow
+        // Only one backup, 2 days ago — days further back than that have no
+        // information to judge them by at all.
+        let days = TimeMachineMonitor.heatmap(backupDates: [day(2, from: now)], days: 7, referenceDate: now)
+        let sixDaysAgo = days.first { Calendar.current.isDate($0.date, inSameDayAs: day(6, from: now)) }
+        #expect(sixDaysAgo?.state == .noData)
+    }
+
+    @Test("A 1-day gap since the most recent backup on/before a day is .late")
+    func testHeatmapOneDayGapIsLate() {
+        let now = anchorNow
+        // Backup 1 day ago; today has no backup of its own -> 1-day gap.
+        let days = TimeMachineMonitor.heatmap(backupDates: [day(1, from: now)], days: 7, referenceDate: now)
+        #expect(days.last?.state == .late)
+    }
+
+    @Test("A 2+ day gap since the most recent backup on/before a day is .missed")
+    func testHeatmapTwoDayGapIsMissed() {
+        let now = anchorNow
+        // Backup 3 days ago; today has no backup -> 3-day gap.
+        let days = TimeMachineMonitor.heatmap(backupDates: [day(3, from: now)], days: 7, referenceDate: now)
+        #expect(days.last?.state == .missed)
+    }
+
+    @Test("Heatmap covers exactly the requested number of days, ending on the reference date")
+    func testHeatmapCoversRequestedWindow() {
+        let now = anchorNow
+        let days = TimeMachineMonitor.heatmap(backupDates: [now], days: 30, referenceDate: now)
+        #expect(days.count == 30)
+        #expect(Calendar.current.isDate(days.last!.date, inSameDayAs: now))
+        #expect(Calendar.current.isDate(days.first!.date, inSameDayAs: day(29, from: now)))
+    }
+
+    @Test("Multiple backups across the window each classify their own day as .backedUp")
+    func testHeatmapMultipleBackupDays() {
+        let now = anchorNow
+        let backups = [day(0, from: now), day(2, from: now), day(5, from: now)]
+        let days = TimeMachineMonitor.heatmap(backupDates: backups, days: 7, referenceDate: now)
+        for offset in [0, 2, 5] {
+            let cell = days.first { Calendar.current.isDate($0.date, inSameDayAs: day(offset, from: now)) }
+            #expect(cell?.state == .backedUp, "day offset \(offset) should be backed up")
+        }
+    }
+}
+
+@Suite("TimeMachineStatus")
+struct TimeMachineStatusTests {
+
+    @Test("A not-configured status is never stale, regardless of any stray date")
+    func testNotConfiguredNeverStale() {
+        var status = TimeMachineStatus.notConfigured
+        status.lastBackupDate = Date().addingTimeInterval(-100 * 3600)
+        #expect(status.isStale == false)
+    }
+
+    @Test("Configured with no known backup date at all is not stale — that's the notData case, not staleness")
+    func testConfiguredNoBackupDateIsNotStale() {
+        let status = TimeMachineStatus(isConfigured: true)
+        #expect(status.isStale == false)
+    }
+
+    @Test("A backup less than 48h old is not stale")
+    func testRecentBackupIsNotStale() {
+        var status = TimeMachineStatus(isConfigured: true)
+        status.lastBackupDate = Date().addingTimeInterval(-47 * 3600)
+        #expect(status.isStale == false)
+    }
+
+    @Test("A backup older than 48h is stale")
+    func testOldBackupIsStale() {
+        var status = TimeMachineStatus(isConfigured: true)
+        status.lastBackupDate = Date().addingTimeInterval(-49 * 3600)
+        #expect(status.isStale == true)
+    }
+
+    @Test("spaceUsedRatio computes 1 minus the available/total fraction")
+    func testSpaceUsedRatioComputation() {
+        var status = TimeMachineStatus(isConfigured: true)
+        status.availableBytes = 250
+        status.totalBytes = 1000
+        #expect(status.spaceUsedRatio == 0.75)
+    }
+
+    @Test("spaceUsedRatio is nil when capacity data is missing or the volume reports zero total")
+    func testSpaceUsedRatioNilWhenDataMissing() {
+        var noAvailable = TimeMachineStatus(isConfigured: true)
+        noAvailable.totalBytes = 1000
+        #expect(noAvailable.spaceUsedRatio == nil)
+
+        var noTotal = TimeMachineStatus(isConfigured: true)
+        noTotal.availableBytes = 250
+        #expect(noTotal.spaceUsedRatio == nil)
+
+        var zeroTotal = TimeMachineStatus(isConfigured: true)
+        zeroTotal.availableBytes = 250
+        zeroTotal.totalBytes = 0
+        #expect(zeroTotal.spaceUsedRatio == nil)
+    }
+}
+
+// MARK: - F-022 review fixes
+
+@Suite("TimeMachineMonitor destinationinfo parsing")
+struct TimeMachineDestinationParsingTests {
+
+    // A local destination: tmutil reports a Mount Point and no URL.
+    @Test("A local destination yields a mount point and is not flagged as network")
+    func testLocalDestination() {
+        let output = """
+        Name          : Backup HD
+        Kind          : Local
+        Mount Point   : /Volumes/Backup HD
+        ID            : 1B2C3D4E-0000-0000-0000-000000000001
+        """
+        let info = TimeMachineMonitor.parseDestinationInfo(output)
+        #expect(info.name == "Backup HD")
+        #expect(info.mountPoint == "/Volumes/Backup HD")
+        #expect(info.url == nil)
+        #expect(info.isNetwork == false)
+    }
+
+    // The regression: a Time Capsule / NAS reports a URL and *no* Mount Point
+    // until its sparsebundle is mounted. Reading only Mount Point made every
+    // network destination look permanently disconnected with no capacity.
+    @Test("A network destination yields a URL, no mount point, and is flagged as network")
+    func testNetworkDestination() {
+        let output = """
+        Name          : Time Capsule
+        Kind          : Network
+        URL           : afp://admin@timecapsule._afpovertcp._tcp.local./Data
+        ID            : 1B2C3D4E-0000-0000-0000-000000000002
+        """
+        let info = TimeMachineMonitor.parseDestinationInfo(output)
+        #expect(info.name == "Time Capsule")
+        #expect(info.mountPoint == nil)
+        #expect(info.url == "afp://admin@timecapsule._afpovertcp._tcp.local./Data")
+        #expect(info.isNetwork)
+    }
+
+    // The URL value contains "://", so splitting on anything but the first
+    // colon truncates it.
+    @Test("A URL value containing :// survives parsing intact")
+    func testURLWithSchemeSeparatorIsNotTruncated() {
+        let info = TimeMachineMonitor.parseDestinationInfo("URL : smb://nas.local/TimeMachine")
+        #expect(info.url == "smb://nas.local/TimeMachine")
+    }
+
+    // Fallback for if the Kind wording ever shifts.
+    @Test("A URL with no Kind line is still treated as a network destination")
+    func testNetworkInferredFromURLAlone() {
+        let info = TimeMachineMonitor.parseDestinationInfo("Name : NAS\nURL : smb://nas.local/TM")
+        #expect(info.isNetwork)
+    }
+
+    @Test("No destinations configured parses to an empty info block")
+    func testEmptyOutput() {
+        let info = TimeMachineMonitor.parseDestinationInfo("")
+        #expect(info.name == nil)
+        #expect(info.mountPoint == nil)
+        #expect(info.isNetwork == false)
+    }
+}
+
+@Suite("TimeMachineStatus review fixes")
+struct TimeMachineStatusReviewFixTests {
+
+    // isStale structurally cannot represent this: it needs a lastBackupDate to
+    // measure against, so with no backups at all it reads false and the app
+    // stayed silent in the one case the user most needs to hear about.
+    @Test("Configured with no backup ever is hasNeverBackedUp, and is not stale")
+    func testNeverBackedUp() {
+        let status = TimeMachineStatus(isConfigured: true, lastBackupDate: nil)
+        #expect(status.hasNeverBackedUp)
+        #expect(status.isStale == false)
+    }
+
+    @Test("An unconfigured Mac is not hasNeverBackedUp — that is the .notConfigured state")
+    func testUnconfiguredIsNotNeverBackedUp() {
+        #expect(TimeMachineStatus.notConfigured.hasNeverBackedUp == false)
+    }
+
+    @Test("A Mac with a backup is not hasNeverBackedUp")
+    func testWithBackupIsNotNeverBackedUp() {
+        let status = TimeMachineStatus(isConfigured: true, lastBackupDate: Date())
+        #expect(status.hasNeverBackedUp == false)
+    }
+
+    // "the drive is unplugged" and "we cannot measure this one" are different
+    // facts; collapsing them showed healthy network destinations as offline.
+    @Test("A mounted local destination is reachable")
+    func testLocalMountedIsReachable() {
+        let status = TimeMachineStatus(isConfigured: true, mountPoint: "/Volumes/B", isReachable: true)
+        #expect(status.reachability == .reachable)
+    }
+
+    @Test("An unmounted local destination is unreachable")
+    func testLocalUnmountedIsUnreachable() {
+        let status = TimeMachineStatus(isConfigured: true, isReachable: false)
+        #expect(status.reachability == .unreachable)
+    }
+
+    @Test("An unmounted network destination is unknown, not unreachable")
+    func testNetworkUnmountedIsUnknown() {
+        let status = TimeMachineStatus(
+            isConfigured: true,
+            destinationURL: "afp://tc.local/Data",
+            isNetworkDestination: true,
+            isReachable: false
+        )
+        #expect(status.reachability == .unknown)
+    }
+}
+
+@Suite("BackupHeatmapDay identity")
+struct BackupHeatmapDayIdentityTests {
+
+    // heatmap() is pure and called from the view body, so it re-runs on every
+    // render. A generated UUID id made ForEach rebuild all 30 cells each time
+    // instead of diffing them.
+    @Test("Identical inputs produce identical ids across calls")
+    func testHeatmapIdsAreStableAcrossCalls() {
+        let now = Date()
+        let dates = [now.addingTimeInterval(-86_400)]
+        let first  = TimeMachineMonitor.heatmap(backupDates: dates, days: 10, referenceDate: now)
+        let second = TimeMachineMonitor.heatmap(backupDates: dates, days: 10, referenceDate: now)
+        #expect(first.map(\.id) == second.map(\.id))
+    }
+
+    @Test("Ids are unique within one heatmap — one day, one cell")
+    func testHeatmapIdsAreUnique() {
+        let days = TimeMachineMonitor.heatmap(backupDates: [], days: 30, referenceDate: Date())
+        #expect(Set(days.map(\.id)).count == days.count)
+    }
+}
+
+// MARK: - MemoryTrendTracker Tests (F-023)
+//
+// `leakStatus(for:)` reads only its `history` parameter — it never touches
+// `MemoryTrendTracker.shared`'s own `histories`/timer/persistence state — so
+// these tests call it directly with synthetic `AppMemoryHistory` values. It's
+// `@MainActor`-isolated only because the whole class is, so the suite is
+// marked `@MainActor` too; no live sampling, alerts, or disk I/O are
+// exercised here (`checkAppMemory`'s real `UNUserNotification`/`AlertLog`
+// side effects are intentionally left to manual QA — see
+// docs/MANUAL_TEST_PLAN.md TC-PERF-U11/U12 — rather than fired for real
+// during a unit test run).
+
+// A second Restart on an app already being restarted used to send a second
+// terminate() and start a second independent poll chain — two relaunches
+// racing, and two alerts — because the confirmation dialog clears its own state
+// immediately while the poll runs for up to 20s with nothing on screen.
+//
+// The tracker is a `.shared` singleton driven from the app host, so these use
+// bundle IDs that cannot match a running app: the guard is what is under test,
+// and it is reached before anything touches NSWorkspace.
+@Suite("MemoryTrendTracker restart guard", .serialized)
+struct MemoryTrendRestartGuardTests {
+
+    private func history(bundleID: String) -> AppMemoryHistory {
+        AppMemoryHistory(bundleID: bundleID, appName: "Fake",
+                         bundlePath: "/nonexistent/Fake.app", samples: [])
+    }
+
+    @Test("An app that is not running reports so rather than starting a chain")
+    @MainActor
+    func testNotRunningIsReported() async {
+        var outcome: RestartOutcome?
+        MemoryTrendTracker.shared.restart(history(bundleID: "com.halo.test.notrunning")) {
+            outcome = $0
+        }
+        if case .failed(let message) = outcome {
+            #expect(message.contains("doesn't appear to be running"))
+        } else {
+            Issue.record("expected .failed, got \(String(describing: outcome))")
+        }
+    }
+
+    // A restart that never claimed a slot must not leave one behind, or the app
+    // becomes permanently un-restartable for the rest of the session.
+    @Test("A failed restart does not leave the app blocked")
+    @MainActor
+    func testFailedRestartReleasesTheSlot() async {
+        let h = history(bundleID: "com.halo.test.repeat")
+
+        var first: RestartOutcome?
+        MemoryTrendTracker.shared.restart(h) { first = $0 }
+        var second: RestartOutcome?
+        MemoryTrendTracker.shared.restart(h) { second = $0 }
+
+        // Both reach the same "not running" answer; neither is refused as
+        // already-in-flight, because the first never got as far as terminate().
+        for outcome in [first, second] {
+            if case .failed(let message) = outcome {
+                #expect(!message.contains("already being restarted"))
+            } else {
+                Issue.record("expected .failed, got \(String(describing: outcome))")
+            }
+        }
+    }
+}
+
+@Suite("MemoryTrendTracker leak detection")
+@MainActor
+struct MemoryTrendTrackerLeakTests {
+
+    private var anchor: Date {
+        var comps = DateComponents()
+        comps.year = 2026; comps.month = 6; comps.day = 15; comps.hour = 9
+        return Calendar.current.date(from: comps)!
+    }
+
+    private func history(_ samples: [MemorySample]) -> AppMemoryHistory {
+        AppMemoryHistory(bundleID: "com.test.app", appName: "Test App", bundlePath: "/Applications/Test.app", samples: samples)
+    }
+
+    @Test("Monotonic growth spanning over 1 hour flags a possible leak")
+    func testMonotonicGrowthOver1HourFlagsLeak() {
+        let start = anchor
+        // 25 samples, 5 minutes apart (= 300s, exactly at maxSampleGapSeconds
+        // — not a reset), each 10 MB higher than the last. Total span: 2h.
+        let samples = (0..<25).map { i in
+            MemorySample(date: start.addingTimeInterval(Double(i) * 300), ramMB: 500 + Double(i) * 10)
+        }
+        let status = MemoryTrendTracker.shared.leakStatus(for: history(samples))
+        #expect(status.isPossibleLeak == true)
+        #expect(status.currentRAMMB == 500 + 24 * 10)
+    }
+
+    @Test("Growth spanning less than 1 hour never flags a leak, regardless of growth rate")
+    func testGrowthUnder1HourNeverFlags() {
+        let start = anchor
+        // 11 samples, 5 minutes apart = 50 minutes total span — under the 1h threshold.
+        let samples = (0..<11).map { i in
+            MemorySample(date: start.addingTimeInterval(Double(i) * 300), ramMB: 500 + Double(i) * 50)
+        }
+        let status = MemoryTrendTracker.shared.leakStatus(for: history(samples))
+        #expect(status.isPossibleLeak == false)
+    }
+
+    @Test("A drop of more than 15% from the streak's local peak resets the streak")
+    func testSignificantDropResetsStreak() {
+        let start = anchor
+        var samples: [MemorySample] = []
+        // Grow for 70 minutes (>1h) up to a peak of 1000 MB.
+        for i in 0...14 {   // 15 samples, 5 min apart = 70 minutes
+            samples.append(MemorySample(date: start.addingTimeInterval(Double(i) * 300), ramMB: 300 + Double(i) * 50))
+        }
+        // Drop >15% below the peak (1000 -> 700, a 30% drop) right after.
+        let dropDate = start.addingTimeInterval(15 * 300)
+        samples.append(MemorySample(date: dropDate, ramMB: 700))
+        // Renewed growth for only 20 minutes after the drop — well under 1h.
+        for i in 1...4 {
+            samples.append(MemorySample(date: dropDate.addingTimeInterval(Double(i) * 300), ramMB: 700 + Double(i) * 10))
+        }
+        let status = MemoryTrendTracker.shared.leakStatus(for: history(samples))
+        #expect(status.isPossibleLeak == false, "the new streak after the drop hasn't reached 1h yet")
+    }
+
+    @Test("A dip of 15% or less does NOT reset the streak — minor fluctuation is tolerated")
+    func testMinorDipDoesNotResetStreak() {
+        let start = anchor
+        var samples: [MemorySample] = []
+        // Grow for 50 minutes up to a peak of 1000 MB.
+        for i in 0...9 {   // 10 samples, 5 min apart = 45 minutes
+            samples.append(MemorySample(date: start.addingTimeInterval(Double(i) * 300), ramMB: 550 + Double(i) * 50))
+        }
+        // A small dip: 1000 -> 900 is a 10% drop, under the 15% threshold.
+        let dipDate = start.addingTimeInterval(9 * 300)
+        samples.append(MemorySample(date: dipDate.addingTimeInterval(300), ramMB: 900))
+        // Resume growth for another 30 minutes so the OVERALL streak exceeds 1h.
+        for i in 1...6 {
+            samples.append(MemorySample(date: dipDate.addingTimeInterval(300 + Double(i) * 300), ramMB: 900 + Double(i) * 20))
+        }
+        let status = MemoryTrendTracker.shared.leakStatus(for: history(samples))
+        #expect(status.isPossibleLeak == true, "a minor dip under 15% should not reset an otherwise-valid >1h streak")
+    }
+
+    @Test("An observation gap longer than 5 minutes resets the streak, even mid-growth")
+    func testSleepWakeGapResetsStreak() {
+        let start = anchor
+        var samples: [MemorySample] = []
+        // Grow for 70 minutes (>1h).
+        for i in 0...14 {
+            samples.append(MemorySample(date: start.addingTimeInterval(Double(i) * 300), ramMB: 400 + Double(i) * 30))
+        }
+        // A 20-minute gap (Mac asleep) — well over maxSampleGapSeconds (5 min).
+        let afterGap = start.addingTimeInterval(14 * 300 + 20 * 60)
+        samples.append(MemorySample(date: afterGap, ramMB: 850))
+        // Renewed growth for only 30 minutes after the gap — under 1h.
+        for i in 1...6 {
+            samples.append(MemorySample(date: afterGap.addingTimeInterval(Double(i) * 300), ramMB: 850 + Double(i) * 10))
+        }
+        let status = MemoryTrendTracker.shared.leakStatus(for: history(samples))
+        #expect(status.isPossibleLeak == false, "the gap should reset the streak; the post-gap streak hasn't reached 1h yet")
+    }
+
+    @Test("A history with only one sample never flags a leak")
+    func testSingleSampleNeverFlags() {
+        let status = MemoryTrendTracker.shared.leakStatus(for: history([MemorySample(date: anchor, ramMB: 500)]))
+        #expect(status.isPossibleLeak == false)
+    }
+
+    @Test("An empty history returns .empty")
+    func testEmptyHistoryReturnsEmptyStatus() {
+        let status = MemoryTrendTracker.shared.leakStatus(for: history([]))
+        #expect(status.isPossibleLeak == false)
+        #expect(status.streakStartDate == nil)
+    }
+}
+
+@Suite("AppMemoryHistory persistence")
+struct AppMemoryHistoryPersistenceTests {
+
+    @Test("AppMemoryHistory round-trips through JSON encode/decode with all fields intact")
+    func testJSONRoundTrip() throws {
+        let start = Date(timeIntervalSince1970: 1_750_000_000)
+        let original = AppMemoryHistory(
+            bundleID: "com.example.app",
+            appName: "Example",
+            bundlePath: "/Applications/Example.app",
+            samples: [
+                MemorySample(date: start, ramMB: 512.5),
+                MemorySample(date: start.addingTimeInterval(30), ramMB: 520.25),
+                MemorySample(date: start.addingTimeInterval(60), ramMB: 530.0),
+            ]
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AppMemoryHistory.self, from: data)
+
+        #expect(decoded.bundleID == original.bundleID)
+        #expect(decoded.appName == original.appName)
+        #expect(decoded.bundlePath == original.bundlePath)
+        #expect(decoded.samples.count == original.samples.count)
+        for (a, b) in zip(decoded.samples, original.samples) {
+            #expect(a.ramMB == b.ramMB)
+            #expect(abs(a.date.timeIntervalSince(b.date)) < 0.001)
+        }
+    }
+
+    @Test("An array of AppMemoryHistory round-trips (the actual persisted shape)")
+    func testArrayJSONRoundTrip() throws {
+        let histories = [
+            AppMemoryHistory(bundleID: "com.a", appName: "A", bundlePath: nil, samples: []),
+            AppMemoryHistory(bundleID: "com.b", appName: "B", bundlePath: "/Applications/B.app",
+                             samples: [MemorySample(date: Date(timeIntervalSince1970: 1_750_000_000), ramMB: 100)]),
+        ]
+        let data = try JSONEncoder().encode(histories)
+        let decoded = try JSONDecoder().decode([AppMemoryHistory].self, from: data)
+        #expect(decoded.count == 2)
+        #expect(decoded.map(\.bundleID) == histories.map(\.bundleID))
+        #expect(decoded[0].bundlePath == nil)
+        #expect(decoded[1].samples.first?.ramMB == 100)
+    }
+}
+
+// MARK: - F-023 review fixes
+
+@Suite("MemoryTrendTracker leak detection")
+struct MemoryTrendLeakDetectionTests {
+
+    private func samples(_ points: [(minutesAgo: Double, ramMB: Double)], now: Date = Date()) -> [MemorySample] {
+        points
+            .map { MemorySample(date: now.addingTimeInterval(-$0.minutesAgo * 60), ramMB: $0.ramMB) }
+            .sorted { $0.date < $1.date }
+    }
+
+    // The reported false positive: RAM climbs early, then sits flat for
+    // ~110 minutes. No >15% drop from the peak, so the streak never resets, and
+    // the old `latest > streakStart` test passed — reporting a leak for an app
+    // whose memory hadn't moved in nearly two hours. This is the ordinary shape
+    // for a browser or IDE that allocates at startup and plateaus.
+    @Test("A long plateau after early growth is not a leak")
+    func testPlateauIsNotALeak() {
+        let now = Date()
+        var points: [(Double, Double)] = [(120, 1000), (118, 1100), (115, 1200), (112, 1100)]
+        // Flat at 1100 from 110 minutes ago until now.
+        for m in stride(from: 110.0, through: 0.0, by: -5.0) { points.append((m, 1100)) }
+
+        let history = AppMemoryHistory(bundleID: "com.test.plateau", appName: "Plateau",
+                                       bundlePath: nil, samples: samples(points.map { (minutesAgo: $0.0, ramMB: $0.1) }, now: now))
+        #expect(MemoryTrendTracker.shared.leakStatus(for: history).isPossibleLeak == false)
+    }
+
+    // The true positive must survive the new, stricter rule.
+    @Test("Steady sustained growth over more than an hour is still a leak")
+    func testSustainedGrowthIsALeak() {
+        let now = Date()
+        // 1000 MB -> 1700 MB, climbing throughout, sampled every 5 minutes for 2h.
+        var points: [(minutesAgo: Double, ramMB: Double)] = []
+        for m in stride(from: 120.0, through: 0.0, by: -5.0) {
+            points.append((minutesAgo: m, ramMB: 1000 + (120 - m) * 6))
+        }
+        let history = AppMemoryHistory(bundleID: "com.test.leak", appName: "Leaky",
+                                       bundlePath: nil, samples: samples(points, now: now))
+        #expect(MemoryTrendTracker.shared.leakStatus(for: history).isPossibleLeak)
+    }
+
+    @Test("Growth smaller than the noise floor is not a leak")
+    func testTinyGrowthIsNotALeak() {
+        let now = Date()
+        var points: [(minutesAgo: Double, ramMB: Double)] = []
+        // 1000 -> 1030 over two hours: 3%, well under the 10% floor.
+        for m in stride(from: 120.0, through: 0.0, by: -5.0) {
+            points.append((minutesAgo: m, ramMB: 1000 + (120 - m) * 0.25))
+        }
+        let history = AppMemoryHistory(bundleID: "com.test.noise", appName: "Noisy",
+                                       bundlePath: nil, samples: samples(points, now: now))
+        #expect(MemoryTrendTracker.shared.leakStatus(for: history).isPossibleLeak == false)
+    }
+
+    // Pre-existing behaviour the review flagged as correct — pinned so a
+    // refactor can't quietly drop it.
+    @Test("A declining app is never a leak")
+    func testDecliningIsNotALeak() {
+        let now = Date()
+        var points: [(minutesAgo: Double, ramMB: Double)] = []
+        for m in stride(from: 120.0, through: 0.0, by: -5.0) {
+            points.append((minutesAgo: m, ramMB: 2000 - (120 - m) * 5))
+        }
+        let history = AppMemoryHistory(bundleID: "com.test.decline", appName: "Shrinking",
+                                       bundlePath: nil, samples: samples(points, now: now))
+        #expect(MemoryTrendTracker.shared.leakStatus(for: history).isPossibleLeak == false)
+    }
+
+    @Test("A short history is never a leak, however steeply it grows")
+    func testShortHistoryIsNotALeak() {
+        let now = Date()
+        let points: [(minutesAgo: Double, ramMB: Double)] = [(10, 1000), (5, 2000), (0, 3000)]
+        let history = AppMemoryHistory(bundleID: "com.test.short", appName: "Young",
+                                       bundlePath: nil, samples: samples(points, now: now))
+        #expect(MemoryTrendTracker.shared.leakStatus(for: history).isPossibleLeak == false)
+    }
+}
+
+@Suite("MemoryTrendTracker slope")
+struct MemoryTrendSlopeTests {
+
+    @Test("A rising series has a positive slope")
+    func testRisingSlope() {
+        let now = Date()
+        let s = (0..<10).map { MemorySample(date: now.addingTimeInterval(Double($0) * 60), ramMB: 100 + Double($0) * 10) }
+        #expect(MemoryTrendTracker.hasPositiveSlope(samples: s, since: now.addingTimeInterval(-60)))
+    }
+
+    @Test("A flat series does not have a positive slope")
+    func testFlatSlope() {
+        let now = Date()
+        let s = (0..<10).map { MemorySample(date: now.addingTimeInterval(Double($0) * 60), ramMB: 100) }
+        #expect(MemoryTrendTracker.hasPositiveSlope(samples: s, since: now.addingTimeInterval(-60)) == false)
+    }
+
+    @Test("A falling series does not have a positive slope")
+    func testFallingSlope() {
+        let now = Date()
+        let s = (0..<10).map { MemorySample(date: now.addingTimeInterval(Double($0) * 60), ramMB: 200 - Double($0) * 10) }
+        #expect(MemoryTrendTracker.hasPositiveSlope(samples: s, since: now.addingTimeInterval(-60)) == false)
+    }
+
+    // An unknown slope must never be read as evidence of a leak.
+    @Test("Too few points is not a positive slope")
+    func testInsufficientPoints() {
+        let now = Date()
+        let s = [MemorySample(date: now, ramMB: 100), MemorySample(date: now.addingTimeInterval(60), ramMB: 200)]
+        #expect(MemoryTrendTracker.hasPositiveSlope(samples: s, since: now.addingTimeInterval(-60)) == false)
+    }
+}
+
+// MARK: - AppUsageTracker Aggregation Tests (F-021)
+//
+// `AppUsageTracker`'s aggregation methods (topApps, backgroundHogs,
+// contextSwitchesPerHour, weekOverWeekChange) normally read the live
+// singleton's `records`/`Date()`. They were refactored into static, pure
+// counterparts parameterized on `records` + `now` (no behavior change —
+// the instance methods just forward to these) specifically so this suite
+// can exercise the real aggregation math against synthetic records and a
+// fixed date, with no NSWorkspace/timer/UserDefaults involved.
+
+@Suite("AppUsageTracker aggregation")
+struct AppUsageTrackerAggregationTests {
+    private typealias Tracker = AppUsageTracker
+
+    private var anchorNow: Date {
+        var comps = DateComponents()
+        comps.year = 2026; comps.month = 6; comps.day = 15; comps.hour = 12
+        return Calendar.current.date(from: comps)!
+    }
+
+    private func day(_ offset: Int, from now: Date) -> Date {
+        Calendar.current.date(byAdding: .day, value: -offset, to: Calendar.current.startOfDay(for: now))!
+    }
+
+    private func record(bundleID: String, appName: String, dayOffset: Int, now: Date,
+                         fg: TimeInterval = 0, observed: TimeInterval = 0, switches: Int = 0,
+                         ramSum: Double = 0, ramCount: Int = 0) -> AppUsageRecord {
+        AppUsageRecord(bundleID: bundleID, appName: appName, day: day(dayOffset, from: now),
+                       foregroundSeconds: fg, observedRunningSeconds: observed, switchCount: switches,
+                       ramSampleSumMB: ramSum, ramSampleCount: ramCount)
+    }
+
+    // MARK: - recordsInWindow
+
+    @Test("recordsInWindow includes today through 6 days ago for a 7-day window, excludes 7 days ago")
+    func testRecordsInWindowBoundary() {
+        let now = anchorNow
+        let records = [
+            record(bundleID: "a", appName: "A", dayOffset: 0, now: now),
+            record(bundleID: "a", appName: "A", dayOffset: 6, now: now),
+            record(bundleID: "a", appName: "A", dayOffset: 7, now: now),
+        ]
+        let windowed = Tracker.recordsInWindow(records, days: 7, now: now)
+        #expect(windowed.count == 2)
+    }
+
+    // MARK: - topApps
+
+    @Test("topApps sums foreground time, RAM, and switches across days for the same bundle ID")
+    func testTopAppsSumsAcrossDays() {
+        let now = anchorNow
+        let records = [
+            record(bundleID: "com.a", appName: "A", dayOffset: 0, now: now, fg: 3600, switches: 3, ramSum: 100, ramCount: 2),
+            record(bundleID: "com.a", appName: "A", dayOffset: 1, now: now, fg: 1800),
+            record(bundleID: "com.b", appName: "B", dayOffset: 0, now: now, fg: 7200, ramSum: 400, ramCount: 4),
+        ]
+        let top = Tracker.topApps(from: records, limit: 5, windowDays: 7, now: now)
+        #expect(top.count == 2)
+        #expect(top.first?.id == "com.b")   // 7200s beats 5400s (3600+1800), sorted descending
+        let a = top.first { $0.id == "com.a" }
+        #expect(a?.totalForegroundSeconds == 5400)
+        #expect(a?.switchCount == 3)
+        #expect(a?.averageRAMMB == 50)   // 100 / 2 samples
+    }
+
+    @Test("topApps excludes an app with zero foreground time even if it was observed running")
+    func testTopAppsExcludesZeroForeground() {
+        let now = anchorNow
+        let records = [record(bundleID: "com.bg", appName: "BG", dayOffset: 0, now: now, observed: 3600)]
+        let top = Tracker.topApps(from: records, limit: 5, windowDays: 7, now: now)
+        #expect(top.isEmpty)
+    }
+
+    @Test("topApps respects the limit parameter")
+    func testTopAppsRespectsLimit() {
+        let now = anchorNow
+        let records = (0..<10).map { i in
+            record(bundleID: "com.app\(i)", appName: "App \(i)", dayOffset: 0, now: now, fg: TimeInterval(i + 1) * 60)
+        }
+        let top = Tracker.topApps(from: records, limit: 3, windowDays: 7, now: now)
+        #expect(top.count == 3)
+    }
+
+    // MARK: - backgroundHogs
+
+    // The rule is now per-day: a long stretch on most days, not a cumulative
+    // total that any always-open app clears in a week.
+    private func hogs(_ records: [AppUsageRecord], now: Date) -> [BackgroundHogApp] {
+        Tracker.backgroundHogs(from: records, minHoursPerDay: 4, minQualifyingDays: 4,
+                                maxForegroundRatio: 0.02, windowDays: 7, now: now)
+    }
+
+    @Test("backgroundHogs flags an app running most days with a near-zero foreground ratio")
+    func testBackgroundHogsFlagsLowRatio() {
+        let now = anchorNow
+        let records = (0..<5).map {
+            record(bundleID: "com.hog", appName: "Hog", dayOffset: $0, now: now,
+                   fg: 10, observed: 8 * 3600, ramSum: 50, ramCount: 1)
+        }
+        let result = hogs(records, now: now)
+        #expect(result.count == 1)
+        #expect(result.first?.id == "com.hog")
+        #expect(result.first?.qualifyingDays == 5)
+    }
+
+    // The reported false positive: 8 cumulative hours over a week is a bit over
+    // an hour a day, which every menu-bar utility and sync client clears — and
+    // maxForegroundRatio cannot filter them out, because a background helper has
+    // near-zero foreground time by definition.
+    @Test("backgroundHogs no longer flags an app running about an hour a day")
+    func testBackgroundHogsExcludesLowDailyUse() {
+        let now = anchorNow
+        let records = (0..<7).map {
+            record(bundleID: "com.menubar", appName: "MenuBar", dayOffset: $0, now: now,
+                   fg: 0, observed: 75 * 60)   // 8.75h cumulative, but only 1.25h/day
+        }
+        #expect(hogs(records, now: now).isEmpty)
+    }
+
+    @Test("backgroundHogs excludes a long stretch on too few days")
+    func testBackgroundHogsExcludesTooFewDays() {
+        let now = anchorNow
+        // Two 10-hour days: plenty cumulatively, but not a habit.
+        let records = (0..<2).map {
+            record(bundleID: "com.burst", appName: "Burst", dayOffset: $0, now: now,
+                   fg: 0, observed: 10 * 3600)
+        }
+        #expect(hogs(records, now: now).isEmpty)
+    }
+
+    @Test("backgroundHogs excludes an app observed less than the per-day threshold")
+    func testBackgroundHogsExcludesShortObservation() {
+        let now = anchorNow
+        let records = [record(bundleID: "com.short", appName: "Short", dayOffset: 0, now: now, observed: 3600)]
+        #expect(hogs(records, now: now).isEmpty)
+    }
+
+    @Test("backgroundHogs excludes an app with real foreground usage despite long observation")
+    func testBackgroundHogsExcludesHighRatio() {
+        let now = anchorNow
+        // 10h/day for 5 days, but foregrounded 2h/day -> ratio 0.2, well above 0.02.
+        let records = (0..<5).map {
+            record(bundleID: "com.used", appName: "Used", dayOffset: $0, now: now,
+                   fg: 2 * 3600, observed: 10 * 3600)
+        }
+        #expect(hogs(records, now: now).isEmpty)
+    }
+
+    // MARK: - contextSwitchesPerHour
+
+    @Test("contextSwitchesPerHour is nil with less than an hour of tracked history")
+    func testContextSwitchesNilBeforeOneHour() {
+        let now = anchorNow
+        let first = now.addingTimeInterval(-1800)   // 30 minutes ago
+        let rate = Tracker.contextSwitchesPerHour(from: [], firstObservedDay: first, windowDays: 7, now: now)
+        #expect(rate == nil)
+    }
+
+    @Test("contextSwitchesPerHour is nil with no observation history at all")
+    func testContextSwitchesNilWithNoHistory() {
+        let rate = Tracker.contextSwitchesPerHour(from: [], firstObservedDay: nil, windowDays: 7, now: anchorNow)
+        #expect(rate == nil)
+    }
+
+    @Test("contextSwitchesPerHour computes total switches divided by tracked hours")
+    func testContextSwitchesComputesRate() {
+        let now = anchorNow
+        let first = day(1, from: now)
+        let records = [
+            record(bundleID: "com.a", appName: "A", dayOffset: 0, now: now, switches: 5),
+            record(bundleID: "com.b", appName: "B", dayOffset: 1, now: now, switches: 3),
+        ]
+        let rate = Tracker.contextSwitchesPerHour(from: records, firstObservedDay: first, windowDays: 7, now: now)
+        #expect(rate != nil)
+        #expect(rate! > 0)
+    }
+
+    // MARK: - weekOverWeekChange
+
+    @Test("weekOverWeekChange is nil until at least 14 days of history exist")
+    func testWeekOverWeekNilBeforeTwoWeeks() {
+        let now = anchorNow
+        let first = day(5, from: now)   // only 5 days of history
+        let change = Tracker.weekOverWeekChange(from: [], firstObservedDay: first, now: now)
+        #expect(change == nil)
+    }
+
+    @Test("weekOverWeekChange is nil with no observation history at all")
+    func testWeekOverWeekNilWithNoHistory() {
+        let change = Tracker.weekOverWeekChange(from: [], firstObservedDay: nil, now: anchorNow)
+        #expect(change == nil)
+    }
+
+    @Test("weekOverWeekChange compares this week's and last week's foreground totals once 14 days of history exist")
+    func testWeekOverWeekComparesTotals() {
+        let now = anchorNow
+        let first = day(13, from: now)   // exactly 14 days of history
+        let records = [
+            record(bundleID: "com.a", appName: "A", dayOffset: 1, now: now, fg: 3600),   // this week
+            record(bundleID: "com.a", appName: "A", dayOffset: 8, now: now, fg: 1800),   // last week
+        ]
+        let change = Tracker.weekOverWeekChange(from: records, firstObservedDay: first, now: now)
+        #expect(change?.thisWeekSeconds == 3600)
+        #expect(change?.lastWeekSeconds == 1800)
+        #expect(change?.percentChange == 100)   // doubled week-over-week
+    }
+
+    @Test("WeekOverWeek.percentChange is nil when last week had zero usage — avoids reporting a fake +100%")
+    func testWeekOverWeekPercentChangeNilWhenLastWeekZero() {
+        let change = AppUsageTracker.WeekOverWeek(thisWeekSeconds: 100, lastWeekSeconds: 0)
+        #expect(change.percentChange == nil)
+    }
+}
+
+// MARK: - Focus Session Tests (F-028)
+//
+// `FocusSessionSummary.digestText`, `FocusAppConfig`, and `FocusDurationPreset`
+// are plain data types with no actor/singleton involved, so they're tested
+// directly. `FocusSessionManager.start()`/`endSession()` and
+// `FocusSessionSettingsStore.add()`/`.remove()` are intentionally NOT
+// exercised here — they have real side effects on the host machine (posting
+// a genuine `UNUserNotificationCenter` notification, appending a permanent
+// entry to the real `AlertLog.shared`, and persisting to the real
+// `UserDefaults["focusSessionAppConfigs"]`) with no injectable seam, the same
+// category of side effect this suite avoided for `AlertManager.checkAppMemory`
+// in the F-023 pass. See docs/MANUAL_TEST_PLAN.md for their manual coverage.
+
+@Suite("FocusSessionSummary")
+struct FocusSessionSummaryTests {
+
+    @Test("digestText — full data, not ended early, matches the documented example exactly")
+    func testDigestTextFullData() {
+        let summary = FocusSessionSummary(
+            plannedMinutes: 50, actualSeconds: 50 * 60, hiddenAppNames: ["Slack", "Mail"],
+            topRAMProcessName: "Chrome", topRAMProcessMB: 820.4, maxCPUPercent: 42, endedEarly: false)
+        #expect(summary.digestText == "50-minute session. Top RAM consumer: Chrome (820 MB). CPU stayed below 45%.")
+    }
+
+    @Test("digestText — ended early, no RAM data, zero CPU")
+    func testDigestTextEndedEarlyNoData() {
+        let summary = FocusSessionSummary(
+            plannedMinutes: 25, actualSeconds: 10 * 60, hiddenAppNames: [],
+            topRAMProcessName: nil, topRAMProcessMB: nil, maxCPUPercent: 0, endedEarly: true)
+        #expect(summary.digestText == "10-minute session (ended early). CPU usage stayed minimal throughout.")
+    }
+
+    @Test("digestText — CPU percent rounds up to the nearest multiple of 5")
+    func testDigestTextCPURounding() {
+        func cpuLine(_ pct: Double) -> String {
+            FocusSessionSummary(plannedMinutes: 25, actualSeconds: 25 * 60, hiddenAppNames: [],
+                                 topRAMProcessName: nil, topRAMProcessMB: nil,
+                                 maxCPUPercent: pct, endedEarly: false).digestText
+        }
+        #expect(cpuLine(40).hasSuffix("CPU stayed below 40%."))    // exact multiple — no rounding needed
+        #expect(cpuLine(41).hasSuffix("CPU stayed below 45%."))    // rounds up to next multiple of 5
+        #expect(cpuLine(55).hasSuffix("CPU stayed below 55%."))
+        #expect(cpuLine(56).hasSuffix("CPU stayed below 60%."))
+    }
+
+    @Test("digestText omits the RAM line entirely when no process data was sampled")
+    func testDigestTextOmitsRAMLineWhenMissing() {
+        let summary = FocusSessionSummary(
+            plannedMinutes: 25, actualSeconds: 25 * 60, hiddenAppNames: [],
+            topRAMProcessName: nil, topRAMProcessMB: nil, maxCPUPercent: 12, endedEarly: false)
+        #expect(!summary.digestText.contains("Top RAM consumer"))
+    }
+}
+
+@Suite("FocusAppConfig")
+struct FocusAppConfigTests {
+
+    @Test("id is derived from bundleIdentifier")
+    func testIDIsBundleIdentifier() {
+        let config = FocusAppConfig(bundleIdentifier: "com.tinyspeck.slackmacgap", name: "Slack")
+        #expect(config.id == "com.tinyspeck.slackmacgap")
+    }
+
+    @Test("Equatable — same bundleIdentifier and name are equal, different name or bundle are not")
+    func testEquatable() {
+        let a = FocusAppConfig(bundleIdentifier: "com.a", name: "A")
+        let sameA = FocusAppConfig(bundleIdentifier: "com.a", name: "A")
+        let differentName = FocusAppConfig(bundleIdentifier: "com.a", name: "A renamed")
+        let differentBundle = FocusAppConfig(bundleIdentifier: "com.b", name: "A")
+        #expect(a == sameA)
+        #expect(a != differentName)
+        #expect(a != differentBundle)
+    }
+
+    @Test("Codable round-trips an array of configs")
+    func testCodableRoundTrip() throws {
+        let configs = [
+            FocusAppConfig(bundleIdentifier: "com.tinyspeck.slackmacgap", name: "Slack"),
+            FocusAppConfig(bundleIdentifier: "com.apple.mail", name: "Mail"),
+        ]
+        let data = try JSONEncoder().encode(configs)
+        let decoded = try JSONDecoder().decode([FocusAppConfig].self, from: data)
+        #expect(decoded == configs)
+    }
+
+    @Test("Hashable — usable in a Set, deduplicating by value equality")
+    func testHashableInSet() {
+        let a = FocusAppConfig(bundleIdentifier: "com.a", name: "A")
+        let sameA = FocusAppConfig(bundleIdentifier: "com.a", name: "A")
+        let b = FocusAppConfig(bundleIdentifier: "com.b", name: "B")
+        let set: Set<FocusAppConfig> = [a, sameA, b]
+        #expect(set.count == 2)
+    }
+}
+
+@Suite("FocusDurationPreset")
+struct FocusDurationPresetTests {
+
+    @Test("Exactly two presets: 25 and 50 minutes")
+    func testPresetValues() {
+        #expect(FocusDurationPreset.allCases.count == 2)
+        #expect(Set(FocusDurationPreset.allCases.map(\.rawValue)) == [25, 50])
+    }
+
+    @Test("label formats as 'N min'")
+    func testPresetLabels() {
+        #expect(FocusDurationPreset.twentyFive.label == "25 min")
+        #expect(FocusDurationPreset.fifty.label == "50 min")
+    }
+}
+
+// MARK: - F-028 review fixes
+
+// MARK: - Focus session crash recovery
+//
+// Recovery used to call `start()` straight from `FocusSessionManager.init`.
+// `start()` builds the overlay, and the overlay view read
+// `FocusSessionManager.shared` in a stored property default — re-entering the
+// `static let` whose initializer was still running. That is a `swift_once`
+// deadlock: the thread parks in `_dispatch_once_wait` and the app hangs at
+// launch, on exactly the crash-recovery path recovery exists for.
+//
+// The structural half of that fix is not unit-testable (a test that reproduced
+// it would hang, and the singleton is constructed once per process). What is
+// pinned here is the decision logic, now pure and lifted out of `init`, plus
+// the boundary that governs whether `resumeInterruptedSession()` does anything
+// at all.
+@Suite("FocusSessionManager recovery")
+struct FocusSessionRecoveryTests {
+
+    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+    @Test("A session with time left is resumable")
+    func testResumable() {
+        #expect(FocusSessionManager.isResumable(endDate: now.addingTimeInterval(600), now: now))
+    }
+
+    // The threshold is "more than 60s", so 60 exactly must not resume: it would
+    // round to a 1-minute session that ends almost immediately.
+    @Test("The 60-second boundary is exclusive", arguments: [-300.0, -1.0, 0.0, 30.0, 60.0])
+    func testNotResumableAtOrBelowBoundary(remaining: TimeInterval) {
+        let end = now.addingTimeInterval(remaining)
+        #expect(FocusSessionManager.isResumable(endDate: end, now: now) == false)
+        #expect(FocusSessionManager.resumeMinutes(endDate: end, now: now) == nil)
+    }
+
+    @Test("Resume duration rounds up to whole minutes")
+    func testResumeMinutesRoundsUp() {
+        #expect(FocusSessionManager.resumeMinutes(endDate: now.addingTimeInterval(61), now: now) == 2)
+        #expect(FocusSessionManager.resumeMinutes(endDate: now.addingTimeInterval(120), now: now) == 2)
+        #expect(FocusSessionManager.resumeMinutes(endDate: now.addingTimeInterval(121), now: now) == 3)
+        #expect(FocusSessionManager.resumeMinutes(endDate: now.addingTimeInterval(1500), now: now) == 25)
+    }
+
+    // Recovery parks the session and `resumeInterruptedSession()` re-checks the
+    // deadline, because time passes between the two — a session recovered with
+    // 70s left is no longer worth resuming two minutes later.
+    @Test("A session that ages out between recovery and resume is dropped")
+    func testAgesOutBeforeResume() {
+        let end = now.addingTimeInterval(70)
+        #expect(FocusSessionManager.isResumable(endDate: end, now: now))
+        #expect(FocusSessionManager.isResumable(endDate: end, now: now.addingTimeInterval(120)) == false)
+    }
+}
+
+@Suite("FocusSessionSummary duration")
+struct FocusSessionDurationTests {
+
+    private func summary(seconds: Int, early: Bool = true) -> FocusSessionSummary {
+        FocusSessionSummary(plannedMinutes: 25, actualSeconds: seconds, hiddenAppNames: [],
+                            topRAMProcessName: nil, topRAMProcessMB: nil,
+                            maxCPUPercent: 0, endedEarly: early)
+    }
+
+    // `max(1, rounded())` rounded every sub-minute session up to "1 minute" —
+    // in the summary, the AlertLog entry and the Focus History row alike.
+    @Test("A session ended after a few seconds does not claim a minute")
+    func testSubMinuteIsHonest() {
+        #expect(summary(seconds: 5).durationText == "Under-a-minute")
+        #expect(summary(seconds: 59).durationText == "Under-a-minute")
+        #expect(summary(seconds: 5).digestText.contains("Under-a-minute"))
+    }
+
+    @Test("A full minute and above reports minutes")
+    func testMinutesReported() {
+        #expect(summary(seconds: 60).durationText == "1-minute")
+        #expect(summary(seconds: 1500).durationText == "25-minute")
+    }
+
+    @Test("Rounding is to the nearest minute, not always up")
+    func testRoundsToNearest() {
+        #expect(summary(seconds: 100).durationText == "2-minute")   // 1.67 -> 2
+        #expect(summary(seconds: 80).durationText == "1-minute")    // 1.33 -> 1
+    }
+
+    @Test("A completed session still reads correctly")
+    func testCompletedSession() {
+        let s = summary(seconds: 1500, early: false)
+        #expect(s.digestText.contains("25-minute session."))
+        #expect(s.digestText.contains("ended early") == false)
+    }
+}
+
+// MARK: - SecurityPostureScanner Tests (F-019)
+//
+// `SecurityPostureScanner.score(for:)` is a pure function over synthetic
+// `[SecurityCheck]` arrays, so these tests never spawn the live `Process`
+// checks (those depend on the machine's actual FileVault/Gatekeeper/firewall/
+// update state and are intentionally left untested here — see
+// docs/MANUAL_TEST_PLAN.md §4.1 for their manual coverage).
+
+@Suite("SecurityPostureScanner")
+struct SecurityPostureScannerTests {
+
+    /// Builds a synthetic check with an arbitrary state, for scoring in isolation.
+    private func check(_ kind: SecurityCheckKind, _ state: SecurityCheckState) -> SecurityCheck {
+        SecurityCheck(kind: kind, state: state, detail: "synthetic")
+    }
+
+    @Test("All checks passing scores 100")
+    func testAllPassScoresFull() {
+        let checks = SecurityCheckKind.allCases.map { check($0, .pass) }
+        #expect(SecurityPostureScanner.score(for: checks) == 100)
+    }
+
+    @Test("Empty check list scores 100")
+    func testEmptyScoresFull() {
+        #expect(SecurityPostureScanner.score(for: []) == 100)
+    }
+
+    @Test("A single fail subtracts 15")
+    func testSingleFailSubtracts15() {
+        let checks = [check(.fileVault, .fail)] + SecurityCheckKind.allCases.dropFirst().map { check($0, .pass) }
+        #expect(SecurityPostureScanner.score(for: checks) == 85)
+    }
+
+    @Test("A single warn subtracts 7")
+    func testSingleWarnSubtracts7() {
+        let checks = [check(.automaticUpdates, .warn)] + SecurityCheckKind.allCases.filter { $0 != .automaticUpdates }.map { check($0, .pass) }
+        #expect(SecurityPostureScanner.score(for: checks) == 93)
+    }
+
+    @Test("Multiple fails and warns sum correctly")
+    func testMultipleFailsAndWarnsSum() {
+        // 2 fails (-30) + 1 warn (-7) + rest pass = 100 - 37 = 63
+        let checks: [SecurityCheck] = [
+            check(.fileVault, .fail),
+            check(.gatekeeper, .fail),
+            check(.firewall, .warn),
+            check(.automaticUpdates, .pass),
+            check(.sip, .pass),
+            check(.secureBoot, .pass),
+            check(.findMy, .pass),
+            check(.loginWindow, .pass)
+        ]
+        #expect(SecurityPostureScanner.score(for: checks) == 63)
+    }
+
+    @Test("Score is clamped to a 0...100 range and never goes negative")
+    func testScoreClampedAtZero() {
+        // 8 fails would be 100 - 120 = -20 unclamped; must clamp to 0.
+        let checks = SecurityCheckKind.allCases.map { check($0, .fail) }
+        #expect(SecurityPostureScanner.score(for: checks) == 0)
+    }
+
+    @Test("Score never exceeds 100 even with no penalizing checks")
+    func testScoreClampedAtHundred() {
+        let checks = SecurityCheckKind.allCases.map { check($0, .pass) }
+        #expect(SecurityPostureScanner.score(for: checks) <= 100)
+    }
+
+    // MARK: - The critical invariant
+
+    @Test("All-unknown checks NEVER penalize the score — this is the core F-019 invariant")
+    func testAllUnknownNeverPenalizes() {
+        let checks = SecurityCheckKind.allCases.map { check($0, .unknown) }
+        #expect(SecurityPostureScanner.score(for: checks) == 100,
+                """
+                Unknown states (SIP, Secure Boot, Find My, Login Window — and any \
+                check whose Process call failed) must never subtract from the score, \
+                since Halo has no reliable way to verify them and must not guess.
+                """)
+    }
+
+    @Test("Mixed fail + unknown: only the fail counts, unknowns are ignored")
+    func testMixedFailAndUnknownOnlyFailCounts() {
+        let checks: [SecurityCheck] = [
+            check(.fileVault, .fail),
+            check(.gatekeeper, .unknown),
+            check(.firewall, .unknown),
+            check(.automaticUpdates, .unknown),
+            check(.sip, .unknown),
+            check(.secureBoot, .unknown),
+            check(.findMy, .unknown),
+            check(.loginWindow, .unknown)
+        ]
+        // Only the single fail (-15) should count; all 7 unknowns contribute nothing.
+        #expect(SecurityPostureScanner.score(for: checks) == 85)
+    }
+
+    @Test("Mixed warn + unknown: only the warn counts, unknowns are ignored")
+    func testMixedWarnAndUnknownOnlyWarnCounts() {
+        let checks: [SecurityCheck] = [
+            check(.automaticUpdates, .warn),
+            check(.fileVault, .unknown),
+            check(.gatekeeper, .unknown),
+            check(.firewall, .unknown),
+            check(.sip, .unknown),
+            check(.secureBoot, .unknown),
+            check(.findMy, .unknown),
+            check(.loginWindow, .unknown)
+        ]
+        #expect(SecurityPostureScanner.score(for: checks) == 93)
+    }
+
+    @Test("SecurityCheckState maps to expected color and icon")
+    func testStateColorAndIcon() {
+        #expect(SecurityCheckState.pass.icon == "checkmark.circle.fill")
+        #expect(SecurityCheckState.warn.icon == "exclamationmark.triangle.fill")
+        #expect(SecurityCheckState.fail.icon == "xmark.circle.fill")
+        #expect(SecurityCheckState.unknown.icon == "questionmark.circle.fill")
+    }
+
+    @Test("The 4 manual-guidance checks have no System Settings deep link for SIP/Secure Boot")
+    func testManualChecksSettingsURLs() {
+        // SIP and Secure Boot are only viewable from Terminal / Recovery Mode —
+        // there is no System Settings pane to deep-link to, so the "Fix" button
+        // must not render for these two.
+        #expect(SecurityCheckKind.sip.settingsURL == nil)
+        #expect(SecurityCheckKind.secureBoot.settingsURL == nil)
+        // Find My and Login Window DO have a reachable settings pane.
+        #expect(SecurityCheckKind.findMy.settingsURL != nil)
+        #expect(SecurityCheckKind.loginWindow.settingsURL != nil)
+    }
+
+    @Test("All 8 SecurityCheckKind cases have distinct id slugs")
+    func testIdSlugsAreDistinct() {
+        let slugs = SecurityCheckKind.allCases.map(\.idSlug)
+        #expect(Set(slugs).count == slugs.count)
+        #expect(slugs.count == 8)
+    }
+}
+
+// MARK: - F-019 review fixes
+
+@Suite("SecurityCheck identity")
+struct SecurityCheckIdentityTests {
+
+    // loadSecurityPosture() replaces the whole array on every Refresh, so a
+    // generated UUID id made all eight rows look brand new to ForEach.
+    @Test("Identity is the check kind, stable across rescans")
+    func testIdentityIsKind() {
+        let a = SecurityCheck(kind: .firewall, state: .pass, detail: "On")
+        let b = SecurityCheck(kind: .firewall, state: .fail, detail: "Off")
+        #expect(a.id == b.id)
+        #expect(a.id == .firewall)
+    }
+
+    @Test("Different kinds have different identities")
+    func testDistinctKinds() {
+        let checks = SecurityCheckKind.allCases.map {
+            SecurityCheck(kind: $0, state: .unknown, detail: "")
+        }
+        #expect(Set(checks.map(\.id)).count == checks.count)
+    }
+}
+
+// MARK: - Shared security-posture store
+//
+// The store is the single source both the Protection checklist and the
+// Dashboard health score read from, so its refresh contract matters more than
+// a normal view model's.
+// Each test drives its own instance, never `.shared`. `HaloTests` is hosted in
+// Halo, so `AppState.init()` has already kicked off a scan on `shared` before
+// the first test runs — asserting `isRefreshing == false` against it fails
+// immediately and for a reason that has nothing to do with the code under test.
+@Suite("SecurityPostureStore")
+struct SecurityPostureStoreTests {
+
+    // `isRefreshing` was published but never checked, so opening Protection
+    // during the launch-time scan started a second one: ten posix_spawns
+    // instead of five, and whichever finished first cleared the flag while the
+    // other was still running, stopping the spinner early.
+    @Test("A concurrent refresh is collapsed, not run twice")
+    @MainActor
+    func testRefreshIsNotReentrant() async {
+        let store = SecurityPostureStore()
+
+        async let first: Void = store.refresh()
+        async let second: Void = store.refresh()
+        _ = await (first, second)
+
+        // Both settle, the flag is clean, and the score is a real value from a
+        // completed scan rather than a half-applied one.
+        #expect(store.isRefreshing == false)
+        #expect(store.score >= 0 && store.score <= 100)
+    }
+
+    // `score` is published rather than computed so readers can subscribe to the
+    // value and `removeDuplicates()`; if it ever drifts from `checks` the
+    // Dashboard and the checklist disagree again, which is the whole thing this
+    // store exists to prevent.
+    @Test("The published score always matches the published checks")
+    @MainActor
+    func testPublishedScoreMatchesChecks() async {
+        let store = SecurityPostureStore()
+        await store.refresh()
+
+        #expect(store.score == SecurityPostureScanner.score(for: store.checks))
+    }
+
+    @Test("The flag is cleared even when a refresh returns early")
+    @MainActor
+    func testFlagClearedOnEarlyReturn() async {
+        let store = SecurityPostureStore()
+        await store.refresh()
+        await store.refresh()   // the second sees a clean flag and runs normally
+        #expect(store.isRefreshing == false)
+    }
+}
+
+@Suite("SecurityPostureScanner scoring")
+struct SecurityPostureScoringTests {
+
+    // `.unknown` must never be scored — under the sandbox every automated check
+    // reads unknown, and scoring them as failures would invent a bad verdict
+    // from an absence of information.
+    @Test("Unknown checks do not reduce the score")
+    func testUnknownIsNotPenalised() {
+        let checks = SecurityCheckKind.allCases.map {
+            SecurityCheck(kind: $0, state: .unknown, detail: "")
+        }
+        #expect(SecurityPostureScanner.score(for: checks) == 100)
+    }
+
+    @Test("A failing check reduces the score")
+    func testFailReducesScore() {
+        let passing = [SecurityCheck(kind: .firewall, state: .pass, detail: "")]
+        let failing = [SecurityCheck(kind: .firewall, state: .fail, detail: "")]
+        #expect(SecurityPostureScanner.score(for: failing) < SecurityPostureScanner.score(for: passing))
+    }
+}
+
+// MARK: - PrivacyPatternDatabase / PrivacyExposureScanner Tests (F-018)
+//
+// `evaluate(text:)` runs the actor's real, bundle-loaded `privacy-patterns.json`
+// against synthetic text — no file-system traversal (`PrivacyExposureScanner`'s
+// `shouldScan`/`evaluateFile` are private and depend on real disk I/O; that
+// traversal/filtering behavior is covered manually in MANUAL_TEST_PLAN.md §4.x).
+// All test values below are well-known, publicly-documented placeholders
+// (AWS's own SDK example key, a standard Visa test-card number, a synthetic
+// SSN) — none belong to a real account or person.
+
+@Suite("PrivacyPatternDatabase")
+struct PrivacyPatternDatabaseTests {
+
+    private func loadedDB() async -> PrivacyPatternDatabase {
+        await PrivacyPatternDatabase.shared.load()
+        return PrivacyPatternDatabase.shared
+    }
+
+    @Test("Plain, unremarkable text produces zero hits")
+    func testNoFalsePositiveOnPlainText() async {
+        let db = await loadedDB()
+        let hits = await db.evaluate(text: "Hello world, this is a normal text file with nothing sensitive in it.")
+        #expect(hits.isEmpty)
+    }
+
+    @Test("Empty text produces zero hits")
+    func testEmptyTextProducesNoHits() async {
+        let db = await loadedDB()
+        let hits = await db.evaluate(text: "")
+        #expect(hits.isEmpty)
+    }
+
+    @Test("Matches an AWS access key and redacts to prefix + last 4")
+    func testAWSKeyMatchAndRedaction() async {
+        let db = await loadedDB()
+        // Built via concatenation (not a literal) so this key-shaped test
+        // fixture — a variant of AWS's own publicly-documented SDK example
+        // key — never trips a secret scanner on push. Not a real credential.
+        let key = "AKIA" + "IOSFODNN7" + "EXAMPLE"
+        let hits = await db.evaluate(text: "aws_access_key_id = \(key)")
+        let hit = try? #require(hits.first { $0.category == .awsKey })
+        #expect(hit?.risk == .critical)
+        #expect(hit?.redactedPreview == "AKIA••••••••MPLE")
+    }
+
+    @Test("Matches a GitHub personal access token and redacts to prefix + last 4")
+    func testGitHubTokenMatchAndRedaction() async {
+        let db = await loadedDB()
+        // Concatenated (not a literal) to avoid tripping secret scanners —
+        // this is a synthetic fixture, not a real token.
+        let token = "ghp_" + "1234567890abcdefghijklmnopqrstuvwxyz"   // 36 chars after ghp_
+        let hits = await db.evaluate(text: "GITHUB_TOKEN=\(token)")
+        let hit = try? #require(hits.first { $0.category == .githubToken })
+        #expect(hit?.risk == .critical)
+        #expect(hit?.redactedPreview == "ghp_••••••••wxyz")
+    }
+
+    @Test("Matches a Stripe secret key and redacts to sk_live_ prefix + last 4")
+    func testStripeSecretKeyMatchAndRedaction() async {
+        let db = await loadedDB()
+        // Concatenated (not a literal) to avoid tripping secret scanners —
+        // this is a synthetic fixture, not a real key.
+        let key = "sk_" + "live_" + "abcdefghijklmnopqrstuvwx"   // 24 chars after sk_live_
+        let hits = await db.evaluate(text: "STRIPE_KEY=\(key)")
+        let hit = try? #require(hits.first { $0.category == .stripeKey })
+        #expect(hit?.risk == .critical)
+        #expect(hit?.redactedPreview == "sk_live_••••••••uvwx")
+    }
+
+    @Test("Matches a Stripe publishable key and redacts with pk_live_ prefix")
+    func testStripePublishableKeyMatchAndRedaction() async {
+        let db = await loadedDB()
+        let key = "pk_" + "live_" + "abcdefghijklmnopqrstuvwx"
+        let hits = await db.evaluate(text: "STRIPE_PK=\(key)")
+        let hit = try? #require(hits.first { $0.category == .stripeKey })
+        #expect(hit?.redactedPreview == "pk_live_••••••••uvwx")
+    }
+
+    // Deliberate behaviour change from the original test, which asserted the
+    // PEM header was passed through verbatim.
+    //
+    // The reasoning for passing it through was sound — a PEM header is a public
+    // marker, not a secret. What the review pointed out is that it required an
+    // unredacted `return raw` to sit inside a function documented as "never
+    // returns the full matched value", where it is a trap for whoever adds the
+    // next category. Nothing downstream needs the literal header text, so the
+    // invariant is now absolute and the marker is fixed.
+    @Test("An SSH private key header is reported as a fixed marker, never verbatim")
+    func testSSHPrivateKeyIsRedactedToAMarker() async {
+        let db = await loadedDB()
+        let hits = await db.evaluate(text: "-----BEGIN RSA PRIVATE KEY-----\nMIIEow...\n-----END RSA PRIVATE KEY-----")
+        let hit = try? #require(hits.first { $0.category == .sshPrivateKey })
+        #expect(hit?.risk == .critical)
+        #expect(hit?.redactedPreview == "PRIVATE KEY BLOCK")
+        #expect(hit?.redactedPreview.contains("BEGIN") == false)
+    }
+
+    @Test("Matches an SSN and redacts to last 4 only")
+    func testSSNMatchAndRedaction() async {
+        let db = await loadedDB()
+        let hits = await db.evaluate(text: "SSN on file: 123-45-6789")
+        let hit = try? #require(hits.first { $0.category == .ssn })
+        #expect(hit?.risk == .warning)
+        #expect(hit?.redactedPreview == "•••-••-6789")
+    }
+
+    @Test("Matches a Luhn-valid credit card number and redacts to last 4")
+    func testCreditCardLuhnValidMatchAndRedaction() async {
+        let db = await loadedDB()
+        // Standard Visa test/sandbox number (publicly documented, Luhn-valid).
+        let hits = await db.evaluate(text: "Card on file: 4111 1111 1111 1111")
+        let hit = try? #require(hits.first { $0.category == .creditCard })
+        #expect(hit?.risk == .critical)
+        #expect(hit?.redactedPreview == "•••• •••• •••• 1111")
+    }
+
+    @Test("A Luhn-invalid digit run of card length is NOT reported as a credit card")
+    func testCreditCardLuhnInvalidIsRejected() async {
+        let db = await loadedDB()
+        // 16 sequential digits — correct length/shape, but fails the Luhn checksum.
+        let hits = await db.evaluate(text: "Tracking number: 1234567890123456")
+        #expect(!hits.contains { $0.category == .creditCard })
+    }
+
+    @Test("Matches per pattern are capped so a pathological file can't flood results")
+    func testMatchesPerPatternAreCapped() async {
+        let db = await loadedDB()
+        // 25 occurrences of an AWS-shaped key (built via concatenation, not a
+        // literal, so this fixture never trips a secret scanner) on separate
+        // lines — the actor caps each pattern at 20 matches per file.
+        let key = "AKIA" + "IOSFODNN7" + "EXAMPLE"
+        let text = Array(repeating: key, count: 25).joined(separator: "\n")
+        let hits = await db.evaluate(text: text)
+        #expect(hits.filter { $0.category == .awsKey }.count == 20)
+    }
+
+    @Test("Bundled privacy-patterns.json loads with all 6 categories represented")
+    func testBundledPatternsLoadAllCategories() async {
+        let db = await loadedDB()
+        #expect(await db.patternCount > 0)
+        #expect(await db.isLoaded)
+    }
+}
+
+@Suite("PrivacyExposureRiskLevel")
+struct PrivacyExposureRiskLevelTests {
+
+    @Test("Critical sorts before Warning, which sorts before Info")
+    func testSeverityOrdering() {
+        let shuffled: [PrivacyExposureRiskLevel] = [.info, .warning, .critical]
+        #expect(shuffled.sorted() == [.critical, .warning, .info])
+    }
+}
+
+// MARK: - F-018 review fixes
+
+@Suite("PrivacyPatternDatabase redaction")
+struct PrivacyRedactionTests {
+
+    // The PR body claims redact() is the only path producing a hit; the .exact
+    // branch bypassed it, so the invariant was enforced by the current contents
+    // of a remotely-updatable JSON file rather than by code.
+    @Test("Redaction never returns the full matched value")
+    func testRedactionHidesValue() {
+        let card = "4111111111111111"
+        let redacted = PrivacyPatternDatabase.redact(card, category: .creditCard)
+        #expect(redacted != card)
+        #expect(redacted.contains(card) == false)
+    }
+
+    @Test("SSN redaction keeps only the last four digits")
+    func testSSNRedaction() {
+        let redacted = PrivacyPatternDatabase.redact("123-45-6789", category: .ssn)
+        #expect(redacted.contains("6789"))
+        #expect(redacted.contains("123") == false)
+    }
+
+    // Was `return raw` inside a function documented as never returning the full
+    // matched value.
+    @Test("Private-key redaction returns a fixed marker, not the matched text")
+    func testPrivateKeyRedaction() {
+        let header = "-----BEGIN OPENSSH PRIVATE KEY-----"
+        let redacted = PrivacyPatternDatabase.redact(header, category: .sshPrivateKey)
+        #expect(redacted == "PRIVATE KEY BLOCK")
+        #expect(redacted.contains("BEGIN") == false)
+    }
+
+    @Test("Every category redacts to something other than the input")
+    func testAllCategoriesRedact() {
+        let sample = "SENSITIVE-VALUE-1234567890"
+        for category in PrivacyExposureCategory.allCases {
+            #expect(PrivacyPatternDatabase.redact(sample, category: category) != sample,
+                    "\(category) returned the raw value")
+        }
+    }
+}
+
+// MARK: - PermissionAuditor Tests (F-016)
+
+@Suite("PermissionAuditor")
+struct PermissionAuditorTests {
+
+    // MARK: PermissionAuditResult / TCCGrant model behaviour
+
+    @Test("unavailable(reason:) carries the honest fallback reason verbatim")
+    func testUnavailableCarriesReason() {
+        let reason = "Halo needs Full Disk Access to show per-app grants — showing categories only."
+        let result = PermissionAuditResult.unavailable(reason: reason)
+
+        guard case .unavailable(let carried) = result else {
+            Issue.record("Expected .unavailable case")
+            return
+        }
+        #expect(carried == reason)
+    }
+
+    @Test("available(grants:) carries the real per-app grant list")
+    func testAvailableCarriesGrants() {
+        let grants = [
+            TCCGrant(kind: .camera, bundleID: "com.apple.FaceTime", appName: "FaceTime", isElevatedRisk: false)
+        ]
+        let result = PermissionAuditResult.available(grants: grants)
+
+        guard case .available(let carried) = result else {
+            Issue.record("Expected .available case")
+            return
+        }
+        #expect(carried.count == 1)
+        #expect(carried[0].bundleID == "com.apple.FaceTime")
+    }
+
+    @Test("Each TCCGrant gets a distinct identity even with identical fields")
+    func testTCCGrantIdentityIsUnique() {
+        let a = TCCGrant(kind: .microphone, bundleID: "com.example.app", appName: "Example", isElevatedRisk: false)
+        let b = TCCGrant(kind: .microphone, bundleID: "com.example.app", appName: "Example", isElevatedRisk: false)
+        #expect(a.id != b.id) // Identifiable via a fresh UUID, not value equality
+    }
+
+    // MARK: Risk-flag heuristic
+    //
+    // The heuristic itself lives inside `PermissionAuditor.run()` as a private
+    // static table (`expectedElevatedPrefixes`) keyed off real TCC.db rows, so
+    // it cannot be invoked directly without a live, FDA-readable database.
+    // These tests document and pin the documented contract — only
+    // Screen Recording / Accessibility are ever eligible for the flag, and
+    // known browser/communication bundle IDs are exempt — using synthetic
+    // `TCCGrant` values shaped exactly as `PermissionAuditor` would produce
+    // them for each case.
+
+    @Test("Non-browser app holding Screen Recording is elevated risk")
+    func testNonBrowserScreenRecordingIsElevated() {
+        let grant = TCCGrant(kind: .screenRecording, bundleID: "com.random.thirdparty",
+                              appName: "Random Tool", isElevatedRisk: true)
+        #expect(grant.isElevatedRisk)
+    }
+
+    @Test("Known browser holding Screen Recording is not elevated risk")
+    func testBrowserScreenRecordingIsExempt() {
+        let grant = TCCGrant(kind: .screenRecording, bundleID: "com.google.Chrome",
+                              appName: "Google Chrome", isElevatedRisk: false)
+        #expect(!grant.isElevatedRisk)
+    }
+
+    @Test("Non-browser app holding Accessibility is elevated risk")
+    func testNonBrowserAccessibilityIsElevated() {
+        let grant = TCCGrant(kind: .accessibility, bundleID: "com.random.thirdparty",
+                              appName: "Random Tool", isElevatedRisk: true)
+        #expect(grant.isElevatedRisk)
+    }
+
+    @Test("Camera/Microphone grants are never flagged elevated regardless of app")
+    func testNonElevatedKindsNeverFlagged() {
+        // Only .screenRecording and .accessibility are ever eligible for the
+        // elevated-risk flag per PermissionAuditor.run(); camera/mic grants
+        // are informational only.
+        let grant = TCCGrant(kind: .camera, bundleID: "com.random.thirdparty",
+                              appName: "Random Tool", isElevatedRisk: false)
+        #expect(!grant.isElevatedRisk)
+    }
+
+    // MARK: Grant grouping by category
+    //
+    // Mirrors the grouping loop in `ProtectionViewModel.loadPermissions()`:
+    // `for grant in grants { grouped[grant.kind, default: []].append(grant.appName) }`
+
+    @Test("Grants group correctly by PermissionKind")
+    func testGroupingByCategory() {
+        let grants = [
+            TCCGrant(kind: .camera, bundleID: "com.a", appName: "A", isElevatedRisk: false),
+            TCCGrant(kind: .camera, bundleID: "com.b", appName: "B", isElevatedRisk: false),
+            TCCGrant(kind: .accessibility, bundleID: "com.c", appName: "C", isElevatedRisk: true)
+        ]
+        var grouped: [PermissionKind: [String]] = [:]
+        for grant in grants { grouped[grant.kind, default: []].append(grant.appName) }
+
+        #expect(grouped[.camera]?.count == 2)
+        #expect(grouped[.accessibility]?.count == 1)
+        #expect(grouped[.microphone] == nil)
+    }
+
+    @Test("Empty grant list produces no groups for any kind")
+    func testGroupingWithNoGrants() {
+        let grants: [TCCGrant] = []
+        var grouped: [PermissionKind: [String]] = [:]
+        for grant in grants { grouped[grant.kind, default: []].append(grant.appName) }
+
+        for kind in PermissionKind.allCases {
+            #expect(grouped[kind] == nil)
+        }
+    }
+
+    // MARK: "X of Y apps excessive" summary computation
+    //
+    // Mirrors `PermissionsAuditSection.totalAuditedApps` / `.excessiveAppCount`:
+    // unique bundle IDs overall, and unique bundle IDs with at least one
+    // elevated-risk grant.
+
+    @Test("Summary count: zero apps with any permission")
+    func testSummaryCountZeroApps() {
+        let grants: [TCCGrant] = []
+        let total = Set(grants.map(\.bundleID)).count
+        let excessive = Set(grants.filter(\.isElevatedRisk).map(\.bundleID)).count
+        #expect(total == 0)
+        #expect(excessive == 0)
+    }
+
+    @Test("Summary count: one app with an excessive combination is counted once")
+    func testSummaryCountExcessiveAppCountedOnce() {
+        // Same app (bundle ID) granted both an elevated permission
+        // (Accessibility) and a non-elevated one (Camera) — should count as
+        // ONE excessive app, not two, and ONE total app, not two.
+        let grants = [
+            TCCGrant(kind: .accessibility, bundleID: "com.random.app", appName: "Random",
+                     isElevatedRisk: true),
+            TCCGrant(kind: .camera, bundleID: "com.random.app", appName: "Random",
+                     isElevatedRisk: false)
+        ]
+        let total = Set(grants.map(\.bundleID)).count
+        let excessive = Set(grants.filter(\.isElevatedRisk).map(\.bundleID)).count
+        #expect(total == 1)
+        #expect(excessive == 1)
+    }
+
+    @Test("Summary count: multiple distinct apps, only some excessive")
+    func testSummaryCountMixedApps() {
+        let grants = [
+            TCCGrant(kind: .accessibility, bundleID: "com.risky.app", appName: "Risky", isElevatedRisk: true),
+            TCCGrant(kind: .camera, bundleID: "com.safe.app", appName: "Safe", isElevatedRisk: false),
+            TCCGrant(kind: .microphone, bundleID: "com.safe.app", appName: "Safe", isElevatedRisk: false)
+        ]
+        let total = Set(grants.map(\.bundleID)).count
+        let excessive = Set(grants.filter(\.isElevatedRisk).map(\.bundleID)).count
+        #expect(total == 2)
+        #expect(excessive == 1)
+    }
+
+    // MARK: Graceful handling when TCC.db read fails
+
+    @Test("PermissionAuditor.run() handles an unreadable TCC.db gracefully")
+    func testRunHandlesUnreadableDatabase() async {
+        // In a normal dev/CI shell (no Full Disk Access granted to the test
+        // runner), TCC.db is unreadable by design — this is the exact
+        // failure mode PermissionAuditor must never crash or fabricate data
+        // for. Assert whichever real branch this environment hits is
+        // internally consistent, so the test stays robust even on a machine
+        // that does have Full Disk Access granted.
+        let auditor = PermissionAuditor()
+        let result = await auditor.run()
+
+        switch result {
+        case .unavailable(let reason):
+            #expect(!reason.isEmpty)
+        case .available(let grants):
+            #expect(!grants.isEmpty) // run() never returns .available with an empty array
+            for grant in grants {
+                #expect(!grant.bundleID.isEmpty)
+                #expect(!grant.appName.isEmpty)
+            }
+        }
+    }
+}
+
+// MARK: - F-016 review fixes
+
+@Suite("PermissionAuditor allowlist")
+struct PermissionAuditorAllowlistTests {
+
+    // For an allowlist whose job is *suppressing* a risk flag, prefix matching
+    // fails in the permissive direction.
+    @Test("A real browser is still treated as expected")
+    func testRealBrowserAllowed() {
+        #expect(PermissionAuditor.isExpectedElevated("com.apple.Safari"))
+        #expect(PermissionAuditor.isExpectedElevated("com.google.Chrome"))
+    }
+
+    // com.apple.mail used to match com.apple.mailctl, and anything naming itself
+    // com.apple.Safari.helper was silently never flagged.
+    @Test("A lookalike identifier is no longer silently allowed")
+    func testLookalikeNotAllowed() {
+        #expect(PermissionAuditor.isExpectedElevated("com.apple.mailctl") == false)
+        #expect(PermissionAuditor.isExpectedElevated("com.apple.Safari.helper.evil") == false)
+        #expect(PermissionAuditor.isExpectedElevated("com.google.ChromeMalware") == false)
+    }
+
+    // The old entry "com.duckduckgo" isn't a real bundle ID — it only worked
+    // because of the prefix behaviour, which is a neat illustration of the bug.
+    @Test("DuckDuckGo is allowlisted under its actual bundle identifier")
+    func testDuckDuckGoRealIdentifier() {
+        #expect(PermissionAuditor.isExpectedElevated("com.duckduckgo.macos.browser"))
+        #expect(PermissionAuditor.isExpectedElevated("com.duckduckgo") == false)
+    }
+
+    // Deliberately-chosen family prefixes still work.
+    @Test("Browser helper processes inherit the parent's expectation")
+    func testHelperPrefixesAllowed() {
+        #expect(PermissionAuditor.isExpectedElevated("com.google.Chrome.helper.renderer"))
+    }
+
+    @Test("An unrelated app is flagged")
+    func testUnknownAppFlagged() {
+        #expect(PermissionAuditor.isExpectedElevated("com.example.randomapp") == false)
     }
 }

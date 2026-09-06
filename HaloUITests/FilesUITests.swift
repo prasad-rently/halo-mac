@@ -11,11 +11,19 @@
 //    7.6 Similar Photos    (F-025, perceptual hash — TC-FILE-60…62; Photos
 //                            Library path is real code but untested this pass —
 //                            it needs a live permission-grant walkthrough)
+//  Files module — all six tabs. Maps to MANUAL_TEST_PLAN.md §7:
+//    7.1 SpaceLens     (TC-FILE-01…03)
+//    7.2 Duplicates    (TC-FILE-10…11)
+//    7.3 Downloads     (TC-FILE-20…)
+//    7.4 Large Files   (TC-FILE-30…)
+//    7.5 Drive Speed   (TC-FILE-40… / F-043)
+//    7.6 iCloud Drive  (TC-FILE-50… / F-030)
 //
-//  SAFETY: the duplicate/large-file/downloads flows can delete files, so every
-//  destructive path is driven to its confirmation and cancelled, with dummy
-//  fixtures + a Trash baseline proving nothing was deleted. Drive Speed writes
-//  only Halo's own scratch file (temp / `.HaloSpeedTest`), which it removes.
+//  SAFETY: the duplicate/large-file/downloads/iCloud-Drive flows can delete
+//  files, so every destructive path is driven to its confirmation and
+//  cancelled, with dummy fixtures + a Trash baseline proving nothing was
+//  deleted. Drive Speed writes only Halo's own scratch file (temp /
+//  `.HaloSpeedTest`), which it removes.
 //
 
 import XCTest
@@ -170,8 +178,85 @@ final class FilesUITests: HaloUITestCase {
         }
         XCTAssertTrue(confirmationSurfaceAppeared(),
                       "Deleting marked similar photos must confirm first (TC-SAFE-02)")
+    // TC-FILE-50/51 — the iCloud Drive tab renders either real containers (with
+    // "iCloud Drive" for com~apple~CloudDocs sorted first) or a friendly
+    // not-set-up state — never a crash. Whether iCloud Drive is configured is
+    // machine-dependent, so both outcomes are accepted.
+    }
+
+    func test_icloud_drive_renders_containers_or_unavailable_state() throws {
+        openFiles(tab: "iCloud Drive")
+        let hasContainer = element(labeled: "iCloud Drive", timeout: 5) != nil
+        let unavailable = element(labeled: "iCloud Drive isn't set up on this Mac", timeout: 2) != nil
+        let noContainers = element(labeled: "No iCloud containers found", timeout: 2) != nil
+        XCTAssertTrue(hasContainer || unavailable || noContainers,
+                      "iCloud Drive tab should show real containers or a graceful empty/unavailable state")
+    }
+
+    // TC-FILE-56 / TC-SAFE-02 — trashing an iCloud Drive item confirms first
+    // (and mentions cross-device removal); cancelling deletes nothing.
+    func test_icloud_drive_delete_confirms_and_cancel_deletes_nothing() throws {
+        let fx = HaloTestFixtures(self)
+        fx.captureTrashBaseline()
+        openFiles(tab: "iCloud Drive")
+
+        guard waitForID("files.icloud.row", timeout: 15) != nil else {
+            fx.tearDown()
+            throw XCTSkip("No iCloud Drive items on this machine to exercise the delete flow.")
+        }
+        element(id: "files.icloud.row").hover()   // reveal the row's trash button
+        guard tapID("files.icloud.trash.button", timeout: 5) else {
+            fx.tearDown()
+            throw XCTSkip("iCloud Drive trash button not hittable.")
+        }
+        XCTAssertTrue(confirmationSurfaceAppeared(),
+                      "Deleting an iCloud Drive item must confirm first (TC-SAFE-02)")
         cancelConfirmation()
         fx.assertTrashUnchanged()
         fx.tearDown()
+    }
+
+    // MARK: - Drive Health / S.M.A.R.T. Monitor (F-020) — TC-FILE-50…58
+    //
+    // Shown in the same Drive Speed tab, below the volume picker. Entirely
+    // read-only (diskutil + IOKit reads only), so no confirmation gate to
+    // navigate here.
+
+    // TC-FILE-50 — before any scan, the card shows the prompt, not a spinner.
+    func test_driveHealth_shows_prompt_before_first_scan() {
+        openFiles(tab: "Drive Speed")
+        XCTAssertTrue(assertID("files.driveHealth.card",
+                                "Drive Health card should render in the Drive Speed tab",
+                                timeout: 10).exists)
+    }
+
+    // TC-FILE-51 / TC-FILE-52 — running a health check settles into a status
+    // badge and a populated metrics grid (real values or the explicit
+    // "Not available on this drive" placeholder — never blank).
+    func test_driveHealth_check_settles_with_status_and_metrics() {
+        openFiles(tab: "Drive Speed")
+        guard tapID("files.driveHealth.check.button", timeout: 10) else {
+            XCTFail("Expected a 'Check Drive Health' button")
+            return
+        }
+        XCTAssertTrue(assertID("files.driveHealth.status",
+                                "Drive Health status badge should appear after a scan", timeout: 30).exists)
+        // At least the always-present Capacity field should render.
+        XCTAssertTrue(assertID("files.driveHealth.field.capacity",
+                                "Capacity metric should render after a scan", timeout: 10).exists)
+    }
+
+    // TC-FILE-57 — "Re-Check" re-runs the scan without crashing.
+    func test_driveHealth_recheck_does_not_crash() {
+        openFiles(tab: "Drive Speed")
+        guard tapID("files.driveHealth.check.button", timeout: 10) else {
+            XCTFail("Expected a 'Check Drive Health' button")
+            return
+        }
+        _ = waitForID("files.driveHealth.status", timeout: 30)
+        // The button relabels to "Re-Check" but keeps the same identifier.
+        XCTAssertTrue(tapID("files.driveHealth.check.button", timeout: 5),
+                      "Re-Check should be tappable using the same identifier")
+        XCTAssertTrue(app.windows.firstMatch.exists)
     }
 }

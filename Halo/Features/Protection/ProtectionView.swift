@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 struct ProtectionView: View {
     @StateObject private var viewModel = ProtectionViewModel()
@@ -8,8 +9,10 @@ struct ProtectionView: View {
             VStack(spacing: 24) {
                 ProtectionHeader(viewModel: viewModel)
                 ScannerCardsRow(viewModel: viewModel)
+                SecurityPostureSection(viewModel: viewModel)
                 PermissionsAuditSection(viewModel: viewModel)
                 LaunchAgentsSection(viewModel: viewModel)
+                PrivacyExposureSection(viewModel: viewModel)
             }
             .padding(28)
         }
@@ -37,17 +40,90 @@ final class ProtectionViewModel: ObservableObject {
     @Published var isClearingBrowser = false
     @Published var clearBrowserError: String? = nil
 
-    // Permissions
+    // Permissions (F-016)
     @Published var permissions: [AppPermission] = []
+    @Published var permissionAudit: PermissionAuditResult = .unavailable(reason: "Not yet checked")
+    @Published var isLoadingPermissions = false
 
     // Launch Agents — real scan from ~/Library/LaunchAgents, /Library/LaunchAgents, /Library/LaunchDaemons
     @Published var launchAgents: [RealLaunchAgentItem] = []
     @Published var isLoadingAgents = false
 
+    // Privacy Exposure Scanner (F-018) — find-only, no deletion capability.
+    @Published var privacyScanState: PrivacyScanState = .idle
+    @Published var privacyFindings: [PrivacyExposureFinding] = []
+    @Published var privacyLastScanDate: Date? = nil
+    @Published var privacyIncludeICloud: Bool = false
+    @Published var privacyCurrentPath: String = ""
+    /// Set when the scan stopped at `maxFiles` — the result is a sample, not an
+    /// exhaustive answer, and must not be shown as one.
+    @Published var privacyScanTruncated = false
+    /// Set when the scan could not run at all. Distinct from "finished with no
+    /// findings", which is what this used to be reported as.
+    @Published var privacyScanError: String?
+    // Security Posture (F-019) — read through the shared store so the checklist
+    // and the Dashboard health score can never disagree.
+    @Published var isLoadingSecurity = false
+    var securityChecks: [SecurityCheck] { SecurityPostureStore.shared.checks }
+    var securityScore: Int { SecurityPostureStore.shared.score }
+    var securityAutomationAvailable: Bool { SecurityPostureStore.shared.automationAvailable }
+
     private let scanner = ProtectionScanner()
+    private let permissionAuditor = PermissionAuditor()
+    private let privacyScanner = PrivacyExposureScanner()
+    private var privacyScanTask: Task<Void, Never>?
+
+    /// The three `security*` properties above read `SecurityPostureStore.shared`,
+    /// which is shared state this view model does not own. Reading it without
+    /// subscribing meant the section only repainted for refreshes *it* started —
+    /// a refresh from anywhere else (AppState's launch scan today, anything
+    /// added later) changed the values under a view that had no reason to
+    /// re-render. Forwarding the store's `objectWillChange` is the standard way
+    /// to republish a nested `ObservableObject`; SwiftUI re-reads after the
+    /// change lands, so the computed properties give fresh values.
+    private var securityStoreObserver: AnyCancellable?
+
+    init() {
+        securityStoreObserver = SecurityPostureStore.shared.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+    }
 
     enum ScanState: Equatable {
         case idle, scanning(progress: Double), complete(clean: Bool), found(count: Int)
+    }
+
+    /// Separate from `ScanState` because a privacy scan has no known total file count
+    /// up front (unlike the malware scan's fixed drop-zone list), so progress is
+    /// reported as a running count rather than a percentage.
+    enum PrivacyScanState: Equatable {
+        case idle
+        case scanning(filesScanned: Int)
+        case complete(findingsCount: Int)
+    }
+
+    var privacyScanStatusText: String {
+        switch privacyScanState {
+        case .idle: return "Not yet scanned"
+        case .scanning(let n): return "Scanning… \(n) file\(n == 1 ? "" : "s") checked"
+        case .complete(let n): return n == 0 ? "No exposed sensitive data found" : "\(n) item\(n == 1 ? "" : "s") found"
+        }
+    }
+
+    var privacyScanStatusColor: Color {
+        switch privacyScanState {
+        case .idle: return .haloText2
+        case .scanning: return .haloAccent
+        case .complete(let n): return n == 0 ? .haloGreen : .haloRed
+        }
+    }
+
+    var privacyFindingsByRisk: [(PrivacyExposureRiskLevel, [PrivacyExposureFinding])] {
+        let grouped = Dictionary(grouping: privacyFindings, by: \.riskLevel)
+        return PrivacyExposureRiskLevel.allCases.compactMap { risk in
+            guard let items = grouped[risk], !items.isEmpty else { return nil }
+            let sorted = items.sorted { ($0.modifiedDate ?? .distantPast) > ($1.modifiedDate ?? .distantPast) }
+            return (risk, sorted)
+        }
     }
 
     var scanStatusText: String {
@@ -75,6 +151,7 @@ final class ProtectionViewModel: ObservableObject {
             group.addTask { await self.loadPermissions() }
             group.addTask { await self.loadInstalledBrowsers() }
             group.addTask { await self.loadLaunchAgents() }
+            group.addTask { await self.loadSecurityPosture() }
         }
     }
 
@@ -127,14 +204,35 @@ final class ProtectionViewModel: ObservableObject {
         showBrowserReviewSheet = false
     }
 
-    // MARK: Permissions
+    // MARK: Permissions (F-016)
 
     func loadPermissions() async {
         // Per-app TCC grants live in a SIP-protected database that requires Full
-        // Disk Access to read, so Halo does not fabricate an audit. Instead each
-        // category links straight to its System Settings privacy pane, where the
+        // Disk Access to read. `PermissionAuditor` attempts the real read first;
+        // when it can't (sandboxed release build, no Full Disk Access, locked
+        // database), Halo does not fabricate an audit — it honestly falls back
+        // to category cards that link straight to System Settings, where the
         // real, authoritative list lives.
+        isLoadingPermissions = true
         permissions = PermissionKind.allCases.map { AppPermission(kind: $0, grantedApps: []) }
+
+        var result = await permissionAuditor.run()
+
+        // Display names are resolved here, on the MainActor, rather than inside
+        // the actor — `NSWorkspace.urlForApplication(withBundleIdentifier:)` is
+        // main-thread-affine AppKit and was being called once per grant, several
+        // hundred times, from a cooperative pool thread.
+        if case .available(let grants) = result {
+            result = .available(grants: PermissionAuditor.resolveAppNames(for: grants))
+        }
+        permissionAudit = result
+
+        if case .available(let grants) = result {
+            var grouped: [PermissionKind: [String]] = [:]
+            for grant in grants { grouped[grant.kind, default: []].append(grant.appName) }
+            permissions = PermissionKind.allCases.map { AppPermission(kind: $0, grantedApps: grouped[$0] ?? []) }
+        }
+        isLoadingPermissions = false
     }
 
     // MARK: Launch Agents (real scan)
@@ -143,6 +241,82 @@ final class ProtectionViewModel: ObservableObject {
         isLoadingAgents = true
         launchAgents = await scanner.scanLaunchAgents()
         isLoadingAgents = false
+    }
+
+    // MARK: Privacy Exposure Scanner (F-018)
+
+    func runPrivacyScan() {
+        privacyScanTask?.cancel()
+        privacyScanTask = Task {
+            privacyScanState = .scanning(filesScanned: 0)
+            privacyFindings = []
+            privacyCurrentPath = ""
+
+            var locations = PrivacyScanLocation.defaultLocations.map(\.url)
+            if privacyIncludeICloud, let icloud = PrivacyScanLocation.iCloudDriveLocation() {
+                locations.append(icloud.url)
+            }
+
+            for await event in await privacyScanner.scan(locations: locations) {
+                if Task.isCancelled { break }
+                switch event {
+                case .progress(let filesScanned, let currentPath):
+                    // Throttled to ~5 Hz. This loop runs on the main actor and
+                    // the scanner yields one `.progress` per file examined, so
+                    // publishing each one meant ~80,000 objectWillChange
+                    // emissions and view invalidations for an 80,000-file
+                    // Documents tree — the UI unusable for the duration and the
+                    // path label an unreadable blur. The count stays honest; it
+                    // just doesn't need publishing at file granularity.
+                    let now = Date()
+                    if now.timeIntervalSince(lastPrivacyProgressPublish) > 0.2 {
+                        lastPrivacyProgressPublish = now
+                        privacyScanState = .scanning(filesScanned: filesScanned)
+                        privacyCurrentPath = currentPath
+                    }
+                case .finding(let finding):
+                    privacyFindings.append(finding)
+                case .completed(_, let findingsCount, let truncated):
+                    privacyLastScanDate = Date()
+                    privacyScanState = .complete(findingsCount: findingsCount)
+                    privacyScanTruncated = truncated
+                    privacyCurrentPath = ""
+                case .error(let message):
+                    // A scan that failed used to be presented as a scan that
+                    // finished cleanly — the one thing a security feature can
+                    // least afford to get wrong.
+                    privacyScanError = message
+                    privacyScanState = .idle
+                    privacyCurrentPath = ""
+                }
+            }
+        }
+    }
+
+    /// Rate-limits the main-actor republish of scan progress.
+    private var lastPrivacyProgressPublish = Date.distantPast
+
+    func cancelPrivacyScan() {
+        privacyScanTask?.cancel()
+        privacyScanTask = nil
+    }
+
+    /// Opens Finder with the file selected. This — and nothing else — is the only
+    /// action a user can take on a finding. There is deliberately no delete/quarantine
+    /// path: v1 is find-only, the user decides what to do next.
+    func revealInFinder(_ finding: PrivacyExposureFinding) {
+        NSWorkspace.shared.activateFileViewerSelecting([finding.fileURL])
+    }
+
+    // MARK: Security Posture (F-019)
+
+    func loadSecurityPosture() async {
+        isLoadingSecurity = true
+        // No manual `objectWillChange.send()`: the store is observed in `init`,
+        // so its own change notification is what repaints this section — and it
+        // does so for refreshes started anywhere, not just this one.
+        await SecurityPostureStore.shared.refresh()
+        isLoadingSecurity = false
     }
 }
 
@@ -538,21 +712,209 @@ struct BrowserReviewSheet: View {
     }
 }
 
-// MARK: - Permissions Audit
+// MARK: - Permissions Audit (F-016)
 
 struct PermissionsAuditSection: View {
     @ObservedObject var viewModel: ProtectionViewModel
 
+    private var totalAuditedApps: Int {
+        guard case .available(let grants) = viewModel.permissionAudit else { return 0 }
+        return Set(grants.map(\.bundleID)).count
+    }
+
+    private var excessiveAppCount: Int {
+        guard case .available(let grants) = viewModel.permissionAudit else { return 0 }
+        return Set(grants.filter(\.isElevatedRisk).map(\.bundleID)).count
+    }
+
+    private var subtitle: String {
+        if case .available = viewModel.permissionAudit {
+            return "Real per-app grants read from this Mac's permission database"
+        }
+        return "Open a category to review which apps have access, in System Settings"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HaloSectionHeader(title: "App Permissions",
-                              subtitle: "Open a category to review which apps have access, in System Settings")
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
-                ForEach(viewModel.permissions) { permission in
-                    PermissionCard(permission: permission)
+            HStack(alignment: .top) {
+                HaloSectionHeader(title: "App Permissions", subtitle: subtitle)
+                Spacer()
+                if viewModel.isLoadingPermissions {
+                    ProgressView().scaleEffect(0.6).tint(.haloAccent)
+                } else if case .available = viewModel.permissionAudit {
+                    HaloBadge(
+                        text: "\(excessiveAppCount) of \(totalAuditedApps) apps excessive",
+                        color: excessiveAppCount > 0 ? .haloAmber : .haloGreen
+                    )
+                    .accessibilityIdentifier("protection.permissions.summary")
+                }
+            }
+
+            switch viewModel.permissionAudit {
+            case .available(let grants):
+                PermissionAuditList(grants: grants)
+
+            case .unavailable(let reason):
+                FullDiskAccessBanner(reason: reason)
+                    .accessibilityIdentifier("protection.permissions.banner")
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
+                    ForEach(viewModel.permissions) { permission in
+                        PermissionCard(permission: permission)
+                    }
                 }
             }
         }
+    }
+}
+
+struct FullDiskAccessBanner: View {
+    let reason: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "info.circle.fill")
+                .foregroundColor(.haloAmber)
+            Text(reason)
+                .font(HaloFont.body(12))
+                .foregroundColor(.haloText)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.haloAmber.opacity(0.08))
+        .cornerRadius(10)
+    }
+}
+
+/// Per-app grants grouped by `PermissionKind`, each group expandable.
+struct PermissionAuditList: View {
+    let grants: [TCCGrant]
+    @State private var expanded: Set<PermissionKind> = []
+
+    private var groups: [(kind: PermissionKind, grants: [TCCGrant])] {
+        PermissionKind.allCases.compactMap { kind in
+            let matches = grants.filter { $0.kind == kind }.sorted { $0.appName < $1.appName }
+            return matches.isEmpty ? nil : (kind, matches)
+        }
+    }
+
+    var body: some View {
+        LazyVStack(spacing: 8) {
+            ForEach(groups, id: \.kind) { group in
+                PermissionGroupRow(
+                    kind: group.kind,
+                    grants: group.grants,
+                    isExpanded: expanded.contains(group.kind)
+                ) {
+                    if expanded.contains(group.kind) { expanded.remove(group.kind) }
+                    else { expanded.insert(group.kind) }
+                }
+            }
+        }
+    }
+}
+
+struct PermissionGroupRow: View {
+    let kind: PermissionKind
+    let grants: [TCCGrant]
+    let isExpanded: Bool
+    let onToggle: () -> Void
+
+    private var riskCount: Int { grants.filter(\.isElevatedRisk).count }
+
+    /// Stable slug for this kind, used to build `protection.permissions.*`
+    /// accessibility identifiers (e.g. "Screen Recording" → "screenrecording").
+    private var slug: String {
+        kind.rawValue.replacingOccurrences(of: " ", with: "").lowercased()
+    }
+
+    /// System Settings privacy-pane anchor for this permission kind — same
+    /// mapping `PermissionCard` uses for its deep link.
+    private var settingsURL: URL? {
+        let anchor: String
+        switch kind {
+        case .camera:          anchor = "Privacy_Camera"
+        case .microphone:      anchor = "Privacy_Microphone"
+        case .location:        anchor = "Privacy_LocationServices"
+        case .contacts:        anchor = "Privacy_Contacts"
+        case .calendar:        anchor = "Privacy_Calendars"
+        case .fullDisk:        anchor = "Privacy_AllFiles"
+        case .screenRecording: anchor = "Privacy_ScreenCapture"
+        case .accessibility:   anchor = "Privacy_Accessibility"
+        }
+        return URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)")
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Button(action: onToggle) {
+                HStack(spacing: 10) {
+                    Image(systemName: kind.icon)
+                        .font(.system(size: 14))
+                        .foregroundColor(.haloAccent)
+                        .frame(width: 20)
+                    Text(kind.rawValue)
+                        .font(HaloFont.body(13, weight: .semibold))
+                        .foregroundColor(.haloText)
+                    Spacer()
+                    if riskCount > 0 {
+                        HaloBadge(text: "\(riskCount) elevated", color: .haloAmber)
+                    }
+                    Text("\(grants.count) app\(grants.count == 1 ? "" : "s")")
+                        .font(HaloFont.body(11))
+                        .foregroundColor(.haloText3)
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.haloText3)
+                }
+                .padding(12)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("protection.permissions.row.\(slug)")
+
+            if isExpanded {
+                VStack(spacing: 4) {
+                    ForEach(grants) { grant in
+                        HStack(spacing: 8) {
+                            Image(systemName: grant.isElevatedRisk
+                                ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                                .font(.system(size: 11))
+                                .foregroundColor(grant.isElevatedRisk ? .haloAmber : .haloGreen)
+                                .frame(width: 16)
+                            Text(grant.appName)
+                                .font(HaloFont.body(12))
+                                .foregroundColor(.haloText)
+                                .lineLimit(1)
+                            if grant.isElevatedRisk {
+                                Text("excessive for this app")
+                                    .font(HaloFont.body(10))
+                                    .foregroundColor(.haloAmber)
+                            }
+                            Spacer()
+                            Button {
+                                if let url = settingsURL { NSWorkspace.shared.open(url) }
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Text("Revoke")
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.system(size: 8, weight: .semibold))
+                                }
+                                .font(HaloFont.body(10, weight: .semibold))
+                                .foregroundColor(.haloRed)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("protection.permissions.revoke.\(slug)")
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 5)
+                    }
+                }
+                .padding(.bottom, 8)
+            }
+        }
+        .background(Color.haloSurface2)
+        .cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10)
+            .stroke(riskCount > 0 ? Color.haloAmber.opacity(0.3) : Color.haloBorder, lineWidth: 1))
     }
 }
 
@@ -604,6 +966,146 @@ struct PermissionCard: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(
+            "protection.permissions.card.\(permission.kind.rawValue.replacingOccurrences(of: " ", with: "").lowercased())"
+        )
+    }
+}
+
+// MARK: - Security Posture (F-019)
+
+struct SecurityPostureSection: View {
+    @ObservedObject var viewModel: ProtectionViewModel
+
+    private var scoreColor: Color {
+        switch viewModel.securityScore {
+        case 80...100: return .haloGreen
+        case 50..<80:  return .haloAmber
+        default:       return .haloRed
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                HaloSectionHeader(
+                    title: "Security Posture",
+                    subtitle: "Read-only checks of key macOS security settings"
+                )
+                Spacer()
+                if viewModel.isLoadingSecurity {
+                    ProgressView().scaleEffect(0.6).tint(.haloAccent)
+                } else {
+                    HStack(spacing: 6) {
+                        // Only the badge is gated on having checks. Refresh was
+                        // gated on the same condition, so an empty result — the
+                        // one state where you most need to re-run — left no way
+                        // to do it.
+                        if !viewModel.securityChecks.isEmpty {
+                            HaloBadge(text: "\(viewModel.securityScore)/100", color: scoreColor)
+                                .accessibilityIdentifier("protection.securityPosture.score")
+                        }
+                        Button {
+                            Task { await viewModel.loadSecurityPosture() }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 12))
+                                .foregroundColor(.haloText2)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("protection.securityPosture.refresh")
+                    }
+                }
+            }
+
+            if viewModel.isLoadingSecurity {
+                HStack(spacing: 10) {
+                    ProgressView().scaleEffect(0.8).tint(.haloAccent)
+                    Text("Checking security settings…")
+                        .font(HaloFont.body(13))
+                        .foregroundColor(.haloText2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(Color.haloSurface2)
+                .cornerRadius(12)
+            } else {
+                // Under the App Sandbox every automated check degrades to
+                // "unknown" and the score sits at a permanent 100/100. Saying so
+                // is the honest thing — eight silent "unknown"s otherwise read as
+                // "this Mac can't be verified" rather than "Halo wasn't allowed
+                // to look".
+                if !viewModel.securityAutomationAvailable {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "lock.slash")
+                            .font(.system(size: 12))
+                            .foregroundColor(.haloAmber)
+                        Text("This build can't read your security settings automatically, so every row below needs checking by hand and the score isn't meaningful.")
+                            .font(HaloFont.body(11))
+                            .foregroundColor(.haloText2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.haloSurface2)
+                    .cornerRadius(10)
+                    .accessibilityIdentifier("protection.securityPosture.sandboxNotice")
+                }
+
+                LazyVStack(spacing: 6) {
+                    ForEach(viewModel.securityChecks) { check in
+                        SecurityCheckRow(check: check)
+                    }
+                }
+                .accessibilityIdentifier("protection.securityPosture.list")
+            }
+        }
+    }
+}
+
+struct SecurityCheckRow: View {
+    let check: SecurityCheck
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: check.kind.icon)
+                .font(.system(size: 14))
+                .foregroundColor(.haloAccent)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(check.kind.rawValue)
+                    .font(HaloFont.body(13, weight: .semibold))
+                    .foregroundColor(.haloText)
+                Text(check.detail)
+                    .font(HaloFont.body(11))
+                    .foregroundColor(.haloText2)
+            }
+
+            Spacer()
+
+            Image(systemName: check.state.icon)
+                .font(.system(size: 14))
+                .foregroundColor(check.state.color)
+                .accessibilityIdentifier("protection.securityPosture.check.\(check.kind.idSlug).state")
+
+            if let url = check.kind.settingsURL {
+                Button {
+                    NSWorkspace.shared.open(url)
+                } label: {
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.haloText3)
+                }
+                .buttonStyle(.plain)
+                .help("Open in System Settings")
+                .accessibilityIdentifier("protection.securityPosture.check.\(check.kind.idSlug).fix")
+            }
+        }
+        .padding(12)
+        .background(Color.haloSurface2)
+        .cornerRadius(10)
+        .accessibilityIdentifier("protection.securityPosture.check.\(check.kind.idSlug)")
     }
 }
 
@@ -728,5 +1230,178 @@ struct LaunchAgentRow: View {
         .overlay(RoundedRectangle(cornerRadius: 10)
             .stroke(agent.isSuspicious ? Color.haloAmber.opacity(0.3) : Color.haloBorder,
                     lineWidth: 1))
+    }
+}
+
+// MARK: - Privacy Exposure Scanner (F-018)
+
+struct PrivacyExposureSection: View {
+    @ObservedObject var viewModel: ProtectionViewModel
+
+    private var isScanning: Bool {
+        if case .scanning = viewModel.privacyScanState { return true }
+        return false
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                HaloSectionHeader(
+                    title: "Sensitive Data Scanner",
+                    subtitle: "Scans Downloads, Documents, and Desktop for exposed credit card numbers, API keys, SSH private keys, and SSNs — find-only, nothing is ever deleted"
+                )
+                Spacer()
+                if let date = viewModel.privacyLastScanDate {
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text("Last scan")
+                            .font(HaloFont.body(10))
+                            .foregroundColor(.haloText3)
+                        Text(RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date()))
+                            .font(HaloFont.body(10, weight: .medium))
+                            .foregroundColor(.haloText2)
+                    }
+                }
+            }
+
+            HaloCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    Toggle(isOn: $viewModel.privacyIncludeICloud) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Include iCloud Drive")
+                                .font(HaloFont.body(12, weight: .medium))
+                                .foregroundColor(.haloText)
+                            Text("Off by default — Downloads, Documents, and Desktop are scanned either way.")
+                                .font(HaloFont.body(11))
+                                .foregroundColor(.haloText3)
+                        }
+                    }
+                    .toggleStyle(.switch)
+                    .disabled(isScanning)
+                    .accessibilityIdentifier("protection.privacyscan.icloudToggle")
+
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(viewModel.privacyScanStatusColor)
+                            .frame(width: 7, height: 7)
+                            .shadow(color: viewModel.privacyScanStatusColor.opacity(0.5), radius: 3)
+                        Text(viewModel.privacyScanStatusText)
+                            .font(HaloFont.body(12))
+                            .foregroundColor(viewModel.privacyScanStatusColor)
+                    }
+                    .accessibilityIdentifier("protection.privacyscan.status")
+
+                    if isScanning, !viewModel.privacyCurrentPath.isEmpty {
+                        Text(viewModel.privacyCurrentPath)
+                            .font(HaloFont.mono(10))
+                            .foregroundColor(.haloText3)
+                            .lineLimit(1)
+                    }
+
+                    HaloPrimaryButton(
+                        isScanning ? "Scanning…" : "Run Sensitive Data Scan",
+                        icon: "magnifyingglass.circle.fill",
+                        isLoading: isScanning
+                    ) { viewModel.runPrivacyScan() }
+                    .accessibilityIdentifier("protection.privacyscan.button")
+                }
+                .padding(20)
+            }
+
+            if !viewModel.privacyFindings.isEmpty {
+                VStack(spacing: 14) {
+                    ForEach(viewModel.privacyFindingsByRisk, id: \.0) { risk, findings in
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 6) {
+                                HaloBadge(text: risk.rawValue, color: risk.color)
+                                Text("\(findings.count) item\(findings.count == 1 ? "" : "s")")
+                                    .font(HaloFont.body(11))
+                                    .foregroundColor(.haloText3)
+                            }
+                            LazyVStack(spacing: 6) {
+                                ForEach(findings) { finding in
+                                    PrivacyFindingRow(finding: finding) {
+                                        viewModel.revealInFinder(finding)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .accessibilityIdentifier("protection.privacyscan.findings.list")
+            } else if case .complete(let count) = viewModel.privacyScanState, count == 0 {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill").foregroundColor(.haloGreen)
+                    Text("No exposed sensitive data found in the scanned locations.")
+                        .font(HaloFont.body(13))
+                        .foregroundColor(.haloText2)
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.haloSurface2)
+                .cornerRadius(12)
+                .accessibilityIdentifier("protection.privacyscan.emptyState")
+            }
+        }
+    }
+}
+
+struct PrivacyFindingRow: View {
+    let finding: PrivacyExposureFinding
+    let onReveal: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: finding.category.icon)
+                .font(.system(size: 14))
+                .foregroundColor(finding.riskLevel.color)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(finding.fileName)
+                        .font(HaloFont.body(12, weight: .medium))
+                        .foregroundColor(.haloText)
+                        .lineLimit(1)
+                    Text(finding.category.rawValue)
+                        .font(HaloFont.body(10))
+                        .foregroundColor(.haloText3)
+                }
+                Text(finding.redactedPreview)
+                    .font(HaloFont.mono(11))
+                    .foregroundColor(finding.riskLevel.color)
+                    .lineLimit(1)
+                Text(finding.displayPath)
+                    .font(HaloFont.body(10))
+                    .foregroundColor(.haloText3)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 6) {
+                if let date = finding.modifiedDate {
+                    Text(RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date()))
+                        .font(HaloFont.body(10))
+                        .foregroundColor(.haloText3)
+                }
+                Button(action: onReveal) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: 10))
+                        Text("Reveal in Finder")
+                            .font(HaloFont.body(10, weight: .semibold))
+                    }
+                    .foregroundColor(.haloAccent)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("protection.privacyscan.reveal.\(finding.id)")
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(Color.haloSurface2)
+        .cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10)
+            .stroke(finding.riskLevel.color.opacity(0.25), lineWidth: 1))
+        .accessibilityIdentifier("protection.privacyscan.row.\(finding.id)")
     }
 }
