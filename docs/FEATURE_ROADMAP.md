@@ -46,6 +46,8 @@
 | [F-023](#f-023--memory-leak--app-bloat-tracker) | Memory Leak & App Bloat Tracker | ✅ Done | ~3 d | ProcessMonitor |
 | [F-022](#f-022--time-machine-backup-health-monitor) | Time Machine Backup Health Monitor | ✅ Done | ~1.5 d | AlertManager |
 | [F-023](#f-023--memory-leak--app-bloat-tracker) | Memory Leak & App Bloat Tracker | 💡 Future Idea | ~3 d | ProcessMonitor |
+| [F-024](#f-024--browser-cleaner) | Browser Cleaner | ✅ Done | 2 d | none |
+| [F-025](#f-025--duplicate-photos-finder-perceptual-hash) | Duplicate Photos Finder (pHash) | 💡 Future Idea | ~5 d | DuplicateDetector |
 | [F-024](#f-024--browser-cleaner) | Browser Cleaner | 💡 Future Idea | ~2 d | none |
 | [F-025](#f-025--duplicate-photos-finder-perceptual-hash) | Duplicate Photos Finder (pHash) | ✅ Done | ~2 d | DuplicateDetector |
 | [F-026](#f-026--downloads-folder-organiser--manager) | Downloads Folder Organiser & Manager | ✅ Done | 2.5 d | AppScanner, FileSystemScanner |
@@ -1698,29 +1700,89 @@ Two deviations from the spec, both for honesty/consistency with the existing cod
 
 ## F-024 · Browser Cleaner
 
-**Status:** 💡 Future Idea  
-**Effort estimate:** 2 days  
-**Theme:** Cleanup & Storage  
-**Branch naming (when ready):** `feat/f024-browser-cleaner`  
-**Depends on:** none (extends existing Cleanup module architecture)
+**Status:** ✅ Done · **Effort:** 2 d · **Depends on:** none (extends existing Cleanup module architecture)
 
 ### Why
-Browser cache is consistently one of the largest junk sources on a Mac. Chrome's GPU shader cache alone can be 2–4 GB; the HTTP cache for an active user can reach 5–10 GB. Safari accumulates years of WebKit data, cookies, and offline storage. This is the single most-requested feature category in Mac cleaner apps. It is also straightforward to implement — all paths are well-documented and fixed per browser.
+Browser cache is consistently one of the largest junk sources on a Mac. Chrome's GPU shader cache alone can be 2–4 GB; the HTTP cache for an active user can reach 5–10 GB. Safari accumulates years of WebKit data, cookies, and offline storage. This is the single most-requested feature category in Mac cleaner apps.
 
-### What it delivers
-- Auto-detects installed browsers: Safari, Chrome, Firefox, Edge, Brave, Arc, Opera, Vivaldi
-- For each browser: expandable checklist of data categories with current sizes — HTTP cache, GPU shader cache, browsing history, download history, cookies, crash reports, stored sessions, IndexedDB, WebSQL
-- Master **"Clean All Browsers"** button at top; individual per-browser clean buttons
-- Pre-clean size summary and post-clean "freed X GB" confirmation
-- Checkbox per category (user can keep cookies but clear cache, for example)
-- All deletions use `FileManager.trashItem` with the standard confirmation flow
+### As actually built
+A new **"Browsers"** tab in the Cleanup module, backed by a dedicated actor
+(`BrowserCleanerScanner`) rather than the flat per-file `FileSystemScanner` used
+by the other 10 cleanup categories — browser data needs a **per-category**
+breakdown (a user may want to clear cache but keep cookies), which the existing
+`CleanupKind` flat-listing model can't express. This is a more granular sibling
+to the whole-browser "clear everything" model already used by Protection's
+Privacy Cleaner card (`ProtectionScanner.detectInstalledBrowsers()`) — that
+model is untouched.
 
-### Data sources
-- Each browser's fixed data paths (e.g., `~/Library/Caches/com.google.Chrome`, `~/Library/Caches/org.mozilla.firefox`, `~/Library/Safari`)
-- `NSWorkspace` to detect which browsers are actually installed (avoids showing paths that don't exist)
+**Every path below was written from real, verified locations — not from
+documentation guesses.** Chrome and Arc's paths were confirmed live via
+`ls`/`find` against the author's own Mac (Chrome has 4 real profiles: `Default`,
+`Profile 1`, `Profile 2`, `Profile 3`, which is why Chromium profile discovery
+is dynamic rather than hardcoded to `Default`). Safari's HTTP-cache/History
+paths are reused verbatim from the already-shipped `ProtectionScanner`. Brave,
+Edge, Opera, Vivaldi, and Firefox are **not installed on the dev machine**, so
+their category paths are Mozilla's/each vendor's own long-documented, stable
+profile file names (unchanged for years) rather than guesses — but they are
+**unverified live**. This is called out explicitly in code comments at the top
+of `BrowserCleanerScanner.swift` so a future contributor knows exactly which
+paths carry which confidence level.
 
-### Integration point
-New **"Browsers"** tab within the existing **Cleanup** module, alongside the existing 10 cleanup categories. Also surfaced as a category in Smart Scan results.
+**Browsers covered:** Safari, Google Chrome, Arc, Brave, Microsoft Edge, Opera,
+Vivaldi, Firefox (detected via `FileManager.fileExists` against each
+`/Applications/<Browser>.app` — only installed browsers are shown).
+
+**Categories per browser** (only created when a verified real path exists for
+that browser — no category is invented to fill out a checklist):
+
+| Category | Safari | Chromium family (Chrome/Arc/Brave/Edge/Opera/Vivaldi) | Firefox |
+|----------|:---:|:---:|:---:|
+| HTTP Cache | ✅ | ✅ (per-profile `Cache` + `Code Cache`, or flat root for Arc) | ✅ (`cache2`) |
+| GPU Shader Cache | — (WebKit has no comparably-named store) | ✅ (`GPUCache`, `DawnGraphiteCache`, `DawnWebGPUCache`) | — |
+| Browsing History | ✅ (`History.db`/`.plist`) | ✅ (`History` — also holds download history, no separate file) | ✅ (`places.sqlite` — also holds download history) |
+| Download History | ✅ (`Downloads.plist`) | — (combined into History, see above) | — (combined into History, see above) |
+| Cookies | ✅ (`Cookies.binarycookies`) | ✅ (`Cookies`) | ✅ (`cookies.sqlite`) |
+| Stored Sessions | ✅ (`LastSession.plist`) | ✅ (`Sessions`) | ✅ (`sessionstore.jsonlz4` + backups) |
+| Crash Reports | ✅ (shared `~/Library/Logs/DiagnosticReports`, filtered by app-name prefix) | ✅ (`Crashpad/completed`) | ✅ (`Crash Reports`) |
+| Site Data (IndexedDB/Local Storage) | — (modern per-container WebsiteData path unverifiable from a sandboxed shell without Full Disk Access — omitted rather than guessed) | ✅ (`IndexedDB`, `Local Storage`, `Session Storage`, `WebStorage`) | ✅ (`storage/default`, `webappsstore.sqlite`) |
+
+**UI:**
+- Sidebar row (`BrowserCleanupCategoryRow`) matches the existing `CleanupCategoryRow` styling; shows live total size or "Scanning…".
+- Main pane (`BrowserCleanerPane`) shows one `BrowserSummaryCard` per detected browser — top 4 largest non-empty categories, total size, "Clean" badge if nothing to clear.
+- **"Clean All Browsers"** button (all browsers with data) + per-browser **"Review & Clear"** button — both route through the same `BrowserCleanerReviewSheet`.
+- Review sheet: per-category checkbox list with size + one-line explainer (e.g. cookies: "clearing signs you out everywhere"), a standing warning to close the browser first, and a size-labeled "Clear Selected" button. **Nothing is ever trashed without this sheet being explicitly confirmed** — matches the mandatory app-wide deletion-confirmation rule.
+- All deletion goes through `FileManager.trashItem` — never `removeItem`.
+- Freed-space banner celebrates via `CelebrationManager.shared.trigger(.spaceRecovered)` when a clear frees > 1 GB, consistent with the rest of Cleanup.
+
+### Files
+| File | Role |
+|------|------|
+| `Halo/Core/Scanner/BrowserCleanerScanner.swift` | `actor BrowserCleanerScanner` — detection, per-category size measurement, `trashItem`-only clearing |
+| `Halo/Features/Cleanup/BrowserCleanerView.swift` | `@MainActor BrowserCleanerViewModel` + `BrowserCleanupCategoryRow`, `BrowserCleanerPane`, `BrowserSummaryCard`, `BrowserCleanerReviewSheet`, `CategoryReviewRow` |
+| `Halo/Core/Models/Models.swift` | Adds `CleanupKind.browsers` case + `BrowserDataCategory`, `BrowserCategoryItem`, `BrowserProfile` models |
+| `Halo/Features/Cleanup/CleanupView.swift` | Wires `BrowserCleanerViewModel` into `CleanupView`/`CleanupSidebar`; routes the `.browsers` category to `BrowserCleanerPane` instead of the flat `CleanupFileList` |
+
+### Known constraints / what's deferred
+- Brave, Edge, Opera, Vivaldi, and Firefox paths are unverified live (not installed on the dev machine) — see the confidence-level comments in `BrowserCleanerScanner.swift`.
+- Safari has no GPU-cache or Site-Data category (see table above) — intentionally omitted rather than guessed.
+- **No real deletion has been runtime-tested** — build-verified only. Actually clicking "Clear Selected" against a live browser profile is deferred to a follow-up manual pass (see PR test plan).
+- Not yet surfaced as a Smart Scan category (the original idea's "also surfaced in Smart Scan results" is not implemented — `ScanCoordinator.scanCategory(.browsers)` is intentionally a no-op since Browsers uses its own actor/pipeline).
+
+### Test plan
+- [ ] Open Cleanup → Browsers tab → installed browsers appear with real sizes
+- [ ] Uninstalled browsers from the supported list do NOT appear
+- [ ] Chrome/Arc multi-profile sizes match `du -sh` on the real paths
+- [ ] Toggle a category off in the review sheet → "Clear Selected" size updates live
+- [ ] Clear a single browser's selected categories → items move to Trash (verify via Finder → Trash, not permanently deleted) → sizes re-measure to 0 for cleared categories
+- [ ] "Clean All Browsers" clears every browser with data in one pass
+- [ ] Clearing cookies while the browser is open surfaces the "close browser first" warning; verify actual behavior (partial write lock vs silent success) with each real browser
+- [ ] Freed > 1 GB triggers the celebration overlay
+
+### Acceptance criteria
+- Every listed category's path is either verified live or documented as a long-stable, unguessed vendor path
+- No deletion without the review sheet being explicitly confirmed
+- Only `trashItem`, never `removeItem`
+- Build succeeds with the new scanner + view fully wired into Cleanup
 
 ---
 

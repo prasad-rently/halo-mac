@@ -77,6 +77,7 @@ enum CleanupKind: String, CaseIterable, Identifiable {
     case xcodeData = "Xcode DerivedData"
     case iosBackups = "iOS Backups"
     case languagePacks = "Language Packs"
+    case browsers = "Browsers"
 
     var id: String { rawValue }
 
@@ -92,6 +93,7 @@ enum CleanupKind: String, CaseIterable, Identifiable {
         case .xcodeData: return "hammer.fill"
         case .iosBackups: return "iphone"
         case .languagePacks: return "globe"
+        case .browsers: return "network"
         }
     }
 
@@ -124,6 +126,11 @@ enum CleanupKind: String, CaseIterable, Identifiable {
             return ["\(home)/Library/Application Support/MobileSync/Backup"]
         case .languagePacks:
             return ["/Applications"]
+        case .browsers:
+            // Scanned/cleared via the dedicated BrowserCleanerScanner actor +
+            // BrowserCleanerViewModel (per-category, not a flat file listing) —
+            // ScanCoordinator.scanCategory(.browsers) is intentionally a no-op.
+            return []
         }
     }
 
@@ -135,6 +142,105 @@ enum CleanupKind: String, CaseIterable, Identifiable {
         default: return nil
         }
     }
+}
+
+// MARK: - Browser Cleaner Models (F-024)
+//
+// These extend the whole-browser "clear everything" model already used by
+// Protection's Privacy Cleaner card (`DetectedBrowser` in ProtectionScanner.swift)
+// with a per-category breakdown, so the Cleanup module's Browsers tab can let a
+// user keep cookies while clearing cache, etc. `BrowserCleanerScanner` (Core/Scanner)
+// is the actor that populates these; `ProtectionScanner`'s simpler whole-browser
+// model is untouched and keeps powering the existing Protection card.
+
+/// One clearable data category a browser may expose. Not every browser supports
+/// every category — `BrowserCleanerScanner` only creates a `BrowserCategoryItem`
+/// for categories it has a verified, real on-disk path for that browser.
+enum BrowserDataCategory: String, CaseIterable, Identifiable, Sendable {
+    case httpCache = "HTTP Cache"
+    case gpuCache = "GPU Shader Cache"
+    case history = "Browsing History"
+    case cookies = "Cookies"
+    case sessions = "Stored Sessions"
+    case crashReports = "Crash Reports"
+    case webStorage = "Site Data (IndexedDB / Local Storage)"
+    case downloadHistory = "Download History"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .httpCache: return "internaldrive"
+        case .gpuCache: return "cpu"
+        case .history: return "clock.arrow.circlepath"
+        case .cookies: return "circle.grid.2x2.fill"
+        case .sessions: return "rectangle.stack.fill"
+        case .crashReports: return "exclamationmark.triangle.fill"
+        case .webStorage: return "cylinder.split.1x2.fill"
+        case .downloadHistory: return "arrow.down.circle.fill"
+        }
+    }
+
+    /// Short explainer shown under the category name in the review sheet.
+    var subtitle: String {
+        switch self {
+        case .httpCache: return "Cached page assets — images, scripts, stylesheets"
+        case .gpuCache: return "Compiled shader/graphics cache used to speed up rendering"
+        case .history: return "List of visited pages"
+        case .cookies: return "Sign-in state and site preferences — clearing signs you out everywhere"
+        case .sessions: return "Restore-on-relaunch tab/window state"
+        case .crashReports: return "Diagnostic reports from past crashes"
+        case .webStorage: return "Per-site local storage, IndexedDB, and WebSQL data"
+        case .downloadHistory: return "Record of past downloads (not the downloaded files themselves)"
+        }
+    }
+}
+
+/// A single clearable item within a browser: one category, its real backing
+/// path(s) on disk, and its measured size.
+struct BrowserCategoryItem: Identifiable, Sendable {
+    let id = UUID()
+    let category: BrowserDataCategory
+    let paths: [String]
+    var size: Int64 = 0
+    var isSelected: Bool = true
+
+    var hasData: Bool { size > 0 }
+    var sizeFormatted: String { ByteCountFormatter.string(fromByteCount: size, countStyle: .file) }
+}
+
+/// A browser detected on this Mac, broken down into per-category clearable items.
+/// Outcome of a browser clean.
+///
+/// Carries *every* failure, not just the first. Under the sandbox most paths are
+/// expected to fail, and one opaque message beside a "cleared N" count told the
+/// user nothing about what had actually happened.
+struct BrowserClearResult: Sendable {
+    let cleared: Int
+    let freed: Int64
+    let errors: [String]
+
+    var succeeded: Bool { errors.isEmpty }
+    var summary: String? {
+        guard !errors.isEmpty else { return nil }
+        if errors.count == 1 { return errors[0] }
+        return "\(errors.count) items couldn't be moved to the Trash. First: \(errors[0])"
+    }
+}
+
+struct BrowserProfile: Identifiable, Sendable {
+    let id = UUID()
+    let name: String
+    let icon: String
+    let appPath: String
+    var categories: [BrowserCategoryItem]
+
+    var totalBytes: Int64 { categories.reduce(0) { $0 + $1.size } }
+    var selectedBytes: Int64 { categories.filter(\.isSelected).reduce(0) { $0 + $1.size } }
+    var totalFormatted: String { ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file) }
+    var selectedFormatted: String { ByteCountFormatter.string(fromByteCount: selectedBytes, countStyle: .file) }
+    var hasData: Bool { totalBytes > 0 }
+    var hasAnySelected: Bool { categories.contains { $0.isSelected && $0.hasData } }
 }
 
 // MARK: - Smart Scan Result

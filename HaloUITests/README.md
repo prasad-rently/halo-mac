@@ -105,6 +105,7 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 | `settings.appUsageTracking.toggle` · `.clearHistory.button` | Settings → General → Privacy (F-021) |
 | `dashboard.backupHealth.card` · `.setup.button` · `.backupNow.button` · `.heatmap` | Dashboard → Backup Health / Time Machine (F-022) |
 | `cleanup.cleanAll.button` · `fileListView` | Cleanup |
+| `cleanup.category.browsers.button` · `browserCleaner.cleanAll.button` · `browserCleaner.clearSelected.button` | Cleanup → Browsers (F-024) |
 | `protection.scan.button` | Protection |
 | `protection.permissions.summary` · `protection.permissions.banner` | Protection → Permission Auditor (F-016) header/fallback |
 | `protection.permissions.row.<kind>` · `protection.permissions.revoke.<kind>` | Protection → Permission Auditor per-app list (rich state) |
