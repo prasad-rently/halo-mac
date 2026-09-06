@@ -243,34 +243,26 @@ actor NetworkTrafficMonitor {
     // Anchoring on the protocol token keeps parsing correct in both cases.
 
     private func fetchConnections() async -> [NetworkConnectionEntry] {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        process.arguments = ["-i", "-n", "-P"]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice   // lsof writes permission-denied lines for other users' sockets here; an unread Pipe() fills and deadlocks exactly like stdout
-
-        do {
-            try process.run()
-        } catch {
-            return []
-        }
-
-        // Drain BEFORE waiting. `lsof -i -n -P` on a machine with a browser open
-        // routinely emits well over the 64 KB pipe buffer; once it fills, lsof
-        // blocks in write(2) while Halo blocks in waitUntilExit() and neither can
-        // progress. The actor wedges permanently — and because `startPolling()`
-        // awaits `snapshot()` on a 2 s loop, `pollTask.cancel()` cannot interrupt
-        // a thread parked in waitUntilExit(), so the zombie lsof stays resident.
+        // ShellReader drains both pipes concurrently and bounds the call.
         //
-        // `readDataToEndOfFile()` returns when the child closes its end at exit,
-        // so this both collects the output and waits.
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard let output = String(data: data, encoding: .utf8) else { return [] }
+        // Draining matters because `lsof -i -n -P` on a machine with a browser
+        // open routinely emits well over the 64 KB pipe buffer, and lsof also
+        // writes permission-denied lines for other users' sockets to stderr —
+        // either stream filling blocks the child while Halo waits on it.
+        //
+        // The ceiling matters just as much: `lsof` on a dead NFS mount blocks
+        // indefinitely, `startPolling()` awaits `snapshot()` on a 2 s loop, and
+        // `pollTask.cancel()` cannot interrupt a thread parked in
+        // `waitUntilExit()` — so an unbounded call would leave a zombie lsof
+        // resident and start another two seconds later.
+        let result = ShellReader.run("/usr/sbin/lsof", ["-i", "-n", "-P"])
 
-        return Self.parseLsofOutput(output)
+        // Partial output is a truncated connection list, which would read as
+        // "these are all the open sockets" — better to show none than a
+        // silently incomplete set.
+        guard result.succeeded else { return [] }
+
+        return Self.parseLsofOutput(result.standardOutput)
     }
 
     /// Pure parser for `lsof -i -n -P` output — extracted so it's testable
@@ -376,34 +368,16 @@ actor NetworkTrafficMonitor {
     // name for display purposes.
 
     private func fetchAppTotals() async -> [AppNetworkTotal] {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/nettop")
-        process.arguments = ["-P", "-L", "1", "-J", "bytes_in,bytes_out"]
+        // Same reasoning as `fetchConnections` above — drained and bounded, on
+        // the same 2 s poll loop.
+        let result = ShellReader.run("/usr/bin/nettop",
+                                     ["-P", "-L", "1", "-J", "bytes_in,bytes_out"])
 
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice   // an unread Pipe() fills and deadlocks exactly like stdout
+        // Partial CSV would under-report per-app byte totals rather than fail
+        // visibly, so a truncated run contributes nothing.
+        guard result.succeeded else { return [] }
 
-        do {
-            try process.run()
-        } catch {
-            return []
-        }
-
-        // Drain BEFORE waiting. `lsof -i -n -P` on a machine with a browser open
-        // routinely emits well over the 64 KB pipe buffer; once it fills, lsof
-        // blocks in write(2) while Halo blocks in waitUntilExit() and neither can
-        // progress. The actor wedges permanently — and because `startPolling()`
-        // awaits `snapshot()` on a 2 s loop, `pollTask.cancel()` cannot interrupt
-        // a thread parked in waitUntilExit(), so the zombie lsof stays resident.
-        //
-        // `readDataToEndOfFile()` returns when the child closes its end at exit,
-        // so this both collects the output and waits.
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard let output = String(data: data, encoding: .utf8) else { return [] }
-
-        return Self.parseNettopOutput(output)
+        return Self.parseNettopOutput(result.standardOutput)
     }
 
     /// Pure parser for `nettop -P -L 1 -J bytes_in,bytes_out` CSV output —

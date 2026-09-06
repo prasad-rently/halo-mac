@@ -242,27 +242,25 @@ actor TimeMachineMonitor {
         _ args: [String],
         mergeStderr: Bool = false
     ) -> (output: String, exitCode: Int32) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = args
+        let result = ShellReader.run(path, args)
 
-        let outPipe = Pipe()
-        process.standardOutput = outPipe
-        process.standardError = mergeStderr ? outPipe : FileHandle.nullDevice
+        // Denied by the sandbox, or the tool is missing. Either way there is no
+        // output and no exit status — callers treat -1 as "we were not able to
+        // ask", which is not the same as "nothing found".
+        guard result.launchFailure == nil else { return ("", -1) }
 
-        do {
-            try process.run()
-        } catch {
-            // Denied by the sandbox, or the tool is missing. Either way there
-            // is no output and no exit status — callers treat -1 as "we were
-            // not able to ask", which is not the same as "nothing found".
-            return ("", -1)
-        }
+        // A child that overran its ceiling was killed, so its output is partial
+        // and its status meaningless. Report it as the same "could not ask"
+        // state rather than letting a truncated `tmutil` listing read as a
+        // complete one.
+        guard !result.didTimeOut else { return ("", -1) }
 
-        let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-
-        let output = String(data: data, encoding: .utf8) ?? ""
-        return (output, process.terminationStatus)
+        // `mergeStderr` used to mean literal `2>&1` into one pipe. ShellReader
+        // drains both concurrently, so there is no buffer to overflow and the
+        // streams can simply be concatenated when the caller wants diagnostics.
+        let output = mergeStderr
+            ? result.standardOutput + result.standardError
+            : result.standardOutput
+        return (output, result.exitCode)
     }
 }
