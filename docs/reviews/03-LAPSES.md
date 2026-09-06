@@ -105,19 +105,32 @@ legitimate group.
 **To resolve:** correct the three rows to the real ids, and add `8163`/`8164`
 (`ShellReader`) which is also missing from the quick-reference table.
 
-### B4. Under-called the `nonisolated` audit · **resolved**
+### B4. Under-called the `nonisolated` audit — then lost the fix · **resolved (twice)**
 
 The adversarial re-review cleared every added `nonisolated` as "touching no actor
 state". True of *mutable* state — and it missed that six of them reference
 `@MainActor` **static** constants, which is a warning today and an **error under
 the Swift 6 language mode**.
 
-Fixed during the pre-merge sweep by marking those constants `nonisolated`, but
-the review should have caught it. The compiler had been telling me: the warnings
-were in every build log I had already read.
+Fixed during the pre-merge sweep by marking those constants `nonisolated` — but
+the review should have caught it in the first place. The compiler had been
+telling me: the warnings were in every build log I had already read.
 
-**Lesson:** when a build emits warnings, read them against the thing being
-reviewed rather than treating "BUILD SUCCEEDED" as the whole answer.
+**Then the fix was lost.** It was made on the *pre-merged* release branch, which
+was reset to rebuild the release through the PR flow. The fix had never been
+pushed to the feature branches, so it did not come back with them, and this log
+went on claiming it was resolved. Found at the very end, by reading the final
+build's warnings rather than by any check, and re-applied on `release/v2.3`.
+
+**Two lessons, and the second is the bigger one:**
+
+* When a build emits warnings, read them against the thing being reviewed rather
+  than treating "BUILD SUCCEEDED" as the whole answer.
+* **A fix made on a throwaway branch is not a fix.** Resetting `release/v2.3`
+  discarded every correction made during the pre-merge sweep, not just the
+  merges. Anything that has to survive belongs on the branch that owns the code.
+  The archive tag preserved it, which is why it was recoverable — but nothing
+  *pointed* at it, so only re-reading the warnings surfaced the loss.
 
 ### B5. Told the user a finding was reversed when it was not · **resolved**
 
@@ -194,10 +207,38 @@ Recorded there, repeated here so this is the single list.
 
 ## Open items to resolve after the last merge
 
-| | What | Where |
-|---|---|---|
-| **B3** | Correct three stale `8031`/`8032` rows in the quick-reference table; add the missing `8163`/`8164` row | `CLAUDE.md` |
+**All closed.** Recorded here with what the closing check actually found.
 
-Everything else in this log is already fixed in the branch it affected. The
-remaining work is B3 plus a final full-tree audit re-run once #12, #19, #15 and
-#17 have merged.
+| | What | Outcome |
+|---|---|---|
+| **B3** | Stale UUID rows in `CLAUDE.md`'s quick-reference table | Closed in `6129958`. **Three** rows were stale, not two — `MemoryTrendsSection.swift` (`8033`/`8034` → `8115`/`8116`) was found only by diffing the whole table against the pbxproj programmatically. No row was missing. |
+| **B4** | The `nonisolated` fix, lost in the branch reset | Re-applied in `24b9bce`. See the amended entry above. |
+
+### Final full-tree audit on `release/v2.3`
+
+| Check | Result |
+|---|---|
+| Residual conflict markers, every text type | **0** |
+| Duplicate pbxproj object definitions | **0** |
+| Duplicate Sources-phase entries (all 5 phases) | **0** |
+| Direct `ProcessMonitor()` / `AlertManager()` constructions | **0** |
+| `AlertKind` cases missing an icon or colour arm | **0 of 11** |
+| Documented UUIDs disagreeing with the pbxproj | **0 of 63** |
+| Clean build | `BUILD SUCCEEDED`, 52 warnings (was 58) |
+| Tests | **346 in 67 suites pass** |
+
+### Still open — a finding, not a lapse
+
+Six Swift-6-error-in-waiting warnings live in **batch-introduced** files and are
+pre-existing on their own feature branches, so no merge caused them:
+
+```
+SimilarPhotosView.swift      4x  reference to captured var 'self' in concurrently-executing code
+DriveHealthSection.swift     1x  reference to property 'monitor' in closure requires explicit 'self'
+WeeklyDigestGenerator.swift  1x  DigestNotificationDelegate conformance crosses into main actor-isolated code
+```
+
+The remaining 18 are in files that predate this batch (`LocalShareClient`,
+`SystemControlsManager`, `ToolRegistry`, `AIModels`, `FileSystemScanner`,
+`ActionRunner`). All are warnings under Swift 5.9 and errors under Swift 6 —
+worth a pass before any language-mode migration, out of scope for v2.3.
