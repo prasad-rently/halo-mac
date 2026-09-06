@@ -23,7 +23,7 @@ This file is the primary context source for Claude (and any AI agent) working on
 | Language | Swift 5.9 / SwiftUI |
 | Architecture | MVVM + Actors + Swift Concurrency |
 | Dev Team ID | R7S39UR27F |
-| Signing cert | `Apple Development: MobileApp Developers (ZWA6Q77327)` |
+| Signing cert | **per-machine — discover it, do not hardcode.** `security find-identity -v -p codesigning`. Historically documented as `Apple Development: MobileApp Developers (ZWA6Q77327)`, which is *not* present on every dev machine (2026-09-06: the only identity was `Apple Development: Gokul M (KJ32TS3953)`). |
 
 ---
 
@@ -238,18 +238,43 @@ print(json.dumps(json.loads(d['haloWidgetData']), indent=2))
 
 ## Build & Sign (command-line, no Xcode account needed)
 
+> **There is no `Halo` scheme.** Only `HaloTests`, `HaloUITests`, `HaloWidget` and
+> `HaloHelper` are shared (`Halo.xcodeproj/xcshareddata/xcschemes/` holds just the
+> first two; `xcodebuild -list` shows the rest). `-scheme Halo` fails with
+> *"does not contain a scheme named Halo"*. Build the **target** instead — and note
+> `-derivedDataPath` requires a scheme, so set `SYMROOT`/`OBJROOT` directly.
+
+> **Build into a CLEAN `SYMROOT` for anything you intend to sign.** A `SYMROOT`
+> previously used for a test build leaves `HaloTests.xctest`,
+> `Testing.framework`, `XCTest*.framework` and `libXCTest*.dylib` *inside*
+> `Halo.app`. They are test-only, they would ship, and they break signing:
+> `codesign --verify --deep --strict` fails with *"code object is not signed at
+> all"* and then *"a sealed resource is missing or invalid"* as you chase them
+> one by one. `rm -rf "$SYMROOT"` first — verified 2026-09-06.
+
 ```bash
 # 1. Build (signing disabled so xcodebuild doesn't demand a provisioning profile)
+#    -target Halo also builds and embeds HaloWidget.appex and HaloHelper.xpc.
+rm -rf /tmp/HaloBuild/Build/Products          # see the clean-SYMROOT note above
 xcodebuild -project Halo.xcodeproj \
-  -scheme Halo -configuration Debug \
-  -derivedDataPath /tmp/HaloBuild \
+  -target Halo -configuration Debug \
+  SYMROOT=/tmp/HaloBuild/Build/Products \
+  OBJROOT=/tmp/HaloBuild/Build/Intermediates.noindex \
   CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" \
   build
 
 APP="/tmp/HaloBuild/Build/Products/Debug/Halo.app"
-CERT="Apple Development: MobileApp Developers (ZWA6Q77327)"
 
-# 2. Sign: dylibs → Sentry.framework → widget appex → outer app  (ORDER MATTERS)
+# Discover the signing identity rather than hardcoding one — the cert in the
+# Identity table above is not on every machine.
+CERT=$(security find-identity -v -p codesigning \
+        | sed -n 's/.*"\(Apple Development:.*\)"/\1/p' | head -1)
+[ -n "$CERT" ] || { echo "no codesigning identity found"; exit 1; }
+echo "signing with: $CERT"
+
+
+# 2. Sign: dylibs → Sentry.framework → HaloHelper.xpc → widget appex → outer app
+#    ORDER MATTERS — every nested code object must be signed before its container.
 find "$APP" -name "*.dylib" | while read d; do
   codesign --force --sign "$CERT" --timestamp=none "$d"
 done
@@ -258,6 +283,11 @@ if [ -d "$APP/Contents/Frameworks/Sentry.framework" ]; then
   codesign --force --sign "$CERT" --timestamp=none \
     "$APP/Contents/Frameworks/Sentry.framework"
 fi
+# The F-002 XPC helper. Omitting this is why the outer signature fails with
+# "In subcomponent: .../XPCServices/HaloHelper.xpc".
+codesign --force --sign "$CERT" \
+  --entitlements HaloHelper/HaloHelper.entitlements --timestamp=none \
+  "$APP/Contents/XPCServices/HaloHelper.xpc"
 codesign --force --sign "$CERT" \
   --entitlements HaloWidget/HaloWidget.entitlements --timestamp=none \
   "$APP/Contents/PlugIns/HaloWidget.appex"
@@ -449,7 +479,7 @@ codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
 - Clustering is union-find over pairwise Hamming distance, via a generic `clusterByHash<T>` helper shared with the Photos Library path.
 - "Recommended keep": highest resolution (`megapixels`) wins; ties broken by most recent `modifiedDate`.
 - Loose-file deletion is `FileManager.trashItem` only, behind a `confirmationDialog` — never `removeItem`.
-- **Photos Library path (stretch goal, real code but NOT runtime-tested — see F-025 PR):** `photosLibraryAuthorizationStatus`, `requestPhotosLibraryAuthorization()` (real `PHPhotoLibrary.requestAuthorization(for: .readWrite)`), `detectInPhotosLibrary(hammingThreshold:assetCap:onProgress:)` (up to 3,000 most-recent `PHAsset`s via `PHImageManager`), `deletePhotosLibraryAssets(localIdentifiers:)` (`PHAssetChangeRequest.deleteAssets` → Photos "Recently Deleted", the PhotoKit equivalent of `trashItem`). Requires `com.apple.security.personal-information.photos-library` entitlement (both entitlement files) + `NSPhotoLibraryUsageDescription` (Info.plist) — all wired, but needs a real permission-grant test pass before being considered verified.
+- **Photos Library path (stretch goal, real code but NOT runtime-tested — see F-025 PR):** `photosLibraryAuthorizationStatus`, `requestPhotosLibraryAuthorization()` (real `PHPhotoLibrary.requestAuthorization(for: .readWrite)`), `detectInPhotosLibrary(hammingThreshold:assetCap:onProgress:)` (up to 3,000 most-recent `PHAsset`s via `PHImageManager`), `deletePhotosLibraryAssets(localIdentifiers:)` (`PHAssetChangeRequest.deleteAssets` → Photos "Recently Deleted", the PhotoKit equivalent of `trashItem`). **The entitlement is in `Halo-Debug.entitlements` ONLY, deliberately** — not in `Halo.entitlements`; the comment in that file explains why. `NSPhotoLibraryUsageDescription` *is* in `Info.plist` for every configuration. Because those two disagree, the row is gated: `PerceptualDuplicateDetector.isPhotosLibraryReachable` is true only when unsandboxed (debug — TCC alone governs, and the entitlement is a no-op there) or sandboxed **and** actually holding the key, and `SimilarPhotosView` hides the Photos Library row entirely when it is false. Without that gate a release build offered a button the sandbox always denied, then told the user to fix it in System Settings — advice that can never work. The check reads the entitlement at runtime via `SecTask`, so **adding the key to `Halo.entitlements` is the only change needed to light the feature back up.** Still needs a real permission-grant test pass against an actual library before being considered verified, and note it requests `.readWrite` (not `.readOnly`) because deletion uses `PHAssetChangeRequest`.
 - Models in `Models.swift`: `PhotoHashItem` / `PhotoSimilarGroup` (loose files), `PhotoAssetHashItem` / `PhotoAssetSimilarGroup` (Photos Library — no `URL`, so their own lightweight types).
 - `@MainActor SimilarPhotosViewModel` scans `~/Pictures`, `~/Downloads`, `~/Desktop` by default (or a user-chosen folder via `NSOpenPanel`), bounded to 20,000 files — same cap policy as `DuplicateFinderViewModel`.
 ## ICloudDriveScanner (F-030)
@@ -876,7 +906,7 @@ ancestor, so real collisions still print.
 ## Known Gotchas
 
 1. **Widget reload budget** — never call `reloadAllTimelines()` more than once/min. Already handled by `widgetReloadTimer`.
-2. **Signing order** — dylibs → Sentry.framework → appex → outer app. Wrong order = TeamIdentifier mismatch crash.
+2. **Signing order** — dylibs → Sentry.framework → **HaloHelper.xpc** → widget appex → outer app. Wrong order = TeamIdentifier mismatch crash. **Every nested code object must be signed before its container**, so a missed one fails the outer signature with *"In subcomponent: …"* naming it. `HaloHelper.xpc` (F-002) is the one the recipe used to omit. See **Build & Sign** above for the full sequence, and its clean-`SYMROOT` warning — test-build leftovers inside `Halo.app` break signing the same way.
 3. **Widget gallery** — macOS only discovers widgets from apps in `/Applications` or `~/Applications`.
 4. **`containerBackground` availability** — must be wrapped in `if #available(macOS 14.0, *)`.
 5. **Global NSEvent monitor** — requires Accessibility permission + sandbox off (debug) or XPC helper (release).
