@@ -78,6 +78,9 @@ struct NetworkDetailSection: View {
                             onRun: { runSpeedTest() },
                             onCancel: { speedTestTask?.cancel(); speedTestState = .idle }
                         )
+
+                        // F-017: Network Traffic Monitor sub-section
+                        NetworkTrafficSection()
                     }
                     .padding(18)
                 }

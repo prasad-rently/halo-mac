@@ -88,6 +88,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | **Protection** (malware scan) | ❌ | 🟡 | iOS blocks scanning; Android limited pkg/file heuristics | P3 | Assessed |
 | Protection — **Privacy/Sensitive Data Scanner (F-018)** | 🟡 | 🟡 | Scoped to user-picked folders (SAF/document picker) — no broad Downloads/Desktop sweep | P3 | Assessed ✓ (§9) |
 | **Performance — top processes** | ❌ | ❌ | No public live-process enumeration | — | Won't do |
+| Performance — **Network Traffic Monitor (F-017)** | ❌ | ❌ | No public API exposes other apps' open sockets or DNS lookups on either mobile OS | — | Won't do |
 | Performance — **memory leak tracker (F-023)** | ❌ | ❌ | Extends top-processes' per-app RAM sampling — same blocked capability (no public API on either OS to read another app's resident memory over time) | — | Won't do |
 | Performance — login items | ❌ | ❌ | No equivalent concept | — | Won't do |
 | Performance — VPN detection | ✅ | ✅ | NetworkExtension / ConnectivityManager | P2 | Assessed |
@@ -223,6 +224,7 @@ Copy this block into a study when assessing a feature for mobile.
 
 | Date | Change |
 |------|--------|
+| 2026-08 | F-017 Network Traffic Monitor shipped on desktop. Feasibility study added (§9): verdict ❌/❌ Won't do — same OS-sandbox blocker as top-processes/ports. Row added to §3. |
 | 2026-08 | F-024 Browser Cleaner assessed (§9): ❌/❌ Won't do — app sandbox on both platforms blocks any cross-app data access, which is the feature's entire premise. |
 | 2026-08 | F-025 (Duplicate Photos Finder / Similar Photos, pHash) shipped on desktop. Feasibility study added (§9) — verdict ✅/✅ Port, P1; §3 row added. |
 | 2026-08 | Feasibility study added (§9) for **F-030 iCloud Drive Analyzer**: iOS 🟡 (document-picker-scoped only, same ceiling as SpaceLens), Android ❌ (no iCloud concept). Row added to §3. Recommendation: don't build — Apple's own Files app already covers this ground better on iOS. |
@@ -295,6 +297,16 @@ promote to `Planned` (spec) when scheduled.
 - **Effort:** iOS ~5 d · Android ~6 d (three providers + streaming + Keystore). **Dependencies:** F-049 shell; mirrors F-046 desktop architecture.
 - **Verdict:** **Port (chat) + Adapt (agentic)** → **P1**. **Recommendation:** high value on mobile; ship chat + context first, add the small mobile tool set incrementally. Consider sharing the Swift provider layer between macOS + iOS.
 
+### Feasibility — Network Traffic Monitor (from desktop F-017)
+- **Desktop capability:** per-process outbound socket table via `lsof -i -n -P` (real IP:port, not domain), best-effort reverse-DNS hostname resolution (cached), real per-app byte totals via `nettop -P -L 1`, tracker-domain flagging, filter/sort, session "top talker" summary. Read-only, no blocking.
+- **iOS mechanism:** none. No public API on iOS exposes another app's open sockets, connection table, or per-app network usage — that visibility is confined to Apple's own Network Extension / VPN-provider entitlement, which requires special Apple approval Halo does not have and which only sees traffic Halo itself routes, not a general system-wide table. Verdict ❌
+- **Android mechanism:** `NetworkStatsManager` exists but only reports **aggregate bytes per UID over a time window** for apps the user has granted `PACKAGE_USAGE_STATS` to inspect — it does not expose live per-socket connection tuples (remote IP/port/protocol) the way `lsof` does on macOS, and reverse-DNS-on-a-live-connection has no equivalent without VpnService (same approval/UX cost as iOS's NEFilterDataProvider). Verdict ❌
+- **OS blockers:** same category as `Performance — top processes` and `Ports manager` — both mobile OSes sandbox process/socket introspection to the owning app only; there is no cross-app `lsof`/`nettop` equivalent without a VPN-provider entitlement that fundamentally changes the app's threat model (all traffic routes through it) and store-review posture.
+- **Permissions required:** would need `PACKAGE_USAGE_STATS` (Android, aggregate-only, doesn't unlock the socket table) or a VPN/NEFilterDataProvider profile (both platforms) — the latter is a different, much heavier feature (a real on-device firewall/VPN), not a "port" of this one.
+- **Store-policy risk:** VPN-provider entitlements draw extra App Store / Play review scrutiny and require a persistent "VPN active" system indicator — disproportionate to a read-only monitoring convenience.
+- **Scope on mobile:** none achievable at parity; the *closest* honest mobile equivalent (Android `NetworkStatsManager` per-app aggregate totals, no hostnames, no live connection list) is already covered as **"Per-app network data usage"** in §5's mobile-exclusive table (Android-only, ❌ iOS) and should be pursued there on its own footing rather than as a port of F-017.
+- **Effort:** N/A. **Dependencies:** N/A.
+- **Verdict:** **Blocked** → **Won't do**. **Recommendation:** do not attempt a port; if per-app data-usage insight is wanted on mobile, build it as the separate, already-tracked "Per-app network data usage" mobile-exclusive idea (Android `NetworkStatsManager`, aggregate-only, no socket/hostname table).
 ### Feasibility — Browser Cleaner (from desktop F-024)
 - **Desktop capability:** per-category clearable-data breakdown (HTTP cache, GPU shader cache, history, cookies, sessions, crash reports, site data) for every installed browser (Safari, Chrome, Arc, Brave, Edge, Opera, Vivaldi, Firefox), read straight from each browser's on-disk profile directories under `~/Library`, cleared via `trashItem` after a per-category review sheet.
 - **iOS mechanism:** none. The App Sandbox gives every app (Halo included) its own container; there is no entitlement, public API, or file-system path that lets one app enumerate, measure, or delete another app's data — not even Safari's, which iOS treats as system-owned. Verdict ❌

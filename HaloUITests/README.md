@@ -113,6 +113,7 @@ Identifiers follow `<module>.<element>.<role>`. Those the app currently exposes:
 | `protection.privacyscan.button` · `.icloudToggle` · `.status` · `.findings.list` · `.emptyState` · `.row.<id>` · `.reveal.<id>` | Protection → Sensitive Data Scanner (F-018) |
 | `protection.securityPosture.score` · `protection.securityPosture.list` · `protection.securityPosture.check.<slug>` (`.state` / `.fix`) | Protection → Security Posture (F-019) |
 | `performance.idleApp.quit.button` | Performance → Idle Apps |
+| `performance.networkTraffic.filter.field` · `.sort.picker` · `.topTalker.text` · `.list` · `.loading` · `.empty` · `.row.<pid>` | Performance → Network Traffic Monitor (F-017) |
 | `performance.memoryTrends.tab` · `performance.memoryTrends.row.<bundleID>` · `performance.memoryTrends.sparkline.<bundleID>` · `performance.memoryTrends.restart.<bundleID>` | Performance → Memory Trends (F-023) |
 | `applications.row.<bundleId>` · `applications.uninstall.button` · `applications.leftover.<kind>` | Applications |
 | `files.tab.<TabTitle>` | Files tab bar |

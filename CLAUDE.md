@@ -694,6 +694,9 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `8083` / `8084` | PrivacyExposureScanner.swift file ref / sources build file |
 | `8085` / `8086` | PrivacyPatternDatabase.swift file ref / sources build file |
 | `8087` / `8088` | privacy-patterns.json file ref / resource build file |
+| `8093` / `8094` | NetworkTrafficMonitor.swift file ref / sources build file |
+| `8095` / `8096` | NetworkTrafficSection.swift file ref / sources build file |
+| `8097` / `8098` | tracker-domains.json file ref / resource build file |
 | `8103` / `8104` | AppUsageTracker.swift file ref / sources build file |
 | `8105` / `8106` | AppUsageInsightsSection.swift file ref / sources build file |
 | `8123` / `8124` | PerceptualDuplicateDetector.swift file ref / sources build file |
@@ -807,6 +810,19 @@ ancestor, so real collisions still print.
 
 ---
 
+## NetworkTrafficMonitor (F-017)
+
+`Halo/Core/Scanner/NetworkTrafficMonitor.swift` + `Halo/Features/Performance/NetworkTrafficSection.swift`
+
+- `actor NetworkTrafficMonitor` — read-only per-process network visibility, surfaced as a collapsible sub-section inside the existing Network card in the Performance module (`NetworkDetailSection.swift`).
+- **Honesty constraint (do not weaken):** no public macOS API — sandboxed or not, short of a Network Extension / `NEFilterDataProvider` entitlement Halo does not have — reveals the DNS hostname or TLS SNI a process actually requested. `lsof`/`proc_pidinfo` only expose the raw remote IP:port.
+  - Real: open outbound sockets via `lsof -i -n -P` (only `local->remote` rows kept — LISTEN/connectionless UDP filtered out); real per-app byte totals via `nettop -P -L 1 -J bytes_in,bytes_out`.
+  - Best-effort, never fabricated: reverse DNS via `getaddrinfo` + `getnameinfo(..., NI_NAMEREQD)`, cached (capped dict, oldest-evicted) so the same IP is never re-resolved every 2 s tick. `resolvedHost` is `nil` — never a guess — when resolution fails. UI column is literally labeled "Remote Host (best-effort)".
+  - `isSuspicious` only set when a hostname **actually resolved** and matched `tracker-domains.json` (40 bundled ad/analytics/telemetry domains, same JSON pattern as `signatures.json` but no update endpoint yet). An unresolved IP is never flagged.
+- **Join key is `pid`, not `processName`** — `lsof`'s COMMAND column and `nettop`'s process-name column truncate the same process's name to different lengths (verified live: `lsof` shows `Google` for a Chrome helper pid that `nettop` shows as `Google Chrome H`). Matching by name string silently drops real data; `AppNetworkTotal.pid` is the only reliable shared key.
+- `func snapshot() async -> NetworkTrafficSnapshot` — connections + appTotals + topTalker, fetched concurrently (`async let`) then reverse-DNS-annotated per unique IP.
+- `NetworkTrafficSection` — `@State private var monitor`, polls every 2 s via its own `Task` while `isExpanded`; filter by app name; sort `.recency` / `.app` / `.traffic` (joined via `appTotal(for: pid)`).
+- Models in `Models.swift`: `NetworkConnectionEntry`, `AppNetworkTotal` (keyed by `pid`), `NetworkTrafficSnapshot`.
 ## AppUsageTracker (F-021)
 
 `Halo/Core/AppUsageTracker.swift` + `Halo/Features/Dashboard/AppUsageInsightsSection.swift`
