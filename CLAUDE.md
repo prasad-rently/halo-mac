@@ -906,7 +906,7 @@ ancestor, so real collisions still print.
 ## Known Gotchas
 
 1. **Widget reload budget** — never call `reloadAllTimelines()` more than once/min. Already handled by `widgetReloadTimer`.
-2. **Signing order** — dylibs → Sentry.framework → appex → outer app. Wrong order = TeamIdentifier mismatch crash.
+2. **Signing order** — dylibs → Sentry.framework → **HaloHelper.xpc** → widget appex → outer app. Wrong order = TeamIdentifier mismatch crash. **Every nested code object must be signed before its container**, so a missed one fails the outer signature with *"In subcomponent: …"* naming it. `HaloHelper.xpc` (F-002) is the one the recipe used to omit. See **Build & Sign** above for the full sequence, and its clean-`SYMROOT` warning — test-build leftovers inside `Halo.app` break signing the same way.
 3. **Widget gallery** — macOS only discovers widgets from apps in `/Applications` or `~/Applications`.
 4. **`containerBackground` availability** — must be wrapped in `if #available(macOS 14.0, *)`.
 5. **Global NSEvent monitor** — requires Accessibility permission + sandbox off (debug) or XPC helper (release).
