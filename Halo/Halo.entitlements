@@ -46,6 +46,16 @@
          loose-file half of the feature — the tested v1 scope — needs no
          entitlement at all and is unaffected.
 
-         Move this key here once the grant flow has actually been exercised. -->
+         Because the key is absent, `PerceptualDuplicateDetector`'s
+         `isPhotosLibraryReachable` returns false in this configuration and the
+         Photos Library row is hidden from `SimilarPhotosView` entirely — a
+         sandboxed build would otherwise offer a button that always fails and
+         then point the user at System Settings, where nothing they can do would
+         help. The loose-file half of F-025 needs no entitlement and is
+         unaffected.
+
+         Move this key here once the grant flow has actually been exercised.
+         The check reads the entitlement at runtime, so adding it here is the
+         only change needed — the UI reappears on its own. -->
 </dict>
 </plist>
