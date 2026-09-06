@@ -678,10 +678,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `8025` / `8026` | SnippetEditorView.swift file ref / sources build file |
 | `8027` / `8028` | SnippetListSection.swift file ref / sources build file |
 | `8029` / `8030` | ActionShareManager.swift file ref / sources build file |
-| `8031` / `8032` | PermissionAuditor.swift file ref / sources build file |
 | `8031` / `8032` | SecurityPostureScanner.swift file ref / sources build file |
-| `8031` / `8032` | MemoryTrendTracker.swift file ref / sources build file |
-| `8033` / `8034` | MemoryTrendsSection.swift file ref / sources build file |
 | `8043` / `8044` | SMARTDiskMonitor.swift file ref / sources build file |
 | `8045` / `8046` | DriveHealthSection.swift file ref / sources build file |
 | `8053` / `8054` | TimeMachineMonitor.swift file ref / sources build file |
@@ -699,12 +696,15 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `8097` / `8098` | tracker-domains.json file ref / resource build file |
 | `8103` / `8104` | AppUsageTracker.swift file ref / sources build file |
 | `8105` / `8106` | AppUsageInsightsSection.swift file ref / sources build file |
+| `8113` / `8114` | MemoryTrendTracker.swift file ref / sources build file |
+| `8115` / `8116` | MemoryTrendsSection.swift file ref / sources build file |
 | `8123` / `8124` | PerceptualDuplicateDetector.swift file ref / sources build file |
 | `8125` / `8126` | SimilarPhotosView.swift file ref / sources build file |
 | `8133` / `8134` | FocusSessionManager.swift file ref / sources build file |
 | `8135` / `8136` | FocusSessionOverlayView.swift file ref / sources build file |
 | `8143` / `8144` | ICloudDriveScanner.swift file ref / sources build file |
 | `8145` / `8146` | ICloudDriveView.swift file ref / sources build file |
+| `8153` / `8154` | PermissionAuditor.swift file ref / sources build file |
 | `8163` / `8164` | ShellReader.swift file ref / sources build file |
 | `9001` / `9002` | GetHealthScoreIntent.swift file ref / sources build file |
 | `9003` / `9004` | GetCPUUsageIntent.swift file ref / sources build file |
