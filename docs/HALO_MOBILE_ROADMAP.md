@@ -99,6 +99,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | Files — Large files | 🟡 | 🟡 | Scoped | P3 | Assessed |
 | Files — Downloads manager | 🟡 | 🟡 | Downloads dir (Android) / Files (iOS) | P3 | Assessed |
 | Files — **Drive Speed (F-043)** | 🟡 | 🟡 | Benchmark internal storage; external limited (OTG Android) | P2 | Assessed |
+| Files — **Similar Photos / pHash (F-025)** | ✅ | ✅ | PhotoKit (`PHAsset`+DCT hash, Swift port) / MediaStore + Android port of same DCT algorithm | P1 | Assessed ✓ (§9) |
 | Files — **iCloud Drive Analyzer (F-030)** | 🟡 | ❌ | iOS: document-picker-scoped folder enumeration only, same limit as SpaceLens; Android: no iCloud concept exists | P3 | Assessed |
 | Files — **Drive Health / S.M.A.R.T. (F-020)** | ❌ | ❌ | No public SMART/drive-health API on either OS — not a permission gap, a total API absence | — | Won't do |
 | **Clipboard history** | 🟡 | 🟡 | iOS current-only/foreground; Android 10+ limited → F-045 | P1 | Planned (F-045) |
@@ -148,16 +149,17 @@ Ordered build queue for Halo Mobile. **P0 = the already-specced first wave.**
 5. **AI assistant (cloud, F-046)** — huge value on mobile; agentic tool set trimmed to mobile-safe reads.
 6. **Health/metrics widget** + **Dashboard-lite** (storage, battery, network).
 7. **Report export (PDF)**.
+8. **Similar Photos / duplicate photos finder (F-025 port)** — PhotoKit/MediaStore are the *native* photo store on mobile, arguably a better fit than the desktop's loose-file fallback; see §9 study.
 
 ### Tier 2 — Adapted insight features (scoped/permissioned)
-8. **Storage insights** (scoped SpaceLens + duplicate photos in granted scope).
-9. **Drive/storage speed test (F-043 port)**.
-10. **VPN / network status**.
-11. **On-device AI (F-047 mobile runtime)**.
-12. **Smart scan / scheduled digest** (BG-task constrained).
+9. **Storage insights** (scoped SpaceLens in granted scope).
+10. **Drive/storage speed test (F-043 port)**.
+11. **VPN / network status**.
+12. **On-device AI (F-047 mobile runtime)**.
+13. **Smart scan / scheduled digest** (BG-task constrained).
 
 ### Tier 3 — Best-effort / low priority
-13. Applications list (Android), Launch-at-boot (Android), Cleanup guidance.
+14. Applications list (Android), Launch-at-boot (Android), Cleanup guidance.
 
 ---
 
@@ -220,6 +222,7 @@ Copy this block into a study when assessing a feature for mobile.
 
 | Date | Change |
 |------|--------|
+| 2026-08 | F-025 (Duplicate Photos Finder / Similar Photos, pHash) shipped on desktop. Feasibility study added (§9) — verdict ✅/✅ Port, P1; §3 row added. |
 | 2026-08 | Feasibility study added (§9) for **F-030 iCloud Drive Analyzer**: iOS 🟡 (document-picker-scoped only, same ceiling as SpaceLens), Android ❌ (no iCloud concept). Row added to §3. Recommendation: don't build — Apple's own Files app already covers this ground better on iOS. |
 | 2026-08 | Desktop F-016 (Permission Auditor) shipped. Feasibility study added (§9): iOS blocked (no cross-app TCC introspection exists); Android adapted via `PackageManager` permission enumeration, gated by `QUERY_ALL_PACKAGES` visibility policy → P3. |
 | 2026-08 | Feasibility study added (§9) for Privacy/Sensitive Data Scanner (F-018); row added to §3. |
@@ -268,6 +271,17 @@ promote to `Planned` (spec) when scheduled.
 - **Scope on mobile:** full (mobile arguably a *more* natural home for a speed test).
 - **Effort:** iOS ~0.5 d · Android ~1 d. **Dependencies:** F-049 shell.
 - **Verdict:** **Port** → **P1**. **Recommendation:** trivial win; bundle into the mobile Dashboard.
+
+### Feasibility — Similar Photos / Duplicate Photos Finder (from desktop F-025)
+- **Desktop capability:** DCT-based 64-bit perceptual hash (pHash) over loose image files (`~/Pictures`, `~/Downloads`, `~/Desktop`) plus an optional Photos Library scan via PhotoKit; Hamming-distance clustering (default ≤8/64 bits) with union-find, "recommended keep" auto-selection (highest resolution → most recent), `trashItem`/`PHAssetChangeRequest.deleteAssets` deletion behind a confirmation dialog.
+- **iOS mechanism:** `PHPhotoLibrary` / `PHAsset` / `PHImageManager` — **this is actually the primary photo store on iOS**, more natural than the desktop's loose-file fallback. The DCT/pHash math (`ImageIO` thumbnail → grayscale grid → DCT-II → 64-bit fingerprint) is pure Swift/Foundation and ports directly; `CGImageSourceCreateThumbnailAtIndex` behaves the same on iOS. Verdict ✅
+- **Android mechanism:** `MediaStore.Images` (`ContentResolver` query) is the Android equivalent of the PhotoKit fetch; the DCT/pHash algorithm is trivially portable to Kotlin (or shared via KMP) since it's just grayscale-bitmap math over a small thumbnail (`BitmapFactory` + `Bitmap.createScaledBitmap`). Verdict ✅
+- **OS blockers:** none — both platforms expose a full read/write photo-library API designed for exactly this use case (unlike the desktop, where PhotoKit is a bolt-on and loose files are the common case).
+- **Permissions required:** iOS `NSPhotoLibraryUsageDescription` (read/write, since deletion needs write) with a limited-access affordance; Android `READ_MEDIA_IMAGES` (13+) / `READ_EXTERNAL_STORAGE` (legacy) plus `MediaStore` delete-request confirmation (Android 11+ requires `MediaStore.createDeleteRequest` user confirmation, which conveniently satisfies the mandatory-confirmation rule for free).
+- **Store-policy risk:** none — both stores have long-standing, well-understood photo-library permission flows; no sensitive-permission review flags expected.
+- **Scope on mobile:** full — arguably a **stronger fit than desktop**, since phones are where "50 near-identical burst shots" and "screenshot re-shares" actually accumulate. This is one of the flagship ideas already called out in §5 ("Duplicate/junk photos cleaner").
+- **Effort:** iOS ~2.5 d (hash engine port + PhotoKit fetch + clustering UI) · Android ~3.5 d (Kotlin port of DCT + MediaStore fetch + confirmation flow). **Dependencies:** F-049 shell.
+- **Verdict:** **Port** → **P1**. **Recommendation:** high mobile value, low platform risk — promote to the mobile backlog (Tier 1/2) ahead of most desktop-only insight features; the desktop PhotoKit half of F-025 (entitlement-wired, runtime-untested) is the natural starting point for the iOS engine port once it gets its first real permission-grant test pass.
 
 ### Feasibility — AI Assistant, cloud (from desktop F-046)
 - **Desktop capability:** agentic assistant over Claude/OpenAI/Gemini (streaming + tool-use), tools from F-042 intents + `ActionLibrary`, read-auto / act-confirm, persisted chat.
