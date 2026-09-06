@@ -278,20 +278,19 @@ actor SMARTDiskMonitor {
     // MARK: - diskutil
 
     private func diskutilInfoPlist(forPath path: String) -> [String: Any]? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/diskutil")
-        process.arguments = ["info", "-plist", path]
-        let outPipe = Pipe()
-        process.standardOutput = outPipe
-        process.standardError = Pipe()
-        do {
-            try process.run()
-        } catch {
-            return nil
-        }
-        let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0, !data.isEmpty else { return nil }
+        // This used to set `standardError = Pipe()` and never read it — the
+        // undrained-stderr deadlock, which blocks the child exactly like a full
+        // stdout buffer. It also had no ceiling, and `diskutil info` on a
+        // failing or spun-down drive is the textbook case for one: this runs on
+        // AppState's 300 s SMART timer, so a wedged call would park a thread for
+        // the rest of the session. ShellReader drains both pipes and bounds it.
+        let result = ShellReader.run("/usr/sbin/diskutil", ["info", "-plist", path])
+
+        // A killed child's plist is truncated, so it would fail to parse anyway
+        // — but `succeeded` says so plainly rather than relying on that.
+        guard result.succeeded, !result.standardOutput.isEmpty,
+              let data = result.standardOutput.data(using: .utf8) else { return nil }
+
         return try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any]
     }
 

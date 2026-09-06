@@ -164,22 +164,22 @@ actor SecurityPostureScanner {
     }
 
     private func runChecked(_ path: String, _ args: [String]) -> (output: String, didSpawn: Bool) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = args
-        let outPipe = Pipe()
-        process.standardOutput = outPipe
-        process.standardError = FileHandle.nullDevice
+        let result = ShellReader.run(path, args)
 
-        do {
-            try process.run()
-        } catch {
-            return ("", false)
-        }
+        // A launch failure is the sandbox denying `posix_spawn` (or a missing
+        // tool). That is "we were never allowed to ask", not "the tool said
+        // nothing" — `didSpawn: false` is what makes every check degrade to
+        // `.unknown` rather than to a guessed verdict.
+        guard result.launchFailure == nil else { return ("", false) }
 
-        let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (String(data: data, encoding: .utf8) ?? "", true)
+        // A timeout yields *partial* output, and every check here decides by
+        // substring match — so half of "FileVault is On" could read as a fail,
+        // or a truncated `defaults read` as a disabled setting. Discarding the
+        // partial output sends the check to `.unknown`, which is this feature's
+        // whole discipline: never a verdict Halo cannot actually stand behind.
+        guard !result.didTimeOut else { return ("", true) }
+
+        return (result.standardOutput, true)
     }
 
     /// Whether Halo can run the read-only tools at all. False under the App
