@@ -16,11 +16,13 @@ engineering.
 | Ref | SHA | State |
 |---|---|---|
 | `main` | `364357a` | **untouched** — nothing from this batch has landed here |
-| `release/v2.3` | `24b9bce` | pushed · 18 merges · 71 files · +18 425 / −395 |
+| `release/v2.3` | `b3a1891` | pushed · 18 merges + **#27** (F-025 sandbox gate) + **#28** (docs) · 348 tests in 67 suites |
 | `review/pr-audit` | `22e4746` | pushed · all review docs |
 | `archive/release-v2.3-premerged` (tag) | `5c0c15d` | pushed · see §5 |
 | `phase0/ci-workflow` | `5e65fbf` | ⚠️ **still not pushed** — needs `workflow` scope |
 | `fix/settings-rework` | `3b0d717` | pushed 2026-09-06 · parked for **v2.4**, see §8 |
+| `fix/f025-gate-photokit-sandbox` | `6bc3a66` | merged as **#27** |
+| `docs/fix-build-recipe-and-f025-entitlement` | `8ca1910` | merged as **#28** |
 
 **Verification of `release/v2.3`**, from a clean build with empty derived data:
 
@@ -72,7 +74,7 @@ required-review or required-status-check rule.
 | # | What | Why it matters |
 |---|---|---|
 | 1 | ~~**#21's description/diff mismatch**~~ · **CLOSED 2026-09-06** | **Resolved: the commit was never lost.** It is `3b0d717` *"fix(settings): rework Settings arrangement and wire dead placeholders"* — 5 files, +81/−27, authored 2026-08-14, sitting on a **local-only** branch based directly on `main` (`364357a`). It was never pushed, never a PR, and is not an ancestor of `release/v2.3` or `main`; #21's body borrowed the description from a sibling branch that never travelled with it. **Decision (user, option 3):** correct #21's body, park the commit for **v2.4**. Done — #21's bullet is struck through with a dated correction, and `fix/settings-rework` is now pushed (`origin/fix/settings-rework` = `3b0d717`) so it is no longer one disk failure from gone. **Still to do, after v2.3 lands:** open it as its own PR against `main` and review it like any other. See §8. |
-| 2 | **#19's Photos entitlement** | `com.apple.security.personal-information.photos-library` is in `Halo-Debug.entitlements` **only**. The release build ships `NSPhotoLibraryUsageDescription` in `Info.plist` but **not** the entitlement — so the PhotoKit path requests authorisation and then fails in a sandboxed build. Either add the key to `Halo.entitlements`, or gate/remove the PhotoKit half so the usage string is not misleading. Also still **never runtime-tested** against a real library, and it requests **write** access (`.readWrite`, `performChanges`). |
+| 2 | ~~**#19's Photos entitlement**~~ · **CLOSED 2026-09-06** | **Decision (user): option 1 — gate the PhotoKit UI out of sandboxed builds, keep the `Info.plist` usage string.** Shipped in **#27** (`94343f0`). The entitlement sat in the one build where it does nothing (`Halo-Debug` has sandbox OFF, so the key is a no-op and TCC governs) and was absent where it would matter — while `Info.plist` shipped the usage string everywhere, so a release build offered a button the sandbox always denied and then told the user to fix it in System Settings, advice that can never work. `PerceptualDuplicateDetector.isPhotosLibraryReachable` now gates the row, reading the entitlement at runtime via `SecTask` so adding the key later restores the feature with no code change. Verified across all four sandbox/entitlement quadrants with a signed probe — the unit test alone could not prove it, because the test host is ad-hoc signed with no entitlements at all and every key reads false there. **Still open, and the user has committed to a runtime pass:** never tested against a real library, and it requests `.readWrite` (deletion needs `PHAssetChangeRequest`). `CLAUDE.md`'s F-025 line claimed the entitlement was in "both entitlement files" — never true, and corrected in **#28** (`b3a1891`). |
 | 3 | **#9's happy path** | Re-confirmed on 2026-09-06: **both** TCC databases are unreadable without Full Disk Access, so every run took the degraded branch. It degrades *honestly*; the parse, service mapping, dedup and elevated-risk classification are **unverified against real rows**. Grant FDA to a debug build once — it settles this and two original findings together. If that pass will not happen, this is the one feature to consider holding. |
 | 4 | **B4 — sandbox scope** | Six features shell out (`#21 #20 #17 #16 #10 #9`); `posix_spawn` is denied under `Halo.entitlements`. All degrade honestly, but their value exists only in an unsandboxed build. Needs **one** answer for the batch: unsandboxed direct distribution, or route through the F-002 privileged helper. F-007 (App Store assets) is already marked skipped, which may make this easier than it looks. |
 | 5 | **P0.1 CI** | `phase0/ci-workflow` cannot be pushed: the `gh` token has `gist, read:org, repo` but not `workflow`. Fix: `gh auth refresh -h github.com -s workflow` (opens a browser), then push and open a PR against `release/v2.3` or `main`. **There is still no CI on this repo.** |
@@ -205,3 +207,41 @@ persistence layer), so nothing survives a relaunch to be truncated.
 like any other — **it has never been reviewed.** It was never a PR and nothing in
 [`02-RE-REVIEW.md`](02-RE-REVIEW.md) covers it. That, not the conflict, is why it
 is parked.
+
+---
+
+## 9. Found while closing decision #2 — the build recipe did not work
+
+Fixed in **#28** (`b3a1891`), but recorded here because it was invisible until
+someone actually ran it, and the same failure mode is the theme of
+[`03-LAPSES.md`](03-LAPSES.md)'s C2.
+
+`CLAUDE.md`'s **Build & Sign** section — the documented path to producing a
+signed, installable Halo — failed at three separate points:
+
+1. **`-scheme Halo` does not exist.** Only `HaloTests`, `HaloUITests`,
+   `HaloWidget` and `HaloHelper` are schemes. It fails on the first command with
+   *"does not contain a scheme named Halo"*. Now `-target Halo`, with
+   `SYMROOT`/`OBJROOT` set directly since `-derivedDataPath` itself demands a
+   scheme.
+2. **It never signed `HaloHelper.xpc`.** F-002 added the XPC helper after the
+   recipe was written, so the outer signature fails with *"In subcomponent:
+   .../XPCServices/HaloHelper.xpc"*. Gotcha 2 carried the same omission and was
+   corrected with it.
+3. **The documented signing cert is not on this machine.** `Apple Development:
+   MobileApp Developers (ZWA6Q77327)` does not exist here; the only identity is
+   `Apple Development: Gokul M (KJ32TS3953)`. The recipe now discovers the
+   identity via `security find-identity` rather than trading one hardcoded name
+   for another that goes stale the same way.
+
+**And a trap worth knowing on its own:** a `SYMROOT` previously used for a *test*
+build leaves `HaloTests.xctest`, `Testing.framework` and `libXCTest*.dylib`
+**inside `Halo.app`**. That is test-only code sitting in a bundle about to be
+signed and installed, and it breaks signing one component at a time — *"code
+object is not signed at all"*, then *"a sealed resource is missing or invalid"* —
+so it reads like a signing problem rather than a contamination problem. §5 trap 6
+recommends reusing one derived-data path for disk reasons, which walks straight
+into it. Build into a clean `SYMROOT` for anything you intend to sign.
+
+The corrected recipe was run end to end before being written down: `** BUILD
+SUCCEEDED **`, then `codesign --verify --deep --strict` passes.
