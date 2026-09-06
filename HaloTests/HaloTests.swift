@@ -1191,6 +1191,50 @@ struct PerceptualDuplicateDetectorTests {
         let group = PhotoSimilarGroup(items: [keep, dupe1, dupe2])
         #expect(group.wastedBytes == 700)
     }
+
+    // MARK: Photos Library reachability gate
+
+    @Test("Photos Library reachability agrees with this build's sandbox state")
+    func testPhotosLibraryReachabilityMatchesSandboxState() {
+        let sandboxed = PerceptualDuplicateDetector.isSandboxed
+        let reachable = PerceptualDuplicateDetector.isPhotosLibraryReachable
+
+        if sandboxed {
+            // Sandboxed: reachable only when the process actually carries the
+            // photos-library allowance. Never true just because the Info.plist
+            // usage string is present.
+            #expect(reachable == PerceptualDuplicateDetector.hasEntitlement(
+                "com.apple.security.personal-information.photos-library"))
+        } else {
+            // Unsandboxed: TCC alone governs, so PhotoKit is always reachable.
+            #expect(reachable == true)
+        }
+    }
+
+    @Test("An entitlement this build does not carry reads as false")
+    func testUnheldEntitlementReadsFalse() {
+        // Guards the SecTask read itself: a key no Halo configuration declares
+        // must come back false rather than trapping or defaulting to true.
+        //
+        // NOTE ON WHAT THIS CAN PROVE. The test host is built with
+        // CODE_SIGNING_ALLOWED=NO, so its binary is ad-hoc linker-signed and
+        // carries *no* entitlements at all — every key reads false here. So this
+        // asserts the false-path only, and would still pass if `hasEntitlement`
+        // were broken and always returned false. That failure mode would hide
+        // the Photos row in every build, so it was ruled out out-of-band with a
+        // signed probe binary covering all four quadrants:
+        //
+        //   unsandboxed, no entitlement   → reachable  (this test host)
+        //   unsandboxed, entitled         → reachable
+        //   sandboxed,  no entitlement    → NOT reachable   ← release today
+        //   sandboxed,  entitled          → reachable       ← after the key lands
+        //
+        // The sandboxed rows also confirm APP_SANDBOX_CONTAINER_ID is genuinely
+        // set inside an App Sandbox container. Re-run that probe rather than
+        // trusting this test alone if `isPhotosLibraryReachable` changes.
+        #expect(PerceptualDuplicateDetector.hasEntitlement(
+            "com.halo.mac.definitely-not-a-real-entitlement") == false)
+    }
 }
 
 // MARK: - F-030 review fixes

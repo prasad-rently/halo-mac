@@ -19,7 +19,14 @@ struct SimilarPhotosView: View {
             content
         }
         .background(Color.haloSurface)
-        .onAppear { viewModel.loadPhotosAuthorizationStatus() }
+        .onAppear {
+            // Skip when unreachable so the whole PhotoKit surface stays dormant
+            // in a sandboxed build rather than reading a status that is always
+            // denied. See `isPhotosLibraryReachable`.
+            if PerceptualDuplicateDetector.isPhotosLibraryReachable {
+                viewModel.loadPhotosAuthorizationStatus()
+            }
+        }
         .alert("Could not access Photos Library", isPresented: Binding(
             get: { viewModel.photosLibraryError != nil },
             set: { if !$0 { viewModel.photosLibraryError = nil } }
@@ -92,7 +99,19 @@ struct SimilarPhotosView: View {
 
     // Experimental Photos Library scan — clearly separated so it reads as an
     // opt-in extra, not a required step.
-    private var photosLibrarySection: some View {
+    //
+    // Hidden entirely when the Photos Library is unreachable in this build (a
+    // sandboxed build without the photos-library entitlement). Showing it there
+    // would offer a button that always fails and then points the user at System
+    // Settings, where nothing they can do will help. The loose-file half of
+    // F-025 — the tested scope — needs no permission and is unaffected.
+    @ViewBuilder private var photosLibrarySection: some View {
+        if PerceptualDuplicateDetector.isPhotosLibraryReachable {
+            photosLibraryRow
+        }
+    }
+
+    private var photosLibraryRow: some View {
         HStack(spacing: 10) {
             Image(systemName: "photo.stack")
                 .font(.system(size: 12))

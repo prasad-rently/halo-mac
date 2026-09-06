@@ -3,6 +3,7 @@ import ImageIO
 import CoreGraphics
 import UniformTypeIdentifiers
 import Photos
+import Security
 
 // MARK: - Perceptual Duplicate Detector (F-025 · Duplicate Photos Finder)
 //
@@ -359,6 +360,44 @@ extension PerceptualDuplicateDetector {
                 return "Halo doesn't have permission to access your Photos Library yet."
             }
         }
+    }
+
+    /// Whether the Photos Library can actually be reached by *this* build.
+    ///
+    /// PhotoKit is governed by two independent gates, and both must pass:
+    ///
+    /// * **Unsandboxed** (debug builds — `Halo-Debug.entitlements` sets
+    ///   `app-sandbox` to `false`): TCC alone decides, so the
+    ///   `NSPhotoLibraryUsageDescription` string in `Info.plist` is sufficient
+    ///   and the library is reachable.
+    /// * **Sandboxed** (release / App Store — `Halo.entitlements`): the sandbox
+    ///   denies the Photos Library unless the process also holds
+    ///   `com.apple.security.personal-information.photos-library`. That key is
+    ///   deliberately *not* in `Halo.entitlements` yet (see the comment there),
+    ///   so a release build is denied **no matter what the user grants in
+    ///   System Settings**.
+    ///
+    /// Without this check the UI offers a button that cannot succeed and then
+    /// tells the user to fix it in System Settings — advice that can never work.
+    /// The entitlement is read at runtime rather than keyed off `#if DEBUG` so
+    /// that adding the key to `Halo.entitlements` lights the feature up on its
+    /// own, with no further code change.
+    nonisolated static var isPhotosLibraryReachable: Bool {
+        guard isSandboxed else { return true }
+        return hasEntitlement("com.apple.security.personal-information.photos-library")
+    }
+
+    /// True when the process is running inside an App Sandbox container.
+    nonisolated static var isSandboxed: Bool {
+        ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] != nil
+    }
+
+    /// Reads a boolean entitlement from the running process's own signature.
+    nonisolated static func hasEntitlement(_ key: String) -> Bool {
+        guard let task = SecTaskCreateFromSelf(nil),
+              let value = SecTaskCopyValueForEntitlement(task, key as CFString, nil)
+        else { return false }
+        return (value as? Bool) ?? false
     }
 
     /// Current PhotoKit authorization state for read/write access (read/write
