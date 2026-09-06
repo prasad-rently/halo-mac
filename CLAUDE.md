@@ -44,6 +44,7 @@ Halo/
 │   │   ├── AlertManager.swift       UNUserNotification + AlertLog bridge
 │   │   ├── ReportGenerator.swift    PDFKit 4-page PDF report export
 │   │   ├── ScanScheduler.swift      NSBackgroundActivityScheduler wrapper
+│   │   ├── ShellReader.swift        the ONLY place Halo spawns a Process — see gotcha 20
 │   │   └── Scanner/
 │   │       ├── SystemMonitor.swift       CPU/RAM/disk/battery/network
 │   │       ├── FileSystemScanner.swift   async actor, AsyncStream
@@ -56,6 +57,11 @@ Halo/
 │   │       ├── AppScanner.swift          actor; enumerates apps + leftover detection
 │   │       ├── DriveSpeedTester.swift     actor; internal/external drive read+write benchmark (F-043)
 │   │       └── BrowserCleanerScanner.swift actor; per-category browser data detect/measure/clear (F-024)
+│   │       └── PerceptualDuplicateDetector.swift  actor; DCT pHash near-duplicate photo finder (F-025)
+│   │       └── ICloudDriveScanner.swift   actor; local ~/Library/Mobile Documents/ analyzer (F-030)
+│   │       ├── PrivacyExposureScanner.swift  actor; scans Downloads/Documents/Desktop for exposed secrets (F-018)
+│   │       └── PrivacyPatternDatabase.swift  actor; loads privacy-patterns.json, matches + redacts (F-018)
+│   │       └── SMARTDiskMonitor.swift     actor; diskutil-backed S.M.A.R.T./NVMe health reader (F-020)
 │   ├── DesignSystem/DesignSystem.swift   colours, components, typography
 │   ├── Intents/
 │   │   ├── GetHealthScoreIntent.swift
@@ -74,8 +80,13 @@ Halo/
 │   │   ├── Protection/ProtectionView.swift
 │   │   ├── Performance/PerformanceView.swift  login items via LoginItemScanner
 │   │   ├── Applications/ApplicationsView.swift AppScanner + deep uninstall
-│   │   ├── Files/FilesView.swift              SpaceLens + Duplicates + LargeFiles + Downloads + Drive Speed tabs
+│   │   ├── Files/FilesView.swift              SpaceLens + Exact Duplicates + Similar Photos + LargeFiles + Downloads + Drive Speed tabs
 │   │   ├── Files/DriveSpeedView.swift          drive read/write benchmark screen (F-043)
+│   │   ├── Files/SimilarPhotosView.swift       perceptual-hash near-duplicate photo finder (F-025)
+│   │   ├── Files/FilesView.swift              SpaceLens + Duplicates + LargeFiles + Downloads + Drive Speed + iCloud Drive tabs
+│   │   ├── Files/DriveSpeedView.swift          drive read/write benchmark screen (F-043)
+│   │   ├── Files/ICloudDriveView.swift         iCloud Drive local folder analyzer screen (F-030)
+│   │   ├── Files/DriveHealthSection.swift      S.M.A.R.T. drive health card, shown in Drive Speed tab (F-020)
 │   │   ├── Clipboard/
 │   │   │   ├── ClipboardView.swift
 │   │   │   ├── ClipboardMonitor.swift
@@ -348,6 +359,21 @@ codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
 
 ---
 
+## MetricsHistory / WeeklyDigestGenerator (F-029)
+
+`Halo/Core/MetricsHistory.swift` + `Halo/Core/WeeklyDigestGenerator.swift` + `Halo/Features/Dashboard/HealthTrendCard.swift`
+
+- `@MainActor final class MetricsHistory: ObservableObject` — singleton `MetricsHistory.shared`
+- Rolling store of **hourly** samples (`MetricsSample`: healthScore, diskFreeGB, top-5 RAM processes), capped at 168 (7 days), persisted to `UserDefaults["haloMetricsHistory"]` as JSON
+- Sampled by `AppState.metricsHistoryTimer` — a **dedicated 3600 s timer**, deliberately separate from the existing 2 s `metricsTimer`. Do **not** hook history sampling into the 2 s tick — same class of mistake the widget pipeline's 60 s reload timer avoids (see Widget Pipeline section above), just at a different order of magnitude (would be ~1,800x too much data for a week).
+- `AppState.recordMetricsHistorySample()` calls `ProcessMonitor.topProcesses(sortBy: .ram, limit: 5)` (already used by Performance's Top Processes section) to get real per-app RAM at sample time
+- `HealthTrendCard` — new Dashboard card (mirrors `NetworkSparklineCard`'s Swift Charts pattern) rendering the 7-day health-score sparkline from `MetricsHistory.shared.recent(days: 7)`
+- `WeeklyDigestGenerator` — `@MainActor enum`, stateless: `composeSummary(from:)` builds a `WeeklyDigestSummary` from `MetricsHistory` + `AlertLog`; `postDigestNotification(summary:)` fires the local notification with a "View Report" `UNNotificationAction`; `exportAndPresentReport(appState:)` and `shareReportPDF(appState:)` reuse `ReportGenerator` for the PDF (save panel / `NSSharingServicePicker` respectively)
+- `WeeklyDigestScheduler` — `@MainActor final class`, singleton `.shared` — `NSBackgroundActivityScheduler` wrapper, exact same pattern as `ScanScheduler` but with its own `com.halo.mac.weeklydigest` identifier so it's fully independent of the Smart Scan schedule. `start(appState:)` called once from `HaloApp`'s `.task`, right after `ScanScheduler.shared.start(appState:)`.
+- `DigestNotificationDelegate: NSObject, UNUserNotificationCenterDelegate` — handles the "View Report" action tap; uses `AppState.shared` rather than holding its own reference (UNUserNotificationCenterDelegate requires NSObjectProtocol, so this is a small dedicated class rather than making `AppState` itself `NSObject`-based)
+- UserDefaults keys: `"weeklyDigestEnabled"` (Bool, default `false`), `"weeklyDigestFrequency"` (`"daily"`/`"weekly"`, default `"weekly"`), `"weeklyDigestWeekday"` (Int, default `2` = Monday), `"weeklyDigestHour"` (Int, default `9`)
+- **Honesty scope (see `docs/FEATURE_ROADMAP.md` F-029 "As actually built"):** "top storage growers" is a real week-over-week disk-free delta, not a file-growth audit; "high-RAM apps" is real but hourly-sampled (not continuous); "backup status" is omitted entirely (no Time Machine integration yet — that's F-022)
+
 ## LoginItemScanner / LaunchAtLoginManager
 
 `Halo/Core/Scanner/LoginItemScanner.swift`
@@ -413,6 +439,71 @@ codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
 - `BrowserDataCategory` cases in `Models.swift`: `.httpCache`, `.gpuCache`, `.history`, `.cookies`, `.sessions`, `.crashReports`, `.webStorage`, `.downloadHistory` — not every browser gets every category (e.g. Safari has no `.gpuCache` or `.webStorage`; only created when a verified real path exists).
 - `CleanupKind.browsers.dataPaths` intentionally returns `[]` — Browsers uses its own actor/pipeline, not `FileSystemScanner`/`ScanCoordinator`.
 - `@MainActor BrowserCleanerViewModel` — `loadAll()` detects + measures concurrently via `withTaskGroup`, then restores original detection order (task-group completion order is nondeterministic); pre-selects only categories that `hasData`.
+## PerceptualDuplicateDetector (F-025)
+
+`Halo/Core/Scanner/PerceptualDuplicateDetector.swift` + `Halo/Features/Files/SimilarPhotosView.swift`
+
+- `actor PerceptualDuplicateDetector` — finds *visually* similar images (near-duplicates), unlike `DuplicateDetector` which is bit-exact SHA-256. Surfaced as the **"Similar Photos"** tab in the Files module (the old "Duplicates" tab is renamed **"Exact Duplicates"**).
+- **Algorithm (standard DCT-based pHash):** 64px `ImageIO` thumbnail → 32×32 8-bit grayscale (`CGContext`) → naive separable 2-D DCT-II → top-left 8×8 low-frequency block → threshold each of the 64 AC coefficients (DC term excluded) against their median → 64-bit fingerprint.
+- `func detect(in:hammingThreshold:onProgress:) async throws -> [PhotoSimilarGroup]` — loose-file path; default threshold ≤8 of 64 bits (UI-adjustable 1–20).
+- Clustering is union-find over pairwise Hamming distance, via a generic `clusterByHash<T>` helper shared with the Photos Library path.
+- "Recommended keep": highest resolution (`megapixels`) wins; ties broken by most recent `modifiedDate`.
+- Loose-file deletion is `FileManager.trashItem` only, behind a `confirmationDialog` — never `removeItem`.
+- **Photos Library path (stretch goal, real code but NOT runtime-tested — see F-025 PR):** `photosLibraryAuthorizationStatus`, `requestPhotosLibraryAuthorization()` (real `PHPhotoLibrary.requestAuthorization(for: .readWrite)`), `detectInPhotosLibrary(hammingThreshold:assetCap:onProgress:)` (up to 3,000 most-recent `PHAsset`s via `PHImageManager`), `deletePhotosLibraryAssets(localIdentifiers:)` (`PHAssetChangeRequest.deleteAssets` → Photos "Recently Deleted", the PhotoKit equivalent of `trashItem`). Requires `com.apple.security.personal-information.photos-library` entitlement (both entitlement files) + `NSPhotoLibraryUsageDescription` (Info.plist) — all wired, but needs a real permission-grant test pass before being considered verified.
+- Models in `Models.swift`: `PhotoHashItem` / `PhotoSimilarGroup` (loose files), `PhotoAssetHashItem` / `PhotoAssetSimilarGroup` (Photos Library — no `URL`, so their own lightweight types).
+- `@MainActor SimilarPhotosViewModel` scans `~/Pictures`, `~/Downloads`, `~/Desktop` by default (or a user-chosen folder via `NSOpenPanel`), bounded to 20,000 files — same cap policy as `DuplicateFinderViewModel`.
+## ICloudDriveScanner (F-030)
+
+`Halo/Core/Scanner/ICloudDriveScanner.swift` + `Halo/Features/Files/ICloudDriveView.swift`
+
+- **Scope note (read this first):** this is a LOCAL analyzer of `~/Library/Mobile Documents/` — the on-disk mirror of iCloud Drive — not a full-account iCloud storage report. There is no public API (CloudKit, `NSUbiquitousKeyValueStore`, or otherwise) that returns a third-party app's total iCloud account quota/usage or a category breakdown (Drive/Photos/Backups/Mail/etc). `CKContainer.default().accountStatus` only reports sign-in state, never a storage number, entitlement or not. Those numbers are only visible in System Settings' own iCloud pane. See `docs/FEATURE_ROADMAP.md` F-030 "As actually built" for the full writeup — the donut-chart-by-category, quota progress bar, and "old device backups" detector from the original spec were all dropped as infeasible.
+- `actor ICloudDriveScanner` — enumerates `~/Library/Mobile Documents/`. Surfaced as the **"iCloud Drive"** tab in the Files module.
+- `func availableContainers() -> [ICloudContainer]` — every top-level folder under Mobile Documents; `com~apple~CloudDocs` (the user-visible "iCloud Drive") sorted first, every other sibling is a per-app ubiquity container.
+- `func scanDirectory(_ url: URL) async -> [ICloudDriveItem]` — top-level entries of any folder, real sizes (directories summed, capped at 20,000 files — same bound/rationale as `SpaceLensViewModel.directorySize`), real modified dates.
+- **Real per-item sync status** via `URLResourceKey.ubiquitousItemDownloadingStatusKey` + `isUploading`/`isDownloading` — populated by the OS for any URL under a ubiquity container, no entitlement needed. Deliberately not `NSMetadataQuery`: the resource-key read is synchronous per-URL with no run-loop/notification machinery, and is equally real for this use case.
+- `func trash(_ item:) -> (success: Bool, errorMessage: String?)` — `trashItem` only, called after the mandatory confirmation dialog in `ICloudDriveView`.
+- `ICloudDriveViewModel` — breadcrumb drill-down mirrors `SpaceLensViewModel`'s navigation model (container picker instead of `NSOpenPanel`, since containers are fixed OS locations, not user-chosen folders).
+## PrivacyExposureScanner / PrivacyPatternDatabase (F-018)
+
+`Halo/Core/Scanner/PrivacyExposureScanner.swift` + `Halo/Core/Scanner/PrivacyPatternDatabase.swift` + `Halo/Features/Protection/ProtectionView.swift` (`PrivacyExposureSection`)
+
+- `actor PrivacyExposureScanner` — recursive, read-only scan of Downloads/Documents/Desktop (iCloud Drive local folder is opt-in, off by default) for files containing sensitive data. `func scan(locations:config:) -> AsyncStream<ScanEvent>`.
+- Skips: symlinks; a fixed noise-directory denylist (`.git`, `node_modules`, `Library`, `DerivedData`, `.build`, etc.); files > 10 MB (`ScanConfig.maxFileSizeBytes`); a large binary-extension denylist; anything that fails a null-byte peek heuristic on the first 8 KB (`ScanConfig.peekBytes`) — this catches misnamed/extension-less binaries the extension list misses.
+- `actor PrivacyPatternDatabase` — singleton `.shared`; mirrors `SignatureDatabase`'s bundle-first / cached-update-wins load from `Halo/Resources/privacy-patterns.json`. **All matching and redaction happen inside this actor** — `func evaluate(text:) -> [PrivacyPatternHit]` returns only pre-redacted previews; the full matched secret never leaves the actor's local scope.
+- Three match types in `privacy-patterns.json`: `"exact"` (SSH PEM headers), `"regex"` (AWS/GitHub/Stripe key prefixes, SSN), `"luhnCandidate"` (credit card digit runs — regex finds candidates, each is Luhn-checksum validated before being reported; this is what keeps the false-positive rate down versus a raw digit-count regex).
+- **Detection categories:** `PrivacyExposureCategory` — `.creditCard`, `.awsKey`, `.githubToken`, `.stripeKey`, `.sshPrivateKey`, `.ssn`. "Hardcoded passwords in config files" from the original brainstorm was deliberately **not** implemented — no prefix/checksum precision exists for that shape, and a generic key=value heuristic would flood results with false positives.
+- **Redaction is mandatory, not incidental** — `PrivacyPatternDatabase.redact(_:category:)` is the only path that produces a `PrivacyPatternHit`'s `redactedPreview` (e.g. `sk_live_••••••••3f2a`, `•••• •••• •••• 3f2a`). No `print`/`NSLog`/`os_log` call anywhere in this feature touches a raw matched value; findings live only in `ProtectionViewModel.privacyFindings` for the current session — never persisted to disk or `UserDefaults`.
+- **Find-only, no delete path** — the only action on a `PrivacyExposureFinding` is `ProtectionViewModel.revealInFinder(_:)` (`NSWorkspace.activateFileViewerSelecting`). There is no quarantine/delete capability anywhere in this feature, by design.
+- `PrivacyScanLocation.defaultLocations` = Downloads/Documents/Desktop; `PrivacyScanLocation.iCloudDriveLocation()` resolves lazily (not a stored static) since `url(forUbiquityContainerIdentifier:)` can block briefly — only called when the user opts in via the iCloud toggle.
+## MemoryTrendTracker (F-023)
+
+`Halo/Core/Scanner/MemoryTrendTracker.swift` + `Halo/Features/Performance/MemoryTrendsSection.swift`
+
+- `@MainActor final class MemoryTrendTracker: ObservableObject` — singleton `MemoryTrendTracker.shared`, started once via `MemoryTrendTracker.shared.start()` from `AppState.init()` (same pattern as `ScanScheduler.shared.start(appState:)`). Runs continuously regardless of whether the Performance view is visible — unlike `TopProcessesSection`'s view-lifetime timer, leak detection needs an uninterrupted sample history.
+- **EXTENDS, not replaces**, the existing `ProcessMonitor` — adds `ProcessMonitor.AppRAMSample` + `func runningAppRAMSamples() -> [AppRAMSample]`, which reuses the same `proc_taskinfo` resident-size read as the Top Processes list but re-keys by **bundle ID** (via `NSRunningApplication`) instead of PID, and skips the CPU-delta bookkeeping F-023 doesn't need.
+- Samples every **30 s**, rolling **2-hour** window per app (`AppMemoryHistory.samples: [MemorySample]`, ~240 samples/app at steady state).
+- **Persistence:** JSON file at `Application Support/Halo/memoryTrendHistory.json` — **not** UserDefaults, because ~240 samples × several tracked apps grows past what a single plist should carry (UserDefaults is loaded entirely into memory as one plist; a dedicated file scales better). Not SQLite either — this codebase has no SQLite/CoreData dependency (see `AlertLog` for the same JSON-in-UserDefaults precedent this pattern extends to a file).
+- **Leak detection — `func leakStatus(for:) -> MemoryLeakStatus`:** walks samples oldest→newest tracking a monotonic-growth "streak". Concrete thresholds (documented in-source and in `docs/FEATURE_ROADMAP.md`'s F-023 "As actually built"):
+  - `significantDropFraction = 0.15` — a **>15% drop from the streak's local peak** resets the streak.
+  - `maxSampleGapSeconds = 300` (5× the sample interval) — an observation gap bigger than this also resets the streak (Halo/the Mac was very likely asleep across it, so "monotonic" can't be claimed through it).
+  - `leakWindowSeconds = 3600` — the surviving streak must span **more than 1 hour of real data** before the "Possible memory leak" badge shows. Because a streak can never outlast how long the app has actually been observed, this single check also satisfies "don't flag a just-launched app" — no separate guard needed.
+  - Result is **always recomputed fresh** from persisted samples — never cached/persisted itself — so a stale flag can never survive a real RAM drop.
+- **Alert:** `AlertManager.checkAppMemory(appName:bundleID:ramMB:)` — a **new** entry point (distinct from `evaluate()`) called after every 30 s sample round, with its own `lastFiredPerApp: [String: Date]` cooldown dictionary keyed by bundle ID so one app crossing the threshold doesn't suppress another's alert. Default threshold **2 GB**, user-configurable via `UserDefaults["memoryLeakAlertThresholdGB"]` (exposed as a `Stepper` in `MemoryTrendsSection`). New `AlertManager.AlertKind.appMemoryHigh` case; `AlertLog` icon `memorychip.fill` / color `.haloAmber`.
+- **Restart:** `MemoryTrendTracker.restart(_:)` — `NSRunningApplication.terminate()` then, after a 1.5 s grace period (falling back to `forceTerminate()` if still running), `NSWorkspace.shared.openApplication(at:configuration:)` using the persisted `bundlePath`. **Always gated behind a `.confirmationDialog`** in `MemoryTrendsSection` (CLAUDE.md's "disruptive actions require confirmation" rule — terminating another app counts, even when the goal is to relaunch it), and only offered on apps the badge has flagged.
+- `MemoryTrendsSection` — sub-section directly below `TopProcessesSection` in `PerformanceView`; per-app sparkline via Swift `Charts` (same `AreaMark`/`LineMark` pattern as `NetworkSparklineCard`), badge + "Restart App" button only on flagged rows, filters out sub-50 MB helper processes as noise.
+## SMARTDiskMonitor (F-020)
+
+`Halo/Core/Scanner/SMARTDiskMonitor.swift` + `Halo/Features/Files/DriveHealthSection.swift`
+
+- `actor SMARTDiskMonitor` — read-only S.M.A.R.T./NVMe health reader. Surfaced as a **"Drive Health"** card in the Files → **Drive Speed** tab, below the volume picker (same tab as F-043, not Dashboard/Performance).
+- **Primary data path is `diskutil info -plist <path>` (a `Process` shell-out), NOT raw IOKit.** On Apple Silicon, `IOServiceMatching("IOBlockStorageDriver")` only exposes aggregate I/O `Statistics` (no SMART data), and `IONVMeBlockDevice`/`IOAHCIBlockDevice` (what the existing P3-07 `DiskHealthMonitor` in Cleanup matches against) don't resolve to any service at all — confirmed by hand with a standalone IOKit probe, this is why P3-07's panel always shows "N/A" here.
+- `IOServiceMatching("IONVMeController")` **does** work on Apple Silicon and is used only to recover the serial number (diskutil never reports one) — matched by "Model Number" against the model diskutil already gave us.
+- **Gotcha — `MediaName` is empty when queried by mount path.** `diskutil info -plist /` (or any volume mount path) returns SMART data fine but an **empty string** for `MediaName`; it's only populated when diskutil is queried by the physical whole-disk BSD id (e.g. `disk0`). `scan(path:id:)` computes `bsdWholeDiskID` anyway (for display) and now falls back to a second diskutil query against it whenever the first `MediaName` is empty — without this, `model` (and therefore the IOKit serial lookup, which matches by model) would always be `nil`.
+- **NVMe vs ATA:** reallocated/pending sector counts (ATA SMART attrs 5/197) are permanently `nil` — not a failed read, NVMe's Health Info Log has no equivalent concept. `AVAILABLE_SPARE`/`AVAILABLE_SPARE_THRESHOLD` and `MEDIA_ERRORS` are the NVMe analogs, surfaced instead. No manufacturer TBW-rating lookup table — NVMe's own `PERCENTAGE_USED` wear indicator is used directly for the lifespan-remaining bar (`100 - percentageUsed`).
+- Every field diskutil/IOKit doesn't report renders **"Not available on this drive"** in the UI — never a zeroed or guessed value.
+- `SMARTTemperatureHistory` — `@MainActor` singleton, rolling 24h sample store (max 288 samples @ 5-min cadence), persisted to `UserDefaults["haloSMARTTemperatureHistory"]`. Internal boot drive only — external drives aren't guaranteed to stay connected.
+- `AppState.startSMARTMonitoring()` — one check at launch + a 300s timer against the boot volume (`path: "/"`); feeds `SMARTTemperatureHistory.record(celsius:)` and `AlertManager.evaluateSMART(model:healthLevel:)`. `diskutil info` is cheap but there's no reason to run it on the 2s metrics loop.
+- `AlertManager.evaluateSMART` — fires `.diskSmartFailing` (1h cooldown) or `.diskSmartWarning` (24h cooldown); `.good`/`.unknown` never fire (an unreadable status isn't evidence of a problem).
 
 ---
 
@@ -422,11 +513,12 @@ codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
 
 ```swift
 enum MenuBarDisplayStyle: String, CaseIterable, Identifiable {
-    case icon       // Halo icon only (default)
-    case textStats  // "CPU 42% · RAM 61%"
-    case miniBar    // 4px capsule progress bars for CPU and RAM
-    case dot        // coloured dot (green/amber/red) based on system pressure
-    case custom     // User-defined format string with tokens
+    case icon             // Halo icon only (default)
+    case textStats        // "CPU 42% · RAM 61%"
+    case miniBar          // 4px capsule progress bars for CPU and RAM
+    case dot              // coloured dot (green/amber/red) based on system pressure
+    case custom           // User-defined format string with tokens
+    case sessionCountdown // F-028: live Focus Session countdown — not user-selectable
 }
 ```
 
@@ -437,6 +529,62 @@ enum MenuBarDisplayStyle: String, CaseIterable, Identifiable {
   - 5 presets: Minimal (`{cpu}%`), Standard (`CPU {cpu}% · RAM {ram}%`), Full, Network (`↓{net_down} ↑{net_up}`), Battery Focus
   - `MenuBarFormatRenderer.render(format:values:)` — replaces tokens with live values from `MenuBarTokenValues`
   - `MenuBarStyleSelector` — in-app editor with live preview, preset buttons, clickable token grid
+- **`MenuBarDisplayStyle.selectable`** (F-028): `allCases` minus `.sessionCountdown` — the only list ever shown in a manual picker (Settings' segmented picker, `MenuBarStyleSelector`). `.sessionCountdown` is switched to automatically by `MenuBarIconView.effectiveStyle` whenever `FocusSessionManager.shared.isActive == true`, and reverts to the user's stored style the instant the session ends. Same "excluded from manual selection" pattern as `AppModule.reorderable` excluding the pinned `.dashboard`.
+
+---
+
+## Focus Session Manager (F-028)
+
+`Halo/Core/FocusSessionManager.swift` + `Halo/Features/Dashboard/FocusSessionOverlayView.swift`
+
+- `@MainActor final class FocusSessionManager: ObservableObject` — singleton `FocusSessionManager.shared`. Owns a 1 s countdown `Timer` + a 5 s sampling `Timer`.
+- `func start(minutes:bundleIDsToHide:)` — hides (never quits) every running app whose bundle ID is in the list via `NSRunningApplication.hide()`; every hidden app is `unhide()`-d in `finish(early:)`, win or lose. The Dashboard's `FocusSessionCard` confirms with the user first, listing the exact apps that will be hidden, before calling `start`.
+- Sampling reuses the existing `ProcessMonitor` actor (same one behind Performance → Top Processes) at `sortBy: .ram, limit: 3` every 5 s, tracking the session's peak-RAM process name/MB, plus `AppState.shared?.cpuUsage` for a peak-CPU read — the end-of-session summary (`FocusSessionSummary.digestText`) is built entirely from these real samples.
+- On end: fires a `UNUserNotificationCenter` notification and appends to the existing `AlertLog` with `kindRaw: "focus"` — no parallel history store. Dashboard's `FocusHistorySection` reads `AlertLog.entries.filter { $0.kindRaw == "focus" }`.
+- `FocusSessionOverlayController` — floating `NSPanel`, same non-activating/`.floating`-level pattern as `QuickActionPickerController`/`ClipboardQuickPickerController`. Unlike those pickers it does **not** hide on losing key status — it's meant to stay visible for the whole session. Its own close button calls `dismissOverlay()` (hides the panel only), never `endSession()`; the countdown keeps running in the menu bar and can be reopened via `reopenOverlay()`.
+- `FocusSessionSettingsStore` (same file) — persists the "apps to hide" list (`[FocusAppConfig]`, JSON in `UserDefaults["focusSessionAppConfigs"]`) edited from the new Settings → Focus tab (`FocusSessionSettingsTab` in `OnboardingView.swift`).
+- **Notification suppression — deliberately NOT implemented.** The original idea sheet said this feature should suppress macOS notification banners via `INFocusStatusCenter`. That API only lets an app report its *own* focus state for other apps to voluntarily respect; it cannot toggle system Focus/DND or silence other apps' notifications, and no public API can. `openSystemFocusSettings()` is the honest replacement — a one-click deep link (`x-apple.systempreferences:com.apple.Notifications-Settings.extension`) so the user turns on a Focus mode themselves. See the file-header comment in `FocusSessionManager.swift` for the full writeup.
+
+---
+
+## Shared singletons — AlertManager & ProcessMonitor
+
+Both are `.shared` with a **private `init`**, matching `AlertLog.shared` beside them. The private
+init is the point: it is what stops a fourth instance reappearing in the next feature branch.
+
+**`AlertManager.shared`** — `Halo/Core/AlertManager.swift`
+The `lastFired` cooldown dictionary is per-instance state, so a second `AlertManager` starts with
+an empty one and the same alert fires twice inside its own cooldown window. Every `evaluate*`
+entry point must reach the same instance for "once per day" to mean once per day.
+
+`AlertKind.rawValue` is a **persisted format**, not an implementation detail: `AlertLog` writes it
+to `UserDefaults`, and `AlertEntry.icon` / `.accentColor` switch on those exact strings. Adding a
+case is fine; renaming one silently strips the icon and colour from every alert already in a
+user's history. **A new case needs a matching arm in both `AlertEntry.icon` and
+`AlertEntry.accentColor`** — otherwise the alert renders as a generic bell. `HaloTests` enforces
+this (`AlertManagerTests`).
+
+**`ProcessMonitor.shared`** — `Halo/Core/Scanner/ProcessMonitor.swift`
+One CPU baseline for the whole app. Per-caller instances each kept their own ~600-entry
+`previousCPUInfo`, reported 0 % CPU on their first call (no baseline to diff against), and made
+two surfaces quote different CPU numbers for the same process because their sampling windows
+differed.
+
+Three things in this actor are load-bearing — do not "tidy" them away:
+
+- **The 1 s coalescing window.** Sharing one instance means two callers can land milliseconds
+  apart. Without the cache the second call computes its CPU delta over a near-zero `elapsed` and
+  every process reads ~0 %. The window is well under the fastest real caller (the 3 s Top
+  Processes timer), so that caller still re-samples every tick.
+- **`previousCPUInfo` is rebuilt, not mutated.** It used to only ever gain entries, so it kept a
+  row for every PID the app had ever seen and grew without bound.
+- **The `total >= previous` guard.** macOS recycles PIDs, so a slot can come back pointing at a
+  younger process with a smaller cumulative counter. `total - previous` is `UInt64` subtraction,
+  which **traps on underflow** — an outright crash. A shared instance holds its baseline for the
+  whole app lifetime, so it meets PID reuse far more often than a per-view instance did.
+
+One `proc_pidinfo()` per PID per sample. The previous version called it twice — once to read the
+process, once to record the CPU snapshot — doubling the syscall count of every sample.
 
 ---
 
@@ -460,11 +608,15 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | Cleanup | ✅ | CleanupViewModel | FileSystemScanner | — |
 | Cleanup (Browsers) | ✅ | BrowserCleanerViewModel | BrowserCleanerScanner | — |
 | Protection | ✅ | ProtectionViewModel | SignatureDatabase ✅ | — |
+| Protection | ✅ | ProtectionViewModel | SignatureDatabase ✅ + PrivacyExposureScanner ✅ | — |
 | Performance | ✅ | PerformanceViewModel | SystemMonitor + LoginItemScanner | — |
 | Applications | ✅ | ApplicationsViewModel | AppScanner | — |
 | Files (SpaceLens) | ✅ | SpaceLensViewModel | — | — |
 | Files (Duplicates) | ✅ | DuplicateFinderViewModel | DuplicateDetector | ✅ |
 | Files (Drive Speed) | ✅ | DriveSpeedViewModel | DriveSpeedTester | ✅ |
+| Files (Similar Photos) | ✅ | SimilarPhotosViewModel | PerceptualDuplicateDetector | — |
+| Files (iCloud Drive) | ✅ | ICloudDriveViewModel | ICloudDriveScanner | — |
+| Files (Drive Speed) | ✅ | DriveSpeedViewModel | DriveSpeedTester + SMARTDiskMonitor (F-020) | ✅ |
 | Clipboard | ✅ | ClipboardViewModel | ClipboardMonitor | ✅ |
 | Actions | ✅ | ActionsViewModel | ActionRunner + ActionLibrary | — |
 | Ports | ✅ | PortManagerViewModel | PortScanner | — |
@@ -475,6 +627,9 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | Alert History | ✅ | AlertLog | AlertManager | — |
 | Report Export | ✅ | ReportGenerator | — | — |
 | Siri Shortcuts | ✅ | HaloShortcutsProvider | 8 AppIntents | — |
+| Focus Session | ✅ | FocusSessionManager | ProcessMonitor (reused) | — |
+| Dashboard — App Usage Insights | ✅ | AppUsageTracker | AppUsageTracker | — |
+| Performance (Memory Trends) | ✅ | MemoryTrendTracker (self-published) | ProcessMonitor.runningAppRAMSamples() | — |
 
 ---
 
@@ -498,6 +653,7 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `4009` / `4010` | AppScanner.swift file ref / sources build file |
 | `4011` / `4012` | AlertLog.swift file ref / sources build file |
 | `4013` / `4014` | ReportGenerator.swift file ref / sources build file |
+| `8171` / `8172` | AsyncTimeout.swift file ref / sources build file |
 | `5001` | Sentry in Frameworks build file |
 | `5002` | XCSwiftPackageProductDependency (Sentry) |
 | `5003` | XCRemoteSwiftPackageReference (sentry-cocoa) |
@@ -522,8 +678,31 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `8025` / `8026` | SnippetEditorView.swift file ref / sources build file |
 | `8027` / `8028` | SnippetListSection.swift file ref / sources build file |
 | `8029` / `8030` | ActionShareManager.swift file ref / sources build file |
+| `8031` / `8032` | PermissionAuditor.swift file ref / sources build file |
+| `8031` / `8032` | SecurityPostureScanner.swift file ref / sources build file |
+| `8031` / `8032` | MemoryTrendTracker.swift file ref / sources build file |
+| `8033` / `8034` | MemoryTrendsSection.swift file ref / sources build file |
+| `8043` / `8044` | SMARTDiskMonitor.swift file ref / sources build file |
+| `8045` / `8046` | DriveHealthSection.swift file ref / sources build file |
+| `8053` / `8054` | TimeMachineMonitor.swift file ref / sources build file |
+| `8055` / `8056` | BackupHealthCard.swift file ref / sources build file |
 | `8063` / `8064` | BrowserCleanerScanner.swift file ref / sources build file |
 | `8065` / `8066` | BrowserCleanerView.swift file ref / sources build file |
+| `8073` / `8074` | MetricsHistory.swift file ref / sources build file |
+| `8075` / `8076` | WeeklyDigestGenerator.swift file ref / sources build file |
+| `8077` / `8078` | HealthTrendCard.swift file ref / sources build file |
+| `8083` / `8084` | PrivacyExposureScanner.swift file ref / sources build file |
+| `8085` / `8086` | PrivacyPatternDatabase.swift file ref / sources build file |
+| `8087` / `8088` | privacy-patterns.json file ref / resource build file |
+| `8103` / `8104` | AppUsageTracker.swift file ref / sources build file |
+| `8105` / `8106` | AppUsageInsightsSection.swift file ref / sources build file |
+| `8123` / `8124` | PerceptualDuplicateDetector.swift file ref / sources build file |
+| `8125` / `8126` | SimilarPhotosView.swift file ref / sources build file |
+| `8133` / `8134` | FocusSessionManager.swift file ref / sources build file |
+| `8135` / `8136` | FocusSessionOverlayView.swift file ref / sources build file |
+| `8143` / `8144` | ICloudDriveScanner.swift file ref / sources build file |
+| `8145` / `8146` | ICloudDriveView.swift file ref / sources build file |
+| `8163` / `8164` | ShellReader.swift file ref / sources build file |
 | `9001` / `9002` | GetHealthScoreIntent.swift file ref / sources build file |
 | `9003` / `9004` | GetCPUUsageIntent.swift file ref / sources build file |
 | `9005` / `9006` | GetBatteryHealthIntent.swift file ref / sources build file |
@@ -533,6 +712,84 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 | `9013` / `9014` | GetClipboardHistoryIntent.swift file ref / sources build file |
 | `9015` / `9016` | ExportReportIntent.swift file ref / sources build file |
 | `9017` / `9018` | HaloShortcutsProvider.swift file ref / sources build file |
+
+---
+
+### Reserved ID blocks — claim one before adding a file
+
+Object IDs in `project.pbxproj` are written zero-padded to 24 characters
+(`000000000000000000008163`); the table above abbreviates them to the last four
+digits. Every new source file needs **two** — a `PBXFileReference` and a
+`PBXBuildFile` — and they must be unique across the whole project.
+
+Duplicate IDs **fail quietly**. Xcode does not error on two objects sharing an ID;
+it resolves the ID to one of them, and the other file silently drops out of its
+Sources phase. The symptom arrives later as a missing symbol with nothing obvious
+connecting it to the project file.
+
+That already happened once: #21, #13 and #9 each independently picked `8031`/`8032`
+for three different scanners, because each branched off `main` and took "the next
+free pair" without seeing the others. **Pick from a free block below and add your row
+before writing the file** — the table is the only thing that makes a claim visible to
+a branch that has not merged yet.
+
+| Block | Owner | Status |
+|-------|-------|--------|
+| `8001`–`8030` | shipped features (see the table above) | taken |
+| `8031`–`8032` | F-019 Security Posture (#21) | claimed |
+| `8043`–`8046` | F-020 S.M.A.R.T. Disk Health (#20) | claimed |
+| `8053`–`8056` | F-022 Time Machine Monitor (#16) | claimed |
+| `8063`–`8066` | F-024 Browser Cleaner (#15) | claimed |
+| `8073`–`8078` | F-029 Weekly Digest (#11) | claimed |
+| `8083`–`8088` | F-018 Privacy Exposure Scanner (#18) | claimed |
+| `8093`–`8098` | F-017 Network Traffic Monitor (#17) | claimed |
+| `8103`–`8106` | F-021 App Usage Analytics (#10) | claimed |
+| `8113`–`8116` | F-023 Memory Leak Tracker (#13) | claimed — moved off `8031` |
+| `8123`–`8126` | F-025 Duplicate Photos (#19) | claimed |
+| `8133`–`8136` | F-028 Focus Session (#14) | claimed |
+| `8143`–`8146` | F-030 iCloud Drive Analyzer (#12) | claimed |
+| `8153`–`8154` | F-016 Permission Auditor (#9) | claimed — moved off `8031` |
+| `8163`–`8164` | `ShellReader` (Phase 0 / P0.2) | claimed |
+| `8171`–`8172` | `AsyncTimeout` (Phase 0 / P0.5) | claimed |
+| `8181`+ | — | **free — take the next block from here** |
+
+Auditing the whole batch for collisions:
+
+```bash
+git show main:Halo.xcodeproj/project.pbxproj | grep -oE '\b[0-9A-F]{24}\b' | sort -u > /tmp/main-ids
+for b in $(git branch --no-merged main --format='%(refname:short)'); do
+  git show "$b":Halo.xcodeproj/project.pbxproj 2>/dev/null \
+    | grep -oE '\b[0-9A-F]{24}\b' | sort -u \
+    | comm -13 /tmp/main-ids - | sed "s|$| $b|"
+done | sort > /tmp/pbx-claims
+awk '{print $1}' /tmp/pbx-claims | uniq -d | while read id; do
+  branches=($(grep "^$id " /tmp/pbx-claims | awk '{print $2}'))
+  # Inherited, not claimed twice: if the branches share an ancestor that already
+  # carries the ID, they are all looking at one object.
+  base=$(git merge-base --octopus $branches 2>/dev/null)
+  if [ -n "$base" ] && git show "$base":Halo.xcodeproj/project.pbxproj 2>/dev/null \
+       | grep -q "$id"; then
+    continue
+  fi
+  echo "$id  <-  ${branches[*]}"
+done
+```
+
+Silence means no collisions. Anything printed is claimed by more than one
+unmerged branch, and the line names them.
+
+`--no-merged main` is load-bearing: without it the scan also reports branches that
+merely share lineage — `feature/upcoming-features` descends from the already-merged
+`feature/f-043-drive-speed-test`, so they hold eight IDs in common quite legitimately.
+A check that prints eight false positives every run is one people learn to ignore.
+
+The `merge-base --octopus` step is there for the same reason, one level up. A Phase 0
+branch that adds a file and is then *merged* into feature branches puts its IDs on all
+of them legitimately — P0.5 (`AsyncTimeout`, `8171`/`8172`) is merged into both #17 and
+#19, so a naive scan reports a three-way collision on a single object. Checking whether
+the claimants share an ancestor that already carries the ID tells inheritance from a
+genuine double-claim. Two branches that independently picked the same ID have no such
+ancestor, so real collisions still print.
 
 ---
 
@@ -547,6 +804,26 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 - `PortEntry` model: `pid`, `processName`, `processPath`, `port`, `protocolType`, `state`, `friendlyName`
 - `NamedPort` model: user-assigned `port → name` mapping, persisted to `UserDefaults["haloNamedPorts"]`
 - `KillSignalPreference` enum: `.ask` / `.sigterm` / `.sigkill`, persisted to `UserDefaults["haloKillSignalPref"]`
+
+---
+
+## AppUsageTracker (F-021)
+
+`Halo/Core/AppUsageTracker.swift` + `Halo/Features/Dashboard/AppUsageInsightsSection.swift`
+
+- `@MainActor final class AppUsageTracker: ObservableObject` — singleton `AppUsageTracker.shared`, same singleton style as `AlertLog`
+- **Hard honesty limitation (do not paper over this):** there is no macOS API a third-party app can use to read OS-level Screen Time history. `FamilyControls`/`ManagedSettings` are parental-control frameworks gated behind an entitlement Halo does not have. This tracker only ever knows about time it personally observed **while Halo itself was running** — if the Mac was asleep or Halo wasn't launched, that time is not counted, never estimated or backfilled. Every UI surface says "Based on time Halo has been running."
+- Data source: `NSWorkspace.didActivateApplicationNotification` (same event `IdleAppMonitor` (F-039) already observes for its own purpose) for exact context-switch counts, plus a single repeating **30 s timer** as the source of truth for all durations (`observedRunningSeconds` for every running regular app, `foregroundSeconds` + one RAM sample for whichever app is frontmost at each tick).
+- **Why tick-based, not elapsed-since-activation:** a suspended `Timer` doesn't fire during sleep, so a Mac asleep for 5 hours with an app frontmost correctly adds zero foreground hours. Elapsed-time math (`Date().timeIntervalSince(activatedAt)`) would incorrectly count the whole sleep duration as usage.
+- RAM sampling reuses the same `ps -p <pid> -o rss=` technique as `IdleAppMonitor`'s `getProcessRAM`.
+- Persists `[AppUsageRecord]` (one record per app per day) as JSON to `UserDefaults["haloAppUsageHistory"]`, pruned to a rolling **14-day** window (7 days for the headline chart/background-hogs, 14 so a week-over-week comparison is possible once there's enough history — same cap-and-persist pattern as `AlertLog`, just date-windowed instead of count-capped).
+- `func topApps(limit:) -> [AppUsageSummary]` — top apps by foreground time, past 7 days
+- `func backgroundHogs(minObservedHours:maxForegroundRatio:) -> [BackgroundHogApp]` — apps observed running 8h+ with near-zero foreground ratio
+- `func contextSwitchesPerHour() -> Double?` — `nil` until ≥1 hour of real history exists (avoids a wild rate from a few minutes of data)
+- `func weekOverWeekChange() -> WeekOverWeek?` — `nil` until Halo has observed ≥14 days (otherwise "last week" would be silently zero and show a fake +100%)
+- `enabledDefaultsKey = "haloAppUsageTrackingEnabled"` — off by default, same opt-in convention as `enableAnalytics`; toggle lives in Settings → General → Privacy (`OnboardingView.swift`'s `SettingsView`)
+- `startIfEnabled()` called once from `HaloApp`'s `.task`; `setTrackingEnabled(_:)` called from the Settings toggle to start/stop live
+- `AppUsageInsightsSection` — expandable `HaloCard` on the Dashboard below `HealthAndMetrics()`: `Charts` `BarMark` bar chart of top 5 apps, Background Hogs list, context-switching + week-over-week stat tiles; shows a disabled/collecting-data state when tracking is off or there's no data yet
 
 ---
 
@@ -601,8 +878,30 @@ Both main-app entitlement files include `com.apple.security.application-groups =
 17. **VPN detection** — use two-rule strategy: (1) definitive protocol prefixes (`ppp`, `ipsec`, `tap`), then (2) `utun` with active IPv4 AND `path.usesInterfaceType(.other)`. iCloud Private Relay uses `utun` but `.cellular`/`.wifi` path type, so rule 2 correctly excludes it.
 18. **Battery health label** — factor cycle count FIRST, then capacity ratio. Cycles < 100 → "Excellent"; < 300 → "Good"; only fall back to capacity ratio for older batteries with known cycles.
 19. **Drive speed benchmark accuracy** — the scratch fd MUST set `fcntl(fd, F_NOCACHE, 1)` (else reads measure RAM) and `fcntl(fd, F_FULLFSYNC)` after writes (else writes measure the SSD's DRAM cache). Write buffer must be random (`arc4random_buf`), not zeros — zeros let compressing controllers report fake speeds. The scratch file is `unlink`-ed (not trashed) — the only sanctioned exception to the trashItem rule, because it's Halo's own temp data that must vanish immediately.
+20. **Never hand-roll a `Process`. Use `ShellReader`.** `Halo/Core/ShellReader.swift` is the only place in the app that should spawn a subprocess, because three separate traps have to be handled together and each one was live in shipped code before it was extracted:
+    - **Pipe deadlock.** `waitUntilExit()` *before* `readDataToEndOfFile()` hangs forever once the child writes past the 64 KB pipe buffer — the child blocks in `write(2)`, the parent is parked in `waitUntilExit()`, and `Task.cancel()` cannot interrupt a thread blocked there. Measured: `lsof -i -n -P` is ~10 KB across 87 connections, so ~550 connections reaches the limit — a loaded machine, not a typical one, but unrecoverable when it happens. Reading before waiting fixes stdout only; an undrained stderr (`process.standardError = Pipe()` that nothing reads) deadlocks identically.
+    - **No timeout.** The hazard that survives fixing the pipe order. `waitUntilExit()` takes no deadline, so `lsof` on a dead NFS mount or `diskutil` on a failing drive blocks the caller forever. Every `ShellReader` call is bounded and escalates SIGTERM → SIGKILL.
+    - **Thread-pool starvation.** The natural fix — one blocking read dispatched per pipe onto `DispatchQueue.global()`, joined with a `DispatchGroup` — *also* deadlocks, and this one is subtle: each call parks two pool threads on a blocking read while a third waits on them, so once enough calls overlap the pool has no thread left to run a drain block and `leave()` is never reached. Halo genuinely has several in flight at once (AppState's SMART timer, `SystemControlsManager`'s poll loop, an AI tool call), and a parallel test run reproduced it in seconds. `ShellReader` therefore multiplexes both descriptors with `poll(2)` **on the calling thread** — no worker threads, nothing to starve. Do not "tidy" this back into a worker-per-pipe design; `HaloTests`' ShellReader suite has explicit regression tests for all three traps.
+
+    Also: `ShellReader` is synchronous and blocking by design (callers are already inside an `actor` or a detached `Task`) — **never call it from the main actor**. It reports a denied `posix_spawn` as `launchFailure`, which is how every call behaves under the release App Sandbox, so callers can distinguish "we were not allowed to ask" from "the tool found nothing". The one sanctioned exception is `ActionRunner`'s live-output path, which needs `readabilityHandler` streaming to relay stdout line-by-line to the UI and so cannot use a batch reader.
+21. **Timing out callback work** — never race a `Task.sleep` sibling inside a
+   `withTaskGroup` and take `group.next()`. It bounds the returned *value* but not
+   the *time*: `withTaskGroup` joins every child before returning, and
+   `group.cancelAll()` cannot interrupt a `withCheckedContinuation` around a
+   blocking call or a framework callback, so the group waits on the work you just
+   abandoned. Measured: a 1.5 s "ceiling" over 5 s of work returns nil after
+   5.01 s, and work that never calls back blocks forever. Use `AsyncTimeout.run`
+   (or `.runBlocking`), which resumes one continuation from whichever of the
+   callback or the deadline arrives first. Note it bounds the *caller*, not the
+   work — the abandoned operation still runs to completion.
 
 ---
+
+22. **`diskutil info -plist` by mount path returns an empty `MediaName`** — only populated when queried by the physical whole-disk BSD id (e.g. `disk0`). `SMARTDiskMonitor.scan(path:id:)` must fall back to a second `diskutil` query against the resolved whole-disk id whenever the first `MediaName` is empty, or `model` (and the IOKit serial-number lookup, which matches by model) silently comes back `nil` for every scan.
+23. **NVMe vs ATA SMART fields** — `IOBlockStorageDriver`/`IONVMeBlockDevice`/`IOAHCIBlockDevice` do not expose SMART data on Apple Silicon (confirmed via IOKit probe); only `diskutil info -plist` and `IONVMeController` (for serial number only) do. Reallocated/pending sector counts (ATA attrs 5/197) don't exist for NVMe — always `nil`, never fake a value.
+24. **`AVAILABLE_SPARE_THRESHOLD` is 99 on Apple Silicon — never compare against it literally.** Verified on this Mac: `diskutil info -plist /` reports `AVAILABLE_SPARE = 100` with `AVAILABLE_SPARE_THRESHOLD = 99`, nothing like the ~10% the NVMe spec's own examples use. A literal `spare <= threshold` check therefore declares a perfectly healthy drive **Failing** the first time spare ticks 100 → 99 on normal wear, which then fires `.diskSmartFailing` ("back up your data immediately") every hour indefinitely. `SMARTDiskInfo.classify` guards this two ways: it ignores any threshold above `maxCredibleSpareThreshold` (50) and uses the spec's strict `<` rather than `<=`, with a threshold-independent `criticalSparePercent` (10) backstop for genuinely low spare. Regression-tested in `HaloTests`.
+25. **`SMARTStatus = "Not Supported"` is the healthy state for USB/Thunderbolt enclosures, not a warning.** Verified on this Mac: an external USB SSD reports `"Not Supported"` and publishes no SMART dictionary at all, because bridge chipsets don't pass the health log through. Mapping an unrecognised status to `.warning` puts an amber badge on a perfectly good drive — `.other` must classify as `.unknown` ("can't tell"), the same discipline F-019's security checks use for values Halo cannot verify. The status check must also sit *after* the wear/spare/error checks so it can't mask a signal that was successfully read.
+26. **Card badge vs system notification are different bars.** `SMARTDiskInfo.healthLevel` drives the Drive Health card (a surface the user chose to open, so it can surface anything notable); `SMARTDiskInfo.alertLevel` is what `AlertManager.evaluateSMART` acts on and is deliberately stricter. A non-zero `MEDIA_ERRORS` count colours the badge but does **not** notify — one unrecovered read over a drive's lifetime isn't evidence of failure, and with `.diskSmartWarning`'s 24 h cooldown it would otherwise nag daily forever with no action the user can take. Pass `alertLevel`, never `healthLevel`, to `evaluateSMART`.
 
 ## Reorderable Sidebar Modules
 

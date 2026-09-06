@@ -3,7 +3,8 @@
 //  HaloUITests
 //
 //  Protection module (malware / adware / PUP scanner backed by
-//  SignatureDatabase). Maps to MANUAL_TEST_PLAN.md §4 (TC-PROT-01…07).
+//  SignatureDatabase, plus the F-016 Permission Auditor). Maps to
+//  MANUAL_TEST_PLAN.md §4 (TC-PROT-01…07) and §4.1 (TC-PROT-08…16).
 //
 //  Scanning is read-only; quarantine/removal is destructive and therefore
 //  exercised only up to its confirmation gate (cancel-at-confirmation).
@@ -65,5 +66,228 @@ final class ProtectionUITests: HaloUITestCase {
             throw XCTSkip("Signature-count label not exposed by name; annotate with " +
                           "an identifier such as `protection.signatureCount.text`.")
         }
+    }
+
+    // MARK: - Permission Auditor (F-016) — TC-PROT-08…16
+
+    // TC-PROT-08 / TC-PROT-13 — the "App Permissions" section always renders
+    // one of its two honest states: the rich per-app list (TCC.db readable)
+    // or the fallback category grid + Full Disk Access banner (unreadable).
+    // Which branch appears depends entirely on whether this machine/build has
+    // granted Full Disk Access — the test accepts either, since both are
+    // valid, non-fabricated outcomes.
+    func test_permissions_section_renders_either_state() {
+        XCTAssertTrue(HaloSidebar(test: self).navigate(to: .protection))
+
+        let bannerAppeared = waitForID("protection.permissions.banner", timeout: 10) != nil
+        let summaryAppeared = waitForID("protection.permissions.summary", timeout: 2) != nil
+        let sectionHeaderAppeared = element(labeled: "App Permissions", timeout: 2) != nil
+
+        XCTAssertTrue(bannerAppeared || summaryAppeared || sectionHeaderAppeared,
+                      "Protection should show the App Permissions section in either its " +
+                      "fallback (banner + category grid) or rich (per-app list) state")
+    }
+
+    // TC-PROT-13 — TCC.db-unreadable path: the honest banner plus the
+    // original category-card grid (never a fabricated per-app list).
+    func test_permissions_fallback_shows_banner_and_category_grid() throws {
+        HaloSidebar(test: self).navigate(to: .protection)
+
+        guard waitForID("protection.permissions.banner", timeout: 10) != nil else {
+            throw XCTSkip("This run has Full Disk Access granted, so the rich per-app " +
+                          "list renders instead of the fallback — see " +
+                          "test_permissions_rich_list_shows_revoke_links for that branch.")
+        }
+        // At least one category card ("Open in Settings" deep link) should be
+        // present alongside the banner.
+        let anyCard = ["camera", "microphone", "location", "contacts", "calendar",
+                       "fulldiskaccess", "screenrecording", "accessibility"]
+            .contains { waitForID("protection.permissions.card.\($0)", timeout: 2) != nil }
+        XCTAssertTrue(anyCard, "Fallback state should still show the category-card grid")
+    }
+
+    // TC-PROT-08 / TC-PROT-11 / TC-PROT-12 — TCC.db-readable path: the
+    // grouped per-app list renders with a summary badge, and "Revoke" links
+    // are present and tappable.
+    func test_permissions_rich_list_shows_revoke_links() throws {
+        HaloSidebar(test: self).navigate(to: .protection)
+
+        guard waitForID("protection.permissions.summary", timeout: 10) != nil else {
+            throw XCTSkip("Full Disk Access is not granted on this machine, so the rich " +
+                          "per-app audit is unavailable — the honest fallback banner is " +
+                          "shown instead (covered by " +
+                          "test_permissions_fallback_shows_banner_and_category_grid).")
+        }
+
+        // Expand the first permission-kind group that has any grants.
+        let kinds = ["camera", "microphone", "location", "contacts", "calendar",
+                    "fulldiskaccess", "screenrecording", "accessibility"]
+        var expandedKind: String?
+        for kind in kinds {
+            if let row = waitForID("protection.permissions.row.\(kind)", timeout: 1) {
+                row.click()
+                expandedKind = kind
+                break
+            }
+        }
+        guard let expandedKind else {
+            XCTFail("Summary badge implies grants exist, but no permission group row was found")
+            return
+        }
+
+        guard let revoke = waitForID("protection.permissions.revoke.\(expandedKind)", timeout: 5) else {
+            XCTFail("Expanding a permission group with grants should reveal a Revoke link")
+            return
+        }
+        XCTAssertTrue(revoke.isHittable, "Revoke link should be tappable")
+        // Do not actually click Revoke — it opens System Settings, an
+        // external app switch outside this suite's scope. Existence +
+        // hittability is the assertion (TC-PROT-11).
+    }
+
+    // MARK: - Sensitive Data Scanner (F-018) — TC-PROT-08…20
+    //
+    // Find-only feature: there is no delete/quarantine path anywhere here, so
+    // these tests can run a real scan to completion without any confirmation
+    // gate to navigate.
+
+    // TC-PROT-08 — the section renders and a scan can be triggered; status
+    // eventually settles (never a stuck "Scanning…" state).
+    func test_privacyScan_runs_and_settles() {
+        XCTAssertTrue(HaloSidebar(test: self).navigate(to: .protection))
+        XCTAssertTrue(element(labeled: "Sensitive Data Scanner", timeout: 10)?.exists ?? false,
+                      "Protection should show a 'Sensitive Data Scanner' section")
+        guard tapID("protection.privacyscan.button", timeout: 8) else {
+            XCTFail("Expected a 'Run Sensitive Data Scan' button")
+            return
+        }
+        XCTAssertTrue(assertID("protection.privacyscan.status",
+                                "Scan status indicator should be visible", timeout: 5).exists)
+        // The scan walks Downloads/Documents/Desktop for real, so allow a
+        // generous timeout; either the findings list or the clean empty state
+        // is an acceptable settled outcome.
+        let settled = waitForID("protection.privacyscan.findings.list", timeout: 120)
+            ?? waitForID("protection.privacyscan.emptyState", timeout: 30)
+        XCTAssertNotNil(settled, "Privacy scan should settle into either findings or the empty state")
+    }
+
+    // TC-PROT-17 — iCloud Drive inclusion is opt-in and off by default. We
+    // only assert the toggle renders here; the exact off/on value
+    // representation for a SwiftUI switch-style Toggle isn't stable enough
+    // to assert without a live GUI session to confirm against, so the
+    // off-by-default expectation itself is documented in
+    // MANUAL_TEST_PLAN.md TC-PROT-17 for manual verification.
+    func test_privacyScan_icloudToggle_renders() {
+        HaloSidebar(test: self).navigate(to: .protection)
+        XCTAssertTrue(assertID("protection.privacyscan.icloudToggle",
+                                "Expected the 'Include iCloud Drive' toggle to render",
+                                timeout: 10).exists)
+    }
+
+    // TC-PROT-19 — "Reveal in Finder" is the only action available on a
+    // finding; if any findings exist, the reveal button must be present and
+    // tappable without crashing the app (Finder itself is out of scope here).
+    func test_privacyScan_reveal_button_present_when_findings_exist() throws {
+        HaloSidebar(test: self).navigate(to: .protection)
+        guard tapID("protection.privacyscan.button", timeout: 8) else {
+            throw XCTSkip("Run Sensitive Data Scan button not found")
+        }
+        guard waitForID("protection.privacyscan.findings.list", timeout: 120) != nil else {
+            throw XCTSkip("No sensitive data findings on this machine — nothing to reveal. " +
+                          "Expectation: each finding row exposes a 'Reveal in Finder' " +
+                          "button (protection.privacyscan.reveal.<id>) and no delete/quarantine action.")
+        }
+        let revealButtons = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "protection.privacyscan.reveal.")
+        )
+        XCTAssertGreaterThan(revealButtons.count, 0,
+                             "At least one finding should expose a Reveal in Finder button")
+    }
+
+    // MARK: - Security Posture Dashboard (F-019) — TC-PROT-08…30
+
+    /// All 8 `SecurityCheckKind` id slugs, in the order `SecurityPostureScanner.scan()`
+    /// returns them. Kept in sync manually with `Models.swift`'s `SecurityCheckKind`.
+    private let securityCheckSlugs = [
+        "fileVault", "gatekeeper", "firewall", "automaticUpdates",
+        "sip", "secureBoot", "findMy", "loginWindow"
+    ]
+
+    // TC-PROT-08 — navigating to Protection surfaces the Security Posture
+    // section, and it eventually settles (loading spinner clears).
+    func test_securityPosture_section_renders() {
+        XCTAssertTrue(HaloSidebar(test: self).navigate(to: .protection))
+        XCTAssertTrue(element(labeled: "Security Posture", timeout: 10)?.exists ?? false,
+                      "Protection should show a 'Security Posture' section")
+        // Give the one-shot async scan time to settle before asserting on rows.
+        _ = waitForID("protection.securityPosture.list", timeout: 15)
+    }
+
+    // TC-PROT-08 / TC-PROT-21…24 — all 8 check rows render with some state
+    // icon, regardless of which are auto-verified vs. always-unknown.
+    func test_securityPosture_all_eight_checks_render() {
+        HaloSidebar(test: self).navigate(to: .protection)
+        guard waitForID("protection.securityPosture.list", timeout: 20) != nil else {
+            XCTFail("Security Posture list did not appear/settle in time")
+            return
+        }
+        for slug in securityCheckSlugs {
+            let row = element(id: "protection.securityPosture.check.\(slug)")
+            XCTAssertTrue(row.waitForExistence(timeout: 5),
+                          "Expected a Security Posture row for '\(slug)'")
+            let stateIcon = element(id: "protection.securityPosture.check.\(slug).state")
+            XCTAssertTrue(stateIcon.waitForExistence(timeout: 5),
+                          "Row '\(slug)' should render a state icon (pass/warn/fail/unknown)")
+        }
+    }
+
+    // TC-PROT-27…29 — the score badge is visible once checks have loaded.
+    func test_securityPosture_score_badge_visible() {
+        HaloSidebar(test: self).navigate(to: .protection)
+        guard waitForID("protection.securityPosture.list", timeout: 20) != nil else {
+            XCTFail("Security Posture list did not appear/settle in time")
+            return
+        }
+        let badge = assertID("protection.securityPosture.score",
+                              "Security Posture score badge should be visible once checks load",
+                              timeout: 10)
+        // Sanity: label should look like "NN/100" or "N/100".
+        XCTAssertTrue(badge.label.contains("/100"), "Score badge label was '\(badge.label)'")
+    }
+
+    // TC-PROT-25 — tapping a "Fix →" settings-link button on a check that has
+    // one (e.g. FileVault, which always has a settingsURL) must not crash.
+    // We deliberately do NOT assert System Settings actually opens — only
+    // that the app survives the tap and remains responsive.
+    func test_securityPosture_fix_button_does_not_crash() {
+        HaloSidebar(test: self).navigate(to: .protection)
+        guard waitForID("protection.securityPosture.list", timeout: 20) != nil else {
+            XCTFail("Security Posture list did not appear/settle in time")
+            return
+        }
+        let fixButton = element(id: "protection.securityPosture.check.fileVault.fix")
+        guard fixButton.waitForExistence(timeout: 5) else {
+            XCTFail("Expected a Fix button on the FileVault row (it always has a settingsURL)")
+            return
+        }
+        fixButton.click()
+        // App should still be alive and on the Protection screen afterward.
+        XCTAssertTrue(app.state == .runningForeground || app.state == .runningBackground,
+                      "App should not crash after tapping a Fix/settings-link button")
+        XCTAssertTrue(element(labeled: "Security Posture", timeout: 5)?.exists ?? false)
+    }
+
+    // TC-PROT-26 — SIP and Secure Boot have no reachable System Settings pane,
+    // so their rows must not render a Fix button at all.
+    func test_securityPosture_no_fix_button_for_sip_and_secureBoot() {
+        HaloSidebar(test: self).navigate(to: .protection)
+        guard waitForID("protection.securityPosture.list", timeout: 20) != nil else {
+            XCTFail("Security Posture list did not appear/settle in time")
+            return
+        }
+        XCTAssertFalse(element(id: "protection.securityPosture.check.sip.fix").exists,
+                        "SIP has no System Settings pane — no Fix button should render")
+        XCTAssertFalse(element(id: "protection.securityPosture.check.secureBoot.fix").exists,
+                        "Secure Boot has no System Settings pane — no Fix button should render")
     }
 }

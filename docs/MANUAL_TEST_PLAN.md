@@ -94,8 +94,88 @@
 | TC-DASH-06 | P1 | Alert history section | After alerts fired | — | Recent `AlertEntry` items listed |
 | TC-DASH-07 | P0 | Export Report button | Click Export Report | — | NSSavePanel; PDF generated (see §15) |
 | TC-DASH-08 | P2 | Battery card on desktop Mac | Run on Mac mini/Studio | — | Battery card hidden or "No battery" gracefully |
+| TC-DASH-09 | P1 | 7-Day Health Trend card (F-029) | Fresh install vs. ≥2 hourly samples | — | Shows honest "collecting samples" placeholder when <2 samples; sparkline + Δ pts once populated |
 | **Unit** TC-DASH-U1 | P0 | `calculateHealthScore()` | Feed known CPU/RAM/disk/battery | Returns expected score; clamps 0–100 |
 | **Unit** TC-DASH-U2 | P1 | Health thresholds boundary | Values at each threshold edge | Correct deduction at boundaries (off-by-one safe) |
+| **Unit** TC-DASH-U3 | P1 | `MetricsSample` Codable roundtrip | Encode/decode with RAM samples | All fields, including nested `ProcessRAMSample`s, preserved |
+
+### 2.1 Backup Health / Time Machine Monitor (F-022)
+
+**Files:** `TimeMachineMonitor.swift`, `BackupHealthCard.swift`, `AppState.startTimeMachineMonitoring()` / `refreshTimeMachineStatus()` / `startTimeMachineBackupNow()`, `AlertManager.evaluateBackup(status:)`
+
+Read-only checks via the public `tmutil` CLI (`destinationinfo`, `status`, `listbackups`, `latestbackup`) — no entitlements, no elevation. "Back Up Now" is a normal `tmutil startbackup`, identical to the menu bar icon's own action. If Time Machine has never been configured, the card must show an explicit empty state — never a fabricated "healthy" card or heatmap.
+
+| ID | Priority | Title | Preconditions | Steps | Expected |
+|----|----------|-------|---------------|-------|----------|
+| TC-DASH-09 | P0 | Not configured — honest empty state | Time Machine never set up | Open Dashboard | "Time Machine isn't set up" state; "Set Up" opens System Settings' Time Machine pane; no heatmap shown |
+| TC-DASH-10 | P0 | Configured + reachable | TM set up, destination mounted | Open Dashboard | Last backup relative time, destination name, free/total space bar, and 30-day heatmap all render |
+| TC-DASH-11 | P0 | Configured but unreachable | TM set up, backup drive unplugged | Open Dashboard | "Not currently reachable" state; last known backup date shown if any; no heatmap fabricated |
+| TC-DASH-12 | P0 | Stale backup visual + alert | Last backup > 48h ago | View card / wait for the 15-min poll | Last-backup text in red; `AlertManager.evaluateBackup` fires "Time Machine Backup Overdue" (24h cooldown) |
+| TC-DASH-13 | P1 | Recent backup is not flagged stale | Last backup < 48h ago | View card | Last-backup text in normal color; no stale alert fires |
+| TC-DASH-14 | P0 | Back Up Now | Configured + reachable | Click "Back Up Now" | Button shows "Backing Up…"/disabled while running; `tmutil startbackup` invoked; status re-polled after |
+| TC-DASH-15 | P1 | Backup already running | A TM backup is in progress (menu bar spinning) | View card | "Backing Up…" state shown; Back Up Now disabled, not double-triggerable |
+| TC-DASH-16 | P1 | Heatmap — backed-up day | A snapshot exists for a given day | View 30-day grid | That day's cell is green ("Backed up") |
+| TC-DASH-17 | P1 | Heatmap — late vs missed | 1-day gap vs 2+ day gap since the nearest prior snapshot | View grid | 1-day gap → amber ("Late"); 2+ day gap → red ("Missed") |
+| TC-DASH-18 | P0 | Heatmap — no fabricated history | Days before Halo's earliest known snapshot, or no backup history at all | View grid | Those cells are neutral gray ("No data") — never red as if a backup was missed |
+| TC-DASH-19 | P2 | 15-minute poll cadence | Leave Dashboard open | Wait / inspect | Status re-checked every 15 min (900s timer), not on the 2s metrics tick — `tmutil` is too heavy for that |
+| **Unit** TC-DASH-U3 | P0 | `heatmap()` — no history at all | Empty backup-dates array | Every day in the window is `.noData` |
+| **Unit** TC-DASH-U4 | P0 | `heatmap()` — backed-up / late / missed classification | Backup today; 1-day gap; 3-day gap | `.backedUp`, `.late`, `.missed` respectively |
+| **Unit** TC-DASH-U5 | P0 | `heatmap()` — days before earliest backup are `.noData`, not `.missed` | One backup 2 days ago, 7-day window | Day 6 (before the backup) is `.noData` |
+| **Unit** TC-DASH-U6 | P1 | `heatmap()` — window size and end date | 30-day window, referenceDate = today | Exactly 30 entries; last = today, first = 29 days ago |
+| **Unit** TC-DASH-U7 | P0 | `TimeMachineStatus.isStale` | Not configured (any date); configured + no date; configured + 47h; configured + 49h | false, false, false, true respectively |
+| **Unit** TC-DASH-U8 | P1 | `TimeMachineStatus.spaceUsedRatio` | 250/1000 bytes; missing available; missing total; zero total | 0.75; nil; nil; nil |
+
+### 2.1 App Usage Insights (F-021)
+
+**Files:** `AppUsageTracker.swift`, `AppUsageInsightsSection.swift` (Dashboard), Settings → General → Privacy toggle in `OnboardingView.swift`
+
+**Honesty constraint — do not test around this:** Halo has no macOS API to read system-wide Screen Time history (`FamilyControls`/`ManagedSettings` need a parental-control entitlement Halo doesn't have). Every number here is time Halo personally observed via `NSWorkspace` activation notifications *while Halo itself was running* — a sleeping Mac or a quit Halo means that time is simply not counted, never estimated or backfilled. Every surface must say so.
+
+| ID | Priority | Title | Preconditions | Steps | Expected |
+|----|----------|-------|---------------|-------|----------|
+| TC-DASH-09 | P0 | Tracking off by default | Fresh install | Open Dashboard | "Usage tracking is off" disabled state shown; no data collected |
+| TC-DASH-10 | P0 | Opt-in starts tracking | Settings → General → Privacy | Enable "Track app usage & screen time insights" | `AppUsageTracker.shared.isTracking` becomes true; `NSWorkspace` observer + 30s timer start |
+| TC-DASH-11 | P1 | Collecting state before any data | Tracking just enabled, no usage yet | View Dashboard | "Collecting usage data" state shown, not an empty chart |
+| TC-DASH-12 | P0 | Top Apps bar chart | Tracking on, several apps used | View Dashboard | Top 5 apps by foreground time over last 7 days, bars sorted descending |
+| TC-DASH-13 | P1 | Background Hogs list | An app run 8h+ with near-zero foreground time | View Dashboard | Listed under "Background Hogs"; apps with real usage are never misflagged |
+| TC-DASH-14 | P1 | Context switching stat | <1h of tracked history vs ≥1h | View stat tile | "Not enough data yet" before 1h; a real switches/hr rate after |
+| TC-DASH-15 | P1 | Week-over-week trend | <14 days of history vs ≥14 days | View stat tile | "Needs 14 days of history" before; a real ±% (or "New this week" if last week was zero) after |
+| TC-DASH-16 | P0 | Sleep excludes time | Put Mac to sleep for a while with an app frontmost, wake it | Check that app's foreground time | No foreground seconds added for the sleep duration — the 30s timer can't fire while asleep |
+| TC-DASH-17 | P1 | Halo quit excludes time | Quit Halo, use the Mac, relaunch Halo | Check usage history | No usage recorded for the time Halo wasn't running |
+| TC-DASH-18 | P2 | System/menu-bar processes excluded | — | Check usage history | Finder, Dock, SystemUIServer, Control Center, Halo itself never appear as tracked "apps" |
+| TC-DASH-19 | P1 | Clear Usage History | Tracking on, some history exists | Settings → "Clear Usage History" | All records removed; Dashboard reverts to the collecting/empty state |
+| **Unit** TC-DASH-U3 | P0 | `recordsInWindow` — trailing-N-day boundary | Records at day 0, 6, 7 for a 7-day window | Days 0 and 6 included; day 7 excluded |
+| **Unit** TC-DASH-U4 | P0 | `topApps` — sums across days, sorts descending, excludes zero-foreground apps | Multi-day records for 2+ bundle IDs, one with only background time | Correct per-app sums; sorted by foreground time desc; zero-foreground app excluded |
+| **Unit** TC-DASH-U5 | P0 | `backgroundHogs` — flags low-ratio long-running apps, excludes short observation and real usage | 8h+/near-zero-fg app; <8h app; 10h/2h-fg app | Only the first is flagged |
+| **Unit** TC-DASH-U6 | P0 | `contextSwitchesPerHour` — nil before 1h of history, real rate after | firstObservedDay 30min ago vs 1+ day ago | nil, then switches ÷ tracked hours |
+| **Unit** TC-DASH-U7 | P0 | `weekOverWeekChange` — nil before 14 days, real comparison after | firstObservedDay 5 days ago vs 13 days ago | nil, then correct this-week/last-week totals and % change |
+| **Unit** TC-DASH-U8 | P1 | `WeekOverWeek.percentChange` — nil when last week was zero | lastWeekSeconds = 0 | nil, not a fabricated +100% |
+
+### 2.1 Focus Session (F-028)
+
+**Files:** `FocusSessionManager.swift`, `FocusSessionOverlayView.swift`, `FocusSessionCard`/`FocusHistorySection` (`DashboardView.swift`), Settings → Focus tab (`OnboardingView.swift`)
+
+Pomodoro-style deep-work session. Hides (never quits) a user-configured list of apps via `NSRunningApplication.hide()`, always paired with `unhide()` on end — win or lose, nothing is ever terminated. **Notification suppression was deliberately not implemented** — no public API lets a third-party app toggle system Focus/DND or silence other apps' notifications (`INFocusStatusCenter` only reports the app's own state). `openSystemFocusSettings()` is the honest replacement: a one-click deep link to System Settings so the user turns on a Focus mode themselves.
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-DASH-09 | P0 | Start requires confirmation | Click "Start Focus Session" | `.confirmationDialog` lists exactly which apps will be hidden (or says none are configured) before anything happens |
+| TC-DASH-10 | P0 / TC-SAFE-02 | Cancel starts nothing | From the dialog in TC-DASH-09, click Cancel | No apps hidden; card stays in idle state; no timer starts |
+| TC-DASH-11 | P0 | Starting hides only configured apps | Configure 2 apps in Settings → Focus, start a session | Only those apps (if running) are hidden via `.hide()`; card shows "N apps hidden" |
+| TC-DASH-12 | P0 | Countdown displays MM:SS | Session running | `remainingFormatted` counts down every second, monospaced digits |
+| TC-DASH-13 | P0 | Ending restores all hidden apps | Click "End Session" (or let it run out) | Every hidden app is `.unhide()`-d — never left hidden, never terminated |
+| TC-DASH-14 | P1 | Overlay dismiss vs end | Close the floating overlay's own close button | Overlay hides only — countdown keeps running in the menu bar; reopens via "Show Overlay" |
+| TC-DASH-15 | P1 | Menu bar shows live countdown | Session active | Menu bar auto-switches to `.sessionCountdown` style (not manually selectable); reverts to the user's stored style the instant the session ends |
+| TC-DASH-16 | P1 | End-of-session summary is real, not synthetic | Session ends (early or full) | `digestText` reflects the actual sampled peak-RAM process + peak CPU from `ProcessMonitor`/`AppState`, not placeholder text |
+| TC-DASH-17 | P1 | Session appended to Alert History | Session ends | New entry in `FocusHistorySection` (reads `AlertLog` where `kindRaw == "focus"`) — no separate history store |
+| TC-DASH-18 | P2 | "Turn on Focus Mode…" opens System Settings | Click it during an active session | Opens the Notifications pane (`com.apple.Notifications-Settings.extension`) — does NOT itself suppress any notification |
+| TC-DASH-19 | P1 | Settings → Focus app list | Add/remove an app in Settings → Focus | Persists to `UserDefaults["focusSessionAppConfigs"]` by bundle ID; survives even if the app isn't currently running |
+| **Unit** TC-DASH-U3 | P0 | `digestText` — full data, matches documented example | plannedMinutes/actualMinutes/topRAMProcessName/topRAMProcessMB/maxCPUPercent set, not ended early | Exact string match against the doc's own example |
+| **Unit** TC-DASH-U4 | P0 | `digestText` — ended early, no RAM data, zero CPU | endedEarly=true, no RAM sample, maxCPUPercent=0 | "(ended early)" suffix; "CPU usage stayed minimal throughout." fallback line |
+| **Unit** TC-DASH-U5 | P1 | `digestText` — CPU rounds up to the nearest multiple of 5 | 40 (exact), 41, 55 (exact), 56 | 40%, 45%, 55%, 60% respectively |
+| **Unit** TC-DASH-U6 | P1 | `digestText` omits the RAM line when no process was sampled | topRAMProcessName/MB both nil | Output never contains "Top RAM consumer" |
+| **Unit** TC-DASH-U7 | P0 | `FocusAppConfig` — id, Equatable, Hashable, Codable round-trip | Various configs | `id == bundleIdentifier`; equal iff both fields match; usable in a `Set`; JSON round-trips |
+| **Unit** TC-DASH-U8 | P2 | `FocusDurationPreset` — values and labels | — | Exactly `{25, 50}`; `label` formats as "N min" |
 
 ---
 
@@ -163,6 +243,99 @@ Per-category breakdown (HTTP cache, GPU shader cache, history, cookies, sessions
 | **Unit** TC-PROT-U2 | P0 | `matches(keyword:)` miss | Lookup unknown | Returns nil |
 | **Unit** TC-PROT-U3 | P1 | Case/whitespace handling | Mixed-case keyword | Normalised match works |
 | **Unit** TC-PROT-U4 | P1 | JSON schema parse | Load malformed signatures.json | Graceful failure, falls back to bundle |
+
+### 4.1 Permission Auditor (F-016)
+
+**Files:** `PermissionAuditor.swift`, `ProtectionView.swift` (`PermissionsAuditSection`, `PermissionAuditList`, `PermissionGroupRow`, `FullDiskAccessBanner`, `PermissionCard`)
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-PROT-08 | P0 | TCC.db readable — real per-app audit | Grant Halo (or the debug binary) Full Disk Access in System Settings, relaunch, open Protection | "App Permissions" shows the grouped, expandable per-app list (`PermissionAuditList`) instead of the category grid; subtitle reads "Real per-app grants read from this Mac's permission database" |
+| TC-PROT-09 | P0 | Risk-flag heuristic — elevated flagged | With FDA granted, a non-browser/non-communication app holds Screen Recording or Accessibility | Its row shows the amber "excessive for this app" label and a warning-triangle icon; the group's "N elevated" badge counts it |
+| TC-PROT-10 | P1 | Risk-flag heuristic — browsers/comms exempt | A known browser (e.g. Chrome/Safari) or comms app (e.g. Slack, Zoom) holds Screen Recording or Accessibility | NOT flagged elevated — green checkmark icon, no "excessive" label |
+| TC-PROT-11 | P1 | Revoke deep link | Click "Revoke" on a per-app grant row | Opens the matching System Settings privacy pane for that permission kind (e.g. `Privacy_ScreenCapture` for Screen Recording) via `x-apple.systempreferences:` |
+| TC-PROT-12 | P0 | Summary badge — "X of Y apps excessive" | View the section header once grants have loaded | Badge reads "N of M apps excessive" (M = unique audited bundle IDs, N = unique bundle IDs with ≥1 elevated grant); amber if N > 0, green if N == 0 |
+| TC-PROT-13 | P0 | TCC.db unreadable — honest fallback | Default state: no Full Disk Access (sandboxed/release build, or FDA not granted) | `FullDiskAccessBanner` shows the honest reason text (e.g. "Halo needs Full Disk Access to show per-app grants — showing categories only"); the original 4-column category-card grid renders beneath it, unchanged |
+| TC-PROT-14 | P1 | Zero readable grants treated as unavailable | TCC.db opens but every row is denied/undetermined (`auth_value` 0 or 1) | Falls back to `.unavailable("No readable permission grants found…")` — the category grid is shown, never an empty per-app list |
+| TC-PROT-15 | P2 | Loading indicator | Observe the section header while `permissionAuditor.run()` is in flight | A small spinner replaces the summary badge; no flash of stale content or crash |
+| TC-PROT-16 | P2 | Release/sandboxed build always falls back | Run the sandboxed release build | TCC.db is unreachable by design → category-card view + banner always shown, never the rich list |
+| **Unit** TC-PROT-U5 | P0 | Risk heuristic — non-browser elevated | `TCCGrant` for Screen Recording/Accessibility, arbitrary bundle ID | `isElevatedRisk == true` |
+| **Unit** TC-PROT-U6 | P0 | Risk heuristic — browser/comm exemption | `TCCGrant` for Screen Recording/Accessibility, known browser/comm bundle ID | `isElevatedRisk == false` |
+| **Unit** TC-PROT-U7 | P1 | Risk heuristic — non-eligible kinds | `TCCGrant` for Camera/Microphone/etc. | Never flagged elevated regardless of bundle ID |
+| **Unit** TC-PROT-U8 | P0 | Grouping by category | Mixed-kind synthetic grant list | Grants bucket correctly per `PermissionKind`; kinds with no grants have no entry |
+| **Unit** TC-PROT-U9 | P0 | "X of Y" count — one excessive app, multiple grants | Same bundle ID: one elevated + one non-elevated grant | Counted once in both total and excessive (no double-count) |
+| **Unit** TC-PROT-U10 | P1 | "X of Y" count — zero apps | Empty grant list | `total == 0`, `excessive == 0` |
+| **Unit** TC-PROT-U11 | P1 | `.unavailable(reason:)` handled gracefully | `PermissionAuditor.run()` on a machine without Full Disk Access | Returns `.unavailable` with a non-empty reason; never throws or crashes |
+### 4.1 Sensitive Data Scanner / Privacy Exposure Scanner (F-018)
+
+**Files:** `PrivacyExposureScanner.swift`, `PrivacyPatternDatabase.swift`, `privacy-patterns.json`, `ProtectionView.swift` (`PrivacyExposureSection`).
+
+Read-only, find-only scan of Downloads/Documents/Desktop (iCloud Drive is opt-in, off by default) for exposed credit card numbers, AWS/GitHub/Stripe keys, SSH private keys, and SSNs. All matching and redaction happen inside `PrivacyPatternDatabase` — the full matched secret never leaves the actor's local scope, and there is no delete/quarantine action, only "Reveal in Finder".
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-PROT-08 | P0 | Run a scan | Protection → "Run Sensitive Data Scan" | Status cycles idle → scanning (running file count) → complete; findings (if any) grouped by risk |
+| TC-PROT-09 | P0 | AWS key detected in a real file | Place a file containing an `AKIA...` key in Downloads | Finding appears, category "AWS Access Key", redacted preview `AKIA••••••••XXXX` |
+| TC-PROT-10 | P0 | Credit card number detected | Place a file containing a real-shaped, Luhn-valid card number | Finding appears, category "Credit Card Number", redacted to last 4 only |
+| TC-PROT-11 | P1 | Luhn-invalid digit run is NOT flagged | Place a file with a 16-digit non-card number (e.g. an order ID) | No credit-card finding — false-positive guard via Luhn checksum |
+| TC-PROT-12 | P0 | SSH private key header detected | Place a file starting with `-----BEGIN OPENSSH PRIVATE KEY-----` | Finding appears; the PEM header itself is shown unredacted (it's a public marker, not a secret) |
+| TC-PROT-13 | P1 | SSN detected | Place a file containing `123-45-6789`-shaped text | Finding appears, category SSN, risk Warning, redacted to last 4 |
+| TC-PROT-14 | P0 | Clean locations | Scan folders with no sensitive data | "No exposed sensitive data found" empty state |
+| TC-PROT-15 | P1 | Binary files skipped | Place a renamed binary with a `.txt` extension containing a real key | Not scanned — null-byte peek heuristic catches it; no finding |
+| TC-PROT-16 | P1 | Oversized file skipped | Place a >10 MB file containing a key | Not scanned — size limit enforced |
+| TC-PROT-17 | P0 | iCloud Drive off by default | Fresh install, view the toggle | "Include iCloud Drive" toggle is off; iCloud is not scanned unless enabled |
+| TC-PROT-18 | P1 | iCloud Drive opt-in | Enable the toggle, run a scan | iCloud Drive's local folder is included in the scan |
+| TC-PROT-19 | P0 | Reveal in Finder | Click "Reveal in Finder" on a finding | `NSWorkspace.activateFileViewerSelecting` opens Finder with the file selected — no other action available |
+| TC-PROT-20 | P1 | Findings grouped and sorted | Multiple findings across risk levels | Grouped Critical → Warning → Info; within a group, sorted by modified date (newest first) |
+| **Unit** TC-PROT-U5 | P0 | AWS key match + redaction | `evaluate(text:)` on AWS example key | Matches `.awsKey`/critical, redacted `AKIA••••••••MPLE` |
+| **Unit** TC-PROT-U6 | P0 | GitHub token match + redaction | `evaluate(text:)` on a 36-char `ghp_` token | Matches `.githubToken`/critical, redacted `ghp_••••••••<last4>` |
+| **Unit** TC-PROT-U7 | P0 | Stripe secret/publishable key match + redaction | `evaluate(text:)` on `sk_live_`/`pk_live_` keys | Correct category, prefix preserved, last 4 shown |
+| **Unit** TC-PROT-U8 | P0 | SSH private key exact match, unredacted | `evaluate(text:)` on a PEM header | Matches `.sshPrivateKey`/critical; preview equals the header verbatim |
+| **Unit** TC-PROT-U9 | P0 | SSN match + redaction | `evaluate(text:)` on `123-45-6789` | Matches `.ssn`/warning, redacted `•••-••-6789` |
+| **Unit** TC-PROT-U10 | P0 | Luhn-valid card matched, Luhn-invalid rejected | Visa test number vs. sequential digits | First reported as `.creditCard`; second produces no credit-card hit |
+| **Unit** TC-PROT-U11 | P1 | Per-pattern match cap | 25 repeated AWS-shaped keys in one text | Exactly 20 hits returned, not 25 |
+| **Unit** TC-PROT-U12 | P2 | Plain/empty text produces no hits | Unremarkable text, empty string | Zero hits both times |
+| **Unit** TC-PROT-U13 | P1 | Risk severity ordering | Sort `[.info, .warning, .critical]` | Returns `[.critical, .warning, .info]` |
+### 4.1 Security Posture Dashboard (F-019)
+
+**Files:** `SecurityPostureScanner.swift`, `ProtectionView.swift` (`SecurityPostureSection` / `SecurityCheckRow`), `Models.swift` (`SecurityCheck`, `SecurityCheckKind`, `SecurityCheckState`), `AppState.swift` (`calculateHealthScore()`).
+
+8 read-only checks via public CLI tools (`fdesetup`, `spctl`, `defaults read`) — no entitlements, no writes, no privilege escalation. 4 are genuinely auto-verified (FileVault, Gatekeeper, Application Firewall, Automatic Updates); 4 have no reliable non-interactive read path on macOS and always surface as `.unknown` with manual-check guidance (SIP, Secure Boot, Find My Mac, Login Window Security) — Halo never guesses these.
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-PROT-08 | P0 | Section renders on Protection load | Open Protection | "Security Posture" section appears below the scanner cards; loading spinner while `loadSecurityPosture()` runs, then all 8 rows render |
+| TC-PROT-09 | P0 | FileVault — On | Run on a FileVault-encrypted Mac | Row shows pass state (green check), detail "On — your disk is encrypted at rest." |
+| TC-PROT-10 | P0 | FileVault — Off | Run on a Mac with FileVault disabled | Row shows fail state (red X), detail "Off — your disk isn't encrypted." |
+| TC-PROT-11 | P1 | FileVault — unreadable | Simulate `fdesetup status` producing unexpected output | Row shows `.unknown` (grey `?`), detail "Couldn't read FileVault status." — never guessed as pass or fail |
+| TC-PROT-12 | P0 | Gatekeeper — enabled | `spctl --status` reports assessments enabled | Row shows pass, "Enabled — unsigned apps are blocked by default." |
+| TC-PROT-13 | P0 | Gatekeeper — disabled | `sudo spctl --master-disable` | Row shows fail, "Disabled — any app can run unchecked." |
+| TC-PROT-14 | P1 | Gatekeeper — unreadable | Non-matching `spctl` output | Row shows `.unknown` |
+| TC-PROT-15 | P0 | Application Firewall — on | Enable in System Settings → Network → Firewall | `globalstate` ≠ 0 → row shows pass |
+| TC-PROT-16 | P0 | Application Firewall — off | Disable firewall | `globalstate` == 0 → row shows fail |
+| TC-PROT-17 | P1 | Firewall — unreadable | `defaults read` returns non-integer / errors | Row shows `.unknown`, never a guessed pass/fail |
+| TC-PROT-18 | P0 | Automatic Updates — on | `AutomaticallyInstallMacOSUpdates` = 1 | Row shows pass |
+| TC-PROT-19 | P1 | Automatic Updates — off | Value = 0 | Row shows **warn** (amber), not fail — "Off — you'll need to install updates manually." |
+| TC-PROT-20 | P1 | Automatic Updates — unreadable | Any other/missing value | Row shows `.unknown` |
+| TC-PROT-21 | P0 | SIP — always manual guidance | View SIP row regardless of actual `csrutil status` | Always `.unknown` state with guidance text pointing to System Report / `csrutil status` in Terminal — never a guessed verdict |
+| TC-PROT-22 | P0 | Secure Boot — always manual guidance | View Secure Boot row | Always `.unknown`, guidance: "Only viewable from Recovery Mode → Startup Security Utility." |
+| TC-PROT-23 | P0 | Find My Mac — always manual guidance | View Find My row | Always `.unknown`, guidance points to System Settings → Apple ID → Find My |
+| TC-PROT-24 | P0 | Login Window Security — always manual guidance | View Login Window row | Always `.unknown`, guidance points to Users & Groups → Login Options |
+| TC-PROT-25 | P1 | "Fix →" link where a Settings pane exists | Click the arrow-up-right button on FileVault/Gatekeeper/Firewall/Automatic Updates/Find My/Login Window rows | `NSWorkspace.shared.open(_:)` invoked with the correct `x-apple.systempreferences:` URL; no crash |
+| TC-PROT-26 | P0 | No "Fix" button for SIP/Secure Boot | Inspect SIP and Secure Boot rows | No arrow-up-right button rendered — `SecurityCheckKind.settingsURL` is `nil` for both, since no System Settings pane exists for either |
+| TC-PROT-27 | P0 | Score badge — all pass | All 4 verifiable checks pass | Badge reads `100/100`, green |
+| TC-PROT-28 | P1 | Score badge — degraded | One check fails, one warns | Badge reflects `100 - 15 - 7 = 78/100`, amber (50–79 range) |
+| TC-PROT-29 | P0 | Score badge — unknowns never drag it down | All 4 manual checks `.unknown` + all 4 verifiable checks pass | Badge stays `100/100` — unknown states contribute zero |
+| TC-PROT-30 | P1 | Manual refresh | Click the refresh (↻) button next to the score badge | `loadSecurityPosture()` re-runs; spinner shown briefly, rows update |
+| TC-PROT-31 | P0 | Health Score integration — quarter weight | Force `securityScore` to 60 (40 points below full) via a failing check | `AppState.calculateHealthScore()` subtracts `(100 - 60) / 4 = 10` points, not the full 40 |
+| TC-PROT-32 | P0 | Health Score integration — never double-penalizes unknowns | All 4 manual checks unknown, all verifiable checks pass | `securityScore == 100`; health score deduction for security is `0` |
+| TC-PROT-33 | P2 | Launch-time optimistic default | Kill and relaunch app; check health score before the one-time async scan resolves | `AppState.securityScore` defaults to `100` (never shows a false "unhealthy" score before the check completes) |
+| **Unit** TC-PROT-U5 | P0 | `score(for:)` — all pass | Synthetic all-`.pass` array | Returns `100` |
+| **Unit** TC-PROT-U6 | P0 | `score(for:)` — single fail / warn | One `.fail` (rest pass); one `.warn` (rest pass) | Returns `85`; returns `93` respectively |
+| **Unit** TC-PROT-U7 | P1 | `score(for:)` — multiple fails/warns sum and clamp | 2 fails + 1 warn; all 8 fail | Returns `63`; clamps to `0` (never negative) |
+| **Unit** TC-PROT-U8 | P0 | `score(for:)` — all-unknown never penalizes | Synthetic all-`.unknown` array | Returns `100` — the core invariant of this feature |
+| **Unit** TC-PROT-U9 | P0 | `score(for:)` — mixed fail/warn + unknown | 1 fail + 7 unknown; 1 warn + 7 unknown | Only the fail/warn counts (`85` / `93`); unknowns contribute nothing to the sum |
+| **Unit** TC-PROT-U10 | P2 | `SecurityCheckKind.settingsURL` | Check each of the 8 kinds | `nil` only for `.sip` and `.secureBoot`; non-nil for the other 6 |
 
 ---
 
@@ -235,6 +408,45 @@ Per-category breakdown (HTTP cache, GPU shader cache, history, cookies, sessions
 | TC-PERF-60 | P1 | Detect idle apps | Leave apps idle | Apps consuming resources while idle are listed |
 | TC-PERF-61 | P1 | Quit idle app | Action on idle app | App quits / confirmation shown |
 | TC-PERF-62 | P2 | No idle apps | All active | Empty state |
+
+### 5.8 Memory Trends (F-023 — Memory Leak & App Bloat Tracker)
+
+**Files:** `MemoryTrendTracker.swift`, `MemoryTrendsSection.swift`, `ProcessMonitor.runningAppRAMSamples()`, `AlertManager.checkAppMemory(appName:bundleID:ramMB:)`
+
+Concrete thresholds under test (all constants on `MemoryTrendTracker`):
+
+| Constant | Value |
+|---|---|
+| `sampleInterval` | 30 s |
+| `windowSeconds` | 2 h rolling window |
+| `leakWindowSeconds` | 3600 s (streak must survive >1 h before the badge shows) |
+| `significantDropFraction` | 0.15 (a drop of >15% below the streak's local peak resets it) |
+| `maxSampleGapSeconds` | 300 s (5× the sample interval; a bigger gap also resets the streak) |
+| `defaultAlertThresholdGB` | 2.0 GB (user-configurable, `UserDefaults["memoryLeakAlertThresholdGB"]`) |
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-PERF-70 | P1 | Section renders | Open Performance | "Memory Trends" section appears below Top Processes with a subtitle "Rolling 2h window · sampled every 30s" (`performance.memoryTrends.tab`) |
+| TC-PERF-71 | P1 | Sparklines render per app | Let Halo sample for a few minutes | Each visible app row (>50 MB) shows a live RAM sparkline (`performance.memoryTrends.sparkline.<bundleID>`); a freshly-added row shows "Collecting samples…" until it has ≥2 samples |
+| TC-PERF-72 | P2 | Sub-50 MB apps filtered | Inspect visible rows | Helper processes/apps under 50 MB current RAM are not listed (noise filter) |
+| TC-PERF-73 | P0 | Leak badge appears after >1h monotonic growth | Let an app's RAM grow continuously for >1 h | "Possible memory leak" badge (`.haloAmber`) appears on that row with a "+N MB since HH:mm" readout |
+| TC-PERF-74 | P0 | Leak badge does NOT appear with <1h of growth | Fresh app / growth streak <1 h old | No badge, regardless of growth rate — not enough data yet |
+| TC-PERF-75 | P1 | >15% drop resets the streak | RAM grows, then drops >15% below the streak's local peak, then grows again for <1h | Badge disappears (streak restarted at the drop) until the new streak itself passes 1 h |
+| TC-PERF-76 | P2 | Sleep/wake gap resets the streak | Growing app, then a >5 min sampling gap (e.g. Mac sleeps), then growth resumes | Streak resets at the gap rather than treating it as continued monotonic growth |
+| TC-PERF-77 | P0 / TC-SAFE-02 | Restart App requires confirmation | On a flagged app, click "Restart App" (`performance.memoryTrends.restart.<bundleID>`) | `.confirmationDialog` appears ("Restart \"<app>\"?" + data-loss warning) before anything happens |
+| TC-PERF-78 | P0 / TC-SAFE-02 | Cancel takes no action | From the dialog in TC-PERF-77, click Cancel | Target app is NOT terminated or relaunched; its PID and RAM history are unchanged |
+| TC-PERF-79 | P1 | Restart App only offered on flagged rows | Inspect a non-leaking row | No "Restart App" button present |
+| TC-PERF-80 | P1 | 2 GB alert threshold — configurable | Change the Stepper (`performance.memoryTrends.alertThreshold.stepper`) | New value persists to `UserDefaults["memoryLeakAlertThresholdGB"]` and survives an app restart |
+| TC-PERF-81 | P0 | Alert fires at/above threshold, not below | An app's RAM crosses the configured GB threshold | A notification + `AlertLog` entry ("`<App>` Using High Memory", icon `memorychip.fill`, `.haloAmber`) fires once, then is suppressed for 30 min (per-bundle-ID cooldown) — an app that stays just below threshold never fires |
+| TC-PERF-82 | P1 | History persists across app restart | Quit and relaunch Halo after some sample history has accumulated | `Application Support/Halo/memoryTrendHistory.json` is read back on launch and sparklines resume without a gap (data older than the 2h window is dropped at load) |
+| **Unit** TC-PERF-U5 | P0 | Monotonic growth >1h flags leak | Synthetic samples growing steadily over >1h (30s cadence) | `leakStatus(for:).isPossibleLeak == true` |
+| **Unit** TC-PERF-U6 | P0 | <1h of growth never flags | Synthetic samples growing steadily for <1h | `isPossibleLeak == false` regardless of growth rate |
+| **Unit** TC-PERF-U7 | P0 | >15% drop resets the streak | Growth, then a >15% drop from local peak, then <1h of renewed growth | `isPossibleLeak == false` (new streak hasn't reached 1h yet) |
+| **Unit** TC-PERF-U8 | P2 | ≤15% dip does NOT reset the streak | Growth with a small (<15%) wobble, total streak >1h | `isPossibleLeak == true` (minor fluctuation tolerated) |
+| **Unit** TC-PERF-U9 | P1 | Sleep/wake gap resets the streak | >1h of growth, then a >5 min gap, then <1h renewed growth | `isPossibleLeak == false` (gap breaks the streak) |
+| **Unit** TC-PERF-U10 | P1 | JSON persistence round-trip | Encode a synthetic `[AppMemoryHistory]`, decode it back | Decoded value == original (bundleID, appName, bundlePath, samples all equal) |
+| **Unit** TC-PERF-U11 | P0 | Alert fires exactly at configured threshold | `ramMB == thresholdGB * 1024` | Alert fires |
+| **Unit** TC-PERF-U12 | P0 | Alert does not fire just below threshold | `ramMB` slightly under `thresholdGB * 1024` | Alert does not fire |
 
 ---
 
@@ -323,6 +535,80 @@ Per-category breakdown (HTTP cache, GPU shader cache, history, cookies, sessions
 > `unlink`-ed (not trashed) immediately — the only sanctioned exception to
 > `TC-SAFE-01`. Verify no `.HaloSpeedTest` residue remains on external drives
 > after any run, cancel, or error.
+
+### 7.6 Similar Photos (F-025 — Duplicate Photos Finder, perceptual hash)
+
+**Files:** `PerceptualDuplicateDetector.swift`, `SimilarPhotosView.swift`
+
+Unlike Exact Duplicates (bit-exact SHA-256), this tab finds *visually* similar images — the same photo re-saved at a different compression level, cropped, or resized still "looks" the same but hashes completely differently under SHA-256. Algorithm: 64px thumbnail → 32×32 grayscale → 2-D DCT → top-left 8×8 low-frequency block, thresholded against its median → 64-bit fingerprint; near-duplicates are images whose fingerprints differ by ≤ the configured Hamming-distance threshold (default 8 of 64 bits). Loose-file deletion is `trashItem`-only, behind a confirmation dialog. The Photos Library scan path is real PhotoKit code but has **not been runtime-verified** this pass (needs a live permission-grant walkthrough) — treat it as "needs a real permission-grant test pass," not "known broken."
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-FILE-60 | P0 | Scan default locations | Open Files → Similar Photos → "Scan Pictures" | Scans `~/Pictures`, `~/Downloads`, `~/Desktop`; progress bar animates; settles into clusters or the empty state |
+| TC-FILE-61 | P1 | Choose a specific folder | Click "Choose Folder", pick a folder with known near-duplicates | Scans only that folder; clusters correctly group visually-similar images |
+| TC-FILE-62 | P1 | Similarity threshold is adjustable | Change the Stepper (1–20) | Lower = stricter (fewer/tighter matches); higher = looser (catches more, more false-positive risk) |
+| TC-FILE-63 | P0 | Recommended keep | View a cluster with mixed resolutions | Highest-resolution item is marked "recommended keep"; others marked for deletion |
+| TC-FILE-64 | P0 / TC-SAFE-02 | Delete marked requires confirmation | Click "Delete marked" on a cluster | `.confirmationDialog` ("Move N marked photos to Trash?") appears before anything happens |
+| TC-FILE-65 | P0 / TC-SAFE-02 | Cancel deletes nothing | From the dialog in TC-FILE-64, click Cancel | No files trashed; cluster and marks unchanged |
+| TC-FILE-66 | P0 | Deletion uses Trash | Confirm "Move to Trash" on a disposable test cluster | Files moved to Trash (recoverable) — never `removeItem` |
+| TC-FILE-67 | P2 | Non-image files ignored | Folder contains non-image files (docs, videos) | Only recognized image extensions (jpg/jpeg/png/heic/heif/tiff/tif/bmp/gif/webp) are hashed |
+| TC-FILE-68 | P2 | Bounded scan | Folder with >20,000 files | Scan caps at 20,000 files, same policy as Exact Duplicates |
+| TC-FILE-69 | P3 | Photos Library scan (experimental, unverified) | Click "Scan Photos Library" | System permission prompt appears; after granting, up to 3,000 most-recent assets are hashed; deleting moves assets to Photos' "Recently Deleted" |
+| **Unit** TC-FILE-U8 | P0 | `hammingDistance` counts differing bits exactly | Identical hashes; single-bit diff; all-bits-different | 0; 1; 64 |
+| **Unit** TC-FILE-U9 | P0 | `detect(in:)` — empty input, non-image files, single image | `[]`; a `.txt` file; one real image | `[]`, `[]`, `[]` respectively (never a 1-item "group") |
+| **Unit** TC-FILE-U10 | P0 | `detect(in:)` — clusters identical copies, excludes a distinct image | Two byte-identical file copies + one visually distinct image | One group containing only the identical pair |
+| **Unit** TC-FILE-U11 | P0 | `makeGroup` recommends the highest-resolution item | Two synthetic hash results, different pixel dimensions | Higher-resolution item `isRecommendedKeep`; the other `isMarkedForDeletion` |
+| **Unit** TC-FILE-U12 | P1 | `makeGroup` breaks a same-resolution tie by most recent | Two synthetic hash results, equal resolution, different `modifiedDate` | The more recently modified item is recommended to keep |
+| **Unit** TC-FILE-U13 | P1 | `PhotoSimilarGroup.wastedBytes` excludes the recommended keep | Group of 3 items, one recommended keep | Sum equals the total of the non-kept items only |
+### 7.6 iCloud Drive Analyzer (F-030)
+
+**Files:** `ICloudDriveScanner.swift`, `ICloudDriveView.swift`
+
+> **Scope note:** this is a LOCAL analyzer of `~/Library/Mobile Documents/` (the
+> on-disk sync mirror), not a full-account iCloud storage report — there is no
+> public API for a third-party app's iCloud quota or a Drive/Photos/Backups/Mail
+> category breakdown. See `docs/FEATURE_ROADMAP.md` F-030 "As actually built."
+
+| ID | Priority | Title | Preconditions | Steps | Expected |
+|----|----------|-------|---------------|-------|----------|
+| TC-FILE-50 | P0 | Container enumeration | iCloud Drive set up | Open Files → iCloud Drive | `com~apple~CloudDocs` shown first as "iCloud Drive"; other ubiquity containers listed with derived names |
+| TC-FILE-51 | P1 | iCloud Drive not set up | Fresh Mac / iCloud Drive off | Open tab | Friendly "iCloud Drive isn't set up on this Mac" state, no crash |
+| TC-FILE-52 | P0 | Drill into a folder | Select a container with subfolders | Click a folder row | Breadcrumb grows; contents of subfolder shown |
+| TC-FILE-53 | P1 | Breadcrumb navigation | Drilled 2+ levels deep | Click an earlier breadcrumb segment | Navigates back; deeper segments truncated |
+| TC-FILE-54 | P1 | Real per-item sync status | Mix of local / evicted ("Optimise Mac Storage") files | View rows | Status label/icon matches actual state (On This Mac / iCloud Only / Downloading…/Uploading…) |
+| TC-FILE-55 | P2 | Reveal in Finder | Any row | Click Reveal | Finder opens with item selected |
+| TC-FILE-56 | P0 | Delete requires confirmation | Any row | Click Trash | Confirmation dialog names the file + size, mentions cross-device removal; Cancel deletes nothing (TC-SAFE-02) |
+| TC-FILE-57 | P2 | Refresh | After external change (e.g. via Finder) | Click Refresh | Re-scans current container/folder |
+| **Unit** TC-FILE-U8 | P1 | `scanDirectory` sizes + sort | Temp dir: 1 file + 1 subfolder | Real sizes (folder summed), sorted largest-first |
+| **Unit** TC-FILE-U9 | P2 | `scanDirectory` empty/missing folder | Empty dir / nonexistent URL | Returns `[]`, no crash |
+| **Unit** TC-FILE-U10 | P2 | `ICloudContainer.displayName` | `com~apple~CloudDocs`, `com~apple~Pages`, third-party `com~...` | "iCloud Drive" override; Apple/third-party prefixes stripped correctly |
+| **Unit** TC-FILE-U11 | P2 | `ICloudSyncStatus` presentation | Each case | Correct label/icon/color mapping |
+| **Unit** TC-FILE-U12 | P2 | `ICloudDriveItem.icon` | Various extensions + directory | Extension-based icon; directories always `folder.fill` |
+### 7.6 Drive Health / S.M.A.R.T. Monitor (F-020)
+
+**Files:** `SMARTDiskMonitor.swift`, `DriveHealthSection.swift` (shown in the same Drive Speed tab, below the volume picker)
+
+Read-only S.M.A.R.T./NVMe health reader via `diskutil info -plist` + an `IONVMeController` IOKit lookup for the serial number only. Every field diskutil/IOKit doesn't report renders "Not available on this drive" — never a guessed or zeroed value.
+
+| ID | Priority | Title | Preconditions | Steps | Expected |
+|----|----------|-------|---------------|-------|----------|
+| TC-FILE-50 | P0 | On-demand only | Open Drive Speed tab | View Drive Health card before tapping anything | No scan has run yet — "Tap 'Check Drive Health'..." prompt shown, not a spinner |
+| TC-FILE-51 | P0 | Run a health check | Tap "Check Drive Health" | Status settles to Good/Warning/Failing/Unknown with an icon + colored badge |
+| TC-FILE-52 | P0 | Metrics grid renders | After a scan | View the 12-field grid | Each field shows a real value or "Not available on this drive" — never blank or a guess |
+| TC-FILE-53 | P1 | NVMe sector fields | Internal Apple Silicon SSD | View Reallocated/Pending Sectors | Shows "N/A on NVMe" (not "Not available") since these are genuinely ATA-only concepts |
+| TC-FILE-54 | P0 | Lifespan bar | Drive reports a wear percentage | View "Estimated Lifespan Remaining" | Bar + percentage = 100 − NVMe's `PERCENTAGE_USED`; color: red <10%, amber <25%, else green |
+| TC-FILE-55 | P1 | Lifespan unavailable | Drive doesn't report wear % | View lifespan section | "Lifespan estimate unavailable" text, not a fabricated bar |
+| TC-FILE-56 | P1 | Temperature sparkline (internal only) | Internal boot volume selected, Halo running a while | View card | 24h chart once ≥2 samples exist; external volumes never show this section |
+| TC-FILE-57 | P1 | Re-check | Tap "Re-Check" after an initial scan | Re-runs the scan | Spinner shown briefly, values refresh |
+| TC-FILE-58 | P1 | Switching volumes re-scans | Select a different volume in the picker | Drive Health card | Auto re-scans for the newly selected volume (`scanIfNeeded`) |
+| TC-FILE-59 | P2 | Failing status alerts | Force/simulate a failing SMART status | — | `AlertManager.evaluateSMART` fires `.diskSmartFailing` (1h cooldown); `.good`/`.unknown` never fire |
+| **Unit** TC-FILE-U8 | P0 | classify() — failing status overrides everything | status=.failing + healthy-looking counters | Returns `.failing` |
+| **Unit** TC-FILE-U9 | P0 | classify() — available spare at/below threshold | spare=10, threshold=10; spare=5, threshold=10 | Both return `.failing` (NVMe spec: at-or-below threshold is critical) |
+| **Unit** TC-FILE-U10 | P0 | classify() — 100%+ wear is failing, 90-99% is only a warning | percentageUsed=100 vs 90/99 | 100 → `.failing`; 90 and 99 → `.warning` |
+| **Unit** TC-FILE-U11 | P1 | classify() — media errors and unrecognized status are warnings | mediaErrorCount=1; status=.other(...) | Both → `.warning` |
+| **Unit** TC-FILE-U12 | P0 | classify() — verified with no red flags is good; unavailable with no signal is unknown, never guessed | status=.verified, all clean vs status=.unavailable, all nil | `.good` and `.unknown` respectively |
+| **Unit** TC-FILE-U13 | P0 | nonEmpty() — the diskutil MediaName-by-mount-path gotcha | nil / "" / "   " / real value | nil, nil, nil, passthrough respectively |
+| **Unit** TC-FILE-U14 | P1 | lifespanRemainingPercent | percentageUsed nil/30/0/110 | nil / 70 / 100 / 0 (clamped, never negative) |
 
 ---
 
@@ -556,6 +842,24 @@ Per-category breakdown (HTTP cache, GPU shader cache, history, cookies, sessions
 | **Unit** TC-RPT-U1 | P1 | Snapshot capture | from AppState | All fields populated on MainActor |
 | **Unit** TC-RPT-U2 | P1 | Page bounds | DrawablePDFPage | `bounds(for:)` returns A4 rect |
 
+### 15.3 Weekly Digest (F-029)
+
+**Files:** `MetricsHistory.swift`, `WeeklyDigestGenerator.swift`, `HealthTrendCard.swift`, Settings → "Weekly Digest" section in `OnboardingView.swift`
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-DIGEST-01 | P1 | Toggle exposed in Settings | Open Settings → General | "Send Weekly Digest" toggle present, off by default |
+| TC-DIGEST-02 | P1 | Enabling reveals schedule pickers | Toggle on | Frequency (Weekly/Daily), Day (weekly only), Time pickers appear; "Next digest: …" label shown |
+| TC-DIGEST-03 | P1 | Schedule independence from Smart Scan | Set digest schedule ≠ scan schedule | `WeeklyDigestScheduler`'s `com.halo.mac.weeklydigest` activity fires independently of `ScanScheduler` |
+| TC-DIGEST-04 | P0 | Send Test Digest Now | Click button | Local notification posted immediately; `AlertLog` gains a "Weekly Digest Sent" entry |
+| TC-DIGEST-05 | P1 | "View Report" notification action | Tap action on the digest notification | App activates, PDF save panel opens (same flow as Export Report) |
+| TC-DIGEST-06 | P2 | Share Weekly Report Now | Click button | `NSSharingServicePicker` opens with a generated PDF |
+| TC-DIGEST-07 | P2 | Honesty scope | Inspect digest body/report | No "backup status" claim; "top storage growers" reads as disk-free delta, not a file audit |
+| TC-DIGEST-08 | P2 | Fresh-install graceful empty state | Send digest with <2 hourly samples | No trend delta shown (nil-safe); body still composes from live metrics |
+| **Unit** TC-DIGEST-U1 | P1 | `healthScoreDelta` / `diskFreeDeltaGB` | Various start/end pairs, including nil start | Correct signed delta; nil when no starting sample |
+| **Unit** TC-DIGEST-U2 | P1 | `notificationBody(for:)` composition | Up/down/steady score, freed/lost/negligible disk, scan & threat counts | Correct direction wording, singular/plural counts, sub-0.1GB disk noise omitted |
+| **Unit** TC-DIGEST-U3 | P1 | `WeeklyDigestScheduler.nextDigestDate` | daily / weekly / "off" / out-of-range hour | Correct next date, matching weekday/hour; nil for "off"; hour clamped to 0–23 |
+
 ---
 
 ## 16. Siri Shortcuts / App Intents
@@ -633,6 +937,7 @@ Per-category breakdown (HTTP cache, GPU shader cache, history, cookies, sessions
 | TC-ONB-05 | P1 | Analytics opt-in | Toggle analytics | `enableAnalytics` set; default false |
 | TC-ONB-06 | P2 | Skip onboarding | Skip | App usable with defaults |
 | TC-ONB-07 | P2 | Re-run onboarding | From settings | Re-displays flow |
+| TC-ONB-08 | P1 | Weekly Digest setup (F-029) | Toggle "Send Weekly Digest" in Settings | Persists `weeklyDigestEnabled`/`weeklyDigestFrequency`/`weeklyDigestWeekday`/`weeklyDigestHour`; see §15.3 for full digest coverage |
 
 ---
 
@@ -765,12 +1070,12 @@ Frequency:     Always / Intermittent (<x/y>)
 | Area | Modules covered |
 |------|-----------------|
 | Core UI | Shell, Sidebar, Dashboard, Onboarding |
-| Cleanup/Files | Cleanup, SpaceLens, Duplicates, Downloads, Large Files, Disk Health |
+| Cleanup/Files | Cleanup, SpaceLens, Duplicates, Downloads, Large Files, Disk Health, iCloud Drive Analyzer |
 | Security | Protection, SignatureDatabase, Permissions, Sentry, Data Safety |
 | Performance | Processes, CPU, Battery, Network, Speed Test, Sensors, Login Items, Idle Apps, GPU |
 | Productivity | Clipboard, Snippets, Actions (108), Ports, Code Beautifier |
 | Connectivity | HaloShare (LocalSend P2P) |
 | System integration | Menu Bar, Widget, Siri Intents, Hotkeys, System Controls (Mic/Cam/DDC) |
-| Automation | Smart Scan, Scheduler, Alerts, PDF Report |
+| Automation | Smart Scan, Scheduler, Alerts, PDF Report, Weekly Digest |
 
 > **Total numbered test cases:** 200+ across 23 sections, including dedicated unit-test (`-U`) rows for all pure-logic components (health score, fuzzy search, VPN detection, battery label, signature lookup, duplicate hashing, scheduler dates, format renderer, lsof parser, Codable roundtrips).

@@ -42,6 +42,8 @@
 		000000000000000000001083 /* SpeedTestService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001082 /* SpeedTestService.swift */; };
 		000000000000000000001085 /* DiskHealthMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001084 /* DiskHealthMonitor.swift */; };
 		000000000000000000001087 /* ProcessMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001086 /* ProcessMonitor.swift */; };
+		000000000000000000008044 /* SMARTDiskMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008043 /* SMARTDiskMonitor.swift */; };
+		000000000000000000008046 /* DriveHealthSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008045 /* DriveHealthSection.swift */; };
 		000000000000000000001089 /* CPUCoresSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001088 /* CPUCoresSection.swift */; };
 		000000000000000000001091 /* SensorsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001090 /* SensorsSection.swift */; };
 		000000000000000000001093 /* BatteryDetailSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001092 /* BatteryDetailSection.swift */; };
@@ -69,6 +71,8 @@
 		000000000000000000004008 /* LoginItemScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004007 /* LoginItemScanner.swift */; };
 		000000000000000000004010 /* AppScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004009 /* AppScanner.swift */; };
 		000000000000000000004012 /* AlertLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004011 /* AlertLog.swift */; };
+		000000000000000000008172 /* AsyncTimeout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008171 /* AsyncTimeout.swift */; };
+		000000000000000000008164 /* ShellReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008163 /* ShellReader.swift */; };
 		000000000000000000004014 /* ReportGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004013 /* ReportGenerator.swift */; };
 		000000000000000000005001 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000005002 /* Sentry */; };
 		000000000000000000006002 /* ActionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006001 /* ActionModels.swift */; };
@@ -109,6 +113,26 @@
 		000000000000000000008030 /* ActionShareManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008029 /* ActionShareManager.swift */; };
 		000000000000000000008064 /* BrowserCleanerScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008063 /* BrowserCleanerScanner.swift */; };
 		000000000000000000008066 /* BrowserCleanerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008065 /* BrowserCleanerView.swift */; };
+		000000000000000000008124 /* PerceptualDuplicateDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008123 /* PerceptualDuplicateDetector.swift */; };
+		000000000000000000008126 /* SimilarPhotosView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008125 /* SimilarPhotosView.swift */; };
+		000000000000000000008144 /* ICloudDriveScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008143 /* ICloudDriveScanner.swift */; };
+		000000000000000000008146 /* ICloudDriveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008145 /* ICloudDriveView.swift */; };
+		000000000000000000008154 /* PermissionAuditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008153 /* PermissionAuditor.swift */; };
+		000000000000000000008084 /* PrivacyExposureScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008083 /* PrivacyExposureScanner.swift */; };
+		000000000000000000008086 /* PrivacyPatternDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008085 /* PrivacyPatternDatabase.swift */; };
+		000000000000000000008088 /* privacy-patterns.json in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008087 /* privacy-patterns.json */; };
+		000000000000000000008032 /* SecurityPostureScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008031 /* SecurityPostureScanner.swift */; };
+		000000000000000000008134 /* FocusSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008133 /* FocusSessionManager.swift */; };
+		000000000000000000008136 /* FocusSessionOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008135 /* FocusSessionOverlayView.swift */; };
+		000000000000000000008104 /* AppUsageTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008103 /* AppUsageTracker.swift */; };
+		000000000000000000008106 /* AppUsageInsightsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008105 /* AppUsageInsightsSection.swift */; };
+		000000000000000000008074 /* MetricsHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008073 /* MetricsHistory.swift */; };
+		000000000000000000008076 /* WeeklyDigestGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008075 /* WeeklyDigestGenerator.swift */; };
+		000000000000000000008078 /* HealthTrendCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008077 /* HealthTrendCard.swift */; };
+		000000000000000000008114 /* MemoryTrendTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008113 /* MemoryTrendTracker.swift */; };
+		000000000000000000008116 /* MemoryTrendsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008115 /* MemoryTrendsSection.swift */; };
+		000000000000000000008054 /* TimeMachineMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008053 /* TimeMachineMonitor.swift */; };
+		000000000000000000008056 /* BackupHealthCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008055 /* BackupHealthCard.swift */; };
 		000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009001 /* GetHealthScoreIntent.swift */; };
 		000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009003 /* GetCPUUsageIntent.swift */; };
 		000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009005 /* GetBatteryHealthIntent.swift */; };
@@ -145,6 +169,7 @@
 		E1840428A8042147E382FE52 /* CodeBeautifierUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 447CC440994885DF5CCA7A6A /* CodeBeautifierUITests.swift */; };
 		211137AACE082EA316D20732 /* AIAssistantUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CDCAD725F3EDB1AA147464F /* AIAssistantUITests.swift */; };
 		48D9F268088D85186495AD71 /* AlertsReportUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 256C0A5343A473D0D89FAB57 /* AlertsReportUITests.swift */; };
+		90D2886A43D44B6BA1D45C98 /* WeeklyDigestUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFC9913365F4432A9F96CD69 /* WeeklyDigestUITests.swift */; };
 		97FC4C5E35CB7030A2F01C9C /* HaloSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */; };
 		A159238AFAAA0D1EF722C664 /* ToolRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB7849370C86E175D74B077 /* ToolRegistry.swift */; };
 		A3253DC631055540204F574D /* AnthropicProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF513D5DDD7399B797BE21F2 /* AnthropicProvider.swift */; };
@@ -277,6 +302,8 @@
 		000000000000000000001082 /* SpeedTestService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SpeedTestService.swift; sourceTree = "<group>"; };
 		000000000000000000001084 /* DiskHealthMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/DiskHealthMonitor.swift; sourceTree = "<group>"; };
 		000000000000000000001086 /* ProcessMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ProcessMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000008043 /* SMARTDiskMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SMARTDiskMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000008045 /* DriveHealthSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/DriveHealthSection.swift; sourceTree = "<group>"; };
 		000000000000000000001088 /* CPUCoresSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/CPUCoresSection.swift; sourceTree = "<group>"; };
 		000000000000000000001090 /* SensorsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/SensorsSection.swift; sourceTree = "<group>"; };
 		000000000000000000001092 /* BatteryDetailSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/BatteryDetailSection.swift; sourceTree = "<group>"; };
@@ -304,6 +331,8 @@
 		000000000000000000004007 /* LoginItemScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/LoginItemScanner.swift; sourceTree = "<group>"; };
 		000000000000000000004009 /* AppScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/AppScanner.swift; sourceTree = "<group>"; };
 		000000000000000000004011 /* AlertLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AlertLog.swift; sourceTree = "<group>"; };
+		000000000000000000008171 /* AsyncTimeout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AsyncTimeout.swift; sourceTree = "<group>"; };
+		000000000000000000008163 /* ShellReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/ShellReader.swift; sourceTree = "<group>"; };
 		000000000000000000004013 /* ReportGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/ReportGenerator.swift; sourceTree = "<group>"; };
 		000000000000000000006001 /* ActionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionModels.swift; sourceTree = "<group>"; };
 		000000000000000000006003 /* ActionLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionLibrary.swift; sourceTree = "<group>"; };
@@ -343,6 +372,26 @@
 		000000000000000000008029 /* ActionShareManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/ActionShareManager.swift; sourceTree = "<group>"; };
 		000000000000000000008063 /* BrowserCleanerScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/BrowserCleanerScanner.swift; sourceTree = "<group>"; };
 		000000000000000000008065 /* BrowserCleanerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Cleanup/BrowserCleanerView.swift; sourceTree = "<group>"; };
+		000000000000000000008123 /* PerceptualDuplicateDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PerceptualDuplicateDetector.swift; sourceTree = "<group>"; };
+		000000000000000000008125 /* SimilarPhotosView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/SimilarPhotosView.swift; sourceTree = "<group>"; };
+		000000000000000000008143 /* ICloudDriveScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ICloudDriveScanner.swift; sourceTree = "<group>"; };
+		000000000000000000008145 /* ICloudDriveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/ICloudDriveView.swift; sourceTree = "<group>"; };
+		000000000000000000008153 /* PermissionAuditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PermissionAuditor.swift; sourceTree = "<group>"; };
+		000000000000000000008083 /* PrivacyExposureScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PrivacyExposureScanner.swift; sourceTree = "<group>"; };
+		000000000000000000008085 /* PrivacyPatternDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PrivacyPatternDatabase.swift; sourceTree = "<group>"; };
+		000000000000000000008087 /* privacy-patterns.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Halo/Resources/privacy-patterns.json; sourceTree = "<group>"; };
+		000000000000000000008031 /* SecurityPostureScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SecurityPostureScanner.swift; sourceTree = "<group>"; };
+		000000000000000000008133 /* FocusSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/FocusSessionManager.swift; sourceTree = "<group>"; };
+		000000000000000000008135 /* FocusSessionOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/FocusSessionOverlayView.swift; sourceTree = "<group>"; };
+		000000000000000000008103 /* AppUsageTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AppUsageTracker.swift; sourceTree = "<group>"; };
+		000000000000000000008105 /* AppUsageInsightsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/AppUsageInsightsSection.swift; sourceTree = "<group>"; };
+		000000000000000000008073 /* MetricsHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/MetricsHistory.swift; sourceTree = "<group>"; };
+		000000000000000000008075 /* WeeklyDigestGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/WeeklyDigestGenerator.swift; sourceTree = "<group>"; };
+		000000000000000000008077 /* HealthTrendCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/HealthTrendCard.swift; sourceTree = "<group>"; };
+		000000000000000000008113 /* MemoryTrendTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/MemoryTrendTracker.swift; sourceTree = "<group>"; };
+		000000000000000000008115 /* MemoryTrendsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/MemoryTrendsSection.swift; sourceTree = "<group>"; };
+		000000000000000000008053 /* TimeMachineMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/TimeMachineMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000008055 /* BackupHealthCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/BackupHealthCard.swift; sourceTree = "<group>"; };
 		000000000000000000009001 /* GetHealthScoreIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetHealthScoreIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009003 /* GetCPUUsageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetCPUUsageIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009005 /* GetBatteryHealthIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetBatteryHealthIntent.swift; sourceTree = "<group>"; };
@@ -385,6 +434,7 @@
 		447CC440994885DF5CCA7A6A /* CodeBeautifierUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CodeBeautifierUITests.swift; sourceTree = "<group>"; };
 		0CDCAD725F3EDB1AA147464F /* AIAssistantUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAssistantUITests.swift; sourceTree = "<group>"; };
 		256C0A5343A473D0D89FAB57 /* AlertsReportUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AlertsReportUITests.swift; sourceTree = "<group>"; };
+		FFC9913365F4432A9F96CD69 /* WeeklyDigestUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WeeklyDigestUITests.swift; sourceTree = "<group>"; };
 		94E717DB998E0BBF1AE83F94 /* HaloTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B4A92E8D0819BCF034A05DF2 /* AIKeyStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIKeyStore.swift; sourceTree = "<group>"; };
 		BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloSidebar.swift; sourceTree = "<group>"; };
@@ -475,8 +525,13 @@
 				000000000000000000004009 /* AppScanner.swift */,
 				000000000000000000001072 /* AlertManager.swift */,
 				000000000000000000004011 /* AlertLog.swift */,
+				000000000000000000008103 /* AppUsageTracker.swift */,
+				000000000000000000008171 /* AsyncTimeout.swift */,
+				000000000000000000008163 /* ShellReader.swift */,
 				000000000000000000004013 /* ReportGenerator.swift */,
 				000000000000000000004005 /* ScanScheduler.swift */,
+				000000000000000000008073 /* MetricsHistory.swift */,
+				000000000000000000008075 /* WeeklyDigestGenerator.swift */,
 				000000000000000000003006 /* HelperClient.swift */,
 				000000000000000000001074 /* CPUDetailMonitor.swift */,
 				000000000000000000001076 /* SMCReader.swift */,
@@ -485,8 +540,15 @@
 				000000000000000000001082 /* SpeedTestService.swift */,
 				000000000000000000001084 /* DiskHealthMonitor.swift */,
 				000000000000000000001086 /* ProcessMonitor.swift */,
+				000000000000000000008043 /* SMARTDiskMonitor.swift */,
 				000000000000000000008001 /* PortScanner.swift */,
 				000000000000000000008019 /* IdleAppMonitor.swift */,
+				000000000000000000008153 /* PermissionAuditor.swift */,
+				000000000000000000008083 /* PrivacyExposureScanner.swift */,
+				000000000000000000008085 /* PrivacyPatternDatabase.swift */,
+				000000000000000000008031 /* SecurityPostureScanner.swift */,
+				000000000000000000008113 /* MemoryTrendTracker.swift */,
+				000000000000000000008053 /* TimeMachineMonitor.swift */,
 				000000000000000000001030 /* DesignSystem.swift */,
 				000000000000000000008011 /* CelebrationOverlay.swift */,
 				000000000000000000001032 /* ApplicationsView.swift */,
@@ -501,11 +563,15 @@
 				000000000000000000008027 /* SnippetListSection.swift */,
 				000000000000000000001065 /* HotkeyManager.swift */,
 				000000000000000000001038 /* DashboardView.swift */,
+				000000000000000000008105 /* AppUsageInsightsSection.swift */,
 				000000000000000000001098 /* NetworkSparklineCard.swift */,
+				000000000000000000008077 /* HealthTrendCard.swift */,
 				000000000000000000001102 /* GPUDashboardCard.swift */,
+				000000000000000000008055 /* BackupHealthCard.swift */,
 				000000000000000000001040 /* FilesView.swift */,
 				000000000000000000008007 /* DownloadsView.swift */,
 				000000000000000000008009 /* DownloadsViewModel.swift */,
+				000000000000000000008045 /* DriveHealthSection.swift */,
 				000000000000000000001042 /* MenuBarView.swift */,
 				000000000000000000001044 /* OnboardingView.swift */,
 				000000000000000000001046 /* PerformanceView.swift */,
@@ -514,8 +580,15 @@
 				000000000000000000001092 /* BatteryDetailSection.swift */,
 				000000000000000000001094 /* NetworkDetailSection.swift */,
 				000000000000000000001096 /* TopProcessesSection.swift */,
+				000000000000000000008115 /* MemoryTrendsSection.swift */,
 				000000000000000000008021 /* IdleAppsSection.swift */,
 				000000000000000000008029 /* ActionShareManager.swift */,
+				000000000000000000008123 /* PerceptualDuplicateDetector.swift */,
+				000000000000000000008125 /* SimilarPhotosView.swift */,
+				000000000000000000008143 /* ICloudDriveScanner.swift */,
+				000000000000000000008145 /* ICloudDriveView.swift */,
+				000000000000000000008133 /* FocusSessionManager.swift */,
+				000000000000000000008135 /* FocusSessionOverlayView.swift */,
 				000000000000000000008013 /* CodeBeautifierView.swift */,
 				000000000000000000008015 /* CodeTheme.swift */,
 				000000000000000000008017 /* SyntaxHighlighter.swift */,
@@ -526,6 +599,7 @@
 				000000000000000000001056 /* Assets.xcassets */,
 				000000000000000000001058 /* PrivacyInfo.xcprivacy */,
 				000000000000000000004001 /* signatures.json */,
+				000000000000000000008087 /* privacy-patterns.json */,
 				000000000000000000009001 /* GetHealthScoreIntent.swift */,
 				000000000000000000009003 /* GetCPUUsageIntent.swift */,
 				000000000000000000009005 /* GetBatteryHealthIntent.swift */,
@@ -622,6 +696,7 @@
 				447CC440994885DF5CCA7A6A /* CodeBeautifierUITests.swift */,
 				0CDCAD725F3EDB1AA147464F /* AIAssistantUITests.swift */,
 				256C0A5343A473D0D89FAB57 /* AlertsReportUITests.swift */,
+				FFC9913365F4432A9F96CD69 /* WeeklyDigestUITests.swift */,
 				BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */,
 				4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */,
 				3ED172401B83B65197881BFC /* SidebarReorderUITests.swift */,
@@ -861,6 +936,7 @@
 				000000000000000000001057 /* Assets.xcassets in Resources */,
 				000000000000000000001059 /* PrivacyInfo.xcprivacy in Resources */,
 				000000000000000000004002 /* signatures.json in Resources */,
+				000000000000000000008088 /* privacy-patterns.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -908,8 +984,12 @@
 				000000000000000000004010 /* AppScanner.swift in Sources */,
 				000000000000000000001073 /* AlertManager.swift in Sources */,
 				000000000000000000004012 /* AlertLog.swift in Sources */,
+				000000000000000000008172 /* AsyncTimeout.swift in Sources */,
+				000000000000000000008164 /* ShellReader.swift in Sources */,
 				000000000000000000004014 /* ReportGenerator.swift in Sources */,
 				000000000000000000004006 /* ScanScheduler.swift in Sources */,
+				000000000000000000008074 /* MetricsHistory.swift in Sources */,
+				000000000000000000008076 /* WeeklyDigestGenerator.swift in Sources */,
 				000000000000000000001075 /* CPUDetailMonitor.swift in Sources */,
 				000000000000000000001077 /* SMCReader.swift in Sources */,
 				000000000000000000001079 /* GPUMonitor.swift in Sources */,
@@ -917,6 +997,7 @@
 				000000000000000000001083 /* SpeedTestService.swift in Sources */,
 				000000000000000000001085 /* DiskHealthMonitor.swift in Sources */,
 				000000000000000000001087 /* ProcessMonitor.swift in Sources */,
+				000000000000000000008044 /* SMARTDiskMonitor.swift in Sources */,
 				000000000000000000001031 /* DesignSystem.swift in Sources */,
 				000000000000000000001033 /* ApplicationsView.swift in Sources */,
 				000000000000000000001035 /* CleanupView.swift in Sources */,
@@ -928,7 +1009,9 @@
 				000000000000000000001066 /* HotkeyManager.swift in Sources */,
 				000000000000000000001039 /* DashboardView.swift in Sources */,
 				000000000000000000001099 /* NetworkSparklineCard.swift in Sources */,
+				000000000000000000008078 /* HealthTrendCard.swift in Sources */,
 				000000000000000000001103 /* GPUDashboardCard.swift in Sources */,
+				000000000000000000008056 /* BackupHealthCard.swift in Sources */,
 				000000000000000000006002 /* ActionModels.swift in Sources */,
 				000000000000000000006004 /* ActionLibrary.swift in Sources */,
 				000000000000000000006006 /* ActionRunner.swift in Sources */,
@@ -949,16 +1032,29 @@
 				000000000000000000008006 /* PortManagerViewModel.swift in Sources */,
 				000000000000000000008008 /* DownloadsView.swift in Sources */,
 				000000000000000000008010 /* DownloadsViewModel.swift in Sources */,
+				000000000000000000008046 /* DriveHealthSection.swift in Sources */,
 				000000000000000000008012 /* CelebrationOverlay.swift in Sources */,
 				000000000000000000008014 /* CodeBeautifierView.swift in Sources */,
 				000000000000000000008016 /* CodeTheme.swift in Sources */,
 				000000000000000000008018 /* SyntaxHighlighter.swift in Sources */,
 				000000000000000000008020 /* IdleAppMonitor.swift in Sources */,
+				000000000000000000008054 /* TimeMachineMonitor.swift in Sources */,
 				000000000000000000008022 /* IdleAppsSection.swift in Sources */,
 				000000000000000000008024 /* SnippetManager.swift in Sources */,
 				000000000000000000008026 /* SnippetEditorView.swift in Sources */,
 				000000000000000000008028 /* SnippetListSection.swift in Sources */,
 				000000000000000000008030 /* ActionShareManager.swift in Sources */,
+				000000000000000000008124 /* PerceptualDuplicateDetector.swift in Sources */,
+				000000000000000000008126 /* SimilarPhotosView.swift in Sources */,
+				000000000000000000008144 /* ICloudDriveScanner.swift in Sources */,
+				000000000000000000008146 /* ICloudDriveView.swift in Sources */,
+				000000000000000000008154 /* PermissionAuditor.swift in Sources */,
+				000000000000000000008032 /* SecurityPostureScanner.swift in Sources */,
+				000000000000000000008134 /* FocusSessionManager.swift in Sources */,
+				000000000000000000008136 /* FocusSessionOverlayView.swift in Sources */,
+				000000000000000000008104 /* AppUsageTracker.swift in Sources */,
+				000000000000000000008106 /* AppUsageInsightsSection.swift in Sources */,
+				000000000000000000008114 /* MemoryTrendTracker.swift in Sources */,
 				000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */,
 				000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */,
 				000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */,
@@ -967,6 +1063,8 @@
 				000000000000000000009012 /* RunActionIntent.swift in Sources */,
 				000000000000000000009014 /* GetClipboardHistoryIntent.swift in Sources */,
 				000000000000000000009016 /* ExportReportIntent.swift in Sources */,
+				000000000000000000008084 /* PrivacyExposureScanner.swift in Sources */,
+				000000000000000000008086 /* PrivacyPatternDatabase.swift in Sources */,
 				000000000000000000009018 /* HaloShortcutsProvider.swift in Sources */,
 				000000000000000000007002 /* ActionSettingsStore.swift in Sources */,
 				000000000000000000007004 /* VoiceSearchController.swift in Sources */,
@@ -982,6 +1080,7 @@
 				000000000000000000001093 /* BatteryDetailSection.swift in Sources */,
 				000000000000000000001095 /* NetworkDetailSection.swift in Sources */,
 				000000000000000000001097 /* TopProcessesSection.swift in Sources */,
+				000000000000000000008116 /* MemoryTrendsSection.swift in Sources */,
 				000000000000000000001049 /* ProtectionView.swift in Sources */,
 				000000000000000000001055 /* SmartScanView.swift in Sources */,
 				000000000000000000002021 /* HaloSharedData.swift in Sources */,
@@ -1057,6 +1156,7 @@
 				E1840428A8042147E382FE52 /* CodeBeautifierUITests.swift in Sources */,
 				211137AACE082EA316D20732 /* AIAssistantUITests.swift in Sources */,
 				48D9F268088D85186495AD71 /* AlertsReportUITests.swift in Sources */,
+				90D2886A43D44B6BA1D45C98 /* WeeklyDigestUITests.swift in Sources */,
 				97FC4C5E35CB7030A2F01C9C /* HaloSidebar.swift in Sources */,
 				0D95339BD7D85794863633C8 /* HaloUITestCase.swift in Sources */,
 				7FA28EC1DD42807C6EFD8148 /* SidebarReorderUITests.swift in Sources */,

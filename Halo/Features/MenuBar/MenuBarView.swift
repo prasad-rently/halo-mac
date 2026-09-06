@@ -69,6 +69,9 @@ enum MenuBarDisplayStyle: String, CaseIterable, Identifiable {
     case miniBar   = "miniBar"    // Tiny CPU/RAM progress bars
     case dot       = "dot"        // Solid colored pressure dot
     case custom    = "custom"     // User-defined format string with tokens
+    // F-028: session-only — activated automatically by FocusSessionManager
+    // while a session is active, never offered as a manual Settings choice.
+    case sessionCountdown = "sessionCountdown"
 
     var id: String { rawValue }
 
@@ -79,7 +82,15 @@ enum MenuBarDisplayStyle: String, CaseIterable, Identifiable {
         case .miniBar:   return "Mini Bars"
         case .dot:       return "Dot"
         case .custom:    return "Custom"
+        case .sessionCountdown: return "Focus Countdown"
         }
+    }
+
+    /// Styles the user can pick manually (Settings picker + in-app style
+    /// selector). Mirrors `AppModule.reorderable` excluding the always-pinned
+    /// Dashboard — `.sessionCountdown` is never a manual choice.
+    static var selectable: [MenuBarDisplayStyle] {
+        allCases.filter { $0 != .sessionCountdown }
     }
 }
 
@@ -208,8 +219,17 @@ struct MenuBarIconView: View {
     @AppStorage("menuBarDisplayStyle") private var styleRaw = MenuBarDisplayStyle.icon.rawValue
     @AppStorage("menuBarFormatString") private var formatString = "CPU {cpu}% · RAM {ram}%"
 
+    // F-028: a live Focus Session always overrides whatever display style the
+    // user has picked — falls back to their normal style the moment the
+    // session ends (isActive flips back to false).
+    @ObservedObject private var focusSession = FocusSessionManager.shared
+
     private var style: MenuBarDisplayStyle {
         MenuBarDisplayStyle(rawValue: styleRaw) ?? .icon
+    }
+
+    private var effectiveStyle: MenuBarDisplayStyle {
+        focusSession.isActive ? .sessionCountdown : style
     }
 
     private var pressureColor: Color {
@@ -221,12 +241,13 @@ struct MenuBarIconView: View {
     }
 
     var body: some View {
-        switch style {
+        switch effectiveStyle {
         case .icon:      iconView
         case .textStats: textStatsView
         case .miniBar:   miniBarView
         case .dot:       dotView
         case .custom:    customFormatView
+        case .sessionCountdown: sessionCountdownView
         }
     }
 
@@ -283,6 +304,20 @@ struct MenuBarIconView: View {
             .font(.system(size: 10, weight: .medium, design: .monospaced))
             .foregroundColor(.primary)
             .frame(height: 18)
+    }
+
+    // Style: F-028 live Focus Session countdown — replaces CPU/RAM stats
+    // while a session is running.
+    @ViewBuilder private var sessionCountdownView: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "moon.stars.fill")
+                .font(.system(size: 9))
+                .foregroundColor(.haloAccent)
+            Text(focusSession.remainingFormatted)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundColor(.haloAccent)
+        }
+        .frame(height: 18)
     }
 }
 
@@ -666,7 +701,7 @@ struct MenuBarStyleSelector: View {
 
                 // Style picker
                 HStack(spacing: 8) {
-                    ForEach(MenuBarDisplayStyle.allCases) { s in
+                    ForEach(MenuBarDisplayStyle.selectable) { s in
                         Button {
                             withAnimation(.easeInOut(duration: 0.15)) { styleRaw = s.rawValue }
                         } label: {
