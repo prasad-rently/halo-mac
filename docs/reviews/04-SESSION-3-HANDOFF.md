@@ -20,6 +20,7 @@ engineering.
 | `review/pr-audit` | `22e4746` | pushed · all review docs |
 | `archive/release-v2.3-premerged` (tag) | `5c0c15d` | pushed · see §5 |
 | `phase0/ci-workflow` | `5e65fbf` | ⚠️ **still not pushed** — needs `workflow` scope |
+| `fix/settings-rework` | `3b0d717` | pushed 2026-09-06 · parked for **v2.4**, see §8 |
 
 **Verification of `release/v2.3`**, from a clean build with empty derived data:
 
@@ -70,7 +71,7 @@ required-review or required-status-check rule.
 
 | # | What | Why it matters |
 |---|---|---|
-| 1 | **#21's description/diff mismatch** | The PR body claims a Settings rework wiring "8 previously-dead placeholder controls". It is genuinely not in the diff. v2.3's **release notes would inherit a claim the release does not contain.** Restore the commit or correct the description. |
+| 1 | ~~**#21's description/diff mismatch**~~ · **CLOSED 2026-09-06** | **Resolved: the commit was never lost.** It is `3b0d717` *"fix(settings): rework Settings arrangement and wire dead placeholders"* — 5 files, +81/−27, authored 2026-08-14, sitting on a **local-only** branch based directly on `main` (`364357a`). It was never pushed, never a PR, and is not an ancestor of `release/v2.3` or `main`; #21's body borrowed the description from a sibling branch that never travelled with it. **Decision (user, option 3):** correct #21's body, park the commit for **v2.4**. Done — #21's bullet is struck through with a dated correction, and `fix/settings-rework` is now pushed (`origin/fix/settings-rework` = `3b0d717`) so it is no longer one disk failure from gone. **Still to do, after v2.3 lands:** open it as its own PR against `main` and review it like any other. See §8. |
 | 2 | **#19's Photos entitlement** | `com.apple.security.personal-information.photos-library` is in `Halo-Debug.entitlements` **only**. The release build ships `NSPhotoLibraryUsageDescription` in `Info.plist` but **not** the entitlement — so the PhotoKit path requests authorisation and then fails in a sandboxed build. Either add the key to `Halo.entitlements`, or gate/remove the PhotoKit half so the usage string is not misleading. Also still **never runtime-tested** against a real library, and it requests **write** access (`.readWrite`, `performChanges`). |
 | 3 | **#9's happy path** | Re-confirmed on 2026-09-06: **both** TCC databases are unreadable without Full Disk Access, so every run took the degraded branch. It degrades *honestly*; the parse, service mapping, dedup and elevated-risk classification are **unverified against real rows**. Grant FDA to a debug build once — it settles this and two original findings together. If that pass will not happen, this is the one feature to consider holding. |
 | 4 | **B4 — sandbox scope** | Six features shell out (`#21 #20 #17 #16 #10 #9`); `posix_spawn` is denied under `Halo.entitlements`. All degrade honestly, but their value exists only in an unsandboxed build. Needs **one** answer for the batch: unsandboxed direct distribution, or route through the F-002 privileged helper. F-007 (App Store assets) is already marked skipped, which may make this easier than it looks. |
@@ -158,3 +159,49 @@ recurring. The three worth reading before doing similar work:
 | [`02-RE-REVIEW.md`](02-RE-REVIEW.md) | Session 3 — the adversarial re-review: R1–R10, all closed |
 | [`03-LAPSES.md`](03-LAPSES.md) | Mistakes made while reviewing and merging |
 | **this file** | Session 3 — the merge train and what is left |
+
+---
+
+## 8. Parked for v2.4
+
+Work that is real, reviewed-as-found, and deliberately **not** in v2.3.
+
+### `fix/settings-rework` (`3b0d717`) — decision §3.1
+
+Pushed 2026-09-06 so it is no longer local-only. Based directly on `main`
+(`364357a`), so it will still apply after `release/v2.3` lands.
+
+**What it does.** Wires eight controls that are dead on `release/v2.3` today —
+every one verified as dead before this was written:
+
+| Control | State on `release/v2.3` | What the commit does |
+|---|---|---|
+| `enableMenuBar` | declared + toggled, read nowhere | drives `MenuBarExtra(isInserted:)` |
+| `menuBarShowCPU` / `ShowRAM` | declared twice, read nowhere | gates the two ring cards in `MenuBarMetricsSection` |
+| `menuBarCompact` | declared in Settings only | drops the `%` suffix — **`.textStats` style only** |
+| `clipboardHistoryLimit` | declared in Settings only | `addClipboardItem` reads it (50–500, default 200) |
+| "Clear All History Now" | `Button(…) {}` — empty closure | confirm-alert → existing `appState.clearAllClipboard()` |
+| 3 × About buttons | `Button(…) {}` — silent no-ops | `.disabled(true)` + "Coming soon" help |
+
+Plus `.formStyle(.grouped)` on four tabs, the stray menu-bar toggle moved into
+its own section, the 5-segment style picker restacked so it stops clipping, and
+a `Disk I/O` → `Disk free space` label correction. It updates the `CLAUDE.md`
+clipboard-cap line itself.
+
+**Merge cost, measured** (`git merge-tree` against `release/v2.3`, no checkout):
+4 of 5 files auto-merge; **one conflict, one 17-line region** in
+`OnboardingView.swift`. It is the style picker — release has
+`MenuBarDisplayStyle.selectable` (introduced by #14/F-028, which excludes
+`.custom`), the commit has `.allCases` inside its new `VStack` wrapper.
+**Resolution: keep release's `.selectable` inside the commit's wrapper.** No test
+references any touched key; `clearAllClipboard()` already exists on release.
+
+**Checked, and *not* a problem:** the 500 → 200 default looked like silent
+truncation on upgrade, since `removeLast(count - limit)` would fire on the first
+copy. But `clipboardItems` is in-memory only (seeded from `sampleItems`, no
+persistence layer), so nothing survives a relaunch to be truncated.
+
+**Still to do:** open it as a PR against `main` after v2.3 lands, and review it
+like any other — **it has never been reviewed.** It was never a PR and nothing in
+[`02-RE-REVIEW.md`](02-RE-REVIEW.md) covers it. That, not the conflict, is why it
+is parked.

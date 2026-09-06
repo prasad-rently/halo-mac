@@ -44,7 +44,7 @@ shipping configuration.
 
 ## Questions for the author
 
-1. **Where did the Settings rework go?** (issue 3) Dropped commit, or wrong description?
+1. ~~**Where did the Settings rework go?** (issue 3) Dropped commit, or wrong description?~~ **Answered 2026-09-06: neither — wrong description.** The rework is `3b0d717` on its own branch `fix/settings-rework`, based directly on `main`, never pushed until now and never part of this PR. #21's body has been corrected; the commit is parked for v2.4. See [`04-SESSION-3-HANDOFF.md`](04-SESSION-3-HANDOFF.md) §3.1 and §8.
 2. **Is the sandboxed release build in scope for this feature?** (issue 2) This needs one answer for the whole batch, not six — see B4.
 3. Was `AutomaticallyInstallMacOSUpdates` chosen deliberately over `CriticalUpdateInstall`, or is that just the first key that surfaced during development?
 
