@@ -10,6 +10,7 @@ struct FilesView: View {
         case largeFiles = "Large Files"
         case downloads  = "Downloads"
         case driveSpeed = "Drive Speed"
+        case iCloudDrive = "iCloud Drive"
     }
 
     var body: some View {
@@ -49,6 +50,7 @@ struct FilesView: View {
             case .largeFiles: LargeFilesView()
             case .downloads:  DownloadsView()
             case .driveSpeed: DriveSpeedView()
+            case .iCloudDrive: ICloudDriveView()
             }
         }
         .background(Color.haloSurface)
