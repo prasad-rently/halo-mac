@@ -34,7 +34,7 @@ actor FileSystemScanner {
         config: ScanConfig = ScanConfig()
     ) -> AsyncStream<ScanEvent> {
         AsyncStream { continuation in
-            Task {
+            let task = Task {
                 do {
                     var scanned = 0
                     var found = 0
@@ -68,6 +68,17 @@ actor FileSystemScanner {
                 }
                 continuation.finish()
             }
+
+            // Without this, abandoning the stream does not stop the work.
+            //
+            // `traverse` already calls `Task.checkCancellation()` for every
+            // file it visits, so the traversal is fully prepared to be
+            // cancelled — but nothing was ever cancelling it. The producing
+            // `Task` here is unstructured, so breaking out of the consumer's
+            // `for await`, or tearing down the view that owns the scan, ended
+            // the stream while leaving a full-filesystem walk running in the
+            // background until it finished on its own.
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 

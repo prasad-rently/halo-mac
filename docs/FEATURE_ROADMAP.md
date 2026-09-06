@@ -34,21 +34,28 @@
 | [F-013](#f-013--icloud-clipboard-sync) | iCloud Clipboard Sync | ⏭ Skipped (user) | 5 d | F-003 |
 | [F-014](#f-014--pdf-health-report-export) | PDF Health Report Export | ✅ Done | 2 d | none |
 | [F-015](#f-015--custom-scan-schedule-ui) | Custom Scan Schedule UI | ✅ Done | 1 d | F-005 |
-| [F-016](#f-016--permission-auditor) | Permission Auditor | 💡 Future Idea | ~3 d | F-002 (release) |
+| [F-016](#f-016--permission-auditor) | Permission Auditor | ✅ Done | 2 d | none |
 | [F-017](#f-017--network-traffic-monitor-app-level-firewall-companion) | Network Traffic Monitor | 💡 Future Idea | ~5 d | none |
 | [F-018](#f-018--privacy-data-exposure-scanner) | Privacy Data Exposure Scanner | 💡 Future Idea | ~3 d | none |
-| [F-019](#f-019--security-posture-dashboard) | Security Posture Dashboard | 💡 Future Idea | ~1.5 d | none |
+| [F-019](#f-019--security-posture-dashboard) | Security Posture Dashboard | ✅ Done | 1.5 d | none |
 | [F-020](#f-020--smart-disk-health-monitor) | S.M.A.R.T. Disk Health Monitor | 💡 Future Idea | ~3 d | none |
+| [F-021](#f-021--app-usage--screen-time-analytics) | App Usage & Screen Time Analytics | ✅ Done | ~3 d | none |
+| [F-020](#f-020--smart-disk-health-monitor) | S.M.A.R.T. Disk Health Monitor | ✅ Done | 3 d | none |
 | [F-021](#f-021--app-usage--screen-time-analytics) | App Usage & Screen Time Analytics | 💡 Future Idea | ~3 d | none |
 | [F-022](#f-022--time-machine-backup-health-monitor) | Time Machine Backup Health Monitor | 💡 Future Idea | ~1.5 d | AlertManager |
+| [F-023](#f-023--memory-leak--app-bloat-tracker) | Memory Leak & App Bloat Tracker | ✅ Done | ~3 d | ProcessMonitor |
+| [F-022](#f-022--time-machine-backup-health-monitor) | Time Machine Backup Health Monitor | ✅ Done | ~1.5 d | AlertManager |
 | [F-023](#f-023--memory-leak--app-bloat-tracker) | Memory Leak & App Bloat Tracker | 💡 Future Idea | ~3 d | ProcessMonitor |
 | [F-024](#f-024--browser-cleaner) | Browser Cleaner | 💡 Future Idea | ~2 d | none |
 | [F-025](#f-025--duplicate-photos-finder-perceptual-hash) | Duplicate Photos Finder (pHash) | 💡 Future Idea | ~5 d | DuplicateDetector |
 | [F-026](#f-026--downloads-folder-organiser--manager) | Downloads Folder Organiser & Manager | ✅ Done | 2.5 d | AppScanner, FileSystemScanner |
 | [F-027](#f-027--snippet-manager--text-expansion-engine-clipboard-evolution) | Snippet Manager & Text Expansion Engine | ✅ Done | 3.5 d | Clipboard module |
-| [F-028](#f-028--focus-session-companion) | Focus Session Companion | 💡 Future Idea | ~3 d | MenuBarDisplayStyle |
+| [F-028](#f-028--focus-session-companion) | Focus Session Companion | ✅ Done | ~3 d | MenuBarDisplayStyle |
 | [F-029](#f-029--scheduled-reports--weekly-digest) | Scheduled Reports & Weekly Digest | 💡 Future Idea | ~2 d | ReportGenerator |
 | [F-030](#f-030--icloud-storage-analyser) | iCloud Storage Analyser → shipped as **iCloud Drive Analyzer** | ✅ Done | ~4 d | none |
+| [F-028](#f-028--focus-session-companion) | Focus Session Companion | 💡 Future Idea | ~3 d | MenuBarDisplayStyle |
+| [F-029](#f-029--scheduled-reports--weekly-digest) | Scheduled Reports & Weekly Digest | ✅ Done | 2 d | ReportGenerator |
+| [F-030](#f-030--icloud-storage-analyser) | iCloud Storage Analyser | 💡 Future Idea | ~4 d | none |
 | [F-031](#f-031--dock--desktop-tinker-actions) | Dock & Desktop Tinker Actions | ✅ Done | 0.5 d | none |
 | [F-032](#f-032--display--audio-quick-actions) | Display & Audio Quick Actions | ✅ Done | 0.5 d | none |
 | [F-033](#f-033--system-junk--developer-cache-cleaner-actions) | System Junk & Dev Cache Cleaner Actions | ✅ Done | 0.5 d | none |
@@ -1209,8 +1216,8 @@ F-005 adds background scan scheduling tied to a simple picker (daily/weekly/off)
 
 ## F-016 · Permission Auditor
 
-**Status:** 💡 Future Idea  
-**Effort estimate:** 3 days  
+**Status:** ✅ Done — `feat/f016-permission-auditor` branch (2026-08)  
+**Effort estimate:** 3 days (actual: ~2 days)  
 **Theme:** Privacy & Security  
 **Branch naming (when ready):** `feat/f016-permission-auditor`  
 **Depends on:** none
@@ -1235,6 +1242,15 @@ New **"Privacy"** module in the sidebar, or a second tab within the existing Pro
 ### Key design decisions to resolve before implementation
 - Sandboxed release builds cannot read TCC.db directly — will require XPC helper (F-002) or user guidance to open System Settings
 - Risk-flagging heuristics need a curated expected-permissions JSON bundle
+
+### As actually built
+Scoped honestly around the TCC.db access constraint rather than routing through the XPC helper (F-002): `PermissionAuditor` (new actor) attempts a direct read of `TCC.db` via the `sqlite3` CLI (`SELECT service, client, auth_value FROM access`) and gracefully reports `.unavailable(reason:)` — never a fabricated result — whenever the file isn't readable, the query errors, or no usable rows come back. Both outcomes are handled in the existing **Protection** module's "App Permissions" section, which now branches on the result:
+- **`.available` (TCC.db readable — the debug/non-sandboxed build path)**: replaces the plain category-card grid with `PermissionAuditList` — grants grouped by `PermissionKind`, each group expandable to a per-app row with a risk flag and a "Revoke" deep link (reusing `PermissionCard`'s existing System-Settings-anchor mapping). A summary badge reads "X of Y apps excessive."
+- **`.unavailable` (the sandboxed release build path, or Full Disk Access not granted)**: keeps the original category-card-only grid exactly as it was, with an honest `FullDiskAccessBanner` explaining why ("Halo needs Full Disk Access to show per-app grants — showing categories only").
+- Risk heuristic kept intentionally simple per the reduced scope: any non-browser, non-communication app (checked against a small bundled prefix list) holding **Screen Recording** or **Accessibility** is flagged `isElevatedRisk`. No JSON-bundle "expected permissions per category" matrix was built — the two-permission heuristic covers the highest-signal cases without over-engineering a v1.
+- Reminders, Photos, and Bluetooth from the original "every TCC category" wishlist were **not** added as new `PermissionKind` cases — the task scope reused the existing 8-case enum as instructed, so the audit is limited to the categories Halo already models (camera, microphone, location, contacts, calendars, full disk access, screen recording, accessibility).
+- No XPC helper dependency was added: F-002 exists for privileged *write* operations, not for bypassing a sandbox's read restriction on a SIP-protected database, so leaning on it here would not have changed the fundamental capability — the honest fallback was the correct scope regardless of F-002's presence.
+- New files: `Halo/Core/Scanner/PermissionAuditor.swift` (actor, UUIDs 8031/8032). New models in `Halo/Core/Models/Models.swift`: `TCCGrant`, `PermissionAuditResult`. `Halo/Features/Protection/ProtectionView.swift` gained `PermissionAuditList`, `PermissionGroupRow`, `FullDiskAccessBanner`, and `ProtectionViewModel.permissionAudit` / `isLoadingPermissions`.
 
 ---
 
@@ -1273,7 +1289,7 @@ New sub-tab within the existing **Network** section of the Performance module, o
 
 ## F-018 · Privacy Data Exposure Scanner
 
-**Status:** 💡 Future Idea  
+**Status:** ✅ Done  
 **Effort estimate:** 3 days  
 **Theme:** Privacy & Security  
 **Branch naming (when ready):** `feat/f018-privacy-exposure-scanner`  
@@ -1302,11 +1318,26 @@ New **"Sensitive Data"** tab within the existing **Protection** module, or an ad
 - Regex false-positive rate needs careful tuning (credit card patterns especially)
 - User opt-in required before scanning Documents/iCloud — privacy of the privacy scanner itself
 
+### As actually built
+- **`PrivacyExposureScanner`** (`Halo/Core/Scanner/PrivacyExposureScanner.swift`) — actor, async-stream driven recursive walk of Downloads/Documents/Desktop (iCloud Drive local folder opt-in only, off by default). Skips symlinks, a fixed set of noise directories (`.git`, `node_modules`, `Library`, `DerivedData`, etc.), files over 10 MB, a large binary-extension denylist, and anything that fails a null-byte peek heuristic — so misnamed/extension-less binaries are still excluded without reading them fully.
+- **`PrivacyPatternDatabase`** (`Halo/Core/Scanner/PrivacyPatternDatabase.swift`) — actor mirroring `SignatureDatabase`'s bundle-first / cached-update-wins loading, backed by `Halo/Resources/privacy-patterns.json`. All matching **and redaction** happen inside this actor so the full raw secret value never leaves it — callers only ever receive a `PrivacyPatternHit` carrying a pre-redacted preview string.
+- **Detection categories actually implemented** (deliberately narrower than the original brainstorm — precision over completeness):
+  - **Credit card numbers** — a digit-run regex finds *candidates*, each candidate is then Luhn-checksum validated before being reported. A raw "13-19 digits in a row" match on its own has a very high false-positive rate against order numbers, phone numbers, and tracking IDs; the Luhn pass cuts that down without needing brand-specific BIN tables.
+  - **AWS access keys** — exact `AKIA[0-9A-Z]{16}` prefix/format match.
+  - **GitHub tokens** — exact prefix match on `ghp_`/`gho_`/`ghu_`/`ghs_`/`ghr_` followed by the token body.
+  - **Stripe keys** — exact prefix match on `sk_live_` (secret) and `pk_live_` (publishable); test-mode (`sk_test_`/`pk_test_`) keys are intentionally not flagged.
+  - **SSH private keys** — exact PEM header match (`-----BEGIN RSA/OPENSSH/EC PRIVATE KEY-----`); only the header (a public marker) is matched, the key material after it is never read or included in the preview.
+  - **SSNs** — `\d{3}-\d{2}-\d{4}` pattern, deliberately filed under **Warning** rather than **Critical** since this shape collides with other formatted numbers (invoice/order IDs) more than the other categories do.
+  - **Not implemented:** "hardcoded passwords in config files" from the original brainstorm was dropped — there is no way to pattern-match `password = "..."`-style assignments with the same prefix/checksum precision as the other categories, and a generic key=value heuristic would dominate the results with false positives. Left for a future, more targeted pass (e.g. known config-file-format-aware parsing) rather than shipped as a noisy regex.
+- **Redaction is structural, not incidental** — `PrivacyPatternDatabase.redact(_:category:)` is the only path that produces a `PrivacyPatternHit`, and it returns last-4/prefix-plus-last-4 previews (e.g. `•••• •••• •••• 3f2a`, `sk_live_••••••••3f2a`). No code path in the scanner, the pattern database, or `ProtectionView`/`ProtectionViewModel` ever calls `print`, `NSLog`, or `os_log`/`Logger` on a matched value, and no raw match is persisted to disk or `UserDefaults` — findings live only in `ProtectionViewModel.privacyFindings` in memory for the current app session.
+- **UI** — new **"Sensitive Data Scanner"** section in the existing Protection module (`PrivacyExposureSection` in `ProtectionView.swift`), not a new top-level module. iCloud Drive toggle (off by default), live "N files checked" progress, results grouped by risk (Critical/Warning/Info) via `HaloBadge`, each row showing filename, category, redacted preview, relative last-modified date, and a **"Reveal in Finder"** button (`NSWorkspace.activateFileViewerSelecting`) — there is no delete/quarantine action anywhere in the feature.
+- **Models** (`Halo/Core/Models/Models.swift`) — `PrivacyExposureFinding`, `PrivacyExposureCategory`, `PrivacyExposureRiskLevel`, `PrivacyScanLocation` (Downloads/Documents/Desktop as `defaultLocations`, lazy `iCloudDriveLocation()` since `url(forUbiquityContainerIdentifier:)` can block on first call).
+
 ---
 
 ## F-019 · Security Posture Dashboard
 
-**Status:** 💡 Future Idea  
+**Status:** ✅ Done — `feat/f019-security-posture` branch (2026-08)  
 **Effort estimate:** 1.5 days  
 **Theme:** Privacy & Security  
 **Branch naming (when ready):** `feat/f019-security-posture`  
@@ -1332,43 +1363,207 @@ Most users have no idea whether FileVault is on, if their firewall is disabled, 
 ### Integration point
 New **"Security Posture"** card in the existing **Protection** module's main view, collapsible. Summary score visible on Dashboard.
 
+### As actually built
+Scope was narrowed from the original 8-auto-check plan for honesty: only **4 of 8** checks have a reliable, non-interactive read path (FileVault, Gatekeeper, Application Firewall, Automatic Updates). SIP, Secure Boot, Find My Mac, and Login Window security have no dependable public CLI read even outside the sandbox — rather than guess and risk a wrong verdict, those 4 surface as an honest `.unknown` state with a one-line "how to check manually" hint (and a Settings deep-link where one exists). The security score (`SecurityPostureScanner.score(for:)`) only ever penalizes checks that were genuinely verified — `.unknown` never subtracts points.
+- `Halo/Core/Scanner/SecurityPostureScanner.swift` — actor, `scan()` + static `score(for:)`
+- `Halo/Core/Models/Models.swift` — `SecurityCheck`, `SecurityCheckState`, `SecurityCheckKind`
+- `Halo/Features/Protection/ProtectionView.swift` — `SecurityPostureSection` + `SecurityCheckRow`, wired into `ProtectionViewModel.loadAll()`
+- `Halo/App/AppState.swift` — `securityScore` (default 100 until the one-time launch scan completes), factored into `calculateHealthScore()` at a quarter-weight vs. CPU/RAM/disk
+- No SecureBoot/SIP/FindMy/LoginWindow "Fix" button is offered where no Settings pane exists (SIP/Secure Boot require booting into Recovery Mode) — the row explains this instead of showing a dead button.
+
 ---
 
 ## F-020 · S.M.A.R.T. Disk Health Monitor
 
-**Status:** 💡 Future Idea  
-**Effort estimate:** 3 days  
-**Theme:** Intelligent Insights  
-**Branch naming (when ready):** `feat/f020-smart-disk-health`  
-**Depends on:** none (IOKit is already used in the codebase)
+**Status:** ✅ Done · **Effort:** 3 d · **Depends on:** none
 
-### Why
-Drive failure is the most catastrophic unrecoverable event that can happen to a Mac. Most users have no warning until the drive fails completely. S.M.A.R.T. data from the drive's internal sensors gives advance warning days or weeks before failure. The commercial tool DriveDx charges $19.99 for this single feature. It aligns directly with Halo's health-monitoring identity and would be a compelling differentiator.
+### Summary
+Read-only S.M.A.R.T./NVMe health monitor for internal & external drives. Health
+status (Good / Warning / Failing), drive model/serial/capacity, temperature,
+power-on hours/cycles, total bytes written, available spare, NVMe's own
+percentage-used wear indicator, media errors, and a 24-hour temperature
+sparkline (internal drive only, sampled every 5 minutes). Surfaced as a
+**"Drive Health"** card in the Files → **Drive Speed** tab (not Dashboard —
+see "Integration point" below for why). `AlertManager` fires a Warning/Failing
+notification whenever health degrades.
 
-### What it delivers
-- Drive health status: Good / Warning / Failing — based on official S.M.A.R.T. attribute thresholds
-- Key metrics displayed: drive model and serial, capacity, health percentage, current temperature, total bytes written (TBW), power-on hours, reallocated sector count, pending sector count, and uncorrectable error count
-- A **lifespan remaining** progress bar based on TBW vs the manufacturer-rated endurance for the detected model
-- Automatic alert when any critical attribute enters the warning zone (feeds into `AlertManager`)
-- Historical temperature sparkline (sampled every 5 minutes, rolling 24-hour window)
+### As actually built — Apple Silicon data-availability findings
 
-### Data sources
-- `IOKit` — `IOServiceMatching("IOBlockStorageDriver")` to enumerate physical drives, then `IORegistryEntryCreateCFProperties` to read S.M.A.R.T. attribute dictionaries from the IORegistry
-- Model-to-TBW-rating lookup table (bundled JSON — major SSD models and their rated endurance)
+The original spec (above, preserved for context in git history) assumed
+`IOServiceMatching("IOBlockStorageDriver")` + `IORegistryEntryCreateCFProperties`
+would expose S.M.A.R.T. attributes directly from the IORegistry, the same
+pattern the existing `DiskHealthMonitor` (P3-07, Cleanup module) already uses.
+**That assumption doesn't hold on Apple Silicon** — independently re-verified
+on this machine (Apple Silicon, macOS 26.2, internal `APPLE SSD AP0512Z`) with
+a standalone `IOServiceMatching` probe before trusting any of the
+implementation:
 
-### Integration point
-New **"Drive Health"** card on Dashboard (alongside CPU, RAM, battery cards). Expanded detail view as a new section in the Performance module. Alert rule in `AlertManager` for failing attributes.
+| Path tried | Result on this machine |
+|---|---|
+| `IOServiceMatching("IOBlockStorageDriver")` → `IORegistryEntryCreateCFProperties` | Only an aggregate I/O `Statistics` dict (bytes/ops/errors/latency read+write). **No S.M.A.R.T. data at all.** This is exactly why P3-07's existing SMART panel in Cleanup always shows "N/A" here. |
+| `IOServiceMatching("IONVMeBlockDevice")` / `IOServiceMatching("IOAHCIBlockDevice")` | **No matching service at all** on Apple Silicon (0 instances returned). |
+| `IOServiceMatching("IONVMeController")` | **Real data** — `Model Number`, `Serial Number`, `Firmware Revision`, `Vendor Name`. No SMART log fields, but this is where the serial number comes from (diskutil never reports one). |
+| `diskutil info -plist <path>` (a `Process` shell-out) | **Real S.M.A.R.T./NVMe Health Info Log data** — confirmed against `system_profiler SPNVMeDataType` as a second, independent source. This became the primary data path instead of raw IOKit. |
 
-### Key design decisions to resolve before implementation
-- NVMe drives on Apple Silicon expose limited S.M.A.R.T. data compared to SATA/Intel Macs — graceful degradation needed
-- TBW lookup table needs curation and a maintenance/update strategy
-- Sandboxed build will require IOKit entitlement addition
+Given that, the implementation pivots to `diskutil info -plist` as the
+primary read path, with an `IONVMeController` IOKit lookup only for the
+serial number diskutil omits.
+
+**Confirmed available on this machine** (via `diskutil info -plist`):
+`SMARTStatus` (Verified/Failing), temperature (Kelvin → converted to °C),
+power-on hours, power cycles, unsafe shutdown count, data units read/written
+(→ real total bytes written, i.e. TBW), available spare %, available spare
+threshold %, NVMe's own `PERCENTAGE_USED` wear indicator, media error count,
+error-log entry count, bus protocol, solid-state flag, capacity. Plus serial
+number and model, via IOKit, once resolved (see gotcha below).
+
+**Confirmed NOT available on this machine — rendered as "Not available on
+this drive", never faked:**
+- **Reallocated / pending sector counts** (ATA SMART attributes 5 and 197) —
+  these are ATA-only concepts. NVMe's Health Information Log page has no
+  equivalent counter; it isn't a failed read, the concept doesn't exist for
+  NVMe. `Available Spare` / `Available Spare Threshold` and `Media Errors`
+  are the nearest NVMe analogs, and both are surfaced instead of faking the
+  ATA fields.
+- **Uncorrectable error count** as a distinct SATA-style metric — NVMe
+  surfaces `Media Errors` and an error-log entry count instead; there's no
+  separate "uncorrectable" counter to report.
+- **A manufacturer TBW-rating lookup table** — dropped entirely from the
+  design. NVMe drives report their own firmware wear assessment
+  (`PERCENTAGE_USED`, the drive's own view of consumed endurance against its
+  rated spec) directly in the SMART log, which is more accurate than a
+  bundled JSON table of SSD models could be and needs no maintenance. The
+  lifespan-remaining bar is `100 - PERCENTAGE_USED`.
+
+**A real bug caught by on-machine verification, not just code review:**
+querying `diskutil info -plist` by *mount path* (what both callers pass — the
+boot volume's `"/"` from the periodic `AppState` check, and a volume's
+`.url.path` from the Drive Health card) returns an **empty string** for
+`MediaName`, even though the SMART log itself comes through fine at that
+level. `MediaName` is only populated when diskutil is queried by the
+*physical whole-disk BSD identifier* (e.g. `disk0`) — confirmed by hand:
+`diskutil info -plist /` → `MediaName ""` vs `diskutil info -plist disk0` →
+`MediaName "APPLE SSD AP0512Z"`, same physical drive. Left unfixed, this
+would have silently shown "Unknown drive" for every scan, and — since the
+IOKit serial-number lookup matches by model string — would have also
+silently blocked the serial number from ever resolving. `SMARTDiskMonitor.scan(path:id:)`
+now falls back to a second `diskutil` query against the already-computed
+whole-disk id whenever the first `MediaName` comes back empty.
+
+**External drives:** the model-to-serial IOKit match and the empty-`MediaName`
+fallback above were both verified against the internal NVMe SSD only — no
+external SATA/USB-UASP drive was available to test against on this machine.
+Treat external-drive serial/model resolution as architecturally sound but
+unverified until tested against a real external drive.
+
+### Files
+| File | Role |
+|------|------|
+| `Halo/Core/Scanner/SMARTDiskMonitor.swift` | `actor SMARTDiskMonitor` — `diskutil`-backed scan + IOKit serial lookup; `SMARTDiskInfo` model with `healthLevel` classification; `SMARTTemperatureHistory` — `@MainActor` rolling 24h sample store, persisted to `UserDefaults` |
+| `Halo/Features/Files/DriveHealthSection.swift` | `DriveHealthSection` view + `DriveHealthViewModel` — on-demand ("Check Drive Health" button) card: status row, metrics grid, lifespan bar, temperature sparkline (`Charts`) |
+| `Halo/Features/Files/DriveSpeedView.swift` | Adds `DriveHealthSection(volume:)` below the volume picker |
+| `Halo/App/AppState.swift` | `startSMARTMonitoring()` — one check at launch + a 300s (5-minute) timer against the boot volume only; feeds `SMARTTemperatureHistory` and `AlertManager.evaluateSMART` |
+| `Halo/Core/AlertManager.swift` | `evaluateSMART(model:healthLevel:)` — fires `.diskSmartWarning` (24h cooldown) / `.diskSmartFailing` (1h cooldown); `.good`/`.unknown` never fire |
+
+### API
+```swift
+actor SMARTDiskMonitor {
+    func scan(volume: DriveVolume) async -> SMARTDiskInfo
+    func scan(path: String, id: String) async -> SMARTDiskInfo
+
+    enum DriveHealthLevel { case good, warning, failing, unknown }
+    struct SMARTDiskInfo {
+        let model, serialNumber, busProtocol: String?
+        let overallStatus: SMARTOverallStatus   // .verified / .failing / .other(String) / .unavailable
+        let temperatureCelsius: Double?
+        let powerOnHours, powerCycles, unsafeShutdowns: Int?
+        let totalBytesWritten, totalBytesRead: Int64?
+        let availableSparePercent, availableSpareThresholdPercent, percentageUsed: Int?
+        let mediaErrorCount, errorLogEntryCount: Int?
+        let reallocatedSectorCount, pendingSectorCount: Int?   // always nil — ATA-only, see above
+        var healthLevel: DriveHealthLevel { get }
+        var lifespanRemainingPercent: Int? { get }             // 100 - percentageUsed
+    }
+}
+```
+
+### Why the boot-volume-only, 5-minute cadence
+`diskutil info -plist` is a `Process` shell-out — cheap, but there's no reason
+to run it on the 2 s metrics loop. The temperature history is deliberately
+internal-drive-only: external drives aren't guaranteed to stay connected, so
+only the always-present internal SSD gets a rolling 24h history.
+
+### Known constraints
+- No manufacturer TBW-rating table — intentionally dropped (see above); the
+  lifespan bar uses the drive's own `PERCENTAGE_USED` instead.
+- Reallocated/pending sector counts and a distinct "uncorrectable errors"
+  metric are permanently `nil` on NVMe drives — this is a real NVMe-vs-ATA
+  protocol difference, not a missing read, and the UI/metrics grid renders
+  them accordingly ("N/A on NVMe" / "Not available on this drive").
+- External-drive serial/model resolution is unverified (no external drive
+  available to test against on this machine).
+- Integration point differs from the original spec: the health card lives in
+  Files → Drive Speed (alongside the related F-043 benchmark), not as a new
+  Dashboard card or Performance section — this keeps all "drive-related"
+  surfaces in one tab rather than splitting drive info across three modules.
+
+### Test plan
+- [ ] Files → Drive Speed → select internal volume → Drive Health card
+      appears below the volume picker
+- [ ] Tap "Check Drive Health" → status resolves to Good, model/serial/
+      capacity/temperature/power-on-hours/TBW populate
+- [ ] Reallocated/Pending Sectors show "N/A on NVMe" (not blank, not "0")
+- [ ] Lifespan bar renders and matches `100 - PERCENTAGE_USED`
+- [ ] Wait 24h+ (or seed `haloSMARTTemperatureHistory` in UserDefaults) →
+      temperature sparkline renders for the internal drive
+- [ ] Switch to an external volume (if available) → card re-scans; confirm
+      serial number behavior against a real external bridge
+- [ ] Force a Warning/Failing health level (simulate via a modified plist in
+      a debug build, since a real failing drive isn't available for testing)
+      → confirm `AlertManager` notification fires with correct cooldown
+- [ ] Confirm the 5-minute `AppState` timer doesn't fire more than once per
+      5 minutes (Console log or breakpoint count)
+
+### Acceptance criteria
+- Health status computed from official S.M.A.R.T./NVMe attribute thresholds,
+  never fabricated
+- Every field diskutil/IOKit doesn't report renders "Not available on this
+  drive" — never a zeroed or guessed value
+- Alert fires on Warning/Failing, never on Unknown (unreadable ≠ unhealthy)
+- Temperature sparkline persists across app restarts
+
+#### Amended during code review (2026-09-05)
+
+Three of the original rules turned out to be wrong against real hardware. All
+three are now regression-tested in `HaloTests`; see `CLAUDE.md` gotchas 22–24.
+
+- **Vendor spare thresholds are not trustworthy as reported.** Apple Silicon
+  reports `AVAILABLE_SPARE_THRESHOLD = 99` against `AVAILABLE_SPARE = 100`
+  (verified on the dev machine). A literal `spare <= threshold` comparison
+  declares a healthy drive **Failing** the first time spare ticks to 99 on
+  normal wear, then fires "back up your data immediately" hourly and
+  indefinitely. `classify` now ignores any threshold above
+  `maxCredibleSpareThreshold` (50), uses the spec's strict `<`, and keeps a
+  threshold-independent `criticalSparePercent` (10) backstop.
+- **An unrecognised `SMARTStatus` is Unknown, not Warning.** Every USB /
+  Thunderbolt bridge reports `"Not Supported"` — the healthy state for that
+  hardware, since enclosures don't pass the health log through. Flagging it
+  amber put a Warning badge on a working external SSD.
+- **The card and the notification are different bars.** Split into
+  `healthLevel` (drives the badge — surfaces anything notable, including a
+  non-zero media-error count) and `alertLevel` (what `AlertManager` acts on —
+  only conditions that are real *and* actionable). A single lifetime
+  unrecovered read is worth showing but must not nag daily forever.
+
+Also fixed: switching volumes while a scan was in flight left the previous
+drive's data on screen under the new drive's name, and the temperature chart
+was gated on `isInternal` rather than on the boot volume it actually samples.
 
 ---
 
 ## F-021 · App Usage & Screen Time Analytics
 
-**Status:** 💡 Future Idea  
+**Status:** ✅ Done  
 **Effort estimate:** 3 days  
 **Theme:** Intelligent Insights  
 **Branch naming (when ready):** `feat/f021-app-usage-analytics`  
@@ -1392,11 +1587,29 @@ Users increasingly want to understand their own Mac habits — how long they spe
 ### Integration point
 New **"Insights"** sub-section within the existing Dashboard, below the health ring. Expandable card showing the weekly bar chart. Toggle in Settings to enable/disable tracking.
 
+### As actually built
+
+The build deviates from the original card in two deliberate ways, both worth understanding before touching this feature:
+
+**1. No SQLite — UserDefaults + JSON, matching the rest of the codebase.**
+Halo has zero SQLite/CoreData dependency anywhere (verified before writing a line of code). Every other rolling-history store in this app — `AlertLog` (50-item cap), the widget pipeline, custom actions — uses `UserDefaults` + `Codable`/JSON. Introducing SQLite for one feature would mean a new dependency, a new persistence pattern, and a new set of edge cases (schema migration, WAL files inside a sandboxed container) for a dataset that's at most a few hundred small records. `AppUsageTracker` persists `[AppUsageRecord]` (one record per app per day) as JSON to `UserDefaults["haloAppUsageHistory"]`, pruned to a rolling 14-day window — same cap-and-persist pattern as `AlertLog`, just date-windowed instead of count-capped. If usage ever grows enough that this becomes a real bottleneck, that's a good problem to revisit with real numbers; it isn't one today.
+
+**2. "Screen Time" only covers time Halo itself was running — this is a hard OS limitation, not a corner cut.**
+There is no macOS API available to a third-party app that retroactively retrieves system-level Screen Time history. Apple's real Screen Time data lives behind the private `FamilyControls`/`ManagedSettings` frameworks, which require a parental-control entitlement Halo does not have and would not qualify for as a system-utility app. So every number this feature reports is scoped to **time Halo was open and running**:
+- If the Mac was asleep, no time is counted for that period (the sampling timer simply doesn't fire — this is *correct* behavior, not a gap: it prevents a Mac that slept for 5 hours with Slack frontmost from reporting 5 fake hours of usage).
+- If Halo wasn't launched (quit, or not set to launch at login), that window isn't counted either, and is never backfilled or estimated.
+- The bar chart, Background Hogs list, and stats all carry a caption — *"Based on time Halo has been running"* — directly in the UI so this is never presented as a full-day Screen Time replacement.
+- Context-switches-per-hour and week-over-week comparisons return `nil` (shown as "not enough data yet") until there's enough real history (≥1 hour, ≥14 days respectively) to make the number honest rather than a wild extrapolation from a few minutes of data.
+
+This is the same honesty discipline F-019 (Security Posture Dashboard) applies to its unverifiable checks, and the same discipline behind the "isUnused"/`NSMetadataItem` fixes in the Bug Fixes & Polish log — Halo does not show a plausible-looking number it can't actually stand behind.
+
+**Implementation:** `Halo/Core/AppUsageTracker.swift` (`@MainActor final class AppUsageTracker: ObservableObject`, singleton, same style as `AlertLog`) + `Halo/Features/Dashboard/AppUsageInsightsSection.swift` (expandable `HaloCard` below `HealthAndMetrics()` on the Dashboard). Toggle in Settings → General → Privacy, off by default (matches `enableAnalytics`'s opt-in convention). See `CLAUDE.md`'s "AppUsageTracker (F-021)" section for the full API surface.
+
 ---
 
 ## F-022 · Time Machine Backup Health Monitor
 
-**Status:** 💡 Future Idea  
+**Status:** ✅ Done  
 **Effort estimate:** 1.5 days  
 **Theme:** Intelligent Insights  
 **Branch naming (when ready):** `feat/f022-time-machine-monitor`  
@@ -1420,11 +1633,20 @@ Time Machine is the primary backup for most Mac users, but its status is entirel
 ### Integration point
 New **"Backup Health"** card on the Dashboard. Summary status (last backup time, green/red dot) visible as a persistent Dashboard widget even when collapsed.
 
+### As actually built
+Data sourcing deviated from the original plan for reliability: rather than parsing `/Library/Preferences/com.apple.TimeMachine.plist` or walking `Backups.backupdb/` directly (both fragile — the plist schema shifts across macOS versions, and APFS-snapshot backups don't produce a `Backups.backupdb` directory at all on modern destinations), the implementation goes entirely through the public `tmutil` CLI: `destinationinfo` (destination name + mount point), `status` (in-progress state), `latestbackup` (fast-path last-backup date), and `listbackups` (full snapshot history for the heatmap, with a graceful fallback to the newest `listbackups` entry when `latestbackup` fails because the destination is unreachable). Free-space numbers come from `URLResourceValues` on the mounted destination volume itself (`tmutil` doesn't expose capacity). Verified live on the dev machine, which has **no Time Machine destination configured** — `tmutil destinationinfo` returns `"No destinations configured."`, `latestbackup` fails with `Failed to mount destination.` (error 17), and `listbackups` fails with `"No machine directory found for host."` — confirming the `.notConfigured` empty state (rather than a fabricated "healthy" card) is what actually renders on a real, unconfigured Mac.
+- `Halo/Core/Scanner/TimeMachineMonitor.swift` — actor, `status()` (async, shells out to `tmutil`) + static `heatmap(backupDates:days:referenceDate:)` (pure, no I/O) + `startBackupNow()` (`tmutil startbackup`)
+- `Halo/Core/Models/Models.swift` — `TimeMachineStatus` (`isConfigured`/`isReachable`/`isStale`/`spaceUsedRatio`), `BackupDayState`, `BackupHeatmapDay`
+- `Halo/Features/Dashboard/BackupHealthCard.swift` — three honest states (not configured / configured-but-unreachable / fully configured), free-space `HaloMiniBar`, 30-day `LazyVGrid` heatmap with per-cell tooltips, "Back Up Now" button disabled while a backup is already running or launching
+- `Halo/App/AppState.swift` — `timeMachineStatus`/`isCheckingTimeMachine`/`isStartingBackup`, polled every 15 minutes (not the 2 s metrics tick — `tmutil` shell calls are tens of ms each and backup status doesn't change that fast)
+- `Halo/Core/AlertManager.swift` — `evaluateBackup(status:)` fires `.backupStale` with a 24 h cooldown once a configured, reachable destination's last backup exceeds 48 h; a disconnected/unreachable destination or "never backed up" state does not spuriously alert
+- Heatmap gray "no data" cells are used both before the earliest known backup and for the entire 30 days when Time Machine isn't configured at all — never rendered as red "missed" days, which would misrepresent absence of data as backup failure
+
 ---
 
 ## F-023 · Memory Leak & App Bloat Tracker
 
-**Status:** 💡 Future Idea  
+**Status:** ✅ Done — `feat/f023-memory-leak-tracker` branch (2026-08)  
 **Effort estimate:** 3 days  
 **Theme:** Intelligent Insights  
 **Branch naming (when ready):** `feat/f023-memory-leak-tracker`  
@@ -1447,6 +1669,30 @@ Memory leaks in long-running apps — Slack, Chrome, Electron apps, Adobe suite 
 
 ### Integration point
 New sub-section in the **Performance** module, directly below the existing Top Processes section. A "Memory Trends" tab alongside "CPU" and "RAM" in the existing picker.
+
+### As actually built
+Two deviations from the spec, both for honesty/consistency with the existing codebase rather than scope-cutting:
+
+- **JSON file, not SQLite.** This codebase has no SQLite/CoreData dependency anywhere (`AlertLog` persists its 50-item history as JSON in `UserDefaults`, following the same pattern). Introducing SQLite for one feature's ~240-samples-per-app history would be a new dependency for no real benefit at this scale, so persistence is a JSON file at `Application Support/Halo/memoryTrendHistory.json` (a dedicated file rather than `UserDefaults`, unlike `AlertLog`, because several tracked apps × 240 samples grows past what a single plist should comfortably carry in memory).
+- **Separate new section, not a picker tab.** The existing `TopProcessesSection` CPU/RAM `Picker` toggles between two views of the *same* top-10 list; Memory Trends tracks a materially different, persisted data set (all regular apps over 2 hours, not the top 10 by instantaneous CPU/RAM). Bolting a third picker option onto that control would have made it toggle between two different underlying data sources under one switch, which is more confusing than a clearly-separated sub-section directly below it — which is also literally what the spec's "Integration point" says first, before offering the tab as an alternative framing.
+
+**Leak-detection algorithm (`MemoryTrendTracker.leakStatus(for:)`)** — walks the persisted samples oldest→newest tracking a "growth streak":
+- A streak's local peak only ever moves up; a sample **more than 15% below the streak's peak** (`significantDropFraction = 0.15`) resets the streak to start at that sample. 15% was chosen as a threshold that survives normal allocator/cache churn (typically a few percent of RSS) while still catching a real "user closed some tabs" drop.
+- A gap between two consecutive samples **greater than 5× the 30 s sample interval** (`maxSampleGapSeconds = 300`) also resets the streak — across a gap that size the Mac (or Halo) was very likely asleep or quit, so "monotonic growth" can't honestly be claimed through it.
+- The **"Possible memory leak"** badge only shows once the surviving streak has lasted **more than 1 hour** (`leakWindowSeconds = 3600`) of real, densely-sampled data. Because a streak can never be older than how long Halo has actually observed the app, this single duration check also satisfies the spec's "don't flag a just-launched app" requirement — no separate "has it been running long enough" guard was needed.
+- The result is **recomputed fresh on every read**, never itself persisted or cached, so a stale "leak" flag can never survive a real RAM drop on the next sample.
+- Badge and alert copy consistently say "possible" / "consider restarting" — never "confirmed leak" — since this is a heuristic on a rolling window, not a diagnosis.
+
+**Alert threshold** — default **2 GB**, exposed as a `Stepper` (0.5 GB steps, 0.5–16 GB range) in the Memory Trends section header, persisted to `UserDefaults["memoryLeakAlertThresholdGB"]`. Wired into `AlertManager` via a new `checkAppMemory(appName:bundleID:ramMB:)` entry point (distinct from the existing `evaluate()`, which only handles one system-wide metric per kind) with its own per-bundle-ID cooldown dictionary so one app crossing the threshold doesn't suppress another's alert; a new `AlertKind.appMemoryHigh` case feeds the existing `AlertLog`.
+
+**Restart** — `NSRunningApplication.terminate()`, a 1.5 s grace period (falling back to `forceTerminate()` if the app is still around), then `NSWorkspace.shared.openApplication(at:configuration:)` using the app's persisted bundle path. Gated behind a `.confirmationDialog` per CLAUDE.md's "disruptive actions require confirmation" rule, and only offered on apps the leak badge has already flagged (not a general-purpose restart button).
+
+- `Halo/Core/Scanner/ProcessMonitor.swift` — extended (not replaced) with `AppRAMSample` + `runningAppRAMSamples()`, reusing the existing `proc_taskinfo` resident-size read, re-keyed by bundle ID instead of PID
+- `Halo/Core/Scanner/MemoryTrendTracker.swift` — `@MainActor final class`, singleton, started once from `AppState.init()`
+- `Halo/Core/Models/Models.swift` — `MemorySample`, `AppMemoryHistory`, `MemoryLeakStatus`
+- `Halo/Core/AlertManager.swift` — `checkAppMemory(appName:bundleID:ramMB:)`, `AlertKind.appMemoryHigh`
+- `Halo/Core/AlertLog.swift` — icon/color for `app_memory_high`
+- `Halo/Features/Performance/MemoryTrendsSection.swift` — new sub-section below `TopProcessesSection`
 
 ---
 
@@ -1713,10 +1959,10 @@ struct TextSnippet: Identifiable, Codable, Equatable {
 
 ## F-028 · Focus Session Companion
 
-**Status:** 💡 Future Idea  
+**Status:** ✅ Done  
 **Effort estimate:** 3 days  
 **Theme:** User Productivity  
-**Branch naming (when ready):** `feat/f028-focus-session`  
+**Branch naming:** `feat/f028-focus-session`  
 **Depends on:** MenuBarDisplayStyle (already built — new session mode needed)
 
 ### Why
@@ -1724,25 +1970,29 @@ This transforms Halo from a passive monitor into an active productivity companio
 
 ### What it delivers
 - **"Start Focus Session"** card on the Dashboard with duration presets: 25 min / 50 min / custom
-- On session start: automatically quits/hides a user-specified list of distracting apps (configurable in Settings), suppresses macOS notification banners, and switches the menu bar display to a **session countdown mode** (replacing the normal CPU/RAM stats)
-- Dismissible minimal fullscreen countdown overlay — shows time remaining, current productivity score, and a "End Session" button
-- Session end: macOS notification + in-app summary: "50-minute session. Top RAM consumer: Chrome (820 MB). CPU stayed below 55%."
-- Session history log: date, duration, productivity summary — visible in a "Focus History" section of the Dashboard
+- On session start: automatically hides (never quits) a user-specified list of distracting apps (configurable in Settings → Focus, with a pre-session confirmation dialog listing exactly which apps will be hidden), and switches the menu bar display to a **session countdown mode** (replacing the normal CPU/RAM stats)
+- Dismissible minimal floating countdown overlay (`NSPanel`) — shows time remaining, hidden-app count, and an "End Session" button; dismissing it only hides the panel, the session keeps running
+- Session end: macOS notification + in-app summary: "50-minute session. Top RAM consumer: Chrome (820 MB). CPU stayed below 55%." — built from real `ProcessMonitor`/`AppState` samples taken every 5s during the session
+- Session history log — visible in a "Focus History" section of the Dashboard, reusing the existing `AlertLog` (`kindRaw: "focus"`) rather than a new store
 
 ### Data sources
-- `NSWorkspace.shared.runningApplications` + `NSWorkspace.hideOtherApplications()` / `terminate()` for app management
-- `UNUserNotificationCenter` for notification suppression (uses Focus mode API on macOS 12+: `INFocusStatusCenter`)
-- Existing `AppState` CPU/RAM metrics for end-of-session report
+- `NSWorkspace.shared.runningApplications` + `NSRunningApplication.hide()`/`unhide()` for app management (not `terminate()` — hiding is reversible and non-destructive)
+- Existing `ProcessMonitor` actor (already powering Performance → Top Processes) sampled every 5s for the peak-RAM process
+- Existing `AppState.cpuUsage` sampled every 5s for the peak-CPU read
+- `UNUserNotificationCenter` for the end-of-session notification
 - New `MenuBarDisplayStyle.sessionCountdown` case added to the existing enum
 
 ### Integration point
-New collapsible **"Focus"** card on the Dashboard. New `sessionCountdown` style added to `MenuBarDisplayStyle` in `MenuBarView.swift`. Session history stored in `AlertLog` with a new `kindRaw: "focus"` entry.
+New collapsible **"Focus Session"** card on the Dashboard (`FocusSessionCard` in `DashboardView.swift`), plus a **"Focus History"** section (`FocusHistorySection`) below Alert History. New `sessionCountdown` style added to `MenuBarDisplayStyle` in `MenuBarView.swift`, applied automatically by `FocusSessionManager` and excluded from manual selection via `MenuBarDisplayStyle.selectable`. Session history stored in `AlertLog` with `kindRaw: "focus"`. New Settings → Focus tab (`FocusSessionSettingsTab` in `OnboardingView.swift`) configures the list of apps to hide.
+
+### As actually built
+The original idea sheet's "suppresses macOS notification banners" bullet, sourced from `INFocusStatusCenter`, was **scoped out** during implementation. `INFocusStatusCenter` only lets an app report its *own* busy/focused state so other apps can *voluntarily* check `isFocused` and choose to hold back their own notifications — it does not give any app the ability to enable system-wide Do Not Disturb/Focus or suppress other apps' banners on the user's behalf, and there is no public macOS API that does. Rather than fake this capability, the shipped feature replaces it with an honest, weaker alternative: a **"Turn on Focus Mode…"** button shown during an active session that deep-links to System Settings' Notifications pane (`x-apple.systempreferences:com.apple.Notifications-Settings.extension`) so the user can enable a Focus mode themselves in one click — clearly a manual nudge, not automatic suppression. Everything else in the "What it delivers" list above shipped as real, working functionality (verified by `xcodebuild … build` succeeding on `HaloUITests`; see `CLAUDE.md`'s Focus Session Manager section for implementation detail). See `docs/HALO_MOBILE_ROADMAP.md` §9 for the mobile feasibility study, which found the auto-hide half is blocked on both mobile OSes but each platform has a *more* capable Focus/DND-adjacent API than desktop in a different dimension.
 
 ---
 
 ## F-029 · Scheduled Reports & Weekly Digest
 
-**Status:** 💡 Future Idea  
+**Status:** ✅ Done — `feat/f029-scheduled-reports` branch (2026-08)  
 **Effort estimate:** 2 days  
 **Theme:** User Productivity  
 **Branch naming (when ready):** `feat/f029-scheduled-reports`  
@@ -1766,6 +2016,26 @@ Power users want to stay informed without opening the app every day. A weekly "y
 
 ### Integration point
 New **"Digest"** section in Settings. The 7-day health sparkline appears as a new card on the Dashboard. Entirely reuses existing components — minimal new code.
+
+### As actually built
+Scope was narrowed from the original 6-bullet digest plan for honesty, following the same principle as F-019's "verified data only" approach:
+- **Health score trend** — REAL. New `MetricsHistory` actor-adjacent `@MainActor` store samples once/hour (a dedicated slow timer in `AppState`, deliberately separate from the existing 2 s metrics timer) and persists a rolling 168-sample (7-day) buffer to `UserDefaults`. Powers both the new `HealthTrendCard` Dashboard sparkline and the digest body.
+- **"Top storage growers"** — simplified to a real week-over-week **disk-free delta** (current `diskFreeGB` vs. the oldest sample in the 7-day window) rather than the originally-imagined "largest files added" audit, which would need a full filesystem diff Halo doesn't otherwise track. This is called out explicitly in the digest body as a GB delta, not a fabricated file list.
+- **"Apps with high average RAM"** — built as a real, if coarse, minimal version: the hourly `MetricsHistory` sample also captures the top 5 RAM processes via the existing `ProcessMonitor.topProcesses(sortBy: .ram)` (already used by the Performance module's Top Processes section). The digest aggregates these hourly readings into a per-app average RAM ranking (`WeeklyDigestGenerator.composeSummary` → `RankedApp`). This is genuinely real data, just sampled hourly rather than continuously — an app that spiked RAM briefly between samples won't be caught.
+- **Backup status** — **omitted**. Halo has no Time Machine integration yet (that's F-022, still a Future Idea in this pipeline) — rather than fabricate a backup-status line, the digest simply doesn't include one.
+- **Threats detected / scans completed** — REAL, filtered from `AlertLog.entries` over the digest period.
+- **PDF attachment / NSSharingService** — built as a "Share Weekly Report Now…" button in Settings (generates the existing 4-page `ReportGenerator` PDF to a temp file and opens `NSSharingServicePicker` — Mail/AirDrop/Messages), plus the notification's "View Report" action button which reuses the Dashboard's existing Export Report flow (save panel). Not a true PDF *attachment* inside the notification banner itself — macOS `UNNotificationAttachment` is meant for images/audio/video preview thumbnails, not documents, so attaching a PDF there would render awkwardly; the two explicit share paths above are the honest equivalent.
+- **Delivery + schedule** — new `WeeklyDigestScheduler` (mirrors `ScanScheduler`'s `NSBackgroundActivityScheduler` pattern exactly, with its own `com.halo.mac.weeklydigest` identifier so it's fully independent of the Smart Scan schedule). Settings → General → "Weekly Digest" section reuses the identical day/hour `Picker` UI as "Scheduled Scans". A "Send Test Digest Now" button lets the user manually fire a digest to verify the flow without waiting for the schedule.
+
+**Files:**
+- `Halo/Core/MetricsHistory.swift` — hourly rolling sample store (new)
+- `Halo/Core/WeeklyDigestGenerator.swift` — summary composition, notification delivery, `WeeklyDigestScheduler`, `DigestNotificationDelegate` (new)
+- `Halo/Features/Dashboard/HealthTrendCard.swift` — 7-day sparkline Dashboard card (new)
+- `Halo/Core/Models/Models.swift` — `MetricsSample`, `ProcessRAMSample`, `RankedApp`, `WeeklyDigestSummary`
+- `Halo/App/AppState.swift` — `metricsHistoryTimer` (hourly), `recordMetricsHistorySample()`
+- `Halo/App/HaloApp.swift` — `WeeklyDigestScheduler.shared.start(appState:)` alongside `ScanScheduler.shared.start(appState:)`
+- `Halo/Features/Onboarding/OnboardingView.swift` — "Weekly Digest" section in `SettingsView`'s General tab
+- `Halo/Features/Dashboard/DashboardView.swift` — `HealthTrendCard()` added to the Dashboard stack
 
 ---
 
@@ -1859,6 +2129,8 @@ New **"iCloud"** tab in the **Files** module, alongside SpaceLens, Exact Duplica
 ---
 
 *Last updated: v4.1 · 26 features shipped (F-001–F-015 + F-026, F-027, F-030 (scoped down — see "As actually built"), F-031–F-034, F-036–F-039, F-041–F-042) · 12 future ideas remaining (F-016–F-025, F-028, F-029)*
+*Last updated: v4.2 · 26 features shipped (F-001–F-015 + F-016, F-026, F-027, F-031–F-034, F-036–F-039, F-041–F-042) · 12 future ideas remaining (F-017–F-025, F-028–F-030)*
+*Last updated: v4.1 · 26 features shipped (F-001–F-015 + F-026, F-027, F-028, F-031–F-034, F-036–F-039, F-041–F-042) · 12 future ideas remaining (F-016–F-025, F-029–F-030)*
 
 ---
 
