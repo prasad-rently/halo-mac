@@ -75,8 +75,8 @@ required-review or required-status-check rule.
 |---|---|---|
 | 1 | ~~**#21's description/diff mismatch**~~ · **CLOSED 2026-09-06** | **Resolved: the commit was never lost.** It is `3b0d717` *"fix(settings): rework Settings arrangement and wire dead placeholders"* — 5 files, +81/−27, authored 2026-08-14, sitting on a **local-only** branch based directly on `main` (`364357a`). It was never pushed, never a PR, and is not an ancestor of `release/v2.3` or `main`; #21's body borrowed the description from a sibling branch that never travelled with it. **Decision (user, option 3):** correct #21's body, park the commit for **v2.4**. Done — #21's bullet is struck through with a dated correction, and `fix/settings-rework` is now pushed (`origin/fix/settings-rework` = `3b0d717`) so it is no longer one disk failure from gone. **Still to do, after v2.3 lands:** open it as its own PR against `main` and review it like any other. See §8. |
 | 2 | ~~**#19's Photos entitlement**~~ · **CLOSED 2026-09-06** | **Decision (user): option 1 — gate the PhotoKit UI out of sandboxed builds, keep the `Info.plist` usage string.** Shipped in **#27** (`94343f0`). The entitlement sat in the one build where it does nothing (`Halo-Debug` has sandbox OFF, so the key is a no-op and TCC governs) and was absent where it would matter — while `Info.plist` shipped the usage string everywhere, so a release build offered a button the sandbox always denied and then told the user to fix it in System Settings, advice that can never work. `PerceptualDuplicateDetector.isPhotosLibraryReachable` now gates the row, reading the entitlement at runtime via `SecTask` so adding the key later restores the feature with no code change. Verified across all four sandbox/entitlement quadrants with a signed probe — the unit test alone could not prove it, because the test host is ad-hoc signed with no entitlements at all and every key reads false there. **Still open, and the user has committed to a runtime pass:** never tested against a real library, and it requests `.readWrite` (deletion needs `PHAssetChangeRequest`). `CLAUDE.md`'s F-025 line claimed the entitlement was in "both entitlement files" — never true, and corrected in **#28** (`b3a1891`). |
-| 3 | **#9's happy path** | Re-confirmed on 2026-09-06: **both** TCC databases are unreadable without Full Disk Access, so every run took the degraded branch. It degrades *honestly*; the parse, service mapping, dedup and elevated-risk classification are **unverified against real rows**. Grant FDA to a debug build once — it settles this and two original findings together. If that pass will not happen, this is the one feature to consider holding. |
-| 4 | **B4 — sandbox scope** | Six features shell out (`#21 #20 #17 #16 #10 #9`); `posix_spawn` is denied under `Halo.entitlements`. All degrade honestly, but their value exists only in an unsandboxed build. Needs **one** answer for the batch: unsandboxed direct distribution, or route through the F-002 privileged helper. F-007 (App Store assets) is already marked skipped, which may make this easier than it looks. |
+| 3 | ~~**#9's happy path**~~ · **CLOSED 2026-09-06** | **Decision (user): no code change — the Full Disk Access pass is folded into the manual runtime test.** Re-confirmed on 2026-09-06 and again on 2026-09-07: both TCC stores return `authorization denied`, so every run has taken the degraded branch. All six code issues from PR-09 were verified fixed on the branch (`-readonly -json`, both stores merged, `.available(grants: [])` on a successful-but-empty read, names resolved on `@MainActor`, exact-match allowlist). What remains unverified is the parse, service mapping, dedup and elevated-risk classification **against real rows** — one FDA grant to a debug build settles it along with PR-09 issues 1–3. Called out as the main thing worth testing in the v2.3-beta release notes. |
+| 4 | **B4 — sandbox scope** · *partly settled by precedent, see §10* | Six features shell out (`#21 #20 #17 #16 #10 #9`); `posix_spawn` is denied under `Halo.entitlements`. All degrade honestly, but their value exists only in an unsandboxed build. Needs **one** answer for the batch: unsandboxed direct distribution, or route through the F-002 privileged helper. F-007 (App Store assets) is already marked skipped, which may make this easier than it looks. |
 | 5 | **P0.1 CI** | `phase0/ci-workflow` cannot be pushed: the `gh` token has `gist, read:org, repo` but not `workflow`. Fix: `gh auth refresh -h github.com -s workflow` (opens a browser), then push and open a PR against `release/v2.3` or `main`. **There is still no CI on this repo.** |
 | 6 | **Six Swift-6 warnings in batch code** | `SimilarPhotosView` ×4 (captured `var self` in concurrent code), `DriveHealthSection` ×1 (implicit `self` in closure), `WeeklyDigestGenerator` ×1 (`DigestNotificationDelegate` conformance crosses into MainActor). Pre-existing on their own branches — no merge caused them. Warnings under Swift 5.9, **errors under Swift 6**. Another 18 sit in files predating this batch. A pass for these belongs with a language-mode migration, not v2.3. |
 
@@ -245,3 +245,52 @@ into it. Build into a clean `SYMROOT` for anything you intend to sign.
 
 The corrected recipe was run end to end before being written down: `** BUILD
 SUCCEEDED **`, then `codesign --verify --deep --strict` passes.
+
+---
+
+## 10. v2.3 shipped as a beta — 2026-09-07
+
+**[v2.3.0-beta.1](https://github.com/prasad-rently/halo-mac/releases/tag/v2.3.0-beta.1)** ·
+tagged on `release/v2.3` (`9110443`) · `Halo-2.3-beta.dmg`, 23.3 MB · marked
+**pre-release**, so v2.2.0 keeps the "Latest" badge.
+
+Three calls the user made, all deliberate:
+
+| | Decision |
+|---|---|
+| **`main`** | **Still untouched at `364357a`.** Not merged — the batch has not had a manual test pass, so it ships as a beta first. |
+| **PR #29** | **Held back.** The ShellReader migration is reviewed and green but stays open for v2.4. v2.3 therefore ships with five scanners spawning unbounded subprocesses — stated plainly in both the release notes and the README rather than left for someone to discover. |
+| **Build config** | **Debug / App Sandbox OFF**, matching every prior Halo release. Under `Halo.entitlements` the sandbox denies `posix_spawn`, so the six shell-out features would ship as empty panels. This is decision #4's answer *for direct distribution*; App Store submission would still need the sandboxed build and would still disable those features. |
+
+**Signing.** No Developer ID Application certificate exists on this machine — the
+only identity is `Apple Development: Gokul M (KJ32TS3953)` — so notarisation is
+impossible and Gatekeeper blocks a plain double-click. Same as v2.0–v2.2, and
+disclosed the same way: right-click → Open, with the `xattr -dr` fallback.
+
+**Verified before publishing**, not assumed:
+
+- Clean `SYMROOT`, so no `HaloTests.xctest` or XCTest frameworks inside the bundle
+- `codesign --verify --deep --strict` passes; helper and widget carry real
+  signatures; `app-sandbox = false` confirmed by reading back the embedded
+  entitlements
+- DMG mounts, `Halo.app` + `/Applications` symlink present, signature survives the
+  copy, version reads 2.3 / 230
+- The app **launches and quits cleanly** — a DMG that crashes on open would
+  otherwise have shipped
+
+**Two README claims were written and then removed** before commit: the subprocess
+audit script, and "all of it goes through ShellReader". Both belong to PR #29,
+which is not in this release. The README now states which five scanners still
+spawn their own and that the fix is queued — the same trap as the `CLAUDE.md`
+F-025 entitlement line in §3.2, caught this time before it landed.
+
+### Still open after this release
+
+| # | What | Note |
+|---|---|---|
+| PR #29 | ShellReader migration | Reviewed, green, awaiting merge into v2.4 |
+| #4 | Sandbox scope | Answered for direct distribution; App Store path still undecided |
+| #5 | CI | Still none. `scripts/audit-subprocess-spawning.sh` (on #29) wants a home. |
+| #6 | Six Swift-6 warnings | Belongs with a language-mode migration |
+| — | **Manual test pass** | The reason this is a beta. F-016 with Full Disk Access granted, and F-025's Photos path, are the two that have never run. |
+| — | Merge to `main` | After the test pass |
