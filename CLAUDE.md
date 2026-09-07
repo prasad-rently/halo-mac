@@ -306,14 +306,14 @@ codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
 
 ## Continuous Integration
 
-`.github/workflows/ci.yml` — runs on every pull request, on pushes to `main`, and on demand
-(`workflow_dispatch`). Before it existed there were no checks on any branch, so every
+`.github/workflows/ci.yml` — runs on every pull request, on pushes to `main` and any
+`release/**` branch, and on demand (`workflow_dispatch`). Before it existed there were no checks on any branch, so every
 "BUILD SUCCEEDED" in a PR body was an unverifiable local claim.
 
 | Job | Runs on | What it does |
 |-----|---------|--------------|
-| `debug-build-and-test` | PR + push to `main` | Debug build of all four products, then `HaloTests` |
-| `release-build` | push to `main` + manual only | Release (whole-module) build — kept off the PR path so a PR pays for one build, not two |
+| `debug-build-and-test` | PR + push to `main`/`release/**` | Debug build of all four products, then `HaloTests` |
+| `release-build` | push to `main`/`release/**` + manual only | Release (whole-module) build — kept off the PR path so a PR pays for one build, not two |
 
 - **Runner:** `macos-26` (arm64). Xcode pinned to **26.4.1**, the version the `F-016`–`F-030`
   batch was developed against, with a fallback to the image default if that patch release is
@@ -339,8 +339,11 @@ codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
   one, share it.
 - On failure the `.xcresult` bundle uploads as artifact `HaloTests-xcresult` (7-day retention).
 
-Baseline on `main` at the time this landed: **54 tests in 15 suites passed**, Debug and Release
-both `BUILD SUCCEEDED`.
+Baseline when this workflow was written (against `main`, pre-batch): 54 tests in 15 suites.
+Current baseline, re-verified 2026-09-15 against `release/v2.4` (`db69f58`) by running both jobs'
+exact commands locally: Debug `BUILD SUCCEEDED` (all four products), **348 tests in 67 suites
+passed**, Release `BUILD SUCCEEDED` (0 errors, whole-module). So CI's first run is a regression
+check on both configurations rather than a first verification of either.
 
 > **Known reproducibility gap.** `Package.resolved` is in `.gitignore`, and Sentry is pinned
 > only as `upToNextMajorVersion` from `8.0.0`. CI therefore resolves whatever the newest 8.x is

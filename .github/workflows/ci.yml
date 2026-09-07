@@ -8,7 +8,10 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    # `release/**` as well as main: v2.3 onward is cut from a release branch and
+    # merged to main only after a manual test pass, so gating main alone would
+    # leave the branch that actually ships unchecked for weeks.
+    branches: [main, 'release/**']
   workflow_dispatch:
 
 # macOS runners bill at 10x, so don't leave superseded runs going.
