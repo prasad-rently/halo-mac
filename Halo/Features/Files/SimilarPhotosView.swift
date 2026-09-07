@@ -237,22 +237,29 @@ final class SimilarPhotosViewModel: ObservableObject {
         // `enumerateImageFiles` is already `static` and touches no instance
         // state, so it is safe to run off the main actor.
         scanTask = Task.detached(priority: .userInitiated) { [weak self] in
+            // `self` is read exactly once, here, into an immutable local. Every
+            // nested closure below then captures `vm` rather than re-reading the
+            // weak capture — reading a captured `var` from inside a nested
+            // concurrent closure is a warning today and an error under the
+            // Swift 6 language mode. Weak semantics are unchanged: `vm` is still
+            // an Optional that is nil once the view model is gone.
+            let vm = self
             let files = Self.enumerateImageFiles(in: dirs)
             do {
                 let found = try await detector.detect(in: files, hammingThreshold: threshold) { p in
-                    Task { @MainActor in self?.progress = p }
+                    Task { @MainActor in vm?.progress = p }
                 }
                 await MainActor.run {
-                    guard let self, !Task.isCancelled else { return }
-                    self.groups = found
-                    self.isScanning = false
+                    guard let vm, !Task.isCancelled else { return }
+                    vm.groups = found
+                    vm.isScanning = false
                 }
             } catch is CancellationError {
-                await MainActor.run { self?.isScanning = false }
+                await MainActor.run { vm?.isScanning = false }
             } catch {
                 await MainActor.run {
-                    self?.scanError = error.localizedDescription
-                    self?.isScanning = false
+                    vm?.scanError = error.localizedDescription
+                    vm?.isScanning = false
                 }
             }
         }
