@@ -40,7 +40,12 @@ final class DriveHealthViewModel: ObservableObject {
 
         guard !isScanning else { return }
         isScanning = true
-        Task { [weak self] in
+        // `monitor` is captured explicitly rather than reached through an
+        // implicit `self`, which the Swift 6 language mode rejects. It is a
+        // `let` holding an actor, so capturing it directly is equivalent and
+        // does not extend the view model's lifetime the way capturing `self`
+        // strongly would.
+        Task { [weak self, monitor] in
             let result = await monitor.scan(volume: volume)
             await MainActor.run {
                 guard let self else { return }

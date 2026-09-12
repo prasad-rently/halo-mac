@@ -157,8 +157,13 @@ enum WeeklyDigestGenerator {
 
     // MARK: - Notification delivery
 
-    static let categoryIdentifier = "com.halo.mac.weeklydigest"
-    static let viewReportActionIdentifier = "VIEW_REPORT"
+    // `nonisolated` because `DigestNotificationDelegate`'s callbacks are
+    // nonisolated (see the note on that class) and compare against these. They
+    // are immutable string constants, so there is no actor state to protect —
+    // the isolation was incidental to living on a `@MainActor` type. Same reason
+    // the six other MainActor statics in this codebase carry it.
+    nonisolated static let categoryIdentifier = "com.halo.mac.weeklydigest"
+    nonisolated static let viewReportActionIdentifier = "VIEW_REPORT"
 
     /// Registers the "View Report" action button. Call once, before the first
     /// digest can possibly fire (WeeklyDigestScheduler.start does this).
@@ -413,10 +418,16 @@ final class WeeklyDigestScheduler {
 // NSObject-based) since UNUserNotificationCenterDelegate requires
 // NSObjectProtocol conformance. Uses AppState.shared (the existing static
 // reference App Intents already rely on) rather than holding its own copy.
-@MainActor
+// The class is deliberately NOT `@MainActor`. `UNUserNotificationCenterDelegate`
+// declares its methods without isolation, so a MainActor-isolated conformance
+// "crosses into main actor-isolated code" — a warning today, an error under the
+// Swift 6 language mode, and a real data race if UserNotifications ever calls
+// back off the main thread. The methods are `nonisolated` and hop to the main
+// actor themselves for the work that needs it, which is what the previous
+// version was already doing inside `Task { @MainActor in … }` anyway.
 final class DigestNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
 
-    func userNotificationCenter(
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
@@ -424,8 +435,11 @@ final class DigestNotificationDelegate: NSObject, UNUserNotificationCenterDelega
         let tappedViewReport = response.actionIdentifier == UNNotificationDefaultActionIdentifier
             || response.actionIdentifier == WeeklyDigestGenerator.viewReportActionIdentifier
 
-        if tappedViewReport, let appState = AppState.shared {
+        if tappedViewReport {
+            // `AppState.shared` is MainActor-isolated, so it is read on the main
+            // actor rather than from whatever thread delivered the callback.
             Task { @MainActor in
+                guard let appState = AppState.shared else { return }
                 WeeklyDigestGenerator.exportAndPresentReport(appState: appState)
             }
         }
@@ -433,7 +447,7 @@ final class DigestNotificationDelegate: NSObject, UNUserNotificationCenterDelega
     }
 
     /// Show the notification banner even while Halo is already in the foreground.
-    func userNotificationCenter(
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
