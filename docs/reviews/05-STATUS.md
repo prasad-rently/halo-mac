@@ -1,6 +1,7 @@
 # Halo — where the project stands
 
 **Last verified:** 2026-09-12 · against the live remote, not from memory.
+**Updated 2026-09-12:** #29 and #30 merged into `release/v2.4`.
 
 This is the single current-state page. The detailed history lives in
 [`00-REVIEW-INDEX.md`](00-REVIEW-INDEX.md) and the session handoffs
@@ -24,7 +25,7 @@ finished or blocked behind that step or behind a one-command token refresh.
 |---|---|---|
 | `main` | `364357a` | **Untouched.** 103 commits and ~18,900 lines behind `release/v2.3`. Deliberate — it advances only after the manual test pass. |
 | `release/v2.3` | `9110443` | Tagged `v2.3.0-beta.1`, released, DMG published |
-| `release/v2.4` | `9110443` | Branched from v2.3 on 2026-09-07. No commits of its own yet — both its PRs are still open |
+| `release/v2.4` | `43ff612` | #29 and #30 merged 2026-09-12. Clean build · **348 tests in 67 suites pass** · subprocess audit clean |
 | `review/pr-audit` | `005226a` | All review documentation |
 | `feat/ci-workflow` | `85d06ae` | ⚠️ **Local only — cannot be pushed.** See §5 |
 
@@ -97,14 +98,25 @@ its signature intact, and **the app launches and quits cleanly**.
 
 | PR | Into | State | What |
 |---|---|---|---|
-| [#29](https://github.com/prasad-rently/halo-mac/pull/29) | `release/v2.4` | `MERGEABLE`/`CLEAN` | **ShellReader migration.** Five scanners spawned subprocesses with no timeout; one had an undrained stderr pipe. All now bounded. Plus `scripts/audit-subprocess-spawning.sh` so it cannot regress |
-| [#30](https://github.com/prasad-rently/halo-mac/pull/30) | `release/v2.4` | `MERGEABLE`/`CLEAN` | **Six Swift-6 warnings** in batch code. One was a genuine latent data race: `DigestNotificationDelegate` was `@MainActor` while conforming to a protocol with no isolation |
-| [#1](https://github.com/prasad-rently/halo-mac/pull/1) | `main` | **`CONFLICTING`/`DIRTY`** | Maestro E2E. Recommended **close** — `main` already has a 21-file `HaloUITests` target this re-adds as new files |
+| [#1](https://github.com/prasad-rently/halo-mac/pull/1) | `main` | **`CONFLICTING`/`DIRTY`** | Maestro E2E. Recommended **close** |
 | [#6](https://github.com/prasad-rently/halo-mac/pull/6) | merged branch | Stale base | Docs-only. Retarget. Settle the `india-bank-sms.v1.json` licence question first |
 | [#7](https://github.com/prasad-rently/halo-mac/pull/7) | `feature/upcoming-features` | Needs splitting | Titled "Phase 0 foundation" but ships 4 features / 5,306 lines / 36 files |
 
-Both #29 and #30 were built, reviewed and verified but **neither is merged** —
-each is waiting on a go-ahead.
+### Merged into `release/v2.4` on 2026-09-12
+
+| PR | What landed |
+|---|---|
+| [#29](https://github.com/prasad-rently/halo-mac/pull/29) | **ShellReader migration.** Five scanners spawned subprocesses with no timeout; `SMARTDiskMonitor` also had an undrained stderr pipe. All bounded now, plus `scripts/audit-subprocess-spawning.sh` so it cannot regress |
+| [#30](https://github.com/prasad-rently/halo-mac/pull/30) | **Six Swift-6 warnings** in batch code. One was a genuine latent data race: `DigestNotificationDelegate` was `@MainActor` while conforming to a protocol declaring no isolation |
+
+GitHub's mergeability check was returning `UNKNOWN` when #30 was merged, so it
+was verified locally against the post-#29 tip with `git merge-tree` — clean, 0
+conflicts — rather than trusting a pending status. The two touch disjoint files.
+
+**The merged result was built and tested, not inferred** from the two PRs'
+separate runs: clean build, **348 tests in 67 suites pass**, audit script clean,
+no residual conflict markers, and the six batch-code Swift-6 warnings confirmed
+gone from `SimilarPhotosView`, `DriveHealthSection` and `WeeklyDigestGenerator`.
 
 ---
 
@@ -136,7 +148,8 @@ each is waiting on a go-ahead.
 Stated in the release notes rather than left to be discovered:
 
 - **Not notarised** — needs a paid Apple Developer ID
-- **Five scanners can hang in theory** — fixed in #29, not in the beta
+- **Five scanners can hang in theory** — fixed in #29, which is on
+  `release/v2.4`; **the v2.3 beta does not have it**
 - **Crash reporting inert** — `Info.plist` still holds `SENTRY_DSN_PLACEHOLDER`
 - **No CI** — tests and audits run by hand
 - **Swift 6 migration outstanding** — 15 warnings in app code plus 5 in the test
@@ -152,7 +165,7 @@ Stated in the release notes rather than left to be discovered:
 
 1. `gh auth refresh -h github.com -s workflow`, then push `feat/ci-workflow` and
    open its PR — gets CI running and takes a local-only branch out of danger
-2. Merge **#29** and **#30** into `release/v2.4`
+2. ~~Merge #29 and #30 into `release/v2.4`~~ — **done 2026-09-12**
 3. **Run the manual test pass** against the beta, prioritising F-016 with Full
    Disk Access granted and F-025's Photos path
 4. Merge `release/v2.3` → `main`, tag a non-beta `v2.3`
