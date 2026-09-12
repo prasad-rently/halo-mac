@@ -626,7 +626,8 @@ process, once to record the CPU snapshot — doubling the syscall count of every
 | `Halo.entitlements` | **ON** (with `~/Library` exceptions) | App Store / release |
 | `HaloWidget.entitlements` | **ON** | Widget extension always |
 
-Both main-app entitlement files include `com.apple.security.application-groups = [group.com.halo.mac]`.
+All three entitlement files include `com.apple.security.application-groups = [group.com.halo.mac]`,
+and **all three must keep it** — `scripts/audit-entitlements.sh` enforces this. See gotcha 27.
 
 ---
 
@@ -948,6 +949,40 @@ ancestor, so real collisions still print.
 24. **`AVAILABLE_SPARE_THRESHOLD` is 99 on Apple Silicon — never compare against it literally.** Verified on this Mac: `diskutil info -plist /` reports `AVAILABLE_SPARE = 100` with `AVAILABLE_SPARE_THRESHOLD = 99`, nothing like the ~10% the NVMe spec's own examples use. A literal `spare <= threshold` check therefore declares a perfectly healthy drive **Failing** the first time spare ticks 100 → 99 on normal wear, which then fires `.diskSmartFailing` ("back up your data immediately") every hour indefinitely. `SMARTDiskInfo.classify` guards this two ways: it ignores any threshold above `maxCredibleSpareThreshold` (50) and uses the spec's strict `<` rather than `<=`, with a threshold-independent `criticalSparePercent` (10) backstop for genuinely low spare. Regression-tested in `HaloTests`.
 25. **`SMARTStatus = "Not Supported"` is the healthy state for USB/Thunderbolt enclosures, not a warning.** Verified on this Mac: an external USB SSD reports `"Not Supported"` and publishes no SMART dictionary at all, because bridge chipsets don't pass the health log through. Mapping an unrecognised status to `.warning` puts an amber badge on a perfectly good drive — `.other` must classify as `.unknown` ("can't tell"), the same discipline F-019's security checks use for values Halo cannot verify. The status check must also sit *after* the wear/spare/error checks so it can't mask a signal that was successfully read.
 26. **Card badge vs system notification are different bars.** `SMARTDiskInfo.healthLevel` drives the Drive Health card (a surface the user chose to open, so it can surface anything notable); `SMARTDiskInfo.alertLevel` is what `AlertManager.evaluateSMART` acts on and is deliberately stricter. A non-zero `MEDIA_ERRORS` count colours the badge but does **not** notify — one unrecovered read over a drive's lifetime isn't evidence of failure, and with `.diskSmartWarning`'s 24 h cooldown it would otherwise nag daily forever with no action the user can take. Pass `alertLevel`, never `healthLevel`, to `evaluateSMART`.
+
+27. **Every App-Group writer needs the entitlement, and losing it fails silently.**
+    `HaloWidget.appex` is sandboxed (WidgetKit requires it) and can read **only**
+    `~/Library/Group Containers/group.com.halo.mac/…`. If the main app does not
+    declare `com.apple.security.application-groups`, its
+    `UserDefaults(suiteName: "group.com.halo.mac")` does **not** fail and does
+    **not** return nil — it silently resolves to
+    `~/Library/Preferences/group.com.halo.mac.plist`, a different file the widget
+    cannot reach. `HaloWidgetData.load()` then returns its zero placeholder, so
+    the widget renders **plausible** values (0 % CPU, 8 GB RAM, no clipboard
+    items) and looks stuck rather than broken.
+
+    This shipped. `7f91bbb` (2026-05-07) removed the key from
+    `Halo-Debug.entitlements` to stop a per-launch TCC prompt, on the stated
+    basis that *"release builds (`Halo.entitlements`) retain the App Group"* —
+    but every shipped DMG, **v2.0 through the v2.3 beta**, is built from the
+    **Debug** configuration and signed with that file. The widget was dead in
+    every release for four months, and this document asserted the opposite the
+    whole time.
+
+    The `?? UserDefaults.standard` fallback in `HaloSharedData` does not rescue
+    it: `UserDefaults(suiteName:)` succeeds in both processes, so the fallback
+    never fires — they simply land in different files.
+
+    Verified 2026-09-12 with a signed probe: an **unsandboxed** app carrying this
+    entitlement, signed with a plain Apple Development certificate and **no
+    provisioning profile**, does get the group container. The original concern
+    was a development re-signing loop, not a limitation of the signing setup.
+
+    `scripts/audit-entitlements.sh` fails the moment any of the three targets
+    drops the group — including when the key is merely commented out, which a
+    `grep` would happily pass.
+
+---
 
 ## Reorderable Sidebar Modules
 

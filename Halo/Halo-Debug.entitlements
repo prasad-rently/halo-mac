@@ -16,6 +16,31 @@
     <key>com.apple.security.network.server</key>
     <true/>
 
+    <!-- App Group — REQUIRED for the widget to show anything.
+         `HaloWidget.appex` is sandboxed (WidgetKit requires it) and can only
+         read `~/Library/Group Containers/group.com.halo.mac/…`. Without this key
+         the main app is unsandboxed with no group membership, so
+         `UserDefaults(suiteName:)` silently resolves to
+         `~/Library/Preferences/group.com.halo.mac.plist` instead — a *different
+         file the widget cannot reach*. `HaloWidgetData.load()` then returns its
+         zero placeholder, which renders as a widget stuck on plausible values
+         rather than an obviously broken one.
+
+         This key was removed in 7f91bbb (2026-05-07) to stop a per-launch TCC
+         prompt during development, on the stated basis that "release builds
+         (Halo.entitlements) retain the App Group". That stopped being true:
+         every shipped DMG, v2.0 through the v2.3 beta, is built from the Debug
+         configuration and therefore signed with THIS file. The widget has been
+         dead in every release since.
+
+         Verified 2026-09-12 with a signed probe: an unsandboxed app carrying
+         this entitlement, signed with a plain Apple Development certificate and
+         no provisioning profile, does get the group container. -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.com.halo.mac</string>
+    </array>
+
     <!-- F-025: Similar Photos — optional Photos Library scan for near-duplicates.
          Entitlement + Info.plist NSPhotoLibraryUsageDescription are wired, but the
          real permission-grant flow has NOT been runtime-tested this session. -->
