@@ -277,6 +277,12 @@ xcodebuild -project Halo.xcodeproj -scheme HaloTests -configuration Debug \
   test
 ```
 
+There is also an audit that keeps subprocess handling in one place:
+
+```bash
+./scripts/audit-subprocess-spawning.sh
+```
+
 ### Building a distributable app
 
 > **There is no `Halo` scheme** — only `HaloTests`, `HaloUITests`, `HaloWidget` and
@@ -345,6 +351,7 @@ HaloWidget/      widget extension
 HaloHelper/      XPC helper for privileged operations
 Shared/          code compiled into both the app and the widget
 HaloTests/       unit tests   ·   HaloUITests/  UI tests
+scripts/         repo audits
 docs/            architecture, design system, roadmaps, code reviews
 ```
 
@@ -379,16 +386,16 @@ SystemMonitor (every 2 s)
 - `ScanCoordinator` uses `withTaskGroup` for parallel category scanning.
 
 ### Spawning subprocesses
-Several features read the system by running Apple's own command-line tools.
-`ShellReader` is the intended single entry point for that: it drains stdout and
-stderr concurrently and bounds every call, because an undrained pipe or a missing
-deadline hangs the caller permanently — and both had shipped before it was
-extracted. See gotcha 20 in `CLAUDE.md`.
+Several features read the system by running Apple's own command-line tools. All of
+it goes through `ShellReader`, which drains stdout and stderr concurrently and
+bounds every call — an undrained pipe or a missing deadline hangs the caller
+permanently, and both had shipped before it was extracted. The only sanctioned
+exception is `ActionRunner`, which streams output to the UI line by line and so
+cannot use a batch reader. See gotcha 20 in `CLAUDE.md`.
 
-In this build the older callers route through it; five of the newer scanners
-(`PermissionAuditor`, `SMARTDiskMonitor`, `NetworkTrafficMonitor`,
-`SecurityPostureScanner`, `TimeMachineMonitor`) still spawn their own and are not
-yet bounded by a timeout. Migrating them is queued for the next release.
+`scripts/audit-subprocess-spawning.sh` enforces this — a rule in a document
+already failed to prevent it once, when five scanners each grew their own
+unbounded `Process`.
 
 ### Sentry Crash Reporting
 - Opt-in only (`enableAnalytics` UserDefaults key, defaults to `false`)

@@ -214,26 +214,24 @@ actor PermissionAuditor {
     /// entirely. (Requires sqlite3 >= 3.33, shipped on macOS 12+; this project
     /// targets 13.0.)
     private func runSQLite(dbPath: String, query: String) -> (output: String, didRun: Bool) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-        process.arguments = ["-readonly", "-json", dbPath, query]
+        // ShellReader keeps stderr on its own handle (merging them is what made
+        // the old `contains("error:")` check fragile) and bounds the call. The
+        // bound matters most here: `run()` is awaited inside
+        // `ProtectionViewModel.loadAll()`'s task group, and a task group joins
+        // every child — so a wedged sqlite3 means the *whole Protection module*
+        // never finishes loading. sqlite3 can genuinely block on a TCC.db the
+        // OS holds open, and only on machines where Full Disk Access is granted
+        // — i.e. never on a dev machine, always on one where this path works.
+        let result = ShellReader.run("/usr/bin/sqlite3",
+                                     ["-readonly", "-json", dbPath, query])
 
-        let outPipe = Pipe()
-        process.standardOutput = outPipe
-        // Its own handle, not shared with stdout. Merging them is also what made
-        // the `contains("error:")` check fragile.
-        process.standardError = FileHandle.nullDevice
+        // `didRun: false` is what makes the caller fall back to the honest
+        // "needs Full Disk Access" state instead of reporting zero grants. A
+        // timeout belongs in that bucket too: partial JSON would either fail to
+        // decode or, worse, decode to a silently truncated grant list.
+        guard result.succeeded else { return ("", false) }
 
-        do {
-            try process.run()
-        } catch {
-            return ("", false)
-        }
-
-        let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-
-        return (String(data: data, encoding: .utf8) ?? "", process.terminationStatus == 0)
+        return (result.standardOutput, true)
     }
 
     /// Decoded shape of one `-json` row.
