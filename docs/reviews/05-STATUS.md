@@ -143,6 +143,49 @@ gone from `SimilarPhotosView`, `DriveHealthSection` and `WeeklyDigestGenerator`.
 
 ---
 
+## 5b. Found while installing the beta — the widget has no data
+
+**Confirmed on 2026-09-12 by installing the released DMG on a real machine.**
+This is a shipped bug, not a theory, and it has been shipped since May.
+
+The app and the widget resolve the *same* App Group suite name to *different
+files*:
+
+| Process | Sandbox | `application-groups` entitlement | `UserDefaults(suiteName:)` resolves to |
+|---|---|---|---|
+| `Halo.app` | off | **absent** | `~/Library/Preferences/group.com.halo.mac.plist` — **verified present and updating** |
+| `HaloWidget.appex` | on | present | `~/Library/Group Containers/group.com.halo.mac/…` — **verified does not exist** |
+
+So `HaloWidgetData.load()` finds nothing and returns its zero placeholder
+(`cpuUsage: 0`, `ramTotalGB: 8`, no clipboard items). That renders as a widget
+stuck at plausible-looking values rather than an obviously broken one, which is
+why it could ship unnoticed.
+
+**Root cause, and it was deliberate.** `7f91bbb` (2026-05-07) removed
+`com.apple.security.application-groups` from `Halo-Debug.entitlements` to stop a
+per-launch TCC prompt, noting *"Release builds (`Halo.entitlements`) retain the
+App Group for widget support."* That assumption stopped being true: every
+shipped DMG — v2.0 through the v2.3 beta — is built from the **Debug**
+configuration. The follow-through never happened.
+
+The `?? UserDefaults.standard` fallback added in the same commit does not help:
+`UserDefaults(suiteName:)` succeeds in both processes, so the fallback never
+fires — they just land in different files.
+
+**`CLAUDE.md` states the opposite** — *"Both main-app entitlement files include
+`com.apple.security.application-groups`"* — and needs correcting either way.
+
+Three options, all needing a decision rather than an obvious fix:
+
+1. Put the entitlement back in `Halo-Debug.entitlements` and accept the TCC
+   prompt, or suppress it by signing with a provisioning profile
+2. Build releases from a configuration that uses `Halo.entitlements` — but that
+   turns the sandbox on, which disables the six shell-out features
+3. Give the widget its own read fallback to the unsandboxed path — narrowest
+   change, but the widget is sandboxed and may not be able to reach it
+
+---
+
 ## 6. Known gaps in the shipped beta
 
 Stated in the release notes rather than left to be discovered:
