@@ -161,6 +161,7 @@ recurring. The three worth reading before doing similar work:
 | [`02-RE-REVIEW.md`](02-RE-REVIEW.md) | Session 3 — the adversarial re-review: R1–R10, all closed |
 | [`03-LAPSES.md`](03-LAPSES.md) | Mistakes made while reviewing and merging |
 | **this file** | Session 3 — the merge train and what is left |
+| [`05-STATUS.md`](05-STATUS.md) | **Current state — start here.** Where the project stands, what is done, what is blocked and on what |
 
 ---
 
