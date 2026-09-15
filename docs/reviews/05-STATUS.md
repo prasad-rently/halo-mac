@@ -1,7 +1,9 @@
 # Halo — where the project stands
 
-**Last verified:** 2026-09-12 · against the live remote, not from memory.
-**Updated 2026-09-12:** #29 and #30 merged into `release/v2.4`.
+**Last verified:** 2026-09-15 · against the live remote, not from memory.
+**Updated 2026-09-15:** #31 merged, build 231 cut. `feat/ci-workflow` rebased onto
+`release/v2.4`'s current tip and fully re-verified; still blocked on the same token
+scope, re-confirmed today.
 
 This is the single current-state page. The detailed history lives in
 [`00-REVIEW-INDEX.md`](00-REVIEW-INDEX.md) and the session handoffs
@@ -25,9 +27,9 @@ finished or blocked behind that step or behind a one-command token refresh.
 |---|---|---|
 | `main` | `364357a` | **Untouched.** 103 commits and ~18,900 lines behind `release/v2.3`. Deliberate — it advances only after the manual test pass. |
 | `release/v2.3` | `9110443` | Tagged `v2.3.0-beta.1`, released, DMG published |
-| `release/v2.4` | `43ff612` | #29 and #30 merged 2026-09-12. Clean build · **348 tests in 67 suites pass** · subprocess audit clean |
-| `review/pr-audit` | `005226a` | All review documentation |
-| `feat/ci-workflow` | `85d06ae` | ⚠️ **Local only — cannot be pushed.** See §5 |
+| `release/v2.4` | `db69f58` | #29–#31 merged; build bumped to 231 for beta.2. Clean build · **348 tests in 67 suites pass** · subprocess audit clean |
+| `review/pr-audit` | `bd41883` | All review documentation |
+| `feat/ci-workflow` | `8cada4c` | ⚠️ **Local only — cannot be pushed.** Rebased onto `db69f58` and re-verified 2026-09-15. See §5 |
 
 **Latest release:** [`v2.3.0-beta.1`](https://github.com/prasad-rently/halo-mac/releases/tag/v2.3.0-beta.1)
 · pre-release · `Halo-2.3-beta.dmg`, 23.3 MB · **0 downloads**.
@@ -127,15 +129,26 @@ gone from `SimilarPhotosView`, `DriveHealthSection` and `WeeklyDigestGenerator`.
 | **Everything downstream of the release** | **The manual test pass.** The beta has **0 downloads**, so it has not begun | Installing the DMG and working through it |
 | `main` advancing to v2.3 | The manual test pass | Same |
 | A non-beta v2.3 tag | The manual test pass | Same |
-| **CI** (decision #5) | `gh` token has `gist, read:org, repo` — **no `workflow` scope**. GitHub rejects any push that creates `.github/workflows/*`. Re-confirmed by attempting it on 2026-09-07 | `gh auth refresh -h github.com -s workflow` — one command, opens a browser |
+| **CI** (decision #5) | `gh` token has `gist, read:org, repo` — **no `workflow` scope**. GitHub rejects any push that creates `.github/workflows/*`. Re-confirmed by attempting it again on 2026-09-15 | `gh auth refresh -h github.com -s workflow` — one command, opens a browser |
 | App Store submission | Decision #4's remaining half | A decision, not engineering |
 
 ### Two things worth acting on sooner rather than later
 
-1. **`feat/ci-workflow` (`85d06ae`) exists only on this machine.** A complete,
-   reviewed 135-line workflow that cannot be pushed without the scope above.
+1. **`feat/ci-workflow` (`8cada4c`) exists only on this machine.** A complete,
+   reviewed 138-line workflow that cannot be pushed without the scope above.
    This is the same exposure `fix/settings-rework` had — one disk failure from
    gone — and the fix is one command.
+
+   Re-verified 2026-09-15 on the rebased tip by running both jobs' exact commands
+   locally, so nothing about it is carried forward on trust: Debug `BUILD SUCCEEDED`
+   with all four products present, **348 tests in 67 suites passed**, and Release
+   `BUILD SUCCEEDED` with 0 errors. That last one closes a gap the branch itself
+   flagged — the Release configuration had not been built since the batch landed, so
+   CI's first post-merge `release-build` would have been its first verification, found
+   red on a push rather than here. Also checked against live GitHub rather than
+   assumed: `actions/checkout@v7` and `actions/upload-artifact@v7` exist, and
+   `Xcode_26.4.1.app` is on the current `macos-26-arm64` image, so the version pin
+   resolves rather than silently falling back to the image default.
 2. **The two features that have never run at all** are F-016's permission list
    (needs Full Disk Access) and F-025's Photos Library scan (needs a real
    library). Everything else in the batch has executed at least once. These are
