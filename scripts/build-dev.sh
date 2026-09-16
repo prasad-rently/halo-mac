@@ -41,6 +41,24 @@ say() { printf '\n\033[1;34m==>\033[0m %s\n' "$1"; }
 # Halo.app, which ship and then break signing with "a sealed resource is
 # missing or invalid". See CLAUDE.md, Build & Sign.
 # ---------------------------------------------------------------------------
+# The token in Halo/App/BuildToken.swift exists so you can tell one dev binary
+# from another, but nothing ever refreshed it: scripts/update_build_token.sh is
+# not wired into any Xcode run-script phase (the only one embeds HaloHelper.xpc),
+# so the token only ever changed when someone ran it by hand and committed. It
+# had been frozen at 8d90f1, which meant every build — the released app included
+# — showed the same value, which is the one thing a build token must never do.
+#
+# Refreshing it here rewrites a tracked file, which is what its own header says
+# it is for ("Auto-updated by the build script before each xcodebuild run").
+# Set HALO_DEV_SKIP_TOKEN=1 to keep the working tree clean instead.
+if [ "${HALO_DEV_SKIP_TOKEN:-0}" != "1" ] && [ -x scripts/update_build_token.sh ]; then
+  say "Refreshing the build token"
+  ./scripts/update_build_token.sh
+  echo "  note: Halo/App/BuildToken.swift is now modified in your working tree"
+else
+  say "Keeping the existing build token (HALO_DEV_SKIP_TOKEN=1)"
+fi
+
 say "Building Halo (Debug) into a clean SYMROOT"
 rm -rf "$SYMROOT"
 xcodebuild -project Halo.xcodeproj \
