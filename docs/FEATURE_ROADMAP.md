@@ -78,6 +78,7 @@
 | [F-048](#f-048--personal-expenditure-tracker-nfeat-126) | Personal Expenditure Tracker (NFeat-126) | 🗓 Planned | TBD | F-044 |
 | [F-049](#f-049--halo-mobile-app-product-line) | Halo Mobile App (product line) | 🗓 Planned | TBD | F-044, F-045, F-050 |
 | [F-050](#f-050--haloshare-mobile--desktop-nfeat-127) | HaloShare Mobile ↔ Desktop (NFeat-127) | 🗓 Planned | TBD | HaloShare (LocalSend) |
+| [F-051](#f-051--lucky-draw-spinner-wheel-nfeat-128) | Lucky Draw Spinner Wheel (NFeat-128) | ✅ Done | ~6 d | CelebrationOverlay (F-037) |
 
 > **Status legend:** ✅ Done · 📋 Queued (next up) · 🗓 Planned (user-requested, spec pending discussion) · 💡 Future Idea (unsolicited) · ⏭ Skipped
 
@@ -3404,3 +3405,111 @@ and mobile↔mobile).
 - Mobile discovery constraints (multicast/mDNS on iOS requires the Local Network entitlement; Android background limits).
 - Background transfer + power/foreground requirements on mobile.
 - Reuse of the existing `Core/LocalShare` protocol models across platforms.
+
+
+---
+
+## F-051 — Lucky Draw Spinner Wheel (NFeat-128)
+
+**Status:** ✅ Done · **Effort:** ~6 d · **Depends on:** `CelebrationOverlay` (F-037 particle engine)
+**Full spec:** [`docs/specs/F-051-lucky-draw-spinner.md`](specs/F-051-lucky-draw-spinner.md)
+
+### Intent
+A **Lucky Draw** module. The user adds any number of names or items; Halo renders
+them as a colour-segmented wheel and one press spins it to reveal a single random
+winner with a full celebration sequence. Entries can be added, bulk-pasted, edited,
+removed, temporarily **excluded**, and — the point of a draw — automatically
+**retired once they win**, so a roster is drawn down round by round with no repeats.
+
+Halo's first purely *social* surface. No scanning, no system access, no network.
+**The animation quality is the feature**: a draw that reveals its winner without
+tension is a random-number generator with a circle drawn around it.
+
+### What it delivers
+- New sidebar module `luckyDraw` (reorderable), multiple saved rosters, JSON-persisted.
+- Add / paste-many / drop-a-file / edit / remove / exclude entries, up to 500.
+- Auto-retire winners (default on), **Put back** any single winner, **Reset draw**.
+- Draw N in a row; per-roster draw history (200) + CSV export.
+- The full §8 animation spec: wind-up recoil → launch → cruise with motion smear →
+  eased deceleration (1 − (1−t)³·⁴) → ratchet pointer → near-miss spotlight → overshoot-and-settle →
+  confetti poppers + per-character name reveal + shockwave → continuous segment re-flow.
+- A **Fairness** popover, because the honesty point below has to be visible in the app.
+
+### The one architectural rule
+**The winner is chosen before the wheel moves.** `SystemRandomNumberGenerator` picks
+the index; the wheel then animates to a pre-computed target angle. Simulating friction
+and reading off whatever lands under the pointer would make the distribution a property
+of the physics code — much harder to prove uniform and trivially skewed by a float
+rounding bug. The animation presents the result; it never produces it.
+
+### Implementation steps
+See §13 of the spec — P1 data + engine (UI-free, fully unit-tested) → P2 roster UI →
+P3 spin + wheel → P4 reveal + celebration → P5 settings/a11y/tuning → P6 docs.
+
+### Test plan
+`DrawEngineTests` (χ² uniformity over 100 k draws; landing angle resolves to the chosen
+index for **every** entry count 1…500 — the 0°/360° seam), `SpinnerAnimatorTests`
+(monotonic angle, exact arrival, velocity profile), `LuckyDrawStoreTests` (round-trip,
+history cap, corrupt-file fallback), plus a manual checklist for the §8 animation beats,
+which cannot be asserted in code.
+
+### Acceptance criteria
+See §9 of the spec — 11 criteria. The load-bearing ones: N draws over an N-entry roster
+yield N distinct winners; the segment under the pointer is always the entry on the card;
+Reduced Motion gets a real alternative presentation rather than a faster spin; 60 fps at
+200 entries.
+
+### Mobile parity (governance)
+✅ Port / ✅ Port, **P2** — pure computation and drawing, no OS API involved.
+`CoreHaptics` / `VibrationEffect` make the ratchet better on a phone than on the Mac.
+Row + study in [`HALO_MOBILE_ROADMAP.md`](HALO_MOBILE_ROADMAP.md) §3 / §9.
+
+### As actually built
+
+Shipped on `feat/f051-lucky-draw`. Nine source files under `Halo/Core/LuckyDraw/` and
+`Halo/Features/LuckyDraw/`, plus `HaloTests/LuckyDrawTests.swift` (ID block 8181–8200).
+
+**Changed from the spec, deliberately:**
+
+- **Put back keeps its row in the Already-drawn log** (`DrawResult.wasReturned`). The spec
+  left this implicit; the log is a record of *draws*, not a mirror of the retired set, so
+  returning a winner to the wheel must not erase the fact that they were drawn. The row
+  stays, marked "Back on the wheel", and the entry is eligible again — it can win twice,
+  and the second win writes its own row. Only **Reset draw** clears the log, and it leaves
+  exclusions alone.
+- **Segment palette rebuilt.** The first implementation held fills at brightness 0.24/0.32
+  so they would sit politely on `haloSurface`; on screen that read as an unfinished pie
+  chart of near-black wedges. Final: the arc Halo's accent gradient already travels
+  (blue ≈210° → violet ≈276°), brightness alternating **0.56 / 0.40**, radial shading per
+  wedge, neighbours separating on luminance parity rather than hue. Cyan is out of range —
+  at these brightnesses it is the one Halo hue that risks the label contrast. One
+  near-white label colour on every fill, enforced at 4.5:1 by `SegmentPaletteTests`.
+- **Labels flip on the left half** so no name is ever rendered upside-down, which the
+  straightforward radial transform does to half the wheel.
+- **The Space shortcut stands down while the name field has focus** — otherwise typing
+  "Anna Maria" spins the wheel mid-word.
+- **`CelebrationManager.focusPoint` added.** The celebration overlay spans the whole
+  window, so the poppers fired from the window's corners and half the confetti landed
+  behind the sidebar. The wheel's centre is reported up through a `PreferenceKey`.
+- **Decay exponent 3.4, not 4.2** (already recorded in the spec; confirmed on screen).
+
+**Specced but NOT built in this pass** — none of it is stubbed or faked, it simply is not
+there yet, and the roadmap should not imply otherwise:
+
+- FR-3 drag-and-drop `.txt`/`.csv` import (multi-line and comma paste *are* implemented).
+- FR-4 duplicate-label detection and the Keep both / Skip prompt.
+- FR-10 "Draw N in a row".
+- FR-17 beyond Space: ⌘N, ⌫ on a selected chip, ⌘⇧R.
+- Sound (D9). Not built at all, rather than built and defaulted off.
+- Roster rename UI (`LuckyDrawStore.renameSelected` exists and is unused).
+
+**Verified:** 370 tests pass, including 20 new ones — χ² uniformity over 100 k draws, the
+landing angle resolving to the chosen index for every entry count 1…500, the put-back and
+reset semantics above, and the palette contrast floor. The wheel, reveal, confetti,
+put-back state and reset were checked on screen in a running build.
+
+**Known, unrelated:** a signed local build raises the macOS *"Halo would like to access
+data from other apps"* consent prompt for the App Group, and `AppState.writeWidgetData()`
+blocks on `HaloWidgetData.save()` until it is answered. That is the F-051-independent
+consequence of `58952d0` restoring the App Group entitlement (gotcha 27) — worth its own
+look, since an unanswered prompt hangs launch.

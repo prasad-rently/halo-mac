@@ -73,6 +73,15 @@
 		000000000000000000004012 /* AlertLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004011 /* AlertLog.swift */; };
 		000000000000000000008172 /* AsyncTimeout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008171 /* AsyncTimeout.swift */; };
 		000000000000000000008164 /* ShellReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008163 /* ShellReader.swift */; };
+		000000000000000000008182 /* DrawModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008181 /* DrawModels.swift */; };
+		000000000000000000008184 /* DrawEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008183 /* DrawEngine.swift */; };
+		000000000000000000008186 /* SpinnerAnimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008185 /* SpinnerAnimator.swift */; };
+		000000000000000000008188 /* LuckyDrawStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008187 /* LuckyDrawStore.swift */; };
+		000000000000000000008190 /* LuckyDrawViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008189 /* LuckyDrawViewModel.swift */; };
+		000000000000000000008192 /* SpinnerWheelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008191 /* SpinnerWheelView.swift */; };
+		000000000000000000008194 /* RosterPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008193 /* RosterPanelView.swift */; };
+		000000000000000000008196 /* DrawResultOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008195 /* DrawResultOverlay.swift */; };
+		000000000000000000008198 /* LuckyDrawView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008197 /* LuckyDrawView.swift */; };
 		000000000000000000004014 /* ReportGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004013 /* ReportGenerator.swift */; };
 		000000000000000000005001 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000005002 /* Sentry */; };
 		000000000000000000006002 /* ActionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006001 /* ActionModels.swift */; };
@@ -149,6 +158,7 @@
 		1A276975BC00655241248D7B /* DriveSpeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C310900DF7BB88C2E7AFC1B /* DriveSpeedView.swift */; };
 		1C35066F666096D6ACA28957 /* OpenAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78C88E9A3466E70C453D9B42 /* OpenAIProvider.swift */; };
 		318D18283567FA7F9C3FCD89 /* DriveSpeedTesterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629A9D17BDFF863DCB0206F2 /* DriveSpeedTesterTests.swift */; };
+		000000000000000000008200 /* LuckyDrawTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008199 /* LuckyDrawTests.swift */; };
 		392C64DDBD96198078804CA3 /* AIToolExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC90BEA4B73BCF5211738E1 /* AIToolExecutor.swift */; };
 		3A50F36FA9B03FBD00BA4A57 /* GeminiProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B3A7C9D128380339D5BBD79 /* GeminiProvider.swift */; };
 		428DD9830BBDEBECB1200590 /* SmokeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74D974CC4B2FB109632BF14A /* SmokeUITests.swift */; };
@@ -336,6 +346,15 @@
 		000000000000000000004011 /* AlertLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AlertLog.swift; sourceTree = "<group>"; };
 		000000000000000000008171 /* AsyncTimeout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AsyncTimeout.swift; sourceTree = "<group>"; };
 		000000000000000000008163 /* ShellReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/ShellReader.swift; sourceTree = "<group>"; };
+		000000000000000000008181 /* DrawModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LuckyDraw/DrawModels.swift; sourceTree = "<group>"; };
+		000000000000000000008183 /* DrawEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LuckyDraw/DrawEngine.swift; sourceTree = "<group>"; };
+		000000000000000000008185 /* SpinnerAnimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LuckyDraw/SpinnerAnimator.swift; sourceTree = "<group>"; };
+		000000000000000000008187 /* LuckyDrawStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LuckyDraw/LuckyDrawStore.swift; sourceTree = "<group>"; };
+		000000000000000000008189 /* LuckyDrawViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LuckyDraw/LuckyDrawViewModel.swift; sourceTree = "<group>"; };
+		000000000000000000008191 /* SpinnerWheelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LuckyDraw/SpinnerWheelView.swift; sourceTree = "<group>"; };
+		000000000000000000008193 /* RosterPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LuckyDraw/RosterPanelView.swift; sourceTree = "<group>"; };
+		000000000000000000008195 /* DrawResultOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LuckyDraw/DrawResultOverlay.swift; sourceTree = "<group>"; };
+		000000000000000000008197 /* LuckyDrawView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LuckyDraw/LuckyDrawView.swift; sourceTree = "<group>"; };
 		000000000000000000004013 /* ReportGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/ReportGenerator.swift; sourceTree = "<group>"; };
 		000000000000000000006001 /* ActionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionModels.swift; sourceTree = "<group>"; };
 		000000000000000000006003 /* ActionLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionLibrary.swift; sourceTree = "<group>"; };
@@ -416,6 +435,7 @@
 		4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloUITestCase.swift; sourceTree = "<group>"; };
 		4FC90BEA4B73BCF5211738E1 /* AIToolExecutor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIToolExecutor.swift; sourceTree = "<group>"; };
 		629A9D17BDFF863DCB0206F2 /* DriveSpeedTesterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedTesterTests.swift; sourceTree = "<group>"; };
+		000000000000000000008199 /* LuckyDrawTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LuckyDrawTests.swift; sourceTree = "<group>"; };
 		67D626412F39854842AE0A36 /* HaloUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B3A7C9D128380339D5BBD79 /* GeminiProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GeminiProvider.swift; sourceTree = "<group>"; };
 		6D2C02D89C828E5968F14081 /* AIProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIProvider.swift; sourceTree = "<group>"; };
@@ -534,6 +554,15 @@
 				000000000000000000008103 /* AppUsageTracker.swift */,
 				000000000000000000008171 /* AsyncTimeout.swift */,
 				000000000000000000008163 /* ShellReader.swift */,
+				000000000000000000008181 /* DrawModels.swift */,
+				000000000000000000008183 /* DrawEngine.swift */,
+				000000000000000000008185 /* SpinnerAnimator.swift */,
+				000000000000000000008187 /* LuckyDrawStore.swift */,
+				000000000000000000008189 /* LuckyDrawViewModel.swift */,
+				000000000000000000008191 /* SpinnerWheelView.swift */,
+				000000000000000000008193 /* RosterPanelView.swift */,
+				000000000000000000008195 /* DrawResultOverlay.swift */,
+				000000000000000000008197 /* LuckyDrawView.swift */,
 				000000000000000000004013 /* ReportGenerator.swift */,
 				000000000000000000004005 /* ScanScheduler.swift */,
 				000000000000000000008073 /* MetricsHistory.swift */,
@@ -719,6 +748,7 @@
 			isa = PBXGroup;
 			children = (
 				629A9D17BDFF863DCB0206F2 /* DriveSpeedTesterTests.swift */,
+				000000000000000000008199 /* LuckyDrawTests.swift */,
 				7C5BDF389221BADF1F31152C /* HaloTests.swift */,
 				00C37BFCA463AB410245B802 /* HelperClientTests.swift */,
 				1EA41949D8E2D368E6AFF7F6 /* AIAssistantTests.swift */,
@@ -996,6 +1026,15 @@
 				000000000000000000004012 /* AlertLog.swift in Sources */,
 				000000000000000000008172 /* AsyncTimeout.swift in Sources */,
 				000000000000000000008164 /* ShellReader.swift in Sources */,
+				000000000000000000008182 /* DrawModels.swift in Sources */,
+				000000000000000000008184 /* DrawEngine.swift in Sources */,
+				000000000000000000008186 /* SpinnerAnimator.swift in Sources */,
+				000000000000000000008188 /* LuckyDrawStore.swift in Sources */,
+				000000000000000000008190 /* LuckyDrawViewModel.swift in Sources */,
+				000000000000000000008192 /* SpinnerWheelView.swift in Sources */,
+				000000000000000000008194 /* RosterPanelView.swift in Sources */,
+				000000000000000000008196 /* DrawResultOverlay.swift in Sources */,
+				000000000000000000008198 /* LuckyDrawView.swift in Sources */,
 				000000000000000000004014 /* ReportGenerator.swift in Sources */,
 				000000000000000000004006 /* ScanScheduler.swift in Sources */,
 				000000000000000000008074 /* MetricsHistory.swift in Sources */,
@@ -1142,6 +1181,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				318D18283567FA7F9C3FCD89 /* DriveSpeedTesterTests.swift in Sources */,
+				000000000000000000008200 /* LuckyDrawTests.swift in Sources */,
 				8A4DFF3A40CA9ADDBF8405AE /* HaloTests.swift in Sources */,
 				D52607DADA626DF2FA479956 /* HelperClientTests.swift in Sources */,
 				ECC49D0FB93E1F7EA5B51EBD /* AIAssistantTests.swift in Sources */,

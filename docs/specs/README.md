@@ -24,6 +24,7 @@ it opens with a Requirements Specification and closes with an Execution Plan.
 | [F-048-expenditure-tracker.md](F-048-expenditure-tracker.md) | F-048 | 126 | Personal Expenditure Tracker | Desktop |
 | [F-049-halo-mobile-app.md](F-049-halo-mobile-app.md) | F-049 | 122/123/127 | Halo Mobile App (product line) | Mobile |
 | [F-050-haloshare-mobile.md](F-050-haloshare-mobile.md) | F-050 | 127 | HaloShare Mobile ↔ Desktop | Desktop + Mobile |
+| [F-051-lucky-draw-spinner.md](F-051-lucky-draw-spinner.md) | F-051 | 128 | Lucky Draw Spinner Wheel | Desktop (mobile ✅ Port) |
 
 ## Document structure (each feature)
 
@@ -49,8 +50,13 @@ F-050 (HaloShare mobile) ── extends existing desktop HaloShare
 F-046 (AI cloud) ── independent; quick win
 F-047 (on-device AI/RAG) ── independent; larger
 F-048 (expenditure) ── depends on F-044 data; can reuse F-046/F-047 for parsing
+F-051 (lucky draw) ── fully independent; no Firebase, no OS access — buildable at any point
 ```
 
 Rationale: the Firebase foundation (00) is a prerequisite for F-044/F-045/F-049,
 so it is specced once and referenced. F-046 is the smallest standalone win.
 F-048 is intentionally last — it consumes F-044's data.
+
+F-051 sits outside the Firebase wave entirely: it touches no cloud foundation and no
+macOS system API, so it can be slotted in wherever a self-contained, high-delight piece
+of work is wanted without blocking or being blocked by anything above.

@@ -129,6 +129,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | **Permission Auditor (F-016)** | ❌ | 🟡 | iOS exposes zero introspection into other apps' TCC/permission grants — no viable path; Android `PackageManager` can enumerate other installed apps' declared + granted permissions, gated by `QUERY_ALL_PACKAGES` visibility and Play policy | P3 | Assessed ✓ (§9) |
 | **Security Posture Dashboard (F-019)** | ❌ | 🟡 | Both OSes block reading passcode/encryption/Find-My status from 3rd-party apps → reimagine as an advisory checklist + Settings deep-links only, no automated pass/fail scoring | P3 | Assessed ✓ (§9) |
 | **Time Machine Backup Health (F-022)** | ❌ | ❌ | Time Machine is a macOS-only concept — no iOS/Android equivalent exists to read. Reimagined separately as the iOS-exclusive "iCloud Backup Health" idea (§5), which is a different, much coarser feature, not a port. | — | Assessed ✓ (§9) |
+| **Lucky Draw Spinner Wheel (F-051)** | ✅ | ✅ | Pure computation + Canvas drawing — no OS API, permission or entitlement involved. `CoreHaptics` / `VibrationEffect` make the ratchet pointer *better* than on macOS | P2 | Assessed ✓ (§9) |
 
 ---
 
@@ -224,6 +225,7 @@ Copy this block into a study when assessing a feature for mobile.
 
 | Date | Change |
 |------|--------|
+| 2026-09 | F-051 Lucky Draw Spinner Wheel specced **and shipped** on desktop. Feasibility study added (§9): ✅/✅ **Port** → P2 — the first desktop feature assessed with *zero* mobile blockers, because it touches no OS capability at all. Row added to §3. |
 | 2026-08 | F-017 Network Traffic Monitor shipped on desktop. Feasibility study added (§9): verdict ❌/❌ Won't do — same OS-sandbox blocker as top-processes/ports. Row added to §3. |
 | 2026-08 | F-024 Browser Cleaner assessed (§9): ❌/❌ Won't do — app sandbox on both platforms blocks any cross-app data access, which is the feature's entire premise. |
 | 2026-08 | F-025 (Duplicate Photos Finder / Similar Photos, pHash) shipped on desktop. Feasibility study added (§9) — verdict ✅/✅ Port, P1; §3 row added. |
@@ -420,3 +422,15 @@ promote to `Planned` (spec) when scheduled.
 - **Effort:** n/a. **Dependencies:** none.
 - **Verdict:** **Blocked** (both platforms) → **Won't do**.
 - **Recommendation:** do not build; the API absence is total, not a reduced/adapted case. If a phone-side "storage health" signal is ever wanted, the honest option is a *different*, clearly-labeled feature — e.g. surfacing Android's `StorageManager` cache-pressure/low-space signals, or iOS's on-device storage breakdown — not a SMART port, since there is nothing on either platform that corresponds to a physical drive's wear/failure telemetry.
+
+### Feasibility — Lucky Draw Spinner Wheel (from desktop F-051)
+- **Desktop capability:** a roster of arbitrary names/items rendered as a colour-segmented wheel; one press picks a uniform-random winner from the system CSPRNG and animates the wheel to a pre-computed landing angle (wind-up → launch → cruise with motion smear → eased deceleration → ratchet pointer → near-miss spotlight → overshoot-and-settle), then reveals it with confetti poppers, a per-character name reveal and a radial shockwave. Winners auto-retire so a roster draws down without repeats; entries can also be excluded, put back, or reset. Persisted to a JSON file; multiple rosters; draw history + CSV export.
+- **iOS mechanism:** SwiftUI `Canvas` + `TimelineView(.animation)` — *literally the same code* as the macOS renderer. `SystemRandomNumberGenerator`, `Codable` JSON persistence and the `CelebrationOverlay` particle engine are all platform-neutral Swift. `CoreHaptics` (`CHHapticTransientEvent` per segment tick) adds a physical ratchet the Mac has no way to produce. Verdict ✅
+- **Android mechanism:** Jetpack Compose `Canvas` + `withInfiniteAnimationFrameNanos` for the per-frame angle, `SecureRandom`/`Random.Default` for selection, Room or a JSON file for persistence, `VibrationEffect.createOneShot` for the tick. Every §8 beat has a direct Compose equivalent (`Animatable` with a custom `Easing` for the decay curve, `graphicsLayer` for the smear/spotlight). Verdict ✅
+- **OS blockers:** **none.** This is the first desktop capability assessed here that requires no system access whatsoever — no process enumeration, no filesystem sweep, no TCC grant, no background execution. It is pure computation, drawing and local storage: exactly the §2 "port the OS-agnostic wins" category, and the cleanest example of it in the whole table.
+- **Permissions required:** none. Not even a rationale screen.
+- **Store-policy risk:** none. No sensitive permission, no background work, no data collection. Worth noting only that "lucky draw / spinner" apps are a crowded App Store category — irrelevant here since this ships inside Halo rather than as a standalone listing.
+- **Scope on mobile:** **full**, with two layout adaptations. Phone layout stacks the roster beneath the wheel instead of beside it; bulk **paste** replaces drag-and-drop file import (both platforms' share sheets make paste-a-list the natural mobile input anyway), and share-sheet export replaces `NSSavePanel`. The 500-entry cap and the two label-degradation steps (§8.13) carry over unchanged — a phone screen reaches label illegibility sooner, so the ≤60/≤120 thresholds should be re-tuned downward on device, not re-derived.
+- **Effort:** ~4 d per platform once the F-049 shell exists (less than desktop's ~6 d — the engine and animation math are ported, not re-derived; only the rendering layer and layout are new). **Dependencies:** F-049 (mobile app shell).
+- **Verdict:** **Port** (both platforms) → **Priority P2**.
+- **Recommendation:** build it, but after the P0/P1 wave. It carries the highest delight-per-engineering-day of anything in the Tier 1 list and has zero platform risk to burn down — which also means it will still be exactly this easy in six months, so it should not displace the cross-device features whose value depends on both halves existing. When it is built, port `DrawEngine` and `SpinnerAnimator` semantics *exactly* (including the decay exponent and the 45 °/s spotlight threshold) so the draw feels like the same object on every device; the animation constants are the product, not implementation detail.

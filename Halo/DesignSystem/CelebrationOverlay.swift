@@ -7,6 +7,7 @@ enum CelebrationType: Equatable {
     case spaceRecovered     // Blue particles floating up — cleanup freed > 1 GB
     case scanComplete       // Subtle expanding ring pulse — any scan completes
     case actionSuccess      // Brief green checkmark flash — action completes
+    case luckyDrawWinner    // Two confetti cannons — F-051 draw reveals a winner
 }
 
 // MARK: - CelebrationManager
@@ -18,17 +19,29 @@ final class CelebrationManager: ObservableObject {
 
     @Published var isActive = false
     @Published var currentType: CelebrationType = .actionSuccess
+    /// Where the celebration is aimed, in the window's global coordinate space.
+    /// `nil` centres it. Set by callers whose celebration belongs to a particular
+    /// piece of the UI — the Lucky Draw poppers fired from the window corners until
+    /// this existed, which put half the confetti behind the sidebar.
+    @Published var focusPoint: CGPoint?
 
     @AppStorage("enableCelebrations") var celebrationsEnabled = true
 
     private init() {}
 
-    func trigger(_ type: CelebrationType) {
+    func trigger(_ type: CelebrationType, focus: CGPoint? = nil) {
         guard celebrationsEnabled else { return }
         currentType = type
+        focusPoint = focus
         withAnimation(.easeIn(duration: 0.15)) { isActive = true }
 
-        let duration: Double = type == .actionSuccess ? 1.2 : 2.0
+        let duration: Double
+        switch type {
+        case .actionSuccess:   duration = 1.2
+        // The poppers need their arcs to land, not be cut off mid-air.
+        case .luckyDrawWinner: duration = 2.9
+        default:               duration = 2.0
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
             withAnimation(.easeOut(duration: 0.3)) { self?.isActive = false }
         }
@@ -61,6 +74,7 @@ struct CelebrationOverlay: View {
             case .spaceRecovered: FloatingParticlesView()
             case .scanComplete:   PulseRingView()
             case .actionSuccess:  CheckmarkFlashView()
+            case .luckyDrawWinner: ConfettiPopperView(focus: manager.focusPoint)
             }
         }
     }
@@ -245,5 +259,127 @@ private struct CheckmarkFlashView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Lucky Draw Winner — Two confetti cannons
+
+/// Real popper physics: launch speed, gravity, air drag, per-piece spin, and a
+/// lateral wobble on the ribbons so they tumble instead of falling straight.
+///
+/// The other celebrations here drift particles along a fixed vector, which is right
+/// for a sparkle burst and wrong for a popper — a confetti cannon is recognisable
+/// precisely by the arc, so this one integrates rather than interpolates.
+private struct ConfettiPopperView: View {
+    /// Where the burst comes from, in the window's coordinate space. `nil` falls back
+    /// to the lower corners of the window.
+    var focus: CGPoint?
+
+    private struct Piece: Identifiable {
+        let id: Int
+        var position: CGPoint
+        var velocity: CGVector
+        var size: Double
+        var rotation: Double
+        var spin: Double
+        var wobble: Double
+        var life: Double
+        var color: Color
+        var isRibbon: Bool
+    }
+
+    @State private var pieces: [Piece] = []
+    @State private var lastTick: Date?
+
+    /// Points per second squared. Everything here is in real points rather than unit
+    /// space, so the numbers are the ones the spec states and a piece's arc doesn't
+    /// change shape with the window.
+    private let gravity: Double = 1600
+    private let drag: Double = 0.985
+    private let lifetime: Double = 2.6
+
+    var body: some View {
+        GeometryReader { geo in
+            TimelineView(.animation) { timeline in
+                Canvas { context, _ in
+                    for p in pieces {
+                        let fade = p.life > lifetime - 0.8 ? max(0, (lifetime - p.life) / 0.8) : 1
+                        guard fade > 0.01 else { continue }
+                        var layer = context
+                        layer.opacity = fade
+                        let wobbleX = p.isRibbon ? sin(p.wobble) * 9 : 0
+                        layer.translateBy(x: p.position.x + wobbleX, y: p.position.y)
+                        layer.rotate(by: .degrees(p.rotation))
+                        let rect = CGRect(x: -p.size * (p.isRibbon ? 0.28 : 0.5),
+                                          y: -p.size * (p.isRibbon ? 0.9 : 0.5),
+                                          width: p.size * (p.isRibbon ? 0.56 : 1),
+                                          height: p.size * (p.isRibbon ? 1.8 : 1))
+                        let path = p.isRibbon ? Path(rect) : Path(ellipseIn: rect)
+                        layer.fill(path, with: .color(p.color))
+                    }
+                }
+                .onChange(of: timeline.date) { date in
+                    step(to: date)
+                }
+            }
+            .onAppear { fire(in: geo.size) }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func step(to date: Date) {
+        let dt = min(lastTick.map { date.timeIntervalSince($0) } ?? 0.016, 0.05)
+        lastTick = date
+        guard dt > 0 else { return }
+        pieces = pieces.compactMap { piece in
+            var p = piece
+            p.life += dt
+            guard p.life < lifetime else { return nil }
+            p.velocity.dy += gravity * dt
+            let decay = pow(drag, dt * 60)
+            p.velocity.dx *= decay
+            p.velocity.dy *= decay
+            p.position.x += p.velocity.dx * dt
+            p.position.y += p.velocity.dy * dt
+            p.rotation += p.spin * dt
+            p.wobble += dt * 7
+            return p
+        }
+    }
+
+    private func fire(in size: CGSize) {
+        guard size.width > 1, size.height > 1 else { return }
+        let palette: [Color] = [.haloAccent, .haloAccent2, .haloGreen,
+                                .haloAmber, .haloPurple, .haloCyan]
+        // Two cannons flanking whatever is being celebrated, firing inward and up so
+        // the arcs cross over it.
+        let centre = focus ?? CGPoint(x: size.width / 2, y: size.height * 0.62)
+        let dx = min(size.width * 0.18, 240)
+        let dy = min(size.height * 0.2, 190)
+        var next = 0
+
+        func cannon(origin: CGPoint, direction: Double, count: Int) -> [Piece] {
+            (0..<count).map { _ in
+                let angle = (direction + Double.random(in: -22...22)) * .pi / 180
+                let speed = Double.random(in: 900...1400)
+                next += 1
+                return Piece(id: next,
+                             position: origin,
+                             velocity: CGVector(dx: cos(angle) * speed, dy: sin(angle) * speed),
+                             size: Double.random(in: 6...15),
+                             rotation: Double.random(in: 0...360),
+                             spin: Double.random(in: -720...720),
+                             wobble: Double.random(in: 0...6.28),
+                             life: 0,
+                             color: palette.randomElement()!,
+                             isRibbon: Bool.random())
+            }
+        }
+
+        lastTick = nil
+        pieces = cannon(origin: CGPoint(x: centre.x - dx, y: centre.y + dy),
+                        direction: -56, count: 70)
+               + cannon(origin: CGPoint(x: centre.x + dx, y: centre.y + dy),
+                        direction: -124, count: 70)
     }
 }

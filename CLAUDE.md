@@ -661,6 +661,7 @@ and **all three must keep it** — `scripts/audit-entitlements.sh` enforces this
 | Focus Session | ✅ | FocusSessionManager | ProcessMonitor (reused) | — |
 | Dashboard — App Usage Insights | ✅ | AppUsageTracker | AppUsageTracker | — |
 | Performance (Memory Trends) | ✅ | MemoryTrendTracker (self-published) | ProcessMonitor.runningAppRAMSamples() | — |
+| Lucky Draw | ✅ | LuckyDrawViewModel + LuckyDrawStore | DrawEngine + SpinnerAnimator | ✅ |
 
 ---
 
@@ -737,6 +738,16 @@ and **all three must keep it** — `scripts/audit-entitlements.sh` enforces this
 | `8145` / `8146` | ICloudDriveView.swift file ref / sources build file |
 | `8153` / `8154` | PermissionAuditor.swift file ref / sources build file |
 | `8163` / `8164` | ShellReader.swift file ref / sources build file |
+| `8181` / `8182` | DrawModels.swift file ref / sources build file |
+| `8183` / `8184` | DrawEngine.swift file ref / sources build file |
+| `8185` / `8186` | SpinnerAnimator.swift file ref / sources build file |
+| `8187` / `8188` | LuckyDrawStore.swift file ref / sources build file |
+| `8189` / `8190` | LuckyDrawViewModel.swift file ref / sources build file |
+| `8191` / `8192` | SpinnerWheelView.swift file ref / sources build file |
+| `8193` / `8194` | RosterPanelView.swift file ref / sources build file |
+| `8195` / `8196` | DrawResultOverlay.swift file ref / sources build file |
+| `8197` / `8198` | LuckyDrawView.swift file ref / sources build file |
+| `8199` / `8200` | LuckyDrawTests.swift file ref / sources build file (HaloTests) |
 | `9001` / `9002` | GetHealthScoreIntent.swift file ref / sources build file |
 | `9003` / `9004` | GetCPUUsageIntent.swift file ref / sources build file |
 | `9005` / `9006` | GetBatteryHealthIntent.swift file ref / sources build file |
@@ -785,7 +796,8 @@ a branch that has not merged yet.
 | `8153`–`8154` | F-016 Permission Auditor (#9) | claimed — moved off `8031` |
 | `8163`–`8164` | `ShellReader` (Phase 0 / P0.2) | claimed |
 | `8171`–`8172` | `AsyncTimeout` (Phase 0 / P0.5) | claimed |
-| `8181`+ | — | **free — take the next block from here** |
+| `8181`–`8200` | F-051 Lucky Draw Spinner Wheel | claimed |
+| `8201`+ | — | **free — take the next block from here** |
 
 Auditing the whole batch for collisions:
 
@@ -901,6 +913,63 @@ ancestor, so real collisions still print.
 - `HaloActionQuery: EntityQuery` — provides `suggestedEntities()` from `ActionLibrary.shared.actions`
 - `IntentError` — shared error enum: `.appNotRunning`, `.reportGenerationFailed`, `.actionNotFound`
 - `AppState.shared: AppState?` — static reference set by HaloApp for intents to access live metrics
+
+---
+
+## Lucky Draw (F-051)
+
+`Halo/Core/LuckyDraw/` + `Halo/Features/LuckyDraw/` + `CelebrationType.luckyDrawWinner`
+
+- New sidebar module `AppModule.luckyDraw` (in `reorderable`, so the user places it).
+  Add any number of names, spin, reveal one winner. Halo's first purely social surface:
+  no scanning, no system access, **no network and no `Process`** anywhere in it.
+- **`DrawEngine` picks the winner before the wheel moves.** `SystemRandomNumberGenerator`
+  chooses the index, then the wheel animates to a pre-computed angle. Simulating friction
+  and reading off whatever lands under the pointer would make the distribution a property
+  of the physics code — much harder to prove uniform, trivially skewed by one rounding
+  bug. The in-app **Fairness** popover states this; keep the two in agreement.
+  `DrawEngine.segmentIndex(atAngle:count:)` is the *single* definition of "what is under
+  the pointer" and is used by both the renderer and the tests — the 0°/360° seam bug
+  hides in that arithmetic, and `LuckyDrawTests` checks every entry count 1…500.
+- **`SpinnerAnimator` is pure functions of elapsed time** — angle, velocity, wind-up,
+  phase. Nothing in the render pass holds frame-to-frame state, which is why the ratchet
+  pointer can never drift out of sync with the wheel: its deflection is a closed-form
+  damped oscillation of *time since the last segment boundary*, derived from the current
+  angle and velocity, not an integrated spring.
+- **Decay exponent is `3.4`, and that number is tuned, not arbitrary.** The spec started
+  at 4.2; at 4.2 the final 0.8 s falls to ~2 °/s and reads as a frozen app rather than
+  as suspense. `SpinnerAnimatorTests` pins the last second into a 12–90 °/s band.
+- **`SegmentPalette` brightness is load-bearing.** Fills sweep the arc Halo's own accent
+  gradient already travels (blue ≈210° → violet ≈276°) with brightness alternating
+  **0.56 / 0.40**; neighbours separate on luminance parity, not hue. The first cut used
+  0.32/0.24 to sit politely on `haloSurface` and the wheel read as unfinished — near-black
+  wedges with no colour in them. Cyan is deliberately outside the range: at these
+  brightnesses it is the one Halo hue that puts the label contrast at risk. Because every
+  fill is built to carry **one** near-white label colour, `SegmentPaletteTests` fails the
+  build if any fill drops below 4.5:1 against it.
+- **Retired ≠ excluded ≠ deleted.** `isRetired` (won this round, cleared by Put back or
+  Reset) and `isExcluded` (user silenced them) are independent flags; nothing the user
+  typed is ever destroyed by the app's own mechanics.
+- **Put back keeps its row in the log.** `DrawResult.wasReturned` is set and the entry
+  becomes eligible again — the log is a record of *draws*, not a mirror of the retired
+  set, and erasing the row would quietly rewrite the history of the round. **Reset draw**
+  is the only thing that clears the log, and it leaves exclusions alone. All three
+  mutations live on `DrawRoster` (a value type) rather than in the store, so they are
+  tested without going near Application Support.
+- Persisted as JSON at `Application Support/Halo/luckyDraw.json` (the `MemoryTrendTracker`
+  precedent, not `AlertLog`'s UserDefaults one). A file that fails to decode is **moved to
+  `luckyDraw.corrupt.json`**, never overwritten — it is the user's typed data.
+- **The Space shortcut is `nil` while the name field has focus.** Otherwise typing
+  "Anna Maria" spins the wheel mid-word.
+- Confetti reuses `CelebrationManager` — one engine, one `enableCelebrations` toggle.
+  `CelebrationManager.focusPoint` was added for it: the overlay spans the whole window,
+  so without a focus the poppers fire from the window's corners and half the confetti
+  lands behind the sidebar. `LuckyDrawView` reports the wheel centre up through a
+  `PreferenceKey`.
+- Reduced Motion (`@Environment(\.accessibilityReduceMotion)`) gets a **different
+  presentation, not a shortened spin**: the wheel does not rotate at all, the winning
+  segment is highlighted, and the card fades in without scale, blur, stagger, shockwave
+  or confetti.
 
 ---
 
