@@ -4549,3 +4549,122 @@ struct LetheProtocolTests {
         #expect(LetheConnectionState.reconnecting(attempt: 3).label.contains("3"))
     }
 }
+
+/// AC-3 / AC-6 from the F-052 spec: the key really is in the Keychain, and
+/// leaving a room really removes it. These hit the **real** Keychain — a mock
+/// would prove nothing about the thing that can actually fail (an entitlement
+/// problem, a wrong accessibility class, a silent add failure).
+@Suite("Lethe key storage", .serialized)
+struct LetheKeyStoreTests {
+
+    /// Namespaced so a failed run can never collide with a real room.
+    private func testRoomId() -> String { "halotest-" + LetheCrypto.newMsgId().prefix(8) }
+
+    @Test("A key survives a save and load — this is AC-3's storage half")
+    func testSaveLoad() throws {
+        let roomId = testRoomId()
+        defer { RoomKeyStore.delete(roomId: roomId) }
+
+        let key = LetheCrypto.generateRoomKey()
+        #expect(RoomKeyStore.save(key, roomId: roomId))
+        #expect(RoomKeyStore.load(roomId: roomId) == key)
+    }
+
+    @Test("Saving twice replaces rather than duplicating")
+    func testOverwrite() throws {
+        let roomId = testRoomId()
+        defer { RoomKeyStore.delete(roomId: roomId) }
+
+        let first = LetheCrypto.generateRoomKey()
+        let second = LetheCrypto.generateRoomKey()
+        #expect(RoomKeyStore.save(first, roomId: roomId))
+        #expect(RoomKeyStore.save(second, roomId: roomId))
+        // A duplicate item would make `load` non-deterministic.
+        #expect(RoomKeyStore.load(roomId: roomId) == second)
+    }
+
+    @Test("Leaving a room destroys the key — AC-6")
+    func testDelete() throws {
+        let roomId = testRoomId()
+        let key = LetheCrypto.generateRoomKey()
+        #expect(RoomKeyStore.save(key, roomId: roomId))
+        #expect(RoomKeyStore.load(roomId: roomId) != nil)
+
+        #expect(RoomKeyStore.delete(roomId: roomId))
+        // Unrecoverable by design: no server copy, no reset flow.
+        #expect(RoomKeyStore.load(roomId: roomId) == nil)
+    }
+
+    @Test("Deleting a room that was never saved is not an error")
+    func testDeleteMissing() {
+        #expect(RoomKeyStore.delete(roomId: testRoomId()))
+    }
+
+    @Test("A key that is gone cannot be listed — the reconcile that AC-3 relies on")
+    func testAllRoomIds() throws {
+        let roomId = testRoomId()
+        let key = LetheCrypto.generateRoomKey()
+        #expect(RoomKeyStore.save(key, roomId: roomId))
+        #expect(RoomKeyStore.allRoomIds().contains(roomId))
+
+        RoomKeyStore.delete(roomId: roomId)
+        // `loadFromDisk` filters the persisted room list against this set, so a
+        // room whose key is gone is never listed — listing it would be a lie.
+        #expect(!RoomKeyStore.allRoomIds().contains(roomId))
+    }
+}
+
+/// AC-4: offline behaviour. Exercises the real actor — no network needed,
+/// because the queue decision is made before any socket I/O.
+@Suite("Lethe offline queue")
+struct LetheOfflineQueueTests {
+
+    private func client() -> LetheRelayClient {
+        // A host that cannot resolve: the client stays disconnected, which is
+        // exactly the state under test.
+        LetheRelayClient(relayURL: URL(string: "wss://invalid.invalid.test")!)
+    }
+
+    @Test("Messages composed while offline are queued, not dropped — AC-4")
+    func testQueuesWhileOffline() async {
+        let c = client()
+        await c.join(roomId: "room1")
+        #expect(await c.send(roomId: "room1", payload: "one"))
+        #expect(await c.send(roomId: "room1", payload: "two"))
+        #expect(await c.queuedCount == 2)
+    }
+
+    @Test("An oversized payload is refused rather than queued forever")
+    func testOversizeRefused() async {
+        let c = client()
+        let huge = String(repeating: "A", count: LetheLimits.maxPayloadBytes + 1)
+        #expect(await c.send(roomId: "room1", payload: huge) == false)
+        // The relay would reject it, so queueing it would retry a doomed send
+        // on every reconnect.
+        #expect(await c.queuedCount == 0)
+    }
+
+    @Test("Rooms are remembered so they can be rejoined on reconnect")
+    func testRejoinSet() async {
+        let c = client()
+        await c.join(roomId: "a")
+        await c.join(roomId: "b")
+        #expect(await c.joinedRoomIds == ["a", "b"])
+    }
+
+    @Test("Leaving a room discards its queued messages")
+    func testLeaveDropsQueue() async {
+        let c = client()
+        await c.join(roomId: "a")
+        await c.join(roomId: "b")
+        _ = await c.send(roomId: "a", payload: "for-a")
+        _ = await c.send(roomId: "b", payload: "for-b")
+        #expect(await c.queuedCount == 2)
+
+        await c.leave(roomId: "a")
+        // Delivering to a room you have left — after destroying its key — would
+        // be pointless at best.
+        #expect(await c.queuedCount == 1)
+        #expect(await c.joinedRoomIds == ["b"])
+    }
+}

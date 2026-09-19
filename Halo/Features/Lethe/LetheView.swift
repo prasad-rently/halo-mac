@@ -18,6 +18,7 @@ struct LetheView: View {
     @State private var showInviteFor: LetheRoom?
     @State private var confirmLeave: LetheRoom?
     @State private var errorText: String?
+    @State private var showSettings = false
 
     private var selectedRoom: LetheRoom? {
         manager.rooms.first { $0.id == selectedRoomID }
@@ -66,6 +67,9 @@ struct LetheView: View {
                 }
             }
         }
+        .sheet(isPresented: $showSettings) {
+            LetheSettingsSheet(manager: manager)
+        }
         .sheet(item: $showInviteFor) { room in
             LetheInviteSheet(room: room, link: manager.inviteLink(for: room))
         }
@@ -100,6 +104,9 @@ struct LetheView: View {
             }
             Spacer()
             connectionPill
+            Button { showSettings = true } label: { Image(systemName: "gearshape") }
+                .buttonStyle(.bordered)
+                .help("Handle, relay, and what the relay can see")
             Button { showJoin = true } label: { Label("Join", systemImage: "link") }
                 .buttonStyle(.bordered)
             Button { showCreate = true } label: { Label("New Room", systemImage: "plus") }

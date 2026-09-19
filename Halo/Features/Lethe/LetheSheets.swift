@@ -236,3 +236,103 @@ struct LethePrivacyPanel: View {
         }
     }
 }
+
+// MARK: - Settings (FR-L-03, FR-L-30, FR-L-32)
+//
+// Handle editing, relay selection and the privacy panel were all implemented in
+// `LetheManager` / `LethePrivacyPanel` before this existed — and were
+// unreachable, which meant three spec requirements were unmet despite the code
+// being written. This is the surface that makes them real.
+
+struct LetheSettingsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var manager: LetheManager
+
+    @State private var handleDraft = ""
+    @State private var relayDraft = ""
+    @State private var relayError: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Lethe settings")
+                    .font(HaloFont.display(17, weight: .bold)).foregroundColor(.haloText)
+
+                // Handle — FR-L-03
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Your handle").font(.subheadline.weight(.semibold)).foregroundColor(.haloText)
+                    Text("Shown to others in the room. It is inside the encrypted payload — "
+                         + "the relay never sees it. Anyone can pick any handle; there is no "
+                         + "identity system, so a handle proves nothing.")
+                        .font(.caption).foregroundColor(.haloText3)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack {
+                        TextField("handle", text: $handleDraft)
+                            .textFieldStyle(.roundedBorder)
+                            .font(HaloFont.mono(11))
+                        Button("Randomise") { handleDraft = LetheCrypto.generateHandle() }
+                        Button("Save") { manager.setHandle(handleDraft) }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(handleDraft.trimmingCharacters(in: .whitespaces).isEmpty
+                                      || handleDraft == manager.handle)
+                    }
+                }
+
+                Divider().overlay(Color.haloSurface2)
+
+                // Relay — FR-L-32
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Relay").font(.subheadline.weight(.semibold)).foregroundColor(.haloText)
+                    Text("The relay is open source and self-hostable. \"You can verify it stores "
+                         + "nothing\" only means something if you can point Halo at your own.")
+                        .font(.caption).foregroundColor(.haloText3)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack {
+                        TextField("wss://…", text: $relayDraft)
+                            .textFieldStyle(.roundedBorder)
+                            .font(HaloFont.mono(10))
+                        Button("Reset") { relayDraft = LetheLimits.defaultRelayURL }
+                        Button("Apply") { applyRelay() }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(relayDraft.trimmingCharacters(in: .whitespaces).isEmpty
+                                      || relayDraft == manager.relayURLString)
+                    }
+                    if let relayError {
+                        Text(relayError).font(.caption).foregroundColor(.haloRed)
+                    }
+                    Text("Changing this reconnects. Rooms are unaffected — a room lives in its "
+                         + "key, not in a server.")
+                        .font(.caption2).foregroundColor(.haloText3)
+                }
+
+                Divider().overlay(Color.haloSurface2)
+
+                // FR-L-30
+                LethePrivacyPanel()
+
+                HStack {
+                    Spacer()
+                    Button("Done") { dismiss() }.buttonStyle(.borderedProminent)
+                }
+            }
+            .padding(20)
+        }
+        .frame(width: 520, height: 620)
+        .background(Color.haloSurface)
+        .onAppear {
+            handleDraft = manager.handle
+            relayDraft = manager.relayURLString
+        }
+    }
+
+    private func applyRelay() {
+        let trimmed = relayDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(),
+              scheme == "ws" || scheme == "wss", url.host != nil else {
+            relayError = "Needs to be a ws:// or wss:// URL with a host."
+            return
+        }
+        relayError = nil
+        manager.setRelayURL(trimmed)
+    }
+}
