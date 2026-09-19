@@ -4184,3 +4184,72 @@ struct BrowserClearResultTests {
         #expect(BrowserClearResult(cleared: 0, freed: 0, errors: ["History: denied"]).summary == "History: denied")
     }
 }
+
+// MARK: - Build label Tests
+
+/// Regression cover for a bug that shipped: `Build.displayLabel` keyed off
+/// `#if DEBUG`, but every Halo release is cut from the **Debug** configuration
+/// (Release turns the App Sandbox on, which kills the six shell-out features).
+/// So DEBUG was defined in production and the released v2.3 labelled itself
+/// `dev · 8d90f1` in its own sidebar. The label is now a function of the bundle
+/// identifier, which is the thing that actually differs between the two apps.
+@Suite("Build label")
+struct BuildLabelTests {
+
+    @Test("A release bundle shows the version, never the dev token")
+    func testReleaseBundle() {
+        let label = Build.displayLabel(bundleID: "com.halo.mac", version: "2.3")
+        #expect(label == "v2.3")
+        #expect(label.contains("dev") == false)
+        #expect(label.contains(Build.token) == false)
+    }
+
+    @Test("A dev bundle shows the dev token")
+    func testDevBundle() {
+        #expect(Build.displayLabel(bundleID: "com.halo.mac.dev", version: "2.3")
+                == "dev · \(Build.token)")
+    }
+
+    @Test("Only a .dev suffix counts as a dev build")
+    func testDevDetection() {
+        #expect(Build.isDevBundle("com.halo.mac.dev"))
+        #expect(Build.isDevBundle("com.halo.mac") == false)
+        // The widget and helper ride inside whichever app contains them; only
+        // the app's own identifier decides, and neither of these ends in .dev.
+        #expect(Build.isDevBundle("com.halo.mac.widget") == false)
+        #expect(Build.isDevBundle("com.halo.mac.helper") == false)
+        #expect(Build.isDevBundle(nil) == false)
+    }
+
+    @Test("The real running bundle is not mislabelled as dev")
+    func testHostBundleIsNotDev() {
+        // HaloTests is hosted by Halo.app, so Bundle.main here is the real app
+        // bundle — this exercises the live properties, not just the pure forms.
+        // The host is com.halo.mac, and this target is compiled with DEBUG
+        // defined, which is precisely the combination that used to render
+        // "dev · <token>" on a shipped release.
+        #expect(Build.isDevBuild == Build.isDevBundle(Bundle.main.bundleIdentifier))
+        if Bundle.main.bundleIdentifier?.hasSuffix(".dev") == false {
+            #expect(Build.isDevBuild == false)
+            #expect(Build.displayLabel == "v\(Build.version)")
+            #expect(Build.displayLabel.contains("dev") == false)
+            #expect(Build.fullLabel.contains("Dev build") == false)
+        }
+    }
+
+    @Test("The full label carries version and build number")
+    func testFullLabel() {
+        let release = Build.fullLabel(bundleID: "com.halo.mac", version: "2.3", buildNumber: "231")
+        #expect(release.hasPrefix("v2.3 (231)"))
+        #expect(release.contains("Dev build") == false)
+
+        let dev = Build.fullLabel(bundleID: "com.halo.mac.dev", version: "2.3", buildNumber: "231")
+        #expect(dev.hasPrefix("Dev build · v2.3 (231)"))
+    }
+
+    @Test("A missing build number degrades to just the version")
+    func testMissingBuildNumber() {
+        #expect(Build.fullLabel(bundleID: "com.halo.mac", version: "2.3", buildNumber: "")
+                .hasPrefix("v2.3 ·"))
+    }
+}
