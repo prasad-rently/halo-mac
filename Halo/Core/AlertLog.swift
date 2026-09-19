@@ -41,6 +41,7 @@ struct AlertEntry: Identifiable, Codable {
         // named in the alert title.
         case "disk_smart_warning": return "exclamationmark.triangle.fill"   // F-020
         case "disk_smart_failing": return "xmark.octagon.fill"              // F-020
+        case "lethe_message":     return "bubble.left.and.bubble.right.fill"  // F-052
         default:                  return "bell.fill"
         }
     }
@@ -55,6 +56,10 @@ struct AlertEntry: Identifiable, Codable {
         case "backup_stale", "backup_never": return .haloAmber   // F-022
         case "disk_smart_warning":           return .haloAmber   // F-020
         case "disk_smart_failing":           return .haloRed     // F-020
+        // Not .haloAccent: AlertEntryIconCoverageTests uses that as its sentinel
+        // for "no arm was written", so an explicit .haloAccent would be
+        // indistinguishable from the bug the test exists to catch.
+        case "lethe_message":                return .haloPurple  // F-052
         default:                             return .haloAccent
         }
     }

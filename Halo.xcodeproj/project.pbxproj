@@ -73,6 +73,14 @@
 		000000000000000000004012 /* AlertLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004011 /* AlertLog.swift */; };
 		000000000000000000008172 /* AsyncTimeout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008171 /* AsyncTimeout.swift */; };
 		000000000000000000008164 /* ShellReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008163 /* ShellReader.swift */; };
+		000000000000000000008202 /* LetheModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008201 /* LetheModels.swift */; };
+		000000000000000000008204 /* LetheCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008203 /* LetheCrypto.swift */; };
+		000000000000000000008206 /* RoomKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008205 /* RoomKeyStore.swift */; };
+		000000000000000000008208 /* LetheInviteLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008207 /* LetheInviteLink.swift */; };
+		000000000000000000008210 /* LetheRelayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008209 /* LetheRelayClient.swift */; };
+		000000000000000000008212 /* LetheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008211 /* LetheManager.swift */; };
+		000000000000000000008214 /* LetheView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008213 /* LetheView.swift */; };
+		000000000000000000008216 /* LetheSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008215 /* LetheSheets.swift */; };
 		000000000000000000004014 /* ReportGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004013 /* ReportGenerator.swift */; };
 		000000000000000000005001 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000005002 /* Sentry */; };
 		000000000000000000006002 /* ActionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006001 /* ActionModels.swift */; };
@@ -336,6 +344,14 @@
 		000000000000000000004011 /* AlertLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AlertLog.swift; sourceTree = "<group>"; };
 		000000000000000000008171 /* AsyncTimeout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AsyncTimeout.swift; sourceTree = "<group>"; };
 		000000000000000000008163 /* ShellReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/ShellReader.swift; sourceTree = "<group>"; };
+		000000000000000000008201 /* LetheModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Lethe/Models/LetheModels.swift; sourceTree = "<group>"; };
+		000000000000000000008203 /* LetheCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Lethe/Crypto/LetheCrypto.swift; sourceTree = "<group>"; };
+		000000000000000000008205 /* RoomKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Lethe/Crypto/RoomKeyStore.swift; sourceTree = "<group>"; };
+		000000000000000000008207 /* LetheInviteLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Lethe/Crypto/LetheInviteLink.swift; sourceTree = "<group>"; };
+		000000000000000000008209 /* LetheRelayClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Lethe/Network/LetheRelayClient.swift; sourceTree = "<group>"; };
+		000000000000000000008211 /* LetheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Lethe/Manager/LetheManager.swift; sourceTree = "<group>"; };
+		000000000000000000008213 /* LetheView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Lethe/LetheView.swift; sourceTree = "<group>"; };
+		000000000000000000008215 /* LetheSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Lethe/LetheSheets.swift; sourceTree = "<group>"; };
 		000000000000000000004013 /* ReportGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/ReportGenerator.swift; sourceTree = "<group>"; };
 		000000000000000000006001 /* ActionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionModels.swift; sourceTree = "<group>"; };
 		000000000000000000006003 /* ActionLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionLibrary.swift; sourceTree = "<group>"; };
@@ -534,6 +550,14 @@
 				000000000000000000008103 /* AppUsageTracker.swift */,
 				000000000000000000008171 /* AsyncTimeout.swift */,
 				000000000000000000008163 /* ShellReader.swift */,
+				000000000000000000008201 /* LetheModels.swift */,
+				000000000000000000008203 /* LetheCrypto.swift */,
+				000000000000000000008205 /* RoomKeyStore.swift */,
+				000000000000000000008207 /* LetheInviteLink.swift */,
+				000000000000000000008209 /* LetheRelayClient.swift */,
+				000000000000000000008211 /* LetheManager.swift */,
+				000000000000000000008213 /* LetheView.swift */,
+				000000000000000000008215 /* LetheSheets.swift */,
 				000000000000000000004013 /* ReportGenerator.swift */,
 				000000000000000000004005 /* ScanScheduler.swift */,
 				000000000000000000008073 /* MetricsHistory.swift */,
@@ -996,6 +1020,14 @@
 				000000000000000000004012 /* AlertLog.swift in Sources */,
 				000000000000000000008172 /* AsyncTimeout.swift in Sources */,
 				000000000000000000008164 /* ShellReader.swift in Sources */,
+				000000000000000000008202 /* LetheModels.swift in Sources */,
+				000000000000000000008204 /* LetheCrypto.swift in Sources */,
+				000000000000000000008206 /* RoomKeyStore.swift in Sources */,
+				000000000000000000008208 /* LetheInviteLink.swift in Sources */,
+				000000000000000000008210 /* LetheRelayClient.swift in Sources */,
+				000000000000000000008212 /* LetheManager.swift in Sources */,
+				000000000000000000008214 /* LetheView.swift in Sources */,
+				000000000000000000008216 /* LetheSheets.swift in Sources */,
 				000000000000000000004014 /* ReportGenerator.swift in Sources */,
 				000000000000000000004006 /* ScanScheduler.swift in Sources */,
 				000000000000000000008074 /* MetricsHistory.swift in Sources */,

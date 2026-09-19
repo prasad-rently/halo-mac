@@ -574,6 +574,7 @@ enum AppModule: String, CaseIterable, Identifiable {
     case clipboard
     case actions
     case localShare
+    case lethe          // F-052
     case ports
     case ai
     case menuBarPreview
@@ -583,7 +584,7 @@ enum AppModule: String, CaseIterable, Identifiable {
     /// The modules that appear in the "Modules" sidebar section and can be
     /// freely reordered by the user. Dashboard is always pinned to "Overview".
     static var reorderable: [AppModule] {
-        [.cleanup, .protection, .performance, .applications, .files, .clipboard, .actions, .ports, .localShare, .ai]
+        [.cleanup, .protection, .performance, .applications, .files, .clipboard, .actions, .ports, .localShare, .lethe, .ai]
     }
 
     var title: String {
@@ -597,6 +598,7 @@ enum AppModule: String, CaseIterable, Identifiable {
         case .clipboard:     return "Clipboard"
         case .actions:       return "Actions"
         case .localShare:    return "HaloShare"
+        case .lethe:         return "Lethe"
         case .ports:         return "Ports"
         case .ai:            return "AI Assistant"
         case .menuBarPreview: return "Menu Bar"
@@ -614,6 +616,7 @@ enum AppModule: String, CaseIterable, Identifiable {
         case .clipboard:     return "doc.on.clipboard.fill"
         case .actions:       return "bolt.circle.fill"
         case .localShare:    return "antenna.radiowaves.left.and.right"
+        case .lethe:         return "bubble.left.and.bubble.right.fill"
         case .ports:         return "network.badge.shield.half.filled"
         case .ai:            return "sparkle"
         case .menuBarPreview: return "menubar.rectangle"
@@ -631,6 +634,7 @@ enum AppModule: String, CaseIterable, Identifiable {
         case .clipboard:     return [Color(hex: "#3a2010"), Color(hex: "#4a2a08")]
         case .actions:       return [Color(hex: "#2a1a0e"), Color(hex: "#3a1e08")]
         case .localShare:    return [Color(hex: "#0e2a3a"), Color(hex: "#1a3a4a")]
+        case .lethe:         return [Color(hex: "#241a3e"), Color(hex: "#3a2060")]
         case .ports:         return [Color(hex: "#0e3a2a"), Color(hex: "#1a4a3a")]
         case .ai:            return [Color(hex: "#3a1e5a"), Color(hex: "#221040")]
         case .menuBarPreview: return [Color(hex: "#1a2a3a"), Color(hex: "#0e1f30")]
