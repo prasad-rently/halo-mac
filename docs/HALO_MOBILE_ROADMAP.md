@@ -129,8 +129,10 @@ feasibility study (§6). iOS / Android assessed separately.
 | **Permission Auditor (F-016)** | ❌ | 🟡 | iOS exposes zero introspection into other apps' TCC/permission grants — no viable path; Android `PackageManager` can enumerate other installed apps' declared + granted permissions, gated by `QUERY_ALL_PACKAGES` visibility and Play policy | P3 | Assessed ✓ (§9) |
 | **Security Posture Dashboard (F-019)** | ❌ | 🟡 | Both OSes block reading passcode/encryption/Find-My status from 3rd-party apps → reimagine as an advisory checklist + Settings deep-links only, no automated pass/fail scoring | P3 | Assessed ✓ (§9) |
 | **Time Machine Backup Health (F-022)** | ❌ | ❌ | Time Machine is a macOS-only concept — no iOS/Android equivalent exists to read. Reimagined separately as the iOS-exclusive "iCloud Backup Health" idea (§5), which is a different, much coarser feature, not a port. | — | Assessed ✓ (§9) |
+| **Lethe — anonymous ephemeral chat (F-052)** | ✅ | ✅ | **Already built.** The Lethe Flutter app ships on both platforms against the same relay; desktop is the new client, not the other way round | P2 | Assessed |
 
 ---
+
 
 ## 4. Mobile-first backlog (prioritized)
 
@@ -234,6 +236,7 @@ Copy this block into a study when assessing a feature for mobile.
 | 2026-08 | F-028 Focus Session Companion assessed (§9): app auto-hide is Blocked on both mobile platforms (no cross-app hide/suppress API), but iOS's Shortcuts→Focus integration and Android's permissioned DND toggle are each *more* capable in the "quiet things down" dimension than anything macOS grants a third-party app — noted as a mobile-native reimagining, not a port, deferred to P3. |
 | 2026-08 | Desktop F-021 (App Usage & Screen Time Analytics) shipped. Feasibility study added (§9): iOS 🟡 Adapt (same foreground-only fallback as desktop) / Android ✅ Port-and-improve (`UsageStatsManager` gives real system-wide history desktop can never have) → P2. |
 | 2026-08 | Feasibility study added (§9): Scheduled Reports / Weekly Digest (F-029). Row added to §3 — near-full Port on both platforms, entirely composed of already-assessed primitives (local notifications, BG scheduling, PDF export, share sheet). |
+| 2026-09 | Desktop F-052 (Lethe anonymous ephemeral chat) shipped. Feasibility study added (§9): **the easiest case this rule has had** — the mobile client already exists and ships, so both verdicts are ✅ Port. The open question is product, not technical: whether Lethe stays a separate app on mobile while becoming a module inside Halo on desktop (spec OQ-5). |
 | 2026-08 | Desktop F-023 (Memory Leak & App Bloat Tracker) shipped. Feasibility study added (§9): Won't do — inherits the same "no public live-process enumeration" blocker as Performance — top processes, on both iOS and Android. |
 | 2026-08 | Desktop F-022 (Time Machine Backup Health Monitor) shipped. Feasibility study added (§9): Won't do / Reimagine → Time Machine has no mobile equivalent; the mobile-exclusive "iCloud Backup Health" idea (§5) is a distinct, much coarser reimagining, not a port. |
 | 2026-08 | F-020 (S.M.A.R.T. Disk Health Monitor) shipped on desktop. Feasibility study added (§9): both iOS and Android verdict ❌ Blocked — neither OS exposes SMART/drive-health data to third-party apps. Row added to §3; status `Won't do`. |
@@ -243,6 +246,35 @@ Copy this block into a study when assessing a feature for mobile.
 ---
 
 ## 9. Feasibility studies — Tier 1 candidates
+
+### F-052 — Lethe anonymous ephemeral chat
+
+| | Verdict | Mechanism |
+|---|---|---|
+| iOS | ✅ Port | **Already built.** Flutter client shipping against `wss://lethe-relay.onrender.com`. Keys in Keychain via `flutter_secure_store`; history in SQLCipher. |
+| Android | ✅ Port | Same codebase; Keystore + SQLCipher. |
+| Web | 🟡 Adapt | Exists, but Lethe's own BRD flags it lower-assurance: no secure enclave, no SQLCipher, keys in IndexedDB are exposed to XSS. |
+
+**OS blockers:** none. Network + symmetric crypto + local storage, all of which
+both mobile OSes provide to third-party apps without special entitlement.
+
+**Permission cost:** camera, and only for QR scanning. No contacts, no location,
+no notifications server-side — Lethe uses local notifications by design, because
+APNs/FCM would require a server that knows who to push to, which contradicts the
+anonymity model.
+
+**Store-policy risk — the real consideration, and it is not technical.**
+Anonymous unmoderated messaging attracts scrutiny from both stores. Apple
+guideline 1.2 (user-generated content) expects a method for filtering
+objectionable material, a reporting mechanism, and the ability to block abusive
+users. Lethe has **none of these, deliberately**: there is no identity to block
+and no server-side content to moderate. The Flutter app shipping today does not
+resolve this; it inherits it. Folding Lethe into Halo — a system *utility* —
+means Halo's own store listing acquires that exposure. This is the argument for
+keeping them separate products on mobile even while desktop gains the module.
+
+**Verdict:** ✅ Port on both platforms, technically trivial (it already exists).
+The decision is a product and store-policy one (spec OQ-5), not an engineering one.
 
 Completed studies (per §6). These move the rows to **Assessed ✓** and are ready to
 promote to `Planned` (spec) when scheduled.

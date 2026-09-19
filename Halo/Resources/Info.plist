@@ -74,6 +74,16 @@
                 <string>halo</string>
             </array>
         </dict>
+        <!-- F-052: the Lethe mobile app already registers this scheme, so an
+             invite shared to a Mac should open Halo rather than fail. -->
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.halo.mac.lethe</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>lethe</string>
+            </array>
+        </dict>
     </array>
     <!-- HaloShare: local network file transfer -->
     <key>NSLocalNetworkUsageDescription</key>

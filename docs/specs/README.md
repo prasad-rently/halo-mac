@@ -1,7 +1,7 @@
 # Halo — Feature Specifications & Execution Plans
 
 Detailed requirements and phased execution plans for the upcoming feature set
-(NFeat-122 → NFeat-127 / F-044 → F-050). Each document is **self-contained**:
+(NFeat-122 → NFeat-128 / F-044 → F-052). Each document is **self-contained**:
 it opens with a Requirements Specification and closes with an Execution Plan.
 
 > **Status:** planning artifacts. No code is written from these yet — they exist
@@ -24,6 +24,7 @@ it opens with a Requirements Specification and closes with an Execution Plan.
 | [F-048-expenditure-tracker.md](F-048-expenditure-tracker.md) | F-048 | 126 | Personal Expenditure Tracker | Desktop |
 | [F-049-halo-mobile-app.md](F-049-halo-mobile-app.md) | F-049 | 122/123/127 | Halo Mobile App (product line) | Mobile |
 | [F-050-haloshare-mobile.md](F-050-haloshare-mobile.md) | F-050 | 127 | HaloShare Mobile ↔ Desktop | Desktop + Mobile |
+| [F-052-lethe-ephemeral-chat.md](F-052-lethe-ephemeral-chat.md) | F-052 | 128 | Lethe — Anonymous Ephemeral Chat | Desktop (mobile client already exists) |
 
 ## Document structure (each feature)
 
