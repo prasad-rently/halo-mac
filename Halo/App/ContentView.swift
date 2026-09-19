@@ -203,6 +203,9 @@ struct SidebarView: View {
         case .localShare:
             let active = LocalShareManager.shared.activeSessions.count
             return (active > 0 ? "\(active)" : nil, .haloGreen)
+        case .lethe:
+            let unread = LetheManager.shared.totalUnread
+            return (unread > 0 ? "\(unread)" : nil, .haloAccent)
         default:
             return (nil, .haloAccent)
         }
@@ -392,6 +395,7 @@ struct DetailView: View {
             case .actions:        ActionsView()
             case .ports:          PortManagerView()
             case .localShare:     LocalShareView()
+            case .lethe:          LetheView()
             case .ai:             AIAssistantView()
             case .menuBarPreview: MenuBarPreviewView()
             }

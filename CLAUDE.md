@@ -661,6 +661,7 @@ and **all three must keep it** — `scripts/audit-entitlements.sh` enforces this
 | Focus Session | ✅ | FocusSessionManager | ProcessMonitor (reused) | — |
 | Dashboard — App Usage Insights | ✅ | AppUsageTracker | AppUsageTracker | — |
 | Performance (Memory Trends) | ✅ | MemoryTrendTracker (self-published) | ProcessMonitor.runningAppRAMSamples() | — |
+| Lethe (F-052) | ✅ | LetheManager | LetheRelayClient + LetheCrypto | ✅ |
 
 ---
 
@@ -685,6 +686,14 @@ and **all three must keep it** — `scripts/audit-entitlements.sh` enforces this
 | `4011` / `4012` | AlertLog.swift file ref / sources build file |
 | `4013` / `4014` | ReportGenerator.swift file ref / sources build file |
 | `8171` / `8172` | AsyncTimeout.swift file ref / sources build file |
+| `8201` / `8202` | LetheModels.swift file ref / sources build file |
+| `8203` / `8204` | LetheCrypto.swift file ref / sources build file |
+| `8205` / `8206` | RoomKeyStore.swift file ref / sources build file |
+| `8207` / `8208` | LetheInviteLink.swift file ref / sources build file |
+| `8209` / `8210` | LetheRelayClient.swift file ref / sources build file |
+| `8211` / `8212` | LetheManager.swift file ref / sources build file |
+| `8213` / `8214` | LetheView.swift file ref / sources build file |
+| `8215` / `8216` | LetheSheets.swift file ref / sources build file |
 | `5001` | Sentry in Frameworks build file |
 | `5002` | XCSwiftPackageProductDependency (Sentry) |
 | `5003` | XCRemoteSwiftPackageReference (sentry-cocoa) |
@@ -785,7 +794,9 @@ a branch that has not merged yet.
 | `8153`–`8154` | F-016 Permission Auditor (#9) | claimed — moved off `8031` |
 | `8163`–`8164` | `ShellReader` (Phase 0 / P0.2) | claimed |
 | `8171`–`8172` | `AsyncTimeout` (Phase 0 / P0.5) | claimed |
-| `8181`+ | — | **free — take the next block from here** |
+| `8181`–`8200` | F-051 Lucky Draw (branch `feat/f051-lucky-draw`, unpushed) | claimed |
+| `8201`–`8216` | F-052 Lethe ephemeral chat | claimed |
+| `8217`+ | — | **free — take the next block from here** |
 
 Auditing the whole batch for collisions:
 
@@ -901,6 +912,77 @@ ancestor, so real collisions still print.
 - `HaloActionQuery: EntityQuery` — provides `suggestedEntities()` from `ActionLibrary.shared.actions`
 - `IntentError` — shared error enum: `.appNotRunning`, `.reportGenerationFailed`, `.actionNotFound`
 - `AppState.shared: AppState?` — static reference set by HaloApp for intents to access live metrics
+
+---
+
+## Lethe — Anonymous Ephemeral Chat (F-052)
+
+`Halo/Core/Lethe/` + `Halo/Features/Lethe/` · spec: `docs/specs/F-052-lethe-ephemeral-chat.md`
+
+A **native Swift client for an existing product**, not a new protocol. Lethe
+(`~/Github/Lethe`) is anonymous ephemeral group chat that already ships as a
+Flutter app for iOS/Android/Web against a stateless Node relay live at
+`wss://lethe-relay.onrender.com`. This module speaks the same wire protocol, so a
+Mac and a phone sit in the same room.
+
+- **Sidebar module `.lethe`**, in `reorderable`. Unread badge via `LetheManager.shared.totalUnread`.
+- **`LetheCrypto`** — AES-256-GCM. The wire payload is
+  `base64(nonce[12] ‖ ciphertext ‖ tag[16])`, which is exactly CryptoKit's
+  `AES.GCM.SealedBox.combined`, so there is no hand-rolled framing.
+- **`roomId = first 16 hex chars of SHA-256(roomKey)`** — must match
+  `deriveRoomId` in the Dart client or the two clients land in different rooms.
+- **`RoomKeyStore`** — keys in the **Keychain** (`com.halo.mac.lethe`,
+  `WhenUnlockedThisDeviceOnly`, never iCloud-synced). Never in UserDefaults or
+  the JSON store.
+- **History** — JSON at `Application Support/Halo/lethe/rooms.json`, the
+  `MemoryTrendTracker` precedent. This codebase has no SQLite/CoreData
+  dependency and one module is not the place to add one. Known consequence,
+  recorded as OQ-3 in the spec: **weaker at rest than the mobile client's
+  SQLCipher store.**
+- **`LetheRelayClient`** — `actor`, one `URLSessionWebSocketTask` for *all*
+  rooms (the protocol carries `roomId` per frame), exponential backoff with
+  jitter, offline queue, client-side 10 msg/sec limit matching the relay.
+- **`AlertKind.letheMessage`** — the notification body carries the room and
+  sender but **never the message text**: notification content is rendered by the
+  OS and can be mirrored to other devices or shown on a lock screen. It also
+  deliberately bypasses the `lastFired` cooldown — that contract is for
+  recurring system conditions, and suppressing a second chat message for an hour
+  would silently hide a conversation.
+
+### Three traps, each of which cost a red test
+
+1. **JSON key order is part of the wire contract.** The same plaintext under the
+   same key and nonce must produce the same ciphertext as the Dart/Node clients.
+   `JSONEncoder` does **not** emit in property-declaration order — measured, it
+   gave `ts, text, msgId, handle` — and `JSONSerialization` on a Dictionary has
+   no order at all (`.sortedKeys` gives `handle, msgId, text, ts`). The payload
+   JSON is therefore **built by hand** in `handle, text, ts, msgId` order. Do not
+   "tidy" it into an encoder.
+2. **Foundation escapes `/` as `\/`; `JSON.stringify` does not.** Both parse the
+   same, so it can never break a conversation — but it breaks byte-equality with
+   the reference for any message containing a URL. There is a dedicated test,
+   because the fixed vectors' text has no slash and would not catch it.
+3. **The relay echoes your own message back to you**, and replays its 50-message
+   buffer on JOIN. `LetheManager.seenMessageIds` dedups by `msgId`; sent messages
+   are recorded as seen at send time so the echo is dropped rather than shown twice.
+
+### Verified, not assumed
+
+- **Live bidirectional interop** with the Node reference client on the
+  production relay: both ends independently derived the same `roomId` and each
+  read the other's message, emoji intact.
+- **Nothing readable on the wire** — a third client joined the room *without* the
+  key and captured the frames; the payload is opaque base64 and the sender's
+  handle is absent too (it is inside the encryption).
+- **Cross-implementation vectors** in `LetheCryptoTests` were generated by the
+  Node reference, not by this Swift code, so they prove interoperability rather
+  than self-consistency.
+
+### Sandbox note
+
+Unlike the six `ShellReader` features, Lethe needs **no subprocess** — network +
+crypto + local storage only. `com.apple.security.network.client` is in both
+entitlement files, so this module works fully in a sandboxed build.
 
 ---
 
