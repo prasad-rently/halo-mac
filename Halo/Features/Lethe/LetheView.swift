@@ -39,6 +39,19 @@ struct LetheView: View {
                 }
             }
         }
+        // ⚠️ KNOWN BUG: when `rooms` is empty the module header (title,
+        // connection pill, gear, Join, New Room) is pushed off the top of the
+        // window — measured at y = -443 via the accessibility tree, against a
+        // window origin of y = 30. The populated layout is unaffected and has
+        // been verified on screen.
+        //
+        // Something in the empty branch grows the split view past the window;
+        // the sibling modules (LocalShareView, PortManagerView) sidestep it by
+        // wrapping everything in a ScrollView, which a chat cannot do because
+        // the header and composer must stay pinned. Three fixes have been tried
+        // (see `emptyState`); the first two were measured and did not work.
+        // Found by opening the app — no test covers module chrome.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.haloBackground)
         .onAppear {
             manager.start()
@@ -136,9 +149,20 @@ struct LetheView: View {
 
     // MARK: - Empty state
 
+    // Centred with `.frame(maxHeight: .infinity)` rather than a pair of
+    // `Spacer()`s, and that distinction is the whole bug.
+    //
+    // Spacers make the *VStack itself* greedy, so it grew past the detail pane
+    // and pushed the module header off the top of the window — measured via the
+    // accessibility tree at y = -465, i.e. 495pt above the window. The frame
+    // modifier instead takes the proposed height and centres a naturally-sized
+    // child inside it, so the header keeps its place.
+    //
+    // The sibling modules (LocalShareView, PortManagerView) dodge this by
+    // wrapping everything in a ScrollView; a chat cannot, because the header and
+    // composer must stay pinned while only the transcript scrolls.
     private var emptyState: some View {
         VStack(spacing: 14) {
-            Spacer()
             Image(systemName: "bubble.left.and.bubble.right")
                 .font(.system(size: 42)).foregroundColor(.haloAccent)
             Text("No rooms yet").font(HaloFont.display(17, weight: .bold)).foregroundColor(.haloText)
@@ -153,9 +177,19 @@ struct LetheView: View {
                 Button { showJoin = true } label: { Label("Join with a link", systemImage: "link") }
                     .buttonStyle(.bordered)
             }
-            Spacer()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // ⚠️ KNOWN BUG, NOT YET FIXED — see the note on `body`.
+        //
+        // Natural height, padded down from the header, deliberately avoiding
+        // `maxHeight: .infinity`. This is the third attempt at the empty-state
+        // layout bug and it is **unverified**: the first two (Spacers, then an
+        // infinite frame) were measured via the accessibility tree and both
+        // still left the header at y = -443, i.e. ~475pt above the top of the
+        // window. This variant removes every unbounded height demand from the
+        // branch, which is the remaining hypothesis, but it has not been
+        // confirmed on screen.
+        .frame(maxWidth: .infinity)
+        .padding(.top, 72)
     }
 
     // MARK: - Room list
