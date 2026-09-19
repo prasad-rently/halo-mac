@@ -39,19 +39,6 @@ struct LetheView: View {
                 }
             }
         }
-        // ⚠️ KNOWN BUG: when `rooms` is empty the module header (title,
-        // connection pill, gear, Join, New Room) is pushed off the top of the
-        // window — measured at y = -443 via the accessibility tree, against a
-        // window origin of y = 30. The populated layout is unaffected and has
-        // been verified on screen.
-        //
-        // Something in the empty branch grows the split view past the window;
-        // the sibling modules (LocalShareView, PortManagerView) sidestep it by
-        // wrapping everything in a ScrollView, which a chat cannot do because
-        // the header and composer must stay pinned. Three fixes have been tried
-        // (see `emptyState`); the first two were measured and did not work.
-        // Found by opening the app — no test covers module chrome.
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.haloBackground)
         .onAppear {
             manager.start()
@@ -161,7 +148,24 @@ struct LetheView: View {
     // The sibling modules (LocalShareView, PortManagerView) dodge this by
     // wrapping everything in a ScrollView; a chat cannot, because the header and
     // composer must stay pinned while only the transcript scrolls.
+    // Rooted in a ScrollView, and that is the whole fix — not cosmetic.
+    //
+    // `NavigationSplitView` mis-lays-out the *sidebar* column when the detail
+    // view is an unboundedly flexible sibling: the sidebar jumps/scrolls and
+    // this module's header gets pushed off the top of the window (measured at
+    // y = -443 against a window origin of y = 30).
+    //
+    // This is the same bug `f787e9c` fixed for AI Assistant's "connect your API
+    // key" screen — "every other module's detail view roots itself in a
+    // ScrollView; AIAssistantView's did not". The populated branch is fine
+    // because `roomList` and `messageScroll` are both ScrollViews; only this
+    // branch was missing one.
+    //
+    // `minHeight` rather than `maxHeight: .infinity` for the same reason:
+    // it gives the content a floor without re-introducing an unbounded demand.
+    // Three earlier attempts that kept an unbounded height all failed.
     private var emptyState: some View {
+        ScrollView {
         VStack(spacing: 14) {
             Image(systemName: "bubble.left.and.bubble.right")
                 .font(.system(size: 42)).foregroundColor(.haloAccent)
@@ -178,18 +182,9 @@ struct LetheView: View {
                     .buttonStyle(.bordered)
             }
         }
-        // ⚠️ KNOWN BUG, NOT YET FIXED — see the note on `body`.
-        //
-        // Natural height, padded down from the header, deliberately avoiding
-        // `maxHeight: .infinity`. This is the third attempt at the empty-state
-        // layout bug and it is **unverified**: the first two (Spacers, then an
-        // infinite frame) were measured via the accessibility tree and both
-        // still left the header at y = -443, i.e. ~475pt above the top of the
-        // window. This variant removes every unbounded height demand from the
-        // branch, which is the remaining hypothesis, but it has not been
-        // confirmed on screen.
-        .frame(maxWidth: .infinity)
-        .padding(.top, 72)
+        .frame(maxWidth: .infinity, minHeight: 460)
+        .padding(.top, 100)
+        }
     }
 
     // MARK: - Room list
