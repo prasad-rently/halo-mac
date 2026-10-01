@@ -135,6 +135,26 @@ final class AlertManager {
         AlertLog.shared.append(title: title, body: body, kindRaw: kind.rawValue)
     }
 
+    // MARK: - External one-off notifications (F-044 D30)
+
+    /// Fire a notification not tied to the metric `AlertKind`s (e.g. a newly-synced
+    /// SMS). Reuses the same UNNotification + AlertLog pipeline. `kindRaw` is a free
+    /// string used for the log entry's icon/colour mapping and the request id.
+    static func fireExternal(kindRaw: String, title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: "\(kindRaw)-\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString.prefix(4))",
+            content: content,
+            trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+
+        AlertLog.shared.append(title: title, body: body, kindRaw: kindRaw)
+    }
+
     // MARK: - Permission request
 
     static func requestPermission() {

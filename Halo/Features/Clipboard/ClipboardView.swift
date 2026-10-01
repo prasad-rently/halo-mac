@@ -5,6 +5,7 @@ struct ClipboardView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var viewModel = ClipboardViewModel()
     @State private var activeTab: ClipboardTab = .history
+    @State private var showSync = false
 
     enum ClipboardTab: String, CaseIterable {
         case history  = "History"
@@ -33,6 +34,18 @@ struct ClipboardView: View {
                     .buttonStyle(.plain)
                 }
                 Spacer()
+
+                // F-045: cross-device clipboard sync status + settings.
+                Button { showSync = true } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: clipboardSyncActive ? "arrow.triangle.2.circlepath.circle.fill"
+                                                              : "arrow.triangle.2.circlepath.circle")
+                        Text(clipboardSyncActive ? "Sync on" : "Sync")
+                    }
+                    .font(HaloFont.body(12, weight: .medium))
+                    .foregroundColor(clipboardSyncActive ? .haloAccent : .haloText2)
+                }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
@@ -66,6 +79,12 @@ struct ClipboardView: View {
             if let item { appState.togglePinClipboard(item) }
         }
         .onChange(of: viewModel.clearAllRequest) { newVal in if newVal { appState.clearAllClipboard() } }
+        .sheet(isPresented: $showSync) { ClipboardSyncSettingsView(sync: appState.clipboardSync) }
+    }
+
+    private var clipboardSyncActive: Bool {
+        if case .connected = appState.clipboardSync.state { return appState.clipboardSync.syncEnabled }
+        return false
     }
 }
 
@@ -393,7 +412,16 @@ struct ClipboardItemRow: View {
                             .font(HaloFont.body(11))
                             .foregroundColor(.haloText3)
 
-                        if let app = item.sourceApp {
+                        // F-045: synced items are badged with their source device;
+                        // locally-copied items keep the source-app label.
+                        if let device = item.syncedFrom {
+                            HStack(spacing: 3) {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                    .font(.system(size: 8))
+                                Text(device).font(HaloFont.body(11))
+                            }
+                            .foregroundColor(.haloAccent)
+                        } else if let app = item.sourceApp {
                             Text("· \(app)")
                                 .font(HaloFont.body(11))
                                 .foregroundColor(.haloText3)

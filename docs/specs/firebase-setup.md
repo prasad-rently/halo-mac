@@ -146,8 +146,55 @@ with but keeps a manual OAuth-client step. **This is a decision to revisit (see 
 - **Provisioning model = in-app client-side assisted flow** ✅ — Halo runs the provisioning locally with the user's token; **no Halo-hosted infrastructure**, tokens never leave the user's machine (preserves the "Halo never touches your data" ethos). No one-click hosted service.
 - **Two-secret model** ✅ — auth credential (email + random password) is auto-managed (Keychain + carried in the pairing QR); the **E2E passphrase** (data secret) is user-held and never in the QR. (F-044 D11.)
 
-### Phase 0 spike (must validate before build)
-1. **firebase-ios-sdk on macOS** — RTDB + Email/Password Auth configured at **runtime** (`FirebaseApp.configure(options:)`), under sandbox + network entitlements.
-2. **Provisioning OAuth** — obtaining a `cloud-platform`/`firebase` token from a native app and the **app-verification** requirement (unverified-app cap/warning). Main risk to the assisted flow; fallback = guided wizard + automated rules deploy.
-3. **Identity Toolkit admin API** — enable Email/Password provider + create the auth user programmatically.
-4. **RTDB provisioning + rules PUT** via `firebasedatabase.googleapis.com` + rules REST.
+### Phase 0 spike (status)
+1. **firebase-ios-sdk on macOS** — ✅ **PASSED (2026-07).** Firebase 11.15.0
+   (`FirebaseDatabase` + `FirebaseAuth`) resolves + builds + links into the Halo
+   macOS app using **runtime** `FirebaseOptions` (no bundled plist). RTDB+Auth
+   chosen over Firestore also builds far lighter (no source gRPC/abseil). Code:
+   `Halo/Core/Cloud/FirebaseRTDBClient.swift`. (Release-sandbox network
+   entitlement still to confirm on the sandboxed build.)
+2. **Provisioning OAuth** — ✅ **S2 SPIKE DONE (2026-07) — feasible, but gated.**
+   - **Device/limited-input flow is RULED OUT.** Google restricts it to a fixed
+     scope set (`email`/`openid`/`profile` + Drive `drive.file`/`drive.appdata` +
+     YouTube) — `cloud-platform`/`firebase` are **not** permitted. So spec §5
+     mitigation (c) "device-code flow" is dead.
+     ([docs](https://developers.google.com/identity/protocols/oauth2/limited-input-device))
+   - **The viable flow is loopback-IP redirect + PKCE authorization code** —
+     Google's recommended native-desktop mechanism (custom URI schemes deprecated;
+     client secret optional for installed apps).
+     ([docs](https://developers.google.com/identity/protocols/oauth2/native-app))
+     Implemented + unit-tested (RFC 7636 vector): `Halo/Core/Cloud/Provisioning/GoogleOAuthPKCE.swift`.
+   - **The blocker stands and is now precise:** `cloud-platform` is a **restricted
+     scope** → Google **app verification (annual third-party security assessment)**
+     is required for an unverified distributed client beyond the ~100-user cap +
+     warning screen. For an open-source app this is heavy/ongoing cost.
+   - **Recommendation (v1):** ship the **guided wizard** (already built as the
+     manual `CloudSetupView`) + automated rules deploy as the default; offer
+     assisted auto-provisioning only via mitigation (b) — the user supplies **their
+     own** OAuth client id once (no verification needed, they're the sole user) —
+     or defer full assisted provisioning until/unless Halo pursues restricted-scope
+     verification. Auth already switched to Email/Password (D12), so the runtime app
+     never needs the OAuth-client at all.
+3. **Identity Toolkit admin API** — ✅ **API sequence mapped (live call not run — no token here).**
+   Enable Email/Password: `PATCH identitytoolkit.googleapis.com/admin/v2/projects/{project}/config`
+   (`signIn.email.enabled=true`, `signIn.email.passwordRequired=true`). Create the
+   runtime auth user: `POST identitytoolkit.googleapis.com/v1/accounts:signUp?key={apiKey}`
+   with `{email,password,returnSecureToken}`. Both need the provisioning token / API key.
+4. **RTDB provisioning + rules PUT** — ✅ **API sequence mapped (live call not run).**
+   Add Firebase to a GCP project: `POST firebase.googleapis.com/v1beta1/projects/{project}:addFirebase`.
+   Create the default DB instance: `POST firebasedatabase.googleapis.com/v1beta/projects/{project}/locations/{location}/instances?databaseId={id}&validateOnly=false`
+   (`type: DEFAULT_DATABASE`). Deploy rules: `PUT https://{instance}.firebaseio.com/.settings/rules.json`
+   with the §7.2 rules JSON (bearer token). Pull web config: `GET firebase.googleapis.com/v1beta1/projects/{project}/webApps/{appId}/config` → feeds `FirebaseConfig`.
+
+> **S2 net verdict:** assisted provisioning is **technically fully scriptable** once
+> a `cloud-platform` token is held (all of R1–R5 via REST), and the OAuth mechanism
+> is proven (`GoogleOAuthPKCE`, RFC-vector-tested). The **only** remaining gate is
+> Google **restricted-scope app verification** — a policy/business decision, not a
+> technical one. **v1 stays on the guided wizard** (no rebuild, a few guided clicks);
+> assisted provisioning is a fast follow the moment a verified (or per-user) OAuth
+> client is available. ⚠️ Live end-to-end provisioning was **not** exercised in this
+> spike (no Google account / consent in the build environment).
+
+> **Also delivered in Phase 0:** `CryptoService` (PBKDF2 + AES-GCM, E2E) +
+> `CloudConfigStore` (Keychain) + `CloudModels` (runtime config + QR pairing),
+> all unit-tested — the shared `Halo/Core/Cloud` foundation for F-044/045/048.
