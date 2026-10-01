@@ -7,6 +7,11 @@
 > Each card is complete enough that a developer (or AI agent) with no prior context can implement and test the feature without reading anything else.
 >
 > To **add a new feature**, append it at the bottom of the Queued section. To **reprioritise**, move the card up or down in the queue. Never remove a Done card — it serves as the implementation record.
+>
+> **Definition of Done (mandatory):** a feature is not `✅ Done` until it has a
+> **mobile feasibility study** (iOS + Android) and a row in
+> [`docs/HALO_MOBILE_ROADMAP.md`](HALO_MOBILE_ROADMAP.md). Assess the mobile path
+> before closing desktop work — see that doc's §0 governance.
 
 ---
 
@@ -55,6 +60,15 @@
 | [F-041](#f-041--shareable-action-configurations) | Shareable Action Configurations | ✅ Done | 2 d | Actions module |
 | [F-042](#f-042--siri-shortcuts--app-intents) | Siri Shortcuts / App Intents | ✅ Done | 4 d | AppState |
 | [F-043](#f-043--drive-read--write-speed-test-nfeat-121) | Drive Read & Write Speed Test (NFeat-121) | ✅ Done | 2 d | Files module |
+| [F-044](#f-044--shared-sms-console-nfeat-122) | Shared SMS Console (NFeat-122) | 🗓 Planned | TBD | Firebase, Halo Mobile |
+| [F-045](#f-045--cross-device-clipboard-sync-nfeat-123) | Cross-Device Clipboard Sync (NFeat-123) | 🗓 Planned | TBD | Firebase, Clipboard module |
+| [F-046](#f-046--ai-querying--cloud-providers-nfeat-124) | AI Querying — Cloud Providers (NFeat-124) | 🗓 Planned | TBD | none |
+| [F-047](#f-047--on-device-ai--custom-rag-nfeat-125) | On-Device AI & Custom RAG (NFeat-125) | 🗓 Planned | TBD | none |
+| [F-048](#f-048--personal-expenditure-tracker-nfeat-126) | Personal Expenditure Tracker (NFeat-126) | 🗓 Planned | TBD | F-044 |
+| [F-049](#f-049--halo-mobile-app-product-line) | Halo Mobile App (product line) | 🗓 Planned | TBD | F-044, F-045, F-050 |
+| [F-050](#f-050--haloshare-mobile--desktop-nfeat-127) | HaloShare Mobile ↔ Desktop (NFeat-127) | 🗓 Planned | TBD | HaloShare (LocalSend) |
+
+> **Status legend:** ✅ Done · 📋 Queued (next up) · 🗓 Planned (user-requested, spec pending discussion) · 💡 Future Idea (unsolicited) · ⏭ Skipped
 
 ---
 
@@ -2834,3 +2848,177 @@ struct DriveSpeedResult {
 - Reports average AND optimal for both read and write
 - Uncached results (read speed not RAM-inflated)
 - No leftover scratch files after run/cancel/error
+
+---
+
+# Upcoming / Planned Features (NFeat-122 → NFeat-127)
+
+> **Detailed requirements + execution plans now live in [`docs/specs/`](specs/README.md)** —
+> one self-contained document per feature (F-044 → F-050) plus a shared
+> [foundations](specs/00-foundations.md) doc. The cards below remain as the
+> short briefing; the `docs/specs/` files are the authoritative specs.
+>
+> These cards capture the requested intent, references, the privacy/config
+> model, and open questions. Status: 🗓 Planned.
+>
+> **Cross-cutting principle — "Bring Your Own Backend (BYOB)":** Halo is
+> open-source. Any cloud-backed feature (SMS sync, clipboard sync, expenditure)
+> uses a **user-supplied, user-owned Firebase project**, configurable from
+> Settings on **both** the desktop and mobile apps. Halo ships **no shared /
+> default backend** — every user's data lives in their own Firebase account.
+> This keeps the model private-by-design and avoids Halo operating (or paying
+> for) central infrastructure.
+
+---
+
+## F-044 — Shared SMS Console (NFeat-122)
+
+**Status:** 🗓 Planned · **Effort:** TBD · **Depends on:** Firebase integration, Halo Mobile app · **Ref:** *SMSArchiver* project
+
+### Intent
+A desktop console that displays SMS messages synced from the user's phone.
+The **Halo Mobile app** reads SMS on-device (keyed by phone number) and syncs
+them to the user's **configurable Firebase** database; the **Halo desktop app**
+reads from that same database and presents a searchable/threaded SMS view.
+
+### Scope
+- **Mobile side (NFeat-122 mobile):** read device SMS, sync to Firebase. Owned by the Halo Mobile app (see F-049).
+- **Desktop side (this card):** Firebase client + SMS console UI (threads, search, per-number filtering).
+- **Config:** Firebase project credentials configurable in Settings on both apps; **no default backend**.
+
+### Open questions (to discuss)
+- Firebase product: Firestore vs Realtime DB? Auth model (anonymous, email, service account)?
+- Data schema for messages/threads; dedup + incremental sync strategy.
+- iOS cannot read arbitrary SMS (platform blocker) — is this **Android-only** on the mobile side? Confirm target platforms.
+- Desktop: new sidebar module vs. sub-view. Read-only, or reply/send (likely read-only)?
+- Retention, encryption-at-rest, and what exactly leaves the device.
+
+---
+
+## F-045 — Cross-Device Clipboard Sync (NFeat-123)
+
+**Status:** 🗓 Planned · **Effort:** TBD · **Depends on:** Firebase integration, Clipboard module
+
+### Intent
+Extend the existing Clipboard module into a **common clipboard interface synced
+across the user's devices** via their **configurable Firebase** account. When a
+user copies on any connected device, the item is published to their Firebase and
+becomes available on the others.
+
+### Scope
+- Desktop: hook `ClipboardMonitor` → publish new items to Firebase; subscribe to remote items and merge into history.
+- Mobile (NFeat-123 mobile): listen for copy events, push to the same Firebase (see F-049).
+- **Config:** same BYOB Firebase account, configurable in Settings on both apps.
+- Note: this supersedes the previously **skipped** F-013 "iCloud Clipboard Sync" with a Firebase, user-owned approach (no Pro tier, no iCloud dependency).
+
+### Open questions (to discuss)
+- Conflict/ordering model; per-device identity; history cap sync semantics.
+- Sensitive-content handling (passwords, tokens) — opt-out rules, TTL, redaction.
+- End-to-end encryption before upload? (recommended, since clipboard is high-sensitivity.)
+- Mobile clipboard listening constraints (iOS `UIPasteboard` has no background change events; Android has limits) — confirm feasibility per platform.
+
+---
+
+## F-046 — AI Querying — Cloud Providers (NFeat-124)
+
+**Status:** 🗓 Planned · **Effort:** TBD · **Depends on:** none
+
+### Intent
+Connect Halo to **leading cloud AI providers** and let the user ask questions /
+get answers from within the app.
+
+### Scope
+- Provider abstraction with user-supplied API keys (BYO key), configurable in Settings.
+- Chat/query surface in the app; likely reuse of the Actions/Quick-picker paradigm.
+
+### Open questions (to discuss)
+- Which providers first (Anthropic Claude, OpenAI, Google, local gateway)? Default to latest Claude models.
+- Where keys are stored (Keychain) and how requests are scoped/limited.
+- Query surface: dedicated module, menu-bar quick-ask, or Actions integration?
+- Relationship to F-047 (on-device) — one unified "AI" module with cloud + local backends?
+
+---
+
+## F-047 — On-Device AI & Custom RAG (NFeat-125)
+
+**Status:** 🗓 Planned · **Effort:** TBD · **Depends on:** none
+
+### Intent
+An **on-device AI** assistant for quick, local tasks — writing scripts, regex,
+and other small snippets, plus suggesting quick responses — backed by a **custom
+RAG service** that answers queries grounded in user-provided **context files of
+any format**. The user can **choose the model and control GPU usage**.
+
+### Scope
+- Local inference runtime (model download/management) with a model picker + GPU/compute setting.
+- RAG pipeline: ingest attached files (any format) → chunk/embed → retrieve → answer.
+- Output use-cases: scripts, regex, quick replies; likely feeds into Actions/Clipboard/CodeBeautifier.
+
+### Open questions (to discuss)
+- Inference stack on macOS: MLX (Apple Silicon), llama.cpp/Metal, or Core ML? GPU-usage control granularity.
+- Supported model formats + where models are stored; size/first-run UX.
+- RAG: embedding model, vector store (local), file parsers per format (PDF/DOCX/code/etc.).
+- Privacy guarantee: fully offline? Interaction with F-046 (cloud) — shared "AI" module with backend toggle.
+- Apple Silicon vs Intel support boundary.
+
+---
+
+## F-048 — Personal Expenditure Tracker (NFeat-126)
+
+**Status:** 🗓 Planned · **Effort:** TBD · **Depends on:** F-044 (SMS data via Firebase) · **Ref:** *Hamza* project
+
+### Intent
+An **approximate expenditure tracker** built on the SMS data from F-044 (bank/
+transaction SMS synced to the user's Firebase). Parse transaction messages to
+produce a spending overview. Take inspiration from the *Hamza* project.
+
+### Scope
+- Transaction-SMS parser (amount, merchant, debit/credit, date) over the F-044 dataset.
+- Aggregation + visualization (by period/category/merchant); "approximate" by design.
+
+### Open questions (to discuss)
+- Parsing strategy: rules/regex per bank vs. AI-assisted extraction (ties to F-046/F-047).
+- Categorization taxonomy; handling multi-bank / multi-format SMS; currency/locale.
+- How much of *Hamza*'s approach/heuristics to adopt; India-centric bank SMS formats?
+- Purely local compute on Firebase-sourced data (no third-party financial API).
+
+---
+
+## F-049 — Halo Mobile App (product line)
+
+**Status:** 🗓 Planned · **Effort:** TBD · **Depends on:** F-044, F-045, F-050
+
+### Intent
+A **mobile app that extends the Halo desktop app**. It is the device-side half of
+several cross-platform features and a new HaloShare peer.
+
+### Mobile feature set (this release)
+- **NFeat-122 (mobile):** Shared SMS Console — fetch device SMS, sync to the user's **configurable** Firebase (not a default backend). → pairs with desktop F-044.
+- **NFeat-123 (mobile):** Clipboard sync — configurable Firebase; on copy, listen and publish to the user's cloud so data is available across connected devices. 100% private (user's own account). → pairs with desktop F-045.
+- **NFeat-127:** HaloShare peer — participate in HaloShare transfers (see F-050).
+
+### Open questions (to discuss)
+- Platform(s) & stack: native iOS/Android, or cross-platform (Flutter/React Native/KMP)? (See `docs/MOBILE_PLATFORM_FEATURES.md` for portability analysis.)
+- iOS limitations: no SMS read API (F-044 likely Android-only); `UIPasteboard` background-listening constraints for F-045.
+- Shared Firebase config UX across desktop + mobile (pairing/QR to copy credentials?).
+- Repo/product structure: same repo vs. separate `halo-mobile` repo.
+
+---
+
+## F-050 — HaloShare Mobile ↔ Desktop (NFeat-127)
+
+**Status:** 🗓 Planned · **Effort:** TBD · **Depends on:** HaloShare (LocalSend Protocol v2.1)
+
+### Intent
+Extend **HaloShare** — currently desktop↔desktop over the LocalSend-compatible
+protocol — to also work **between Halo mobile apps** and desktop (mobile↔desktop
+and mobile↔mobile).
+
+### Scope
+- Implement the LocalSend v2.1 protocol on the Halo Mobile app (discovery, TLS, consent, transfer).
+- Verify interop across desktop↔mobile and mobile↔mobile; ideally still interoperable with the official LocalSend apps.
+
+### Open questions (to discuss)
+- Mobile discovery constraints (multicast/mDNS on iOS requires the Local Network entitlement; Android background limits).
+- Background transfer + power/foreground requirements on mobile.
+- Reuse of the existing `Core/LocalShare` protocol models across platforms.

@@ -210,6 +210,24 @@ Phase R4 (9.5 days) ── F-027, F-041, F-042 ───→  Snippets + Shareabl
 
 ---
 
+## Upcoming / Planned (NFeat-122 → NFeat-127)
+
+User-requested features, briefed and awaiting detailed discussion before implementation. Full briefing cards (intent, references, privacy model, open questions) in `docs/FEATURE_ROADMAP.md`. Cross-cutting principle: **Bring Your Own Backend** — every cloud feature uses the user's own **configurable Firebase** project (no shared/default backend), keeping Halo private-by-design as an open-source app.
+
+| ID | NFeat | Feature | Platform | Depends on | Ref |
+|----|-------|---------|----------|-----------|-----|
+| F-044 | 122 | Shared SMS Console — mobile syncs SMS → user's Firebase → desktop console | Desktop + Mobile | Firebase, F-049 | SMSArchiver |
+| F-045 | 123 | Cross-Device Clipboard Sync via configurable Firebase | Desktop + Mobile | Firebase, Clipboard | — |
+| F-046 | 124 | AI Querying — connect leading cloud AI providers (BYO key) | Desktop | none | — |
+| F-047 | 125 | On-Device AI & Custom RAG — scripts/regex/quick answers, file-grounded RAG, model + GPU choice | Desktop | none | — |
+| F-048 | 126 | Personal Expenditure Tracker — approx spend from bank SMS (F-044 data) | Desktop | F-044 | Hamza |
+| F-049 | 122/123/127 | Halo Mobile App — device-side of SMS sync, clipboard sync, HaloShare | Mobile | F-044, F-045, F-050 | — |
+| F-050 | 127 | HaloShare Mobile ↔ Desktop / Mobile ↔ Mobile (extend LocalSend v2.1) | Desktop + Mobile | HaloShare | LocalSend |
+
+> **Status:** 🗓 Planned — briefings captured; each to be specced individually before coding. **NFeat-121 (F-043 Drive Speed Test) is already ✅ shipped.**
+
+---
+
 ## Future Ideas (F-016 → F-030)
 
 Brainstormed during v2.0 planning. Full cards with rationale, data sources, and integration points are in `docs/FEATURE_ROADMAP.md`. Grouped by theme below.
@@ -282,6 +300,8 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 ---
 
 ## Mobile Platform Expansion
+
+> **Mobile development is driven by [`docs/HALO_MOBILE_ROADMAP.md`](HALO_MOBILE_ROADMAP.md)** — the authoritative feature backlog + governance (feasibility study required before any port; updated whenever desktop gains a feature).
 
 Full research and platform-specific feature mapping documented in **`docs/MOBILE_PLATFORM_FEATURES.md`**.
 

@@ -2,6 +2,12 @@
 
 This file is the primary context source for Claude (and any AI agent) working on this codebase. Read it fully before making any change. Deeper references: `docs/ARCHITECTURE.md`, `docs/WIDGET.md`, `docs/DESIGN_SYSTEM.md`, `docs/ROADMAP.md`.
 
+> **🔴 MANDATORY — Mobile parity rule.** Every new desktop feature (`F-xxx`) is
+> **not "done"** until it has a **mobile feasibility study** (iOS + Android) and a
+> row in **[`docs/HALO_MOBILE_ROADMAP.md`](docs/HALO_MOBILE_ROADMAP.md)**. Do the
+> feasibility study *before* adding the feature to the mobile backlog. That doc is
+> the single source of truth for Halo-mobile development. See its §0 governance.
+
 ---
 
 ## Identity

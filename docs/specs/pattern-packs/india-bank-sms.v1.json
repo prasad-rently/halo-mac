@@ -1,0 +1,96 @@
+{
+  "$schema": "./pattern-pack.schema.md",
+  "id": "india-bank-sms",
+  "version": 1,
+  "locale": "en-IN",
+  "currency": "INR",
+  "description": "India bank/UPI SMS classification + transaction-parse pattern pack. Data-driven port of the Hamza reference (~/CW/Hamza: SmsClassifier.kt, TransactionParser.kt). Used by F-044 (categorization) and F-048 (expenditure parsing). All matching is case-insensitive on the uppercased body/sender unless noted.",
+  "source": "Hamza (com.example.hamza) — verified against real device inbox Apr–Jun 2026",
+
+  "tuning": {
+    "balanceLookbehindChars": 14,
+    "dedupWindowMs": 120000,
+    "personalSenderDigitsMin": 7,
+    "personalSenderDigitsMax": 15,
+    "amountNearestToVerb": true
+  },
+
+  "dltSuffix": {
+    "-T": "transactional",
+    "-S": "service",
+    "-P": "promotional",
+    "-G": "government",
+    "note": "DLT-registered header suffixes. -P short-circuits to promotional before the transactional content check; -T/-S/-P/-G used as the classifier's final fallback."
+  },
+
+  "classifier": {
+    "order": ["otp", "personal", "government", "promotionalSenderShortcut(-P)", "transactional", "service", "promotional", "dltSuffixFallback", "uncategorized"],
+    "otpKeywords": [
+      "OTP", "ONE TIME PASSWORD", "ONE-TIME PASSWORD", "ONE TIME PASSCODE",
+      "VERIFICATION CODE", "VERIFICATION PIN", "SECURITY CODE", "LOGIN CODE",
+      "AUTHENTICATION CODE", "AUTH CODE", "CONFIRMATION CODE", "ACCESS CODE",
+      "DO NOT SHARE", "NEVER SHARE", "DONT SHARE", "DON'T SHARE", "OTP IS"
+    ],
+    "otpNumberRegex": "(\\b\\d{4,8}\\b(?:\\s+IS\\s+(?:YOUR|THE))|(?:USE|ENTER|CODE\\s*[:\\-]?\\s*)\\s*\\b\\d{4,8}\\b)",
+    "personalRule": "sender has no letters, only [0-9 +()-.], digit count in [7,15]",
+    "govSenders": ["UIDAI", "NDMA", "COWIN", "MYGOV", "DIGILOCKER", "UMANG", "EPFO", "INCOMETAX", "GOVT", "-G"],
+    "govKeywords": ["EMERGENCY ALERT", "PUBLIC NOTICE", "WEATHER WARNING", "DISASTER", "EVACUATION", "NATIONAL ALERT", "AMBER ALERT", "AADHAAR", "PAN CARD"],
+    "transactionalStrong": ["DEBITED", "CREDITED", "WITHDRAWN", "DEPOSITED", "NEFT", "IMPS", "RTGS", "UPI", "TXN", "TRANSACTION", "AVL BAL", "AVAILABLE BAL", "A/C", "ACCT NO", "AC NO", "EMI", "REFUND"],
+    "moneyTokens": ["RS.", "RS ", "INR", "₹", "RUPEES"],
+    "transactionalVerbs": ["PAID", "RECEIVED", "SPENT", "PAYMENT", "TRANSFERRED", "CHARGED"],
+    "transactionalRule": "transactionalStrong matched, OR (a moneyToken present AND a transactionalVerb present)",
+    "serviceKeywords": [
+      "DELIVERED", "DELIVERY", "OUT FOR DELIVERY", "SHIPPED", "DISPATCHED",
+      "ORDER CONFIRMED", "ORDER PLACED", "BOOKING CONFIRMED", "BOOKED",
+      "PNR", "TICKET", "APPOINTMENT", "RESERVATION", "SCHEDULED",
+      "STATEMENT", "BILL GENERATED", "DUE DATE", "PAYMENT DUE",
+      "LOGIN ALERT", "SECURITY ALERT", "PASSWORD RESET",
+      "REGISTERED", "ACTIVATED", "REQUEST RECEIVED",
+      "E-MANDATE", "MANDATE", "AUTOPAY", "AUTO PAY", "AUTO-PAY"
+    ],
+    "promoKeywords": [
+      "OFFER", "DISCOUNT", "SALE", "% OFF", "OFF ON", "FLAT ", "CASHBACK", "COUPON",
+      "DEAL", "LOWEST PRICE", "LOWEST", "LIMITED TIME", "LIMITED PERIOD", "HURRY",
+      "GRAB", "SHOP NOW", "BUY NOW", "ORDER NOW", "BOOK NOW", "SUBSCRIBE", "UNSUBSCRIBE",
+      "REPLY STOP", "STOP TO", "OPT OUT", "T&C", "CLICK HERE", "CLICK", "WWW.", "HTTP",
+      "DOWNLOAD NOW", "INSTALL NOW", "CLAIM", "REWARD", "REWARDS", "WINNER",
+      "CONGRATULATIONS", "LUCKY", "PRIZE", "PRE-APPROVED", "APPLY NOW", "EXCLUSIVE",
+      "RECHARGE", "EARN ", "ACTIVATE", "UPGRADE", "MISS OUT", "DON'T MISS", "DONT MISS",
+      "LAST CHANCE", "GET UP TO", "UP TO", "VOUCHER", "GIFT", "BONUS", "SAVE RS",
+      "SAVE UP", "BEST PRICE", "FLASH"
+    ]
+  },
+
+  "parser": {
+    "amountRegex": "(?:RS|INR|₹)\\.?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)",
+    "debitWords": ["DEBITED", "SPENT", "WITHDRAWN", "PURCHASED", "PURCHASE", "DEDUCTED", "PAID", "SENT", "CHARGED", "TXN OF", "TXN RS", "TXN INR", "DEBIT OF", "PAYMENT OF"],
+    "creditWords": ["CREDITED", "RECEIVED", "DEPOSITED", "REFUNDED", "ADDED"],
+    "creditWordsNote": "Bare 'REFUND' intentionally EXCLUDED — it matched pending 'refund initiated/reference'. Only 'REFUNDED' (settled) counts as income.",
+    "excludeWords": [
+      "DECLINED", "FAILED", "UNSUCCESSFUL", "REVERSED", "NOT DEBITED", "NOT CREDITED",
+      "IS DUE", "DUE ON", "PAYMENT DUE", "TOTAL DUE", "MIN AMT", "MINIMUM AMOUNT",
+      "WILL BE DEBITED", "WILL BE DEDUCTED", "WILL BE AUTO", "WILL BE CREDITED",
+      "TO BE DEBITED", "TO BE DEDUCTED",
+      "INITIATED", "REQUESTED", "PLEASE PAY", "PAY NOW", "OVERDUE", "PAYABLE", "REMINDER"
+    ],
+    "excludeWordsNote": "Actual E-Mandate/UPI-Mandate/auto-debit EXECUTIONS carry a 'debited'/'sent' verb (no 'will be') and ARE counted — only the future announcements above are skipped.",
+    "nonBankSenders": ["AIRTEL", "JIO", "PAYTM", "PHONEPE", "PHONPE", "MOBIKW", "FREECH", "AMAZON", "FLIPKART", "FKRT", "SWIGGY", "ZOMATO", "EKART", "MYNTRA", "INDANE", "HPGAS", "BHARATGAS", "BHRTGS", "IRCTC", "POLBAZ", "POLICYB", "NETFLIX"],
+    "nonBankSendersNote": "Matched on SENDER only — a merchant named in the body ('spent at ZOMATO') from a bank sender still counts.",
+    "promoWords": ["OFFER", "DISCOUNT", "SALE", "% OFF", "SHOP NOW", "BUY NOW", "ORDER NOW", "COUPON", "PROMO", "CONGRATULATIONS", "WINNER", "PRIZE", "LUCKY", "APPLY NOW", "PRE-APPROVED", "PREAPPROVED", "LOAN OFFER", "CLAIM", "REWARD POINTS", "VOUCHER", "UNSUBSCRIBE", "T&C", "CLICK HERE", "LIMITED TIME", "HURRY", "EXCITING"],
+    "promoWordsNote": "Bare 'HTTP'/'WWW.' intentionally EXCLUDED from parser rejects — bank debit alerts carry fraud-report URLs; rejecting them dropped real UPI 'Sent' debits.",
+    "balancePrefix": ["BAL", "BALANCE", "AVBL", "AVAILABLE", "AVL", "AVAIL", "LIMIT", "OUTSTANDING", "DUE"],
+    "accountRegex": "(?:X|x|\\*){2,}\\s*(\\d{3,4})|(?:A/C|AC|ACCT|CARD)[^\\d]{0,6}(?:X|x|\\*)*(\\d{3,4})",
+    "merchantRegex": "(?:\\bat\\s+|\\bto\\s+|info[:\\-]\\s*)([A-Za-z0-9][A-Za-z0-9 &._'-]{2,30}?)(?=\\s+(?:on|via|ref|for|dated|\\.|,|$))"
+  },
+
+  "algorithm": [
+    "1. Reject if sender endsWith '-P' (promotional DLT header).",
+    "2. Reject if sender matches any nonBankSenders.",
+    "3. Reject if body contains any excludeWords or promoWords.",
+    "4. direction: earliest of debitWords (expense) vs creditWords (income); none => NotTransaction.",
+    "5. amount: amountRegex.findAll; drop any whose <=balanceLookbehindChars-char lookbehind contains a balancePrefix; among the rest pick the one NEAREST the direction verb. None => Unreadable.",
+    "6. extras: accountRegex tail (last 3–4 digits), merchantRegex (best-effort, nullable).",
+    "7. post: markSelfTransfers (same day + same amount debit+credit => isTransfer, excluded from totals); dedupNearDuplicates (same amount+direction within dedupWindowMs).",
+    "8. overrides precedence: per-message force-include/exclude > exclude-sender-core > automatic."
+  ]
+}
