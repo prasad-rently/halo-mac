@@ -4830,3 +4830,672 @@ struct HaloShareInteropTests {
         #expect((try? Data(contentsOf: dest.appendingPathComponent("fromdesktop.bin"))) == (try Data(contentsOf: bin)))
     }
 }
+
+// MARK: - Lethe Tests (F-052)
+
+/// Cross-implementation vectors. Every constant here was produced by the Lethe
+/// **Node reference** (`relay/scripts/chat-demo.mjs`'s crypto, replayed with a
+/// fixed key and nonce), not by this Swift code — so these tests prove
+/// interoperability rather than self-consistency. A change on either side that
+/// breaks the other fails here rather than in a conversation.
+///
+///     roomKey  000102…1e1f   (32 bytes)
+///     nonce    a0a1…aaab     (12 bytes)
+@Suite("Lethe crypto")
+struct LetheCryptoTests {
+
+    static let roomKeyHex = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+    static let nonceHex   = "a0a1a2a3a4a5a6a7a8a9aaab"
+
+    /// From Node: `createHash('sha256').update(roomKey).digest('hex').slice(0,16)`
+    static let expectedRoomId = "630dcd2966c43366"
+
+    static let expectedMsgJSON = #"{"handle":"ghost_7f3a","text":"hello from node 👋","ts":1758000000000,"msgId":"0f1e2d3c4b5a69788796a5b4c3d2e1f0"}"#
+
+    /// base64( nonce ‖ ct ‖ tag ) produced by Node for the JSON above.
+    static let nodePayload = "oKGio6SlpqeoqaqrnToUTCuvbtpAX6W0bxWzqi+bPyPzlW5O6Gte8l2RV2m3GiuQj0QhUjK8aqdtH6MJ2IrNak7ybg1jZDppkUi1gISMtV8AldTM1o+Mf8aq7oDvO82VoPP9SY1BXK/QrHSjt7wckjXPuvmquDU0t+3cThRyHIuSq33xC7Dw1Tf46M6grB8="
+
+    /// base64url( nonce ‖ ct ‖ tag ) of the string "Design Team", from Node.
+    static let nodeNameBlob = "oKGio6Slpqeoqaqron0PRCKlIusHBOr5y2N-ftFtyIyKDsVppgJw"
+
+    static func hexData(_ hex: String) -> Data {
+        var out = Data(); var i = hex.startIndex
+        while i < hex.endIndex {
+            let j = hex.index(i, offsetBy: 2)
+            out.append(UInt8(hex[i..<j], radix: 16)!)
+            i = j
+        }
+        return out
+    }
+    static var key: Data { hexData(roomKeyHex) }
+    static var nonce: Data { hexData(nonceHex) }
+
+    @Test("roomId derivation matches the Dart/Node reference")
+    func testRoomIdVector() {
+        #expect(LetheCrypto.deriveRoomId(from: Self.key) == Self.expectedRoomId)
+        #expect(LetheCrypto.deriveRoomId(from: Self.key).count == 16)
+    }
+
+    @Test("Swift decrypts a payload produced by the Node reference")
+    func testDecryptNodePayload() throws {
+        let decoded = try LetheCrypto.decryptMessage(payload: Self.nodePayload, roomKey: Self.key)
+        #expect(decoded.handle == "ghost_7f3a")
+        #expect(decoded.text == "hello from node 👋")   // non-ASCII survives the round trip
+        #expect(decoded.ts == 1_758_000_000_000)
+        #expect(decoded.msgId == "0f1e2d3c4b5a69788796a5b4c3d2e1f0")
+    }
+
+    @Test("Swift reproduces the Node payload byte-for-byte with the same key and nonce")
+    func testEncryptMatchesNodeBytes() throws {
+        let produced = try LetheCrypto.encryptMessage(
+            text: "hello from node 👋",
+            handle: "ghost_7f3a",
+            roomKey: Self.key,
+            ts: 1_758_000_000_000,
+            msgId: "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+            nonce: Self.nonce
+        )
+        // Same key + same nonce + same plaintext must give the same ciphertext.
+        // If this fails, the JSON we seal differs from what the other clients
+        // seal, and every cross-client message would be unreadable.
+        #expect(produced == Self.nodePayload)
+    }
+
+    @Test("Swift decrypts the Node-produced invite name blob")
+    func testDecryptNameBlob() throws {
+        #expect(try LetheCrypto.decryptStringURL(Self.nodeNameBlob, roomKey: Self.key) == "Design Team")
+    }
+
+    @Test("Round-trip with a random nonce")
+    func testRoundTrip() throws {
+        let key = LetheCrypto.generateRoomKey()
+        #expect(key.count == 32)
+        let payload = try LetheCrypto.encryptMessage(text: "round trip", handle: "echo_01", roomKey: key)
+        let back = try LetheCrypto.decryptMessage(payload: payload, roomKey: key)
+        #expect(back.text == "round trip")
+    }
+
+    @Test("A wrong key fails to open — it never returns garbage")
+    func testWrongKeyRejected() throws {
+        let payload = try LetheCrypto.encryptMessage(text: "secret", handle: "a", roomKey: LetheCrypto.generateRoomKey())
+        #expect(throws: (any Error).self) {
+            _ = try LetheCrypto.decryptMessage(payload: payload, roomKey: LetheCrypto.generateRoomKey())
+        }
+    }
+
+    @Test("A tampered tag is rejected")
+    func testTamperRejected() throws {
+        let key = LetheCrypto.generateRoomKey()
+        let payload = try LetheCrypto.encryptMessage(text: "authentic", handle: "a", roomKey: key)
+        var bytes = Data(base64Encoded: payload)!
+        bytes[bytes.count - 1] ^= 0x01          // flip one bit of the auth tag
+        #expect(throws: (any Error).self) {
+            _ = try LetheCrypto.decryptMessage(payload: bytes.base64EncodedString(), roomKey: key)
+        }
+    }
+
+    @Test("A truncated payload is rejected, not crashed on")
+    func testShortPayload() {
+        #expect(throws: (any Error).self) {
+            _ = try LetheCrypto.open(Data([0x00, 0x01, 0x02]), key: LetheCrypto.generateRoomKey())
+        }
+    }
+
+    @Test("Nonces never repeat across messages")
+    func testNonceUniqueness() throws {
+        let key = LetheCrypto.generateRoomKey()
+        var nonces = Set<Data>()
+        for _ in 0..<200 {
+            let p = try LetheCrypto.encryptMessage(text: "x", handle: "h", roomKey: key)
+            nonces.insert(Data(base64Encoded: p)!.prefix(12))
+        }
+        // Nonce reuse under GCM is catastrophic, not merely weak.
+        #expect(nonces.count == 200)
+    }
+
+    @Test("base64url decoding accepts padded and unpadded input")
+    func testBase64URLPadding() {
+        // Dart's base64Url.encode pads; Node's base64url does not. Links come
+        // from both, so both must parse.
+        let padded   = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+        let unpadded = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+        #expect(LetheCrypto.base64URLDecode(padded) == Self.key)
+        #expect(LetheCrypto.base64URLDecode(unpadded) == Self.key)
+    }
+
+    @Test("A URL in the message body is not slash-escaped")
+    func testSlashesNotEscaped() throws {
+        // Foundation's JSONEncoder escapes "/" as "\\/" by default; JSON.stringify
+        // does not. Both parse the same, so this can never break a conversation
+        // — but it silently breaks byte-equality with the reference for any
+        // message containing a URL, which the fixed vectors above would not
+        // catch because their text has no slash.
+        let key = LetheCrypto.generateRoomKey()
+        let payload = try LetheCrypto.encryptMessage(
+            text: "see https://example.com/page", handle: "h", roomKey: key)
+        let clearJSON = try LetheCrypto.open(Data(base64Encoded: payload)!, key: key)
+        let str = String(data: clearJSON, encoding: .utf8)!
+        #expect(str.contains("https://example.com/page"))
+        #expect(!str.contains("\\/"))
+    }
+
+    @Test("msgId is 32 lowercase hex characters, like the Dart client's")
+    func testMsgIdShape() {
+        let id = LetheCrypto.newMsgId()
+        #expect(id.count == 32)
+        #expect(id.allSatisfy { $0.isHexDigit && !$0.isUppercase })
+    }
+}
+
+@Suite("Lethe invite links")
+struct LetheInviteLinkTests {
+
+    @Test("A link parses back to the key and name it was built from")
+    func testRoundTrip() throws {
+        let key = LetheCrypto.generateRoomKey()
+        let roomId = LetheCrypto.deriveRoomId(from: key)
+        let link = try LetheInviteLink.create(roomId: roomId, roomKey: key, roomName: "Design Team")
+
+        let parsed = try #require(LetheInviteLink.parse(link))
+        #expect(parsed.roomId == roomId)
+        #expect(parsed.roomKey == key)
+        #expect(parsed.roomName == "Design Team")
+    }
+
+    @Test("A link built by the Node/Dart reference parses here")
+    func testParseReferenceLink() throws {
+        // Generated by the Node reference with the fixed key + nonce.
+        let link = "lethe://join#roomId=630dcd2966c43366&roomKey=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8%3D&name=oKGio6Slpqeoqaqron0PRCKlIusHBOr5y2N-ftFtyIyKDsVppgJw"
+        let parsed = try #require(LetheInviteLink.parse(link))
+        #expect(parsed.roomId == LetheCryptoTests.expectedRoomId)
+        #expect(parsed.roomKey == LetheCryptoTests.key)
+        #expect(parsed.roomName == "Design Team")
+    }
+
+    @Test("The key travels in the fragment, never the path or query")
+    func testKeyIsInFragment() throws {
+        let key = LetheCrypto.generateRoomKey()
+        let link = try LetheInviteLink.create(roomId: LetheCrypto.deriveRoomId(from: key),
+                                              roomKey: key, roomName: "x")
+        let hashIndex = try #require(link.firstIndex(of: "#"))
+        let beforeHash = String(link[link.startIndex..<hashIndex])
+        // A fragment is never transmitted by any HTTP client — that is the whole
+        // reason the key lives after the '#'.
+        #expect(!beforeHash.contains("roomKey"))
+        #expect(beforeHash == "lethe://join")
+    }
+
+    @Test("Names with characters that would break the fragment survive")
+    func testAwkwardNames() throws {
+        for name in ["a&b=c", "room #2", "💀 secret", "emoji 🎉 and spaces", "100% done"] {
+            let key = LetheCrypto.generateRoomKey()
+            let link = try LetheInviteLink.create(roomId: LetheCrypto.deriveRoomId(from: key),
+                                                  roomKey: key, roomName: name)
+            let parsed = try #require(LetheInviteLink.parse(link), "failed for \(name)")
+            #expect(parsed.roomName == name)
+        }
+    }
+
+    @Test("Malformed links return nil rather than throwing")
+    func testMalformed() {
+        let bad = [
+            "", "not a link", "https://example.com",
+            "lethe://join#", "lethe://join#roomId=abc",
+            "lethe://join#roomId=abc&roomKey=notbase64&name=x",
+        ]
+        for input in bad {
+            #expect(LetheInviteLink.parse(input) == nil, "should reject: \(input)")
+        }
+    }
+
+    @Test("A link whose roomId contradicts its key is rejected")
+    func testMismatchedRoomIdRejected() throws {
+        let key = LetheCrypto.generateRoomKey()
+        let good = try LetheInviteLink.create(roomId: LetheCrypto.deriveRoomId(from: key),
+                                              roomKey: key, roomName: "x")
+        let tampered = good.replacingOccurrences(of: "roomId=\(LetheCrypto.deriveRoomId(from: key))",
+                                                 with: "roomId=0000000000000000")
+        // The key is authoritative. A mismatched id would JOIN a room whose
+        // traffic nobody in it can decrypt — silently useless, so refuse it.
+        #expect(LetheInviteLink.parse(tampered) == nil)
+    }
+
+    @Test("A wrong-length key is rejected")
+    func testShortKeyRejected() {
+        let shortKey = LetheCrypto.base64URLEncode(Data(repeating: 0, count: 16))
+        let link = "lethe://join#roomId=abc&roomKey=\(shortKey)&name=x"
+        #expect(LetheInviteLink.parse(link) == nil)
+    }
+}
+
+@Suite("Lethe wire protocol")
+struct LetheProtocolTests {
+
+    @Test("Client frames match the relay's expected shape")
+    func testClientFrames() throws {
+        let join = try #require(LetheClientFrame.join(roomId: "abc123").encoded())
+        let joinObj = try #require(try JSONSerialization.jsonObject(with: Data(join.utf8)) as? [String: Any])
+        #expect(joinObj["type"] as? String == "JOIN")
+        #expect(joinObj["roomId"] as? String == "abc123")
+
+        let send = try #require(LetheClientFrame.send(roomId: "abc123", payload: "b64").encoded())
+        let sendObj = try #require(try JSONSerialization.jsonObject(with: Data(send.utf8)) as? [String: Any])
+        #expect(sendObj["type"] as? String == "SEND")
+        #expect(sendObj["payload"] as? String == "b64")
+    }
+
+    @Test("Server frames parse")
+    func testServerFrames() {
+        #expect(LetheServerEvent.parse(#"{"type":"CONNECTED"}"#) == .connected)
+        #expect(LetheServerEvent.parse(#"{"type":"MESSAGE","roomId":"r1","payload":"p","ts":1758000000000}"#)
+                == .message(roomId: "r1", payload: "p", ts: 1_758_000_000_000))
+        #expect(LetheServerEvent.parse(#"{"type":"ERROR","code":"RATE_LIMIT","message":"Slow down"}"#)
+                == .error(code: "RATE_LIMIT", message: "Slow down"))
+    }
+
+    @Test("Unknown and malformed frames degrade to .unknown, never crash")
+    func testUnknownFrames() {
+        // Forward compatibility: a relay that grows a new frame type must not
+        // take the client down.
+        for raw in ["", "not json", "{}", #"{"type":"FUTURE_THING"}"#, #"{"type":"MESSAGE"}"#] {
+            #expect(LetheServerEvent.parse(raw) == .unknown, "should be unknown: \(raw)")
+        }
+    }
+
+    @Test("Relay limits match relay/src/constants.js")
+    func testLimits() {
+        #expect(LetheLimits.maxPayloadBytes == 65536)
+        #expect(LetheLimits.maxMessagesPerSecond == 10)
+        #expect(LetheLimits.maxMessageCharacters == 2000)
+    }
+
+    @Test("An oversized message is refused before it reaches the relay")
+    func testOversizePayloadRefused() {
+        let key = LetheCrypto.generateRoomKey()
+        let huge = String(repeating: "A", count: 70_000)
+        #expect(throws: (any Error).self) {
+            _ = try LetheCrypto.encryptMessage(text: huge, handle: "h", roomKey: key)
+        }
+    }
+
+    @Test("Connection states carry a human label")
+    func testConnectionLabels() {
+        #expect(LetheConnectionState.connected.isUsable)
+        #expect(!LetheConnectionState.waking.isUsable)
+        #expect(LetheConnectionState.waking.label.contains("Waking"))
+        #expect(LetheConnectionState.reconnecting(attempt: 3).label.contains("3"))
+    }
+}
+
+/// AC-3 / AC-6 from the F-052 spec: the key really is in the Keychain, and
+/// leaving a room really removes it. These hit the **real** Keychain — a mock
+/// would prove nothing about the thing that can actually fail (an entitlement
+/// problem, a wrong accessibility class, a silent add failure).
+@Suite("Lethe key storage", .serialized)
+struct LetheKeyStoreTests {
+
+    /// Namespaced so a failed run can never collide with a real room.
+    private func testRoomId() -> String { "halotest-" + LetheCrypto.newMsgId().prefix(8) }
+
+    @Test("A key survives a save and load — this is AC-3's storage half")
+    func testSaveLoad() throws {
+        let roomId = testRoomId()
+        defer { RoomKeyStore.delete(roomId: roomId) }
+
+        let key = LetheCrypto.generateRoomKey()
+        #expect(RoomKeyStore.save(key, roomId: roomId))
+        #expect(RoomKeyStore.load(roomId: roomId) == key)
+    }
+
+    @Test("Saving twice replaces rather than duplicating")
+    func testOverwrite() throws {
+        let roomId = testRoomId()
+        defer { RoomKeyStore.delete(roomId: roomId) }
+
+        let first = LetheCrypto.generateRoomKey()
+        let second = LetheCrypto.generateRoomKey()
+        #expect(RoomKeyStore.save(first, roomId: roomId))
+        #expect(RoomKeyStore.save(second, roomId: roomId))
+        // A duplicate item would make `load` non-deterministic.
+        #expect(RoomKeyStore.load(roomId: roomId) == second)
+    }
+
+    @Test("Leaving a room destroys the key — AC-6")
+    func testDelete() throws {
+        let roomId = testRoomId()
+        let key = LetheCrypto.generateRoomKey()
+        #expect(RoomKeyStore.save(key, roomId: roomId))
+        #expect(RoomKeyStore.load(roomId: roomId) != nil)
+
+        #expect(RoomKeyStore.delete(roomId: roomId))
+        // Unrecoverable by design: no server copy, no reset flow.
+        #expect(RoomKeyStore.load(roomId: roomId) == nil)
+    }
+
+    @Test("Deleting a room that was never saved is not an error")
+    func testDeleteMissing() {
+        #expect(RoomKeyStore.delete(roomId: testRoomId()))
+    }
+
+    @Test("A key that is gone cannot be listed — the reconcile that AC-3 relies on")
+    func testAllRoomIds() throws {
+        let roomId = testRoomId()
+        let key = LetheCrypto.generateRoomKey()
+        #expect(RoomKeyStore.save(key, roomId: roomId))
+        #expect(RoomKeyStore.allRoomIds().contains(roomId))
+
+        RoomKeyStore.delete(roomId: roomId)
+        // `loadFromDisk` filters the persisted room list against this set, so a
+        // room whose key is gone is never listed — listing it would be a lie.
+        #expect(!RoomKeyStore.allRoomIds().contains(roomId))
+    }
+}
+
+/// AC-4: offline behaviour. Exercises the real actor — no network needed,
+/// because the queue decision is made before any socket I/O.
+@Suite("Lethe offline queue")
+struct LetheOfflineQueueTests {
+
+    private func client() -> LetheRelayClient {
+        // A host that cannot resolve: the client stays disconnected, which is
+        // exactly the state under test.
+        LetheRelayClient(relayURL: URL(string: "wss://invalid.invalid.test")!)
+    }
+
+    @Test("Messages composed while offline are queued, not dropped — AC-4")
+    func testQueuesWhileOffline() async {
+        let c = client()
+        await c.join(roomId: "room1")
+        #expect(await c.send(roomId: "room1", payload: "one"))
+        #expect(await c.send(roomId: "room1", payload: "two"))
+        #expect(await c.queuedCount == 2)
+    }
+
+    @Test("An oversized payload is refused rather than queued forever")
+    func testOversizeRefused() async {
+        let c = client()
+        let huge = String(repeating: "A", count: LetheLimits.maxPayloadBytes + 1)
+        #expect(await c.send(roomId: "room1", payload: huge) == false)
+        // The relay would reject it, so queueing it would retry a doomed send
+        // on every reconnect.
+        #expect(await c.queuedCount == 0)
+    }
+
+    @Test("Rooms are remembered so they can be rejoined on reconnect")
+    func testRejoinSet() async {
+        let c = client()
+        await c.join(roomId: "a")
+        await c.join(roomId: "b")
+        #expect(await c.joinedRoomIds == ["a", "b"])
+    }
+
+    @Test("Leaving a room discards its queued messages")
+    func testLeaveDropsQueue() async {
+        let c = client()
+        await c.join(roomId: "a")
+        await c.join(roomId: "b")
+        _ = await c.send(roomId: "a", payload: "for-a")
+        _ = await c.send(roomId: "b", payload: "for-b")
+        #expect(await c.queuedCount == 2)
+
+        await c.leave(roomId: "a")
+        // Delivering to a room you have left — after destroying its key — would
+        // be pointless at best.
+        #expect(await c.queuedCount == 1)
+        #expect(await c.joinedRoomIds == ["b"])
+    }
+}
+
+// MARK: - Lethe: leaving a room on disk (AC-6)
+
+/// AC-6 is "verified on disk, not just in the UI". `LetheKeyStoreTests` covers
+/// the Keychain half; this covers the history file, using a scratch directory
+/// so a developer's real rooms are never read or written.
+@Suite("Lethe leave-room on disk", .serialized)
+@MainActor
+struct LetheLeaveOnDiskTests {
+
+    @Test("Leaving a room removes it, its name and its history from rooms.json — AC-6")
+    func testLeaveScrubsHistoryFile() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("halo-lethe-test-" + UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let manager = LetheManager(storeDirectory: dir)
+        manager.handle = "tester"   // not setHandle(): that writes the user's real UserDefaults
+        let room = try #require(manager.createRoom(named: "AC6 ephemeral room"))
+        defer { RoomKeyStore.delete(roomId: room.id) }
+
+        try manager.send(text: "ac6-message-body", to: room)
+
+        let file = dir.appendingPathComponent("rooms.json")
+        let before = try String(contentsOf: file, encoding: .utf8)
+        // Guards the test itself: if these were false the "after" assertions
+        // below would pass vacuously.
+        #expect(before.contains(room.id))
+        #expect(before.contains("AC6 ephemeral room"))
+        #expect(before.contains("ac6-message-body"))
+        #expect(RoomKeyStore.load(roomId: room.id) != nil)
+
+        manager.leave(room: room)
+
+        let after = try String(contentsOf: file, encoding: .utf8)
+        #expect(!after.contains(room.id))
+        #expect(!after.contains("AC6 ephemeral room"))
+        #expect(!after.contains("ac6-message-body"))
+        #expect(RoomKeyStore.load(roomId: room.id) == nil)
+        #expect(manager.rooms.isEmpty)
+    }
+}
+
+// MARK: - Lethe: telemetry scrubbing (spec §6.2)
+
+@Suite("Lethe telemetry", .serialized)
+struct LetheTelemetryTests {
+
+    private func reset() { LetheTelemetryScrubber.update(roomIds: [], roomNames: [], handle: "") }
+
+    @Test("An invite link is redacted by shape — it carries the room key")
+    func testInviteLinkRedacted() throws {
+        reset()
+        let key = LetheCrypto.generateRoomKey()
+        let link = try LetheInviteLink.create(roomId: LetheCrypto.deriveRoomId(from: key),
+                                              roomKey: key, roomName: "Secret plans")
+        let out = LetheTelemetryScrubber.scrub("failed to open \(link) twice")
+        #expect(!out.contains("lethe://"))
+        #expect(!out.contains("roomKey"))
+        #expect(out.contains(LetheTelemetryScrubber.redaction))
+    }
+
+    @Test("Room ids, room names and the handle are redacted wherever they appear")
+    func testRegisteredValuesRedacted() {
+        LetheTelemetryScrubber.update(roomIds: ["0123456789abcdef"],
+                                      roomNames: ["Secret plans"],
+                                      handle: "Quiet-Fox-42")
+        defer { reset() }
+
+        let out = LetheTelemetryScrubber.scrub(
+            "room 0123456789abcdef (Secret plans) rejected frame from Quiet-Fox-42")
+        #expect(!out.contains("0123456789abcdef"))
+        #expect(!out.contains("Secret plans"))
+        #expect(!out.contains("Quiet-Fox-42"))
+        #expect(out.contains("rejected frame from"))   // the diagnostic survives
+    }
+
+    @Test("A very short handle is not registered, so it cannot shred stack text")
+    func testShortHandleIgnored() {
+        LetheTelemetryScrubber.update(roomIds: [], roomNames: [], handle: "al")
+        defer { reset() }
+        #expect(LetheTelemetryScrubber.scrub("al and also palace") == "al and also palace")
+    }
+
+    @Test("Nested extras are scrubbed, not just top-level strings")
+    func testNestedScrub() {
+        LetheTelemetryScrubber.update(roomIds: ["feedfacefeedface"], roomNames: [], handle: "")
+        defer { reset() }
+
+        let scrubbed = LetheTelemetryScrubber.scrub([
+            "a": "room feedfacefeedface",
+            "b": ["c": ["feedfacefeedface", "ok"]],
+            "n": 7,
+        ] as [String: Any]) as? [String: Any]
+
+        let flat = String(describing: scrubbed as Any)
+        #expect(!flat.contains("feedfacefeedface"))
+        #expect(scrubbed?["n"] as? Int == 7)
+    }
+
+    /// The scrubber is a backstop. The primary guarantee is that nothing in
+    /// Lethe writes to a log or to Sentry in the first place — and the cheapest
+    /// way to keep that true is to fail the build the moment someone adds one.
+    @Test("No Lethe source file logs or talks to Sentry directly")
+    func testNoLoggingInLetheSources() throws {
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let dirs = ["Halo/Core/Lethe", "Halo/Features/Lethe"]
+            .map { repoRoot.appendingPathComponent($0) }
+        let forbidden = try NSRegularExpression(
+            pattern: #"\b(print|debugPrint|dump|NSLog|os_log)\s*\(|\bLogger\s*\(|SentrySDK|import\s+Sentry|import\s+os\.log|import\s+OSLog"#)
+
+        var scanned = 0
+        var offenders: [String] = []
+        for dir in dirs {
+            let files = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: nil)?
+                .compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" } ?? []
+            for file in files {
+                scanned += 1
+                let text = try String(contentsOf: file, encoding: .utf8)
+                let code = text.split(separator: "\n", omittingEmptySubsequences: false)
+                    .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+                    .joined(separator: "\n")
+                if forbidden.firstMatch(in: code, range: NSRange(code.startIndex..., in: code)) != nil {
+                    offenders.append(file.lastPathComponent)
+                }
+            }
+        }
+        // Without this, a moved directory would make the test pass on zero files.
+        #expect(scanned >= 6)
+        #expect(offenders.isEmpty, "Lethe must not log or call Sentry directly: \(offenders)")
+    }
+}
+
+// MARK: - Lethe: live cross-client interop (AC-1) — opt-in
+
+/// AC-1 is the ship gate: a Mac running Halo and the *real* Lethe Flutter app
+/// exchange messages in both directions against the *unmodified production
+/// relay*. That cannot run unattended in CI — it needs a second client — so it
+/// is opt-in: the suite is disabled unless `HALO_LETHE_LIVE_DIR` is set.
+///
+///     TEST_RUNNER_HALO_LETHE_LIVE_DIR=/some/dir xcodebuild test … \
+///         -only-testing:HaloTests/LetheLiveInteropTests
+///
+/// (xcodebuild strips the `TEST_RUNNER_` prefix before the test process sees it.)
+///
+/// The test is the Mac half, and drives Halo's own `LetheRelayClient` /
+/// `LetheCrypto` / `LetheInviteLink` — the same code the app uses. It talks to
+/// whatever is driving the other half through files in that directory:
+///
+///   invite.txt     written first: a throwaway room's `lethe://` invite
+///   state.log      relay connection state transitions, appended
+///   go-send        create this file to make the Mac send its message
+///   sent.json      what the Mac sent, written after `go-send`
+///   received.jsonl every decrypted message from another handle, appended
+///
+/// It passes only if a message from *another* client arrives, decrypts, and
+/// matches `HALO_LETHE_LIVE_EXPECT` (default `ping from the phone`).
+@Suite("Lethe live interop (AC-1)", .serialized,
+       .enabled(if: ProcessInfo.processInfo.environment["HALO_LETHE_LIVE_DIR"] != nil))
+struct LetheLiveInteropTests {
+
+    private final class Inbox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var lines: [String] = []
+        func append(_ s: String) { lock.lock(); lines.append(s); lock.unlock() }
+        var snapshot: [String] { lock.lock(); defer { lock.unlock() }; return lines }
+    }
+
+    @Test("Mac ↔ Flutter client round trip on the production relay", .timeLimit(.minutes(12)))
+    func testRoundTrip() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let dir = URL(fileURLWithPath: try #require(env["HALO_LETHE_LIVE_DIR"]), isDirectory: true)
+        let expected = env["HALO_LETHE_LIVE_EXPECT"] ?? "ping from the phone"
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        func append(_ line: String, to name: String) {
+            let url = dir.appendingPathComponent(name)
+            let data = Data((line + "\n").utf8)
+            if let h = try? FileHandle(forWritingTo: url) {
+                h.seekToEndOfFile(); h.write(data); try? h.close()
+            } else {
+                try? data.write(to: url)
+            }
+        }
+
+        let key = LetheCrypto.generateRoomKey()
+        let roomId = LetheCrypto.deriveRoomId(from: key)
+        let myHandle = "halo-mac-ac1"
+        let invite = try LetheInviteLink.create(roomId: roomId, roomKey: key, roomName: "AC-1 interop")
+        try invite.write(to: dir.appendingPathComponent("invite.txt"), atomically: true, encoding: .utf8)
+
+        let inbox = Inbox()
+        let relay = URL(string: env["HALO_LETHE_RELAY"] ?? LetheLimits.defaultRelayURL)!
+        let client = LetheRelayClient(relayURL: relay)
+        await client.setEventHandler { event in
+            switch event {
+            case .state(let s):
+                append("\(Date().timeIntervalSince1970) \(s)", to: "state.log")
+            case .relayError(let code, let message):
+                append("\(Date().timeIntervalSince1970) relay error \(code)", to: "state.log")
+                _ = message
+            case .message(_, let payload, _):
+                guard let m = try? LetheCrypto.decryptMessage(payload: payload, roomKey: key) else {
+                    append("undecryptable frame dropped", to: "state.log")
+                    return
+                }
+                // The relay echoes our own message back; only other clients count.
+                guard m.handle != myHandle else { return }
+                let line = "{\"handle\":\(Self.q(m.handle)),\"text\":\(Self.q(m.text)),\"ts\":\(m.ts)}"
+                inbox.append(m.text)
+                append(line, to: "received.jsonl")
+            }
+        }
+        await client.connect()
+        await client.join(roomId: roomId)
+
+        // Phase 1 — wait for the driver to say the phone has joined, then send.
+        let goFile = dir.appendingPathComponent("go-send")
+        try await Self.wait(timeout: 300) { FileManager.default.fileExists(atPath: goFile.path) }
+
+        let outgoing = "pong from the Mac 🍎 https://example.com/a/b?c=d"
+        let payload = try LetheCrypto.encryptMessage(text: outgoing, handle: myHandle, roomKey: key)
+        let queued = await client.send(roomId: roomId, payload: payload)
+        #expect(queued)
+        try "{\"text\":\(Self.q(outgoing))}".write(to: dir.appendingPathComponent("sent.json"),
+                                                   atomically: true, encoding: .utf8)
+
+        // Phase 2 — wait for the phone's reply to arrive and decrypt.
+        try await Self.wait(timeout: 400) { !inbox.snapshot.isEmpty }
+        let received = inbox.snapshot
+        #expect(received.contains(expected), "got \(received), wanted \"\(expected)\"")
+
+        await client.disconnect()
+    }
+
+    private static func q(_ s: String) -> String {
+        let data = try? JSONSerialization.data(withJSONObject: [s], options: [.fragmentsAllowed])
+        let arr = data.flatMap { String(data: $0, encoding: .utf8) } ?? "[\"\"]"
+        return String(arr.dropFirst().dropLast())
+    }
+
+    private static func wait(timeout: TimeInterval, until condition: @escaping @Sendable () -> Bool) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            if Date() > deadline { throw LiveInteropTimeout() }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+    }
+
+    private struct LiveInteropTimeout: Error, CustomStringConvertible {
+        var description: String { "timed out waiting on the other client" }
+    }
+}

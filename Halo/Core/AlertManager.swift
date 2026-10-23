@@ -40,6 +40,7 @@ final class AlertManager {
         case backupNever    = "backup_never"   // F-022
         case diskSmartWarning = "disk_smart_warning"
         case diskSmartFailing = "disk_smart_failing"
+        case letheMessage   = "lethe_message"     // F-052
     }
 
     // MARK: - State
@@ -227,6 +228,25 @@ final class AlertManager {
     }
 
     // MARK: - Fire helper
+
+    // MARK: - F-052 Lethe
+
+    /// A message arrived in a Lethe room while it wasn't on screen.
+    ///
+    /// Deliberately bypasses the `fire`/`lastFired` cooldown: that contract is
+    /// for recurring *system conditions* ("disk is still low"), where repeating
+    /// adds nothing. A chat message is a discrete event — suppressing the second
+    /// one for an hour would silently hide a conversation.
+    ///
+    /// The body carries the room and sender but **never the message text**.
+    /// Notification content is rendered by the OS and can be mirrored to other
+    /// devices or shown on a locked screen; Lethe's whole proposition is that
+    /// the content stays between key-holders.
+    func fireLetheMessage(roomName: String, handle: String) {
+        post(title: roomName,
+             body: "New message from \(handle)",
+             kindRaw: AlertKind.letheMessage.rawValue)
+    }
 
     private func fire(_ kind: AlertKind, title: String, body: String, cooldown: TimeInterval) {
         if let last = lastFired[kind], Date().timeIntervalSince(last) < cooldown { return }
