@@ -135,9 +135,25 @@ None of these are started. Starting them against an unfrozen contract would prod
 | Desktop receive fixed (V1–V4) | ✅ `fix/haloshare-binary-upload` | — |
 | Protocol core + tests | ✅ `ios/HaloShareKit` — 56 tests | ⏳ |
 | Discovery (scan + manual) | ✅ HTTP /24 scan + manual address (multicast: not on iOS, §3 MD2) | ⏳ |
-| Send / Receive + consent | ✅ library level, verified vs desktop both ways + curl (UI: ⏳) | ⏳ |
-| App shell | ⏳ | ⏳ |
+| Send / Receive + consent | ✅ library **and app**: Mac→phone (consent, SHA-256 identical), decline (exit 3, nothing written), phone→Mac (5 MB exact) — iOS Simulator | ⏳ |
+| App shell | ✅ `ios/HaloMobile` — Share / Inbox / Settings, consent sheet, cloud placeholders | ⏳ |
 | Share extension / Sharesheet | ❌ deferred | ❌ deferred |
 | Background receive | ❌ deferred | ❌ deferred |
 | Official-LocalSend interop | ❌ not testable here | ❌ not testable here |
 | Cloud features (SMS, clipboard, pairing) | 🚫 blocked (§6) | 🚫 blocked (§6) |
+
+### 9.1 iOS verification record (2026-10-23, iOS Simulator, iPhone 17)
+
+Driven through the real app UI against the Kit's CLI peer on the Mac:
+
+| Flow | Result |
+|------|--------|
+| Launch | "Ready to receive · port 53317"; cloud rows labelled "Not yet" (MR-SH-3) |
+| Mac → phone, 3 MB binary | Consent sheet showed sender, file name and size; **nothing in `Documents/Received` before Accept**; after Accept the file's SHA-256 matched the original |
+| Mac → phone, declined | Sender got "declined by receiver" (exit 3); **no file, no partial** |
+| Phone → Mac, 5 MB | Added the Mac by address, selected it, sent; app showed "Sent halo-test-5MB.bin"; Mac held exactly 5,242,880 bytes |
+| Manual address | `127.0.0.1:53318` → found "Gokul's Mac" |
+
+A usability defect found by driving it: the keyboard could not be dismissed once the address field was focused and covered the Send button. Fixed (Done button, interactive scroll-dismiss, dismiss on Add).
+
+**Not verified:** the system file picker (the Debug "send test file" exercises the same send path), the HTTP /24 scan against a real LAN peer, Local Network permission prompts, physical devices, the official LocalSend app.
