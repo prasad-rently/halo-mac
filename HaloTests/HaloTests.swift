@@ -4668,3 +4668,136 @@ struct LetheOfflineQueueTests {
         #expect(await c.joinedRoomIds == ["b"])
     }
 }
+
+// MARK: - Lethe: leaving a room on disk (AC-6)
+
+/// AC-6 is "verified on disk, not just in the UI". `LetheKeyStoreTests` covers
+/// the Keychain half; this covers the history file, using a scratch directory
+/// so a developer's real rooms are never read or written.
+@Suite("Lethe leave-room on disk", .serialized)
+@MainActor
+struct LetheLeaveOnDiskTests {
+
+    @Test("Leaving a room removes it, its name and its history from rooms.json — AC-6")
+    func testLeaveScrubsHistoryFile() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("halo-lethe-test-" + UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let manager = LetheManager(storeDirectory: dir)
+        manager.handle = "tester"   // not setHandle(): that writes the user's real UserDefaults
+        let room = try #require(manager.createRoom(named: "AC6 ephemeral room"))
+        defer { RoomKeyStore.delete(roomId: room.id) }
+
+        try manager.send(text: "ac6-message-body", to: room)
+
+        let file = dir.appendingPathComponent("rooms.json")
+        let before = try String(contentsOf: file, encoding: .utf8)
+        // Guards the test itself: if these were false the "after" assertions
+        // below would pass vacuously.
+        #expect(before.contains(room.id))
+        #expect(before.contains("AC6 ephemeral room"))
+        #expect(before.contains("ac6-message-body"))
+        #expect(RoomKeyStore.load(roomId: room.id) != nil)
+
+        manager.leave(room: room)
+
+        let after = try String(contentsOf: file, encoding: .utf8)
+        #expect(!after.contains(room.id))
+        #expect(!after.contains("AC6 ephemeral room"))
+        #expect(!after.contains("ac6-message-body"))
+        #expect(RoomKeyStore.load(roomId: room.id) == nil)
+        #expect(manager.rooms.isEmpty)
+    }
+}
+
+// MARK: - Lethe: telemetry scrubbing (spec §6.2)
+
+@Suite("Lethe telemetry", .serialized)
+struct LetheTelemetryTests {
+
+    private func reset() { LetheTelemetryScrubber.update(roomIds: [], roomNames: [], handle: "") }
+
+    @Test("An invite link is redacted by shape — it carries the room key")
+    func testInviteLinkRedacted() throws {
+        reset()
+        let key = LetheCrypto.generateRoomKey()
+        let link = try LetheInviteLink.create(roomId: LetheCrypto.deriveRoomId(from: key),
+                                              roomKey: key, roomName: "Secret plans")
+        let out = LetheTelemetryScrubber.scrub("failed to open \(link) twice")
+        #expect(!out.contains("lethe://"))
+        #expect(!out.contains("roomKey"))
+        #expect(out.contains(LetheTelemetryScrubber.redaction))
+    }
+
+    @Test("Room ids, room names and the handle are redacted wherever they appear")
+    func testRegisteredValuesRedacted() {
+        LetheTelemetryScrubber.update(roomIds: ["0123456789abcdef"],
+                                      roomNames: ["Secret plans"],
+                                      handle: "Quiet-Fox-42")
+        defer { reset() }
+
+        let out = LetheTelemetryScrubber.scrub(
+            "room 0123456789abcdef (Secret plans) rejected frame from Quiet-Fox-42")
+        #expect(!out.contains("0123456789abcdef"))
+        #expect(!out.contains("Secret plans"))
+        #expect(!out.contains("Quiet-Fox-42"))
+        #expect(out.contains("rejected frame from"))   // the diagnostic survives
+    }
+
+    @Test("A very short handle is not registered, so it cannot shred stack text")
+    func testShortHandleIgnored() {
+        LetheTelemetryScrubber.update(roomIds: [], roomNames: [], handle: "al")
+        defer { reset() }
+        #expect(LetheTelemetryScrubber.scrub("al and also palace") == "al and also palace")
+    }
+
+    @Test("Nested extras are scrubbed, not just top-level strings")
+    func testNestedScrub() {
+        LetheTelemetryScrubber.update(roomIds: ["feedfacefeedface"], roomNames: [], handle: "")
+        defer { reset() }
+
+        let scrubbed = LetheTelemetryScrubber.scrub([
+            "a": "room feedfacefeedface",
+            "b": ["c": ["feedfacefeedface", "ok"]],
+            "n": 7,
+        ] as [String: Any]) as? [String: Any]
+
+        let flat = String(describing: scrubbed as Any)
+        #expect(!flat.contains("feedfacefeedface"))
+        #expect(scrubbed?["n"] as? Int == 7)
+    }
+
+    /// The scrubber is a backstop. The primary guarantee is that nothing in
+    /// Lethe writes to a log or to Sentry in the first place — and the cheapest
+    /// way to keep that true is to fail the build the moment someone adds one.
+    @Test("No Lethe source file logs or talks to Sentry directly")
+    func testNoLoggingInLetheSources() throws {
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let dirs = ["Halo/Core/Lethe", "Halo/Features/Lethe"]
+            .map { repoRoot.appendingPathComponent($0) }
+        let forbidden = try NSRegularExpression(
+            pattern: #"\b(print|debugPrint|dump|NSLog|os_log)\s*\(|\bLogger\s*\(|SentrySDK|import\s+Sentry|import\s+os\.log|import\s+OSLog"#)
+
+        var scanned = 0
+        var offenders: [String] = []
+        for dir in dirs {
+            let files = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: nil)?
+                .compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" } ?? []
+            for file in files {
+                scanned += 1
+                let text = try String(contentsOf: file, encoding: .utf8)
+                let code = text.split(separator: "\n", omittingEmptySubsequences: false)
+                    .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+                    .joined(separator: "\n")
+                if forbidden.firstMatch(in: code, range: NSRange(code.startIndex..., in: code)) != nil {
+                    offenders.append(file.lastPathComponent)
+                }
+            }
+        }
+        // Without this, a moved directory would make the test pass on zero files.
+        #expect(scanned >= 6)
+        #expect(offenders.isEmpty, "Lethe must not log or call Sentry directly: \(offenders)")
+    }
+}

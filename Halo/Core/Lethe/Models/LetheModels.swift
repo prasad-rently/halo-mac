@@ -184,3 +184,69 @@ enum LetheLimits {
     static let historyCapPerRoom = 1_000
     static let defaultRelayURL = "wss://lethe-relay.onrender.com"
 }
+
+// MARK: - Telemetry scrubbing (spec §6.2)
+
+/// Halo ships Sentry; Lethe's promise is that nothing about a conversation
+/// leaves the Mac. Sentry is opt-in, but the spec requires that *even when the
+/// user has opted in* no event or breadcrumb carries a room id, room name,
+/// handle or invite link.
+///
+/// Nothing in Lethe logs today (a source-scan test enforces that). This is the
+/// backstop for the cases that scan cannot see: an error string built from a
+/// room name, a crash message that interpolates a handle.
+///
+/// Pure string work with no Sentry import, so it is testable on its own. The
+/// hooks that call it live in `HaloApp.configureSentry()`.
+enum LetheTelemetryScrubber {
+
+    static let redaction = "[lethe-redacted]"
+
+    /// Sentry invokes its hooks off the main actor, so the manager cannot be
+    /// asked for the current rooms there. It pushes a snapshot here instead.
+    private final class Registry: @unchecked Sendable {
+        let lock = NSLock()
+        var sensitive: [String] = []
+    }
+    private static let registry = Registry()
+
+    /// Shorter strings are not registered: a 1–2 character handle would redact
+    /// every matching letter in a stack trace and make it unreadable.
+    static let minimumSensitiveLength = 3
+
+    static func update(roomIds: [String], roomNames: [String], handle: String) {
+        let values = (roomIds + roomNames + [handle])
+            .filter { $0.count >= minimumSensitiveLength }
+        registry.lock.lock()
+        registry.sensitive = values
+        registry.lock.unlock()
+    }
+
+    static func scrub(_ text: String) -> String {
+        registry.lock.lock()
+        let sensitive = registry.sensitive
+        registry.lock.unlock()
+
+        var out = text
+        // Invite links carry the room key itself — the most damaging thing a
+        // report could hold — so they are matched by shape, not by registry.
+        if let regex = try? NSRegularExpression(pattern: #"lethe://[^\s"'<>]+"#) {
+            out = regex.stringByReplacingMatches(
+                in: out, range: NSRange(out.startIndex..., in: out), withTemplate: redaction)
+        }
+        for value in sensitive {
+            out = out.replacingOccurrences(of: value, with: redaction)
+        }
+        return out
+    }
+
+    /// Recurses through nested dictionaries/arrays, scrubbing every string.
+    static func scrub(_ value: Any) -> Any {
+        switch value {
+        case let s as String:          return scrub(s)
+        case let d as [String: Any]:   return d.mapValues { scrub($0) }
+        case let a as [Any]:           return a.map { scrub($0) }
+        default:                       return value
+        }
+    }
+}

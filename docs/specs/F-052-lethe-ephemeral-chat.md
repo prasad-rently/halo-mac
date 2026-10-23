@@ -1,6 +1,6 @@
 # F-052 — Lethe: Anonymous Ephemeral Chat in Halo (NFeat-128)
 
-> **Status:** 📝 Requirements draft · **Platform:** Desktop (+ existing Lethe mobile/web clients)
+> **Status:** 🔧 Built on `feat/f052-lethe` (unmerged, unpushed) — validation open, see §8.1 and §9 · **Platform:** Desktop (+ existing Lethe mobile/web clients)
 > **Source project:** [`~/Github/Lethe`](https://github.com/prasad-rently/Lethe) — private · Flutter app + Node.js relay, relay live at `wss://lethe-relay.onrender.com`
 > **Relates to:** [00-foundations](00-foundations.md) (BYOB Firebase), [F-045](F-045-clipboard-sync.md) (clipboard sync), [F-050](F-050-haloshare-mobile.md) (HaloShare mobile), existing `.localShare` module
 > **F-id note:** `F-051` is claimed by the Lucky Draw spinner wheel (branch `feat/f051-lucky-draw`, unpushed at time of writing). This takes `F-052`.
@@ -356,6 +356,27 @@ converge. Recorded as OQ-5.
    the claim in §6.3 is verified, not assumed.
 10. `HALO_MOBILE_ROADMAP.md` §3 row added.
 
+### 8.1 Verification status (as of the `feat/f052-lethe` branch)
+
+"Verified" means observed or asserted by a test, not inferred from reading code.
+
+| AC | Status | Evidence / what is missing |
+|----|--------|----------------------------|
+| 1 | ❌ **Open — ship gate** | Only the Node reference client has exchanged messages with Halo on the production relay. No iOS/Android session has been run. |
+| 2 | 🟡 Substantially met | A third client without the key captured the frames: payload and handle opaque. No literal packet capture (pcap) was taken. |
+| 3 | ✅ Verified on screen | Quit/relaunch restored room, message and handle; key came from the Keychain. |
+| 4 | 🟡 Partly | Offline queue unit-tested; echo + replay dedup observed on screen. Pulling the network mid-session in the real app has not been done. |
+| 5 | 🟡 Code only | `.waking` state exists in `LetheRelayClient`; the banner has not been seen against a genuinely cold relay. |
+| 6 | ✅ Verified (test) | `LetheKeyStoreTests` (Keychain) + `LetheLeaveOnDiskTests` (rooms.json scratch dir). |
+| 7 | 🟡 Crypto layer | Wrong-key and tampered-tag rejection are tested in `LetheCryptoTests`; the manager's drop-silently path (`ingest`) has no direct test. |
+| 8 | ✅ Verified (test) | Arms in `AlertLog.swift`; `AlertManagerTests` iterate `allCases`. |
+| 9 | ❌ **Open** | Both entitlement files carry `network.client`, which is all Lethe needs; no sandboxed run has been recorded. |
+| 10 | ✅ Done | `HALO_MOBILE_ROADMAP.md` §3 row + §9 study. |
+
+§6.2 (telemetry): `LetheTelemetryScrubber` redacts invite links, room ids, room
+names and the handle from Sentry breadcrumbs and events; a source-scan test
+fails if any Lethe file adds a logging call or touches `SentrySDK`.
+
 ---
 
 ## 9. Open Questions & Risks
@@ -370,6 +391,22 @@ converge. Recorded as OQ-5.
 | **OQ-6** | **Does §7.4 get pursued?** | Independent decision. If yes it likely reshapes F-045's transport and should be settled before F-045 is built, not after. |
 | **R-1** | **Relay is a single point of failure and a correlation point.** | It cannot read messages, but it sees IPs and room-membership timing. Lethe's BRD accepts this for v1 (Tor is v3). Halo users may have a different expectation than Lethe users; say so plainly (FR-L-30). |
 | **R-2** | **Protocol drift.** | Two independent clients now implement one wire format with no shared test vectors. Mitigation: port `relay/scripts/chat-demo.mjs` (the BRD calls it the reference crypto/wire format) into a Halo test as fixed vectors, so a Dart-side change that breaks Swift fails a test rather than a conversation. |
+
+### 9.1 Decision status
+
+None of OQ-1…OQ-6 has been decided. They are recorded here as **open**, with what
+the build assumed in the meantime, so the assumption is visible rather than
+silently becoming the decision. Plan item 0.3 (decide OQ-3 and OQ-1 before build)
+was **not** done before building.
+
+| # | Status | What the build assumes meanwhile |
+|---|--------|----------------------------------|
+| OQ-1 | **Open** | Default relay is the Render free tier. The ~50 s cold start is handled with a distinct `.waking` state ("Waking the relay…"), and the relay URL is user-overridable (FR-L-32). |
+| OQ-2 | **Open** | §6.2 constraints implemented (scrubber + no-logging test); the privacy panel states that Halo includes opt-in Sentry. Whether that is *sufficient* remains a judgement call. |
+| OQ-3 | **Open** | History is **plain JSON** in `Application Support/Halo/lethe/rooms.json` — readable by anything running as the user. Option "encrypt with a Keychain-held key" is not implemented. |
+| OQ-4 | **Open** (UI note only) | No rotation or member removal. The invite sheet says so plainly ("There is no way to remove a member — make a new room instead"). |
+| OQ-5 | **Open** | Treated as separate products sharing a protocol; Flutter web client unaffected. |
+| OQ-6 | **Open** | §7.4 not pursued; nothing in F-045 changed. |
 
 ---
 
@@ -405,7 +442,7 @@ and should be revisited before Phase 1.
 | 2.1 | `.lethe` AppModule + sidebar entry + `reorderable` |
 | 2.2 | Room list, transcript, composer (2,000-char cap) |
 | 2.3 | Create / join sheets; invite QR render + copy + share |
-| 2.4 | QR scan via camera (`NSCameraUsageDescription`) |
+| 2.4 | QR scan via camera (`NSCameraUsageDescription`) — **deferred, not built in v1** (see `LetheSheets.swift` header note); FR-L-08 and FR-L-33 are unmet by design until this lands |
 | 2.5 | Connection-state banner incl. cold-start copy |
 | 2.6 | Privacy panel (FR-L-30) |
 

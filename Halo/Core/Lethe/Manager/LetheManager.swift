@@ -48,7 +48,25 @@ final class LetheManager: ObservableObject {
     private var seenMessageIds: Set<String> = []
     private var started = false
 
-    private init() {}
+    /// Where history is written. `nil` means the real Application Support
+    /// folder; tests pass a scratch directory so they never touch a user's rooms.
+    private let storeDirectory: URL?
+    /// Off in tests — `connectIfNeeded()` would otherwise open a socket to the
+    /// production relay from a unit test.
+    private let connectsToRelay: Bool
+
+    private init() {
+        storeDirectory = nil
+        connectsToRelay = true
+    }
+
+    /// Test seam. The directory argument is required (no default) so a bare
+    /// `LetheManager()` still cannot compile and a second live instance cannot
+    /// appear by accident — `shared` remains the only one the app uses.
+    init(storeDirectory: URL, connectsToRelay: Bool = false) {
+        self.storeDirectory = storeDirectory
+        self.connectsToRelay = connectsToRelay
+    }
 
     // MARK: - Lifecycle
 
@@ -72,6 +90,7 @@ final class LetheManager: ObservableObject {
         guard !trimmed.isEmpty else { return }
         handle = trimmed
         UserDefaults.standard.set(trimmed, forKey: Self.handleKey)
+        refreshTelemetrySnapshot()
     }
 
     func setRelayURL(_ new: String) {
@@ -85,6 +104,7 @@ final class LetheManager: ObservableObject {
     }
 
     private func connectIfNeeded() {
+        guard connectsToRelay else { return }
         guard client == nil, !rooms.isEmpty || started else { return }
         guard let url = URL(string: relayURLString) else { return }
 
@@ -261,6 +281,16 @@ final class LetheManager: ObservableObject {
         Task { [client] in await client?.send(roomId: room.id, payload: payload) }
     }
 
+    /// Only the real instance feeds the scrubber's process-wide snapshot. A
+    /// test instance (non-nil `storeDirectory`) must not overwrite it, or
+    /// parallel tests would see each other's rooms.
+    private func refreshTelemetrySnapshot() {
+        guard storeDirectory == nil else { return }
+        LetheTelemetryScrubber.update(roomIds: rooms.map(\.id),
+                                      roomNames: rooms.map(\.name),
+                                      handle: handle)
+    }
+
     // MARK: - Persistence
     //
     // JSON in Application Support, following MemoryTrendTracker — this codebase
@@ -276,14 +306,22 @@ final class LetheManager: ObservableObject {
     }
 
     private var storeURL: URL? {
-        guard let dir = FileManager.default.urls(for: .applicationSupportDirectory,
-                                                 in: .userDomainMask).first else { return nil }
-        let folder = dir.appendingPathComponent("Halo/lethe", isDirectory: true)
+        let folder: URL
+        if let storeDirectory {
+            folder = storeDirectory
+        } else {
+            guard let dir = FileManager.default.urls(for: .applicationSupportDirectory,
+                                                     in: .userDomainMask).first else { return nil }
+            folder = dir.appendingPathComponent("Halo/lethe", isDirectory: true)
+        }
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         return folder.appendingPathComponent("rooms.json")
     }
 
     private func persist() {
+        // Every path that changes rooms or the handle ends here, so this is
+        // the one place the telemetry scrubber's snapshot needs refreshing.
+        refreshTelemetrySnapshot()
         guard let url = storeURL else { return }
         let store = Store(rooms: rooms, messages: messagesByRoom)
         guard let data = try? JSONEncoder().encode(store) else { return }
@@ -303,5 +341,6 @@ final class LetheManager: ObservableObject {
         let liveIds = Set(rooms.map(\.id))
         messagesByRoom = store.messages.filter { liveIds.contains($0.key) }
         seenMessageIds = Set(messagesByRoom.values.flatMap { $0 }.map(\.id))
+        refreshTelemetrySnapshot()
     }
 }

@@ -44,6 +44,30 @@ struct HaloApp: App {
             options.attachStacktrace = true
             options.enableAutoSessionTracking = true
             options.sessionTrackingIntervalMillis = 30_000
+            // F-052 §6.2: even with analytics opted in, nothing about a Lethe
+            // conversation (room id/name, handle, invite link) may leave.
+            options.beforeBreadcrumb = { crumb in
+                if let message = crumb.message { crumb.message = LetheTelemetryScrubber.scrub(message) }
+                if let data = crumb.data,
+                   let scrubbed = LetheTelemetryScrubber.scrub(data) as? [String: Any] {
+                    crumb.data = scrubbed
+                }
+                return crumb
+            }
+            options.beforeSend = { event in
+                if let message = event.message {
+                    event.message = SentryMessage(formatted: LetheTelemetryScrubber.scrub(message.formatted))
+                }
+                event.exceptions?.forEach { $0.value = LetheTelemetryScrubber.scrub($0.value) }
+                if let tags = event.tags {
+                    event.tags = tags.mapValues { LetheTelemetryScrubber.scrub($0) }
+                }
+                if let extra = event.extra,
+                   let scrubbed = LetheTelemetryScrubber.scrub(extra) as? [String: Any] {
+                    event.extra = scrubbed
+                }
+                return event
+            }
             // Environment tagging
             #if DEBUG
             options.environment = "debug"

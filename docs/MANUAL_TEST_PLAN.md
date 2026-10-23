@@ -998,6 +998,36 @@ Read-only S.M.A.R.T./NVMe health reader via `diskutil info -plist` + an `IONVMeC
 
 ---
 
+## 20.1 Lethe — Anonymous Ephemeral Chat (F-052)
+
+**Files:** `Core/Lethe/*`, `Features/Lethe/LetheView.swift`, `LetheSheets.swift` · **Spec:** `docs/specs/F-052-lethe-ephemeral-chat.md` (§8 acceptance criteria)
+**Needs:** network access to `wss://lethe-relay.onrender.com`. TC-LETHE-03/08/09 need a **second device** (phone running the Lethe Flutter app, or the Node reference client). Run P0 against a **Release (sandboxed)** build as well as Debug — see TC-LETHE-15.
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-LETHE-01 | P0 | Module appears | Launch Halo | "Lethe" is in the sidebar, reorderable via edit mode; no crash |
+| TC-LETHE-02 | P0 | Empty-state layout | Fresh state (no rooms) → open Lethe | Module header is **fully visible** below the title bar and the sidebar does not jump. *(Regression: header was pushed off-screen; fix is the ScrollView root, not yet re-verified on screen.)* |
+| TC-LETHE-03 | P0 | Two-way interop — **ship gate, AC-1** | Create room on Mac, share invite; join from a phone running the Lethe app; send a message each way, incl. an emoji and a URL | Both messages appear on both devices, intact, against the **unmodified production relay** |
+| TC-LETHE-04 | P0 | Create room | "+" → name → create | Room listed, key stored in Keychain (`com.halo.mac.lethe`), connection state reaches Connected; the invite sheet warns there is no way to remove a member |
+| TC-LETHE-05 | P1 | Join by link | Copy invite from one install; paste into Join on another (or same Mac, 2nd room store) | Room joins; room name decrypts from the link |
+| TC-LETHE-06 | P0 | Relaunch persistence — AC-3 | Send a message; quit and relaunch Halo | Room, message and handle restored; reconnects; message is **not duplicated** by the relay's echo/replay |
+| TC-LETHE-07 | P1 | Offline queue — AC-4 | Connected → disable Wi-Fi → type and send → re-enable | State shows reconnecting; message queued; delivered on reconnect exactly once |
+| TC-LETHE-08 | P1 | Cold-start state — AC-5 | Leave relay idle >15 min, then open Lethe | "Waking the relay…" (not a hung spinner); connects within ~60 s |
+| TC-LETHE-09 | P1 | Unread + notification | Receive a message in a room that is not open | Sidebar badge increments; notification shows room + sender but **no message text**; opening the room clears the badge |
+| TC-LETHE-10 | P0 | Leave room — AC-6 | Leave a room (confirm dialog) → `security find-generic-password -s com.halo.mac.lethe` and `grep <roomId> ~/Library/Application\ Support/Halo/lethe/rooms.json` | Confirmation shown first; Keychain item **gone**; roomId, name and messages **absent** from `rooms.json` |
+| TC-LETHE-11 | P1 | Wrong-key blob — AC-7 | With a third client that lacks the key, post to the room | Nothing renders: no crash, no placeholder row |
+| TC-LETHE-12 | P1 | Deep link | `open "lethe://join#roomId=…&roomKey=…&name=…"` | Halo comes forward on the Lethe module with the join flow |
+| TC-LETHE-13 | P1 | Settings sheet | Gear → change handle; enter `http://x` then `wss://example.com` as relay | Handle persists; invalid relay rejected, `ws/wss` host accepted and reconnects |
+| TC-LETHE-14 | P1 | Privacy panel | Gear → privacy panel | States: what the relay can/cannot see (your IP is visible; text, sender, room name and key are not); the 50-message / 6 h relay buffer; Halo includes opt-in Sentry and nothing from the module is attached to a report |
+| TC-LETHE-15 | P0 | Sandboxed build — AC-9 | Build Release (`Halo.entitlements`, sandbox ON); run TC-LETHE-04, 06, 07 | Full functionality; no sandbox denial in Console |
+| TC-LETHE-16 | P1 | Nothing readable on the wire — AC-2 | Capture relay traffic (e.g. mitmproxy/Wireshark TLS-terminated test relay) while chatting | No message text, handle, room name or key in any frame |
+| TC-LETHE-17 | P2 | Rate limit / size | Send >10 msgs/sec; send >2,000 chars | Client-side throttle; clear "too long" message, no opaque relay ERROR |
+| TC-LETHE-18 | P2 | Telemetry scrub (unit) | Run `LetheTelemetryTests` | Invite links, room ids/names and handle redacted; no logging/Sentry calls in Lethe sources |
+| TC-LETHE-19 | P2 | Leave-on-disk (unit) | Run `LetheLeaveOnDiskTests` | `rooms.json` in a scratch dir loses the room, name and history on leave |
+| TC-LETHE-20 | P3 | QR scan (**not built**) | — | Expected to be **absent** in v1 (FR-L-08 deferred); QR *render* works |
+
+---
+
 ## 21. Cross-Cutting / Non-Functional
 
 ### 21.1 Permissions
