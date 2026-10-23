@@ -4556,6 +4556,19 @@ struct ShareFileNameTests {
         }
     }
 
+    @Test("A destination under /private/… keeps the real file name (regression: it became \"file\")")
+    func privatePrefixedDestination() throws {
+        // standardizedFileURL strips "/private" only for paths that exist; the destination
+        // directory does, the file about to be written doesn't.
+        let base = URL(fileURLWithPath: "/private/tmp/halo-private-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        #expect(ShareFileName.uniqueDestination(for: "hello.txt", in: base).lastPathComponent == "hello.txt")
+        let hostile = ShareFileName.uniqueDestination(for: "../../escape.txt", in: base)
+        #expect(hostile.path.hasPrefix(base.path + "/"))
+        #expect(hostile.lastPathComponent == "escape.txt")
+    }
+
     @Test("An existing file is never overwritten — a free name is chosen")
     func noOverwrite() throws {
         let base = try tempDir()
@@ -4609,3 +4622,128 @@ struct DeviceInfoDTOWireTests {
     }
 }
 
+
+// MARK: - HaloShare: desktop ⇄ HaloShareKit interop (opt-in)
+
+/// F-050's acceptance criteria need desktop and mobile to exchange files. This drives the
+/// **real desktop `LocalShareServer` / `LocalShareClient`** against `halosharecli`, the
+/// command-line peer built from `ios/Packages/HaloShareKit` — a separate implementation.
+///
+///     (cd ios/Packages/HaloShareKit && swift build)
+///     TEST_RUNNER_HALO_SHARE_CLI=$PWD/ios/Packages/HaloShareKit/.build/debug/halosharecli \
+///         xcodebuild test … -only-testing:HaloTests/HaloShareInteropTests
+///
+/// Disabled unless `HALO_SHARE_CLI` is set.
+@Suite("HaloShare desktop ⇄ HaloShareKit interop", .serialized,
+       .enabled(if: ProcessInfo.processInfo.environment["HALO_SHARE_CLI"] != nil))
+struct HaloShareInteropTests {
+
+    private var cli: URL { URL(fileURLWithPath: ProcessInfo.processInfo.environment["HALO_SHARE_CLI"] ?? "/nonexistent") }
+
+    private func tempDir() throws -> URL {
+        let d = FileManager.default.temporaryDirectory.appendingPathComponent("halo-interop-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    private func runCLI(_ args: [String], timeout: TimeInterval = 60) throws -> (status: Int32, out: String) {
+        let p = Process()
+        p.executableURL = cli
+        p.arguments = args
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = pipe
+        try p.run()
+        let deadline = Date().addingTimeInterval(timeout)
+        while p.isRunning && Date() < deadline { usleep(50_000) }
+        if p.isRunning { p.terminate() }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        return (p.terminationStatus, String(decoding: data, as: UTF8.self))
+    }
+
+    private func randomFile(_ name: String, bytes: Int, in dir: URL) throws -> URL {
+        var data = Data(count: bytes)
+        data.withUnsafeMutableBytes { _ = SecRandomCopyBytes(kSecRandomDefault, $0.count, $0.baseAddress!) }
+        let url = dir.appendingPathComponent(name)
+        try data.write(to: url)
+        return url
+    }
+
+    /// The desktop server wired the way `LocalShareManager` wires it: accept every offer and
+    /// register a session with per-file tokens.
+    private func desktopServer(port: UInt16, into dest: URL) async throws -> LocalShareServer {
+        let server = LocalShareServer()
+        try await server.start(
+            port: port, parameters: .tcp,
+            onPrepareUpload: { request, _ in
+                let sessionId = UUID().uuidString
+                var tokens: [String: String] = [:]
+                var files: [String: ShareFile] = [:]
+                for (id, f) in request.files {
+                    tokens[id] = UUID().uuidString
+                    files[id] = ShareFile(id: id, fileName: f.fileName, size: f.size, fileType: f.fileType, sha256: f.sha256)
+                }
+                await server.registerSession(id: sessionId, tokens: tokens, files: files, destDirectory: dest)
+                return PrepareUploadResponse(sessionId: sessionId, files: tokens)
+            },
+            onFileReceived: { _, _, _ in }, onCancel: { _ in }, onProgress: { _, _, _ in })
+        return server
+    }
+
+    @Test("HaloShareKit (sender) → desktop server: text, binary, several files, and 24 MB")
+    func kitSendsToDesktop() async throws {
+        let dest = try tempDir(), src = try tempDir()
+        let server = try await desktopServer(port: 53931, into: dest)
+        defer { Task { await server.stop() } }
+        try await Task.sleep(nanoseconds: 400_000_000)
+
+        let text = src.appendingPathComponent("note.txt"); try Data("from the kit".utf8).write(to: text)
+        let bin = try randomFile("photo.bin", bytes: 300_000, in: src)
+        let big = try randomFile("big.bin", bytes: 24 << 20, in: src)
+
+        let r = try runCLI(["send", "--to", "127.0.0.1:53931", text.path, bin.path, big.path])
+        #expect(r.status == 0, "cli exited \(r.status):\n\(r.out)")
+        #expect((try? String(contentsOf: dest.appendingPathComponent("note.txt"), encoding: .utf8)) == "from the kit")
+        #expect((try? Data(contentsOf: dest.appendingPathComponent("photo.bin"))) == (try Data(contentsOf: bin)))
+        #expect((try? Data(contentsOf: dest.appendingPathComponent("big.bin"))) == (try Data(contentsOf: big)), "24 MB file differs")
+    }
+
+    @Test("HaloShareKit probes the desktop server and gets a usable identity")
+    func kitProbesDesktop() async throws {
+        let dest = try tempDir()
+        let server = try await desktopServer(port: 53932, into: dest)
+        defer { Task { await server.stop() } }
+        try await Task.sleep(nanoseconds: 400_000_000)
+        let r = try runCLI(["info", "127.0.0.1:53932"])
+        #expect(r.status == 0, "\(r.out)")
+        #expect(r.out.contains("desktop"), "\(r.out)")
+    }
+
+    @Test("Desktop client → HaloShareKit receiver: binary files arrive intact")
+    func desktopSendsToKit() async throws {
+        let dest = try tempDir(), src = try tempDir()
+        let readyFile = src.appendingPathComponent("ready.txt")
+        let p = Process()
+        p.executableURL = cli
+        p.arguments = ["receive", "--dir", dest.path, "--port", "53933", "--ready-file", readyFile.path, "--timeout", "90"]
+        p.standardOutput = Pipe(); p.standardError = Pipe()
+        try p.run()
+        defer { p.terminate() }
+        for _ in 0..<100 where !FileManager.default.fileExists(atPath: readyFile.path) { usleep(100_000) }
+        #expect(FileManager.default.fileExists(atPath: readyFile.path), "the kit receiver never came up")
+
+        let bin = try randomFile("fromdesktop.bin", bytes: 700_000, in: src)
+        let device = ShareDevice(alias: "kit", version: "2.1", deviceModel: nil, deviceType: .headless, fingerprint: "kit",
+                                 port: 53933, protocol_: .http, download: false, ipAddress: "127.0.0.1", lastSeen: Date())
+        var file = ShareFile(id: "f1", fileName: "fromdesktop.bin", size: 700_000, fileType: "application/octet-stream")
+        file.sourceURL = bin
+
+        let prepared = try await LocalShareClient.shared.prepareUpload(to: device, files: [file])
+        let token = try #require(prepared.files["f1"])
+        try await LocalShareClient.shared.uploadFile(file.with(token: token), sessionId: prepared.sessionId, to: device) { _, _ in }
+
+        for _ in 0..<50 where !FileManager.default.fileExists(atPath: dest.appendingPathComponent("fromdesktop.bin").path) { usleep(100_000) }
+        #expect((try? Data(contentsOf: dest.appendingPathComponent("fromdesktop.bin"))) == (try Data(contentsOf: bin)))
+    }
+}
