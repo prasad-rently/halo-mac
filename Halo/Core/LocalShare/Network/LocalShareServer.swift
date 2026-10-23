@@ -337,8 +337,12 @@ actor LocalShareServer {
 
     // MARK: - Helpers
 
+    /// Where an incoming file is written. **The file name is chosen by the sender**, so it
+    /// is untrusted: it used to be appended to the destination as-is, which let a name like
+    /// `../../.zshrc` write outside the folder the user approved, and silently overwrote
+    /// anything already there. `ShareFileName` confines it to `base` and picks a free name.
     private func destinationURL(for file: ShareFile, base: URL) -> URL {
-        base.appendingPathComponent(file.fileName)
+        ShareFileName.uniqueDestination(for: file.fileName, in: base)
     }
 
     private func sendResponse(connection: NWConnection, status: Int, body: String) {
@@ -427,5 +431,58 @@ struct HTTPRequestHead: Equatable {
 
         return HTTPRequestHead(method: String(parts[0]).uppercased(), path: path,
                                queryParams: query, headers: headers)
+    }
+}
+
+
+// MARK: - ShareFileName
+
+/// Turning a sender-supplied file name into a path that is safe to write.
+///
+/// LocalSend lets a sender include folders (`photos/2026/a.jpg`), so a relative sub-path is
+/// legitimate and is kept. What is refused is anything that could leave the destination
+/// directory: `..` components, absolute paths, and NUL bytes. Windows senders use `\`, which
+/// is treated as a separator rather than as part of a name.
+enum ShareFileName {
+
+    /// A relative path made only of safe components, or `nil` if nothing usable remains.
+    /// `..` and `.` and empty components are dropped rather than honoured.
+    static func safeRelativePath(_ raw: String) -> String? {
+        guard !raw.contains("\0") else { return nil }
+        let normalised = raw.replacingOccurrences(of: "\\", with: "/")
+        let parts = normalised.split(separator: "/", omittingEmptySubsequences: true)
+            .map(String.init)
+            .filter { $0 != "." && $0 != ".." }
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        guard !parts.isEmpty else { return nil }
+        return parts.joined(separator: "/")
+    }
+
+    /// `base/<safe path>`, with ` (1)`, ` (2)` … inserted before the extension if it already
+    /// exists, and guaranteed to resolve inside `base`.
+    static func uniqueDestination(for rawName: String, in base: URL,
+                                  fileManager: FileManager = .default) -> URL {
+        let relative = safeRelativePath(rawName) ?? "file"
+        var candidate = base.appendingPathComponent(relative)
+
+        // Belt and braces: whatever the component filtering did, the standardised result
+        // must still be under `base`.
+        let root = base.standardizedFileURL.path
+        if !(candidate.standardizedFileURL.path + "/").hasPrefix(root.hasSuffix("/") ? root : root + "/") {
+            candidate = base.appendingPathComponent("file")
+        }
+
+        guard fileManager.fileExists(atPath: candidate.path) else { return candidate }
+        let dir = candidate.deletingLastPathComponent()
+        let ext = candidate.pathExtension
+        let stem = candidate.deletingPathExtension().lastPathComponent
+        var n = 1
+        while true {
+            let name = ext.isEmpty ? "\(stem) (\(n))" : "\(stem) (\(n)).\(ext)"
+            let next = dir.appendingPathComponent(name)
+            if !fileManager.fileExists(atPath: next.path) { return next }
+            n += 1
+        }
     }
 }
