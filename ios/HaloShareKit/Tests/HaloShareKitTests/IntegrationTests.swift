@@ -28,13 +28,15 @@ struct Rig {
     let peer: Peer
 
     static func make(decision: ConsentDecision = .accept, idleTimeout: TimeInterval = 30,
-                     maxSessions: Int = 4, consentDelay: TimeInterval = 0) async throws -> Rig {
+                     maxSessions: Int = 4, consentDelay: TimeInterval = 0,
+                     sessionTimeout: TimeInterval = 600) async throws -> Rig {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("hsk-rx-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         let receiverIdentity = DeviceIdentity(alias: "Receiver", fingerprint: DeviceIdentity.randomFingerprint(), deviceType: "desktop")
         let server = HaloShareServer(configuration: .init(identity: receiverIdentity, receiveDirectory: dir,
-                                                         idleTimeout: idleTimeout, maxConcurrentSessions: maxSessions)) { _ in
+                                                         idleTimeout: idleTimeout, maxConcurrentSessions: maxSessions,
+                                                         sessionTimeout: sessionTimeout)) { _ in
             if consentDelay > 0 { try? await Task.sleep(nanoseconds: UInt64(consentDelay * 1_000_000_000)) }
             return decision
         }
@@ -505,6 +507,63 @@ struct LoopbackTests {
         let d = [FileDescriptor(id: "f", fileName: "f", size: 1, fileType: "x")]
         #expect(try Raw.post(port: rig.port, path: "/api/localsend/v2/prepare-upload", body: try prepareBody(files: d), contentType: "application/json").status == 200)
         #expect(try Raw.post(port: rig.port, path: "/api/localsend/v2/prepare-upload", body: try prepareBody(files: d), contentType: "application/json").status == 429)
+    }
+
+    private func prepare(_ rig: Rig, size: Int64 = 1) throws -> (status: Int, response: PrepareUploadResponse?) {
+        let d = [FileDescriptor(id: "f", fileName: "f.bin", size: size, fileType: "application/octet-stream")]
+        let r = try Raw.post(port: rig.port, path: "/api/localsend/v2/prepare-upload", body: try prepareBody(files: d), contentType: "application/json")
+        guard r.status == 200 else { return (r.status, nil) }
+        let json = String(r.body.split(separator: "\r\n\r\n", maxSplits: 1).last ?? "")
+        return (200, try JSONDecoder().decode(PrepareUploadResponse.self, from: Data(json.utf8)))
+    }
+
+    /// Blocking raw upload: head + `firstPart` bytes, pause, then the rest. Returns the HTTP status.
+    private func slowUpload(port: Int, sessionId: String, token: String, total: Int, firstPart: Int, pause: TimeInterval) throws -> Int {
+        let fd = socket(AF_INET, SOCK_STREAM, 0); defer { close(fd) }
+        var tv = timeval(tv_sec: 15, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        var addr = sockaddr_in(); addr.sin_family = sa_family_t(AF_INET); addr.sin_port = UInt16(port).bigEndian
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let rc = withUnsafePointer(to: &addr) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } }
+        guard rc == 0 else { throw POSIXError(.ECONNREFUSED) }
+        var first = Data("POST /api/localsend/v2/upload?sessionId=\(sessionId)&fileId=f&token=\(token) HTTP/1.1\r\nHost: x\r\nContent-Length: \(total)\r\nConnection: close\r\n\r\n".utf8)
+        first.append(Data(repeating: 5, count: firstPart))
+        _ = first.withUnsafeBytes { send(fd, $0.baseAddress, $0.count, 0) }
+        Thread.sleep(forTimeInterval: pause)
+        let rest = Data(repeating: 5, count: total - firstPart)
+        _ = rest.withUnsafeBytes { send(fd, $0.baseAddress, $0.count, 0) }
+        var reply = Data(); var buf = [UInt8](repeating: 0, count: 2048)
+        while true { let n = recv(fd, &buf, buf.count, 0); if n <= 0 { break }; reply.append(buf, count: n) }
+        return String(decoding: reply, as: UTF8.self).split(separator: " ").dropFirst().first.flatMap { Int($0) } ?? -1
+    }
+
+    @Test("An abandoned session expires: its token stops working and its slot is freed")
+    func abandonedSessionExpires() async throws {
+        let rig = try await Rig.make(maxSessions: 1, sessionTimeout: 1); defer { Task { await rig.stop() } }
+        let first = try prepare(rig)
+        #expect(first.status == 200)
+        #expect(try prepare(rig).status == 429, "precondition: the single slot is taken")
+
+        try await Task.sleep(nanoseconds: 2_200_000_000)
+
+        #expect(await rig.server.sessionCount == 0, "the abandoned session was never forgotten")
+        #expect(rig.log.cancelled == 1, "the app was not told the session ended")
+        let r = try #require(first.response)
+        let up = try Raw.post(port: rig.port, path: "/api/localsend/v2/upload?sessionId=\(r.sessionId)&fileId=f&token=\(r.files["f"]!)", body: Data([1]))
+        #expect(up.status == 404, "an expired session's token still worked (\(up.status))")
+        #expect(try prepare(rig).status == 200, "a new sender is still locked out (429)")
+    }
+
+    @Test("A session is not expired while an upload is streaming")
+    func sessionSurvivesAnUploadInFlight() async throws {
+        let rig = try await Rig.make(sessionTimeout: 1); defer { Task { await rig.stop() } }
+        let r = try #require(try prepare(rig, size: 3000).response)
+        let port = rig.port, token = r.files["f"]!, sid = r.sessionId
+        // 2.5 s of silence mid-body: longer than the 1 s session timeout, shorter than the 30 s idle timeout.
+        let status = try await Task.detached { try self.slowUpload(port: port, sessionId: sid, token: token, total: 3000, firstPart: 100, pause: 2.5) }.value
+        #expect(status == 200, "a live upload was cut by session expiry (\(status))")
+        #expect(rig.filesOnDisk == ["f.bin"])
+        #expect(rig.log.cancelled == 0)
     }
 
     @Test("The client reports a busy receiver as such")

@@ -50,13 +50,19 @@ public actor HaloShareServer {
         /// An upload that goes quiet for this long is abandoned.
         public var idleTimeout: TimeInterval
         public var maxConcurrentSessions: Int
+        /// A session nobody has touched for this long is forgotten (tokens stop working, partials
+        /// are deleted, `.sessionCancelled` is emitted). Without it, `maxConcurrentSessions`
+        /// abandoned ones locked every later sender out with `429` until the app restarted.
+        public var sessionTimeout: TimeInterval
 
         public init(identity: DeviceIdentity, receiveDirectory: URL,
-                    idleTimeout: TimeInterval = 60, maxConcurrentSessions: Int = 4) {
+                    idleTimeout: TimeInterval = 60, maxConcurrentSessions: Int = 4,
+                    sessionTimeout: TimeInterval = 600) {
             self.identity = identity
             self.receiveDirectory = receiveDirectory
             self.idleTimeout = idleTimeout
             self.maxConcurrentSessions = maxConcurrentSessions
+            self.sessionTimeout = sessionTimeout
         }
     }
 
@@ -67,6 +73,7 @@ public actor HaloShareServer {
         let tokens: [String: String]
         var received: Set<String> = []
         var inFlight: [String: URL] = [:]       // fileId → partial path
+        var lastActivity = Date()
     }
 
     private let config: Configuration
@@ -74,6 +81,7 @@ public actor HaloShareServer {
     private var listener: NWListener?
     private var connections: [ObjectIdentifier: NWConnection] = [:]
     private var sessions: [String: Session] = [:]
+    private var sweepTask: Task<Void, Never>?
     private var continuation: AsyncStream<ServerEvent>.Continuation?
 
     public nonisolated let events: AsyncStream<ServerEvent>
@@ -117,11 +125,22 @@ public actor HaloShareServer {
             listener.start(queue: .global(qos: .userInitiated))
         }
         boundPort = bound
+        let interval = max(0.25, min(30, config.sessionTimeout / 4))
+        sweepTask?.cancel()
+        sweepTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                guard !Task.isCancelled, let self else { return }
+                await self.sweepExpiredSessions()
+            }
+        }
         continuation?.yield(.listening(port: bound))
         return bound
     }
 
     public func stop() {
+        sweepTask?.cancel()
+        sweepTask = nil
         listener?.cancel()
         listener = nil
         for c in connections.values { c.cancel() }
@@ -132,6 +151,21 @@ public actor HaloShareServer {
     }
 
     public var port: UInt16 { boundPort }
+
+    // MARK: Session expiry
+
+    /// Forgets sessions idle longer than `sessionTimeout` that have no upload in flight.
+    func sweepExpiredSessions(now: Date = Date()) {
+        for (id, session) in sessions
+        where session.inFlight.isEmpty && now.timeIntervalSince(session.lastActivity) > config.sessionTimeout {
+            sessions[id] = nil
+            discardPartials(of: session)
+            continuation?.yield(.sessionCancelled(sessionId: id))
+        }
+    }
+
+    /// Sessions currently held (for tests).
+    var sessionCount: Int { sessions.count }
 
     // MARK: Connection handling
 
@@ -233,6 +267,7 @@ public actor HaloShareServer {
 
     private func prepareUpload(_ request: PrepareUploadRequest, address: String) async -> Data {
         guard !request.files.isEmpty else { return HTTPResponse.error(400, "No files") }
+        sweepExpiredSessions()
         guard sessions.count < config.maxConcurrentSessions else {
             return HTTPResponse.error(429, "Too many sessions")
         }
@@ -261,6 +296,7 @@ public actor HaloShareServer {
                         watchdog: Watchdog) async -> Data {
         guard let sessionId = head.query["sessionId"], let fileId = head.query["fileId"],
               let token = head.query["token"] else { return HTTPResponse.error(400, "Missing params") }
+        sweepExpiredSessions()
         guard var session = sessions[sessionId] else { return HTTPResponse.error(404, "Session not found") }
         guard let expectedToken = session.tokens[fileId], Self.constantTimeEqual(expectedToken, token) else {
             return HTTPResponse.error(403, "Invalid token")
@@ -286,6 +322,7 @@ public actor HaloShareServer {
         } catch { return HTTPResponse.error(500, "Cannot create folder") }
 
         session.inFlight[fileId] = partial
+        session.lastActivity = Date()
         sessions[sessionId] = session
 
         // Trust Content-Length; fall back to the size announced in prepare-upload.
@@ -301,6 +338,7 @@ public actor HaloShareServer {
             return HTTPResponse.error(404, "Session cancelled")
         }
         current.inFlight[fileId] = nil
+        current.lastActivity = Date()
 
         switch outcome {
         case .failed:

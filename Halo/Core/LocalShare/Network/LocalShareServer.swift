@@ -21,7 +21,17 @@ actor LocalShareServer {
         var files: [String: ShareFile] // fileId -> file info
         var destDirectory: URL
         var completed: Set<String>
+        /// Last time this session did anything (registered, started or finished an upload).
+        var lastActivity = Date()
+        /// Uploads streaming right now. A session with one is never expired, however long it runs.
+        var activeUploads = 0
     }
+
+    /// A session nobody has touched for this long is forgotten: its tokens stop working and the
+    /// UI is told it was cancelled. Without it an abandoned transfer kept valid upload tokens
+    /// (and, on the Mac, a power assertion) until the app quit.
+    private var sessionTimeout: TimeInterval = 600
+    private var sweepTask: Task<Void, Never>?
 
     // MARK: - Lifecycle
 
@@ -29,12 +39,14 @@ actor LocalShareServer {
         port: UInt16 = 53317,
         parameters: NWParameters,
         idleTimeout: TimeInterval = 60,
+        sessionTimeout: TimeInterval = 600,
         onPrepareUpload: @escaping (PrepareUploadRequest, String) async -> PrepareUploadResponse?,
         onFileReceived: @escaping (String, String, URL) -> Void,
         onCancel: @escaping (String) -> Void,
         onProgress: @escaping (String, String, Int64) -> Void
     ) async throws {
         self.idleTimeout = idleTimeout
+        self.sessionTimeout = sessionTimeout
         self.onPrepareUpload = onPrepareUpload
         self.onFileReceived = onFileReceived
         self.onCancel = onCancel
@@ -56,9 +68,21 @@ actor LocalShareServer {
         }
 
         listener?.start(queue: .global(qos: .userInitiated))
+
+        sweepTask?.cancel()
+        let interval = max(0.25, min(30, sessionTimeout / 4))
+        sweepTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                guard !Task.isCancelled, let self else { return }
+                await self.sweepExpiredSessions()
+            }
+        }
     }
 
     func stop() {
+        sweepTask?.cancel()
+        sweepTask = nil
         listener?.cancel()
         listener = nil
         for conn in connections.values {
@@ -77,7 +101,22 @@ actor LocalShareServer {
             destDirectory: destDirectory,
             completed: []
         )
+        sweepExpiredSessions()
     }
+
+    /// Drops sessions idle for longer than `sessionTimeout` that have no upload in flight.
+    /// One that never finished is reported through `onCancel`, so the UI ends it and the
+    /// power assertion is released; a finished one is simply forgotten.
+    func sweepExpiredSessions(now: Date = Date()) {
+        for (id, session) in activeSessions
+        where session.activeUploads == 0 && now.timeIntervalSince(session.lastActivity) > sessionTimeout {
+            activeSessions.removeValue(forKey: id)
+            if session.completed.count < session.files.count { onCancel?(id) }
+        }
+    }
+
+    /// Sessions currently held. Exposed for tests.
+    var sessionCount: Int { activeSessions.count }
 
     /// Connections currently held open. Exposed for tests; the server forgets each one as soon
     /// as it has been served.
@@ -254,6 +293,7 @@ actor LocalShareServer {
     }
 
     private func handlePrepareUpload(connection: NWConnection, body: Data?, sourceIP: String) async {
+        sweepExpiredSessions()
         guard let body, let request = try? JSONDecoder().decode(PrepareUploadRequest.self, from: body) else {
             sendResponse(connection: connection, status: 400, body: "{\"error\":\"Invalid body\"}")
             return
@@ -286,7 +326,8 @@ actor LocalShareServer {
             return
         }
 
-        guard var session = activeSessions[sessionId] else {
+        sweepExpiredSessions()
+        guard let session = activeSessions[sessionId] else {
             sendResponse(connection: connection, status: 404, body: "{\"error\":\"Session not found\"}")
             return
         }
@@ -310,6 +351,16 @@ actor LocalShareServer {
         if fileInfo.size > 0, head.contentLength > Int(fileInfo.size) {
             sendResponse(connection: connection, status: 413, body: "{\"error\":\"Larger than announced\"}")
             return
+        }
+
+        // Mark the upload in flight so the session cannot expire underneath it. State is changed
+        // through `activeSessions[...]?` (never a stale copy held across the awaits below), so a
+        // concurrent upload or a cancel is not overwritten.
+        activeSessions[sessionId]?.activeUploads += 1
+        activeSessions[sessionId]?.lastActivity = Date()
+        defer {
+            activeSessions[sessionId]?.activeUploads -= 1
+            activeSessions[sessionId]?.lastActivity = Date()
         }
 
         // Trust `Content-Length`; fall back to the size announced in prepare-upload.
@@ -338,8 +389,14 @@ actor LocalShareServer {
             }
         }
 
-        session.completed.insert(fileId)
-        activeSessions[sessionId] = session
+        // A cancel that arrived while this file was streaming removed the session; the file
+        // must not survive it.
+        guard activeSessions[sessionId] != nil else {
+            try? FileManager.default.removeItem(at: destURL)
+            sendResponse(connection: connection, status: 404, body: "{\"error\":\"Session cancelled\"}")
+            return
+        }
+        activeSessions[sessionId]?.completed.insert(fileId)
         onFileReceived?(sessionId, fileId, destURL)
         sendResponse(connection: connection, status: 200, body: "{\"message\":\"OK\"}")
     }

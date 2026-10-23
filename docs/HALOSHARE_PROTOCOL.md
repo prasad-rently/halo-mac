@@ -147,7 +147,11 @@ That is a degraded-but-working design, not a bug; it is why the HTTP scan is a f
    before writing anything.
 7. **Don't confuse "the user is deciding" with "the peer stalled".** An idle timeout (default 60 s) drops a
    silent connection, but is suspended while the receiver waits for the user's accept/decline.
-8. Keep the device awake during a transfer (desktop: power assertion; Android: wake lock/foreground
+8. **Sessions expire.** A session with no upload in flight and no activity for 10 minutes is forgotten:
+   its tokens stop working (`404`), partials are deleted, the app is told it was cancelled, and its slot is
+   freed (`maxConcurrentSessions` abandoned sessions used to answer every later sender with `429` until a
+   restart). An upload that is still streaming keeps its session alive however long it takes.
+9. Keep the device awake during a transfer (desktop: power assertion; Android: wake lock/foreground
    service; iOS: idle-timer disabled while foregrounded).
 
 ## 8. Where Halo desktop differed from this contract

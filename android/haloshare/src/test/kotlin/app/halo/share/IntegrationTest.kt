@@ -136,6 +136,41 @@ class LoopbackTest {
         assertEquals(200, Raw.post(rig.port, "/api/localsend/v2/upload?sessionId=${resp.sessionId}&fileId=f1&token=${resp.files["f1"]}", ByteArray(10) { 1 }).status)
     }
 
+    private fun prepared(rig: Rig, size: Long = 1): Pair<Int, PrepareUploadResponse?> {
+        val r = Raw.post(rig.port, "/api/localsend/v2/prepare-upload", prepareBody(FileDescriptor("f1", "f.bin", size)), "application/json")
+        return r.status to (if (r.status == 200) parseResponse(r.text) else null)
+    }
+
+    @Test fun anAbandonedSessionExpiresItsTokenStopsWorkingAndItsSlotIsFreed() = Rig(maxSessions = 1, sessionTimeoutMs = 1000).use { rig ->
+        val (st, resp) = prepared(rig)
+        assertEquals(200, st)
+        assertEquals("precondition: the single slot is taken", 429, prepared(rig).first)
+
+        Thread.sleep(2200)
+
+        assertEquals("the abandoned session was never forgotten", 0, rig.server.sessionCount)
+        assertEquals("the app was not told the session ended", 1, rig.log.cancelled.get())
+        val up = Raw.post(rig.port, "/api/localsend/v2/upload?sessionId=${resp!!.sessionId}&fileId=f1&token=${resp.files["f1"]}", ByteArray(1) { 1 })
+        assertEquals("an expired session's token still worked", 404, up.status)
+        assertEquals("a new sender is still locked out", 200, prepared(rig).first)
+    }
+
+    @Test fun aSessionIsNotExpiredWhileAnUploadIsStreaming() = Rig(sessionTimeoutMs = 1000).use { rig ->
+        val resp = prepared(rig, 3000).second!!
+        Socket().use { s ->
+            s.connect(InetSocketAddress("127.0.0.1", rig.port), 5000); s.soTimeout = 15000
+            val out = s.getOutputStream()
+            out.write(("POST /api/localsend/v2/upload?sessionId=${resp.sessionId}&fileId=f1&token=${resp.files["f1"]} HTTP/1.1\r\nHost: x\r\nContent-Length: 3000\r\nConnection: close\r\n\r\n").toByteArray())
+            out.write(ByteArray(100) { 5 }); out.flush()
+            Thread.sleep(2500)                       // longer than the 1 s session timeout, shorter than the idle timeout
+            out.write(ByteArray(2900) { 5 }); out.flush()
+            val status = String(s.getInputStream().readBytes()).split(" ")[1].toInt()
+            assertEquals("a live upload was cut by session expiry", 200, status)
+        }
+        assertEquals(listOf("f.bin"), rig.filesOnDisk())
+        assertEquals(0, rig.log.cancelled.get())
+    }
+
     @Test fun aSenderCannotStreamMoreThanTheSizeTheUserApproved() = Rig().use { rig ->
         val d = FileDescriptor("f1", "t.bin", 10)
         val resp = parseResponse(Raw.post(rig.port, "/api/localsend/v2/prepare-upload", prepareBody(d), "application/json").text)

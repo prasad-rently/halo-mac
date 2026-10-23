@@ -4556,18 +4556,57 @@ struct HaloShareServerBinaryTests {
 
     // MARK: Hardening (review follow-ups)
 
+    final class CancelLog: @unchecked Sendable {
+        private let lock = NSLock(); private var ids: [String] = []
+        func add(_ id: String) { lock.lock(); ids.append(id); lock.unlock() }
+        var all: [String] { lock.lock(); defer { lock.unlock() }; return ids }
+    }
+
     private func hardenedServer(port: UInt16, dest: URL, fileSize: Int64, idleTimeout: TimeInterval = 60,
-                                consentDelay: TimeInterval = 0) async throws -> LocalShareServer {
+                                sessionTimeout: TimeInterval = 600, consentDelay: TimeInterval = 0,
+                                extraFileSize: Int64? = nil, cancels: CancelLog = CancelLog()) async throws -> LocalShareServer {
         let server = LocalShareServer()
-        try await server.start(port: port, parameters: .tcp, idleTimeout: idleTimeout,
+        try await server.start(port: port, parameters: .tcp, idleTimeout: idleTimeout, sessionTimeout: sessionTimeout,
                                onPrepareUpload: { _, _ in
                                    if consentDelay > 0 { try? await Task.sleep(nanoseconds: UInt64(consentDelay * 1e9)) }
                                    return nil
                                },
-                               onFileReceived: { _, _, _ in }, onCancel: { _ in }, onProgress: { _, _, _ in })
-        let file = ShareFile(id: "f1", fileName: "blob.bin", size: fileSize, fileType: "application/octet-stream")
-        await server.registerSession(id: "s1", tokens: ["f1": "tok"], files: ["f1": file], destDirectory: dest)
+                               onFileReceived: { _, _, _ in }, onCancel: { cancels.add($0) }, onProgress: { _, _, _ in })
+        var files = ["f1": ShareFile(id: "f1", fileName: "blob.bin", size: fileSize, fileType: "application/octet-stream")]
+        var tokens = ["f1": "tok"]
+        if let extraFileSize {
+            files["f2"] = ShareFile(id: "f2", fileName: "second.bin", size: extraFileSize, fileType: "application/octet-stream")
+            tokens["f2"] = "tok2"
+        }
+        await server.registerSession(id: "s1", tokens: tokens, files: files, destDirectory: dest)
         return server
+    }
+
+    /// A blocking raw upload that sends the head and the first part, pauses (running `during`),
+    /// then sends the rest and returns the HTTP status.
+    private func slowUpload(port: UInt16, fileId: String = "f1", token: String = "tok", total: Int, firstPart: Int,
+                            pause: TimeInterval, during: () -> Void = {}) throws -> Int {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        defer { close(fd) }
+        var tv = timeval(tv_sec: 15, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET); addr.sin_port = port.bigEndian
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let rc = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+        }
+        guard rc == 0 else { throw POSIXError(.ECONNREFUSED) }
+        var first = Data("POST /api/localsend/v2/upload?sessionId=s1&fileId=\(fileId)&token=\(token) HTTP/1.1\r\nHost: x\r\nContent-Length: \(total)\r\nConnection: close\r\n\r\n".utf8)
+        first.append(Data(repeating: 5, count: firstPart))
+        _ = first.withUnsafeBytes { send(fd, $0.baseAddress, $0.count, 0) }
+        Thread.sleep(forTimeInterval: pause)
+        during()
+        let rest = Data(repeating: 5, count: total - firstPart)
+        _ = rest.withUnsafeBytes { send(fd, $0.baseAddress, $0.count, 0) }
+        var reply = Data(); var buf = [UInt8](repeating: 0, count: 2048)
+        while true { let n = recv(fd, &buf, buf.count, 0); if n <= 0 { break }; reply.append(buf, count: n) }
+        return String(decoding: reply, as: UTF8.self).split(separator: " ").dropFirst().first.flatMap { Int($0) } ?? -1
     }
 
     @Test("A sender cannot stream more than the size the user approved")
@@ -4635,6 +4674,85 @@ struct HaloShareServerBinaryTests {
         let json = Data(#"{"info":{"alias":"Pixel","version":"2.1","deviceModel":"Pixel 9","deviceType":"mobile","fingerprint":"abc","port":53317,"protocol":"https","download":false},"files":{"f1":{"id":"f1","fileName":"a.txt","fileType":"text/plain","size":3}}}"#.utf8)
         let result = try rawPost(port: 53923, path: "/api/localsend/v2/prepare-upload", body: json, contentType: "application/json")
         #expect(result.status == 403, "the connection was cut while waiting for the user (status \(result.status))")
+    }
+
+    @Test("An abandoned session expires: its token stops working and the UI is told it was cancelled")
+    func abandonedSessionExpires() async throws {
+        let dest = try tempDir(); let cancels = CancelLog()
+        let server = try await hardenedServer(port: 53925, dest: dest, fileSize: 10, sessionTimeout: 1, cancels: cancels)
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53925)
+        #expect(await server.sessionCount == 1)
+
+        try await Task.sleep(nanoseconds: 2_200_000_000)
+
+        #expect(await server.sessionCount == 0, "the abandoned session was never forgotten")
+        #expect(cancels.all == ["s1"], "the UI was not told: \(cancels.all)")
+        let r = try rawPost(port: 53925, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: Data(repeating: 1, count: 10))
+        #expect(r.status == 404, "an expired session's token still worked (\(r.status))")
+        #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob.bin").path))
+    }
+
+    @Test("A session is not expired while an upload is still streaming")
+    func sessionSurvivesAnUploadInFlight() async throws {
+        let dest = try tempDir(); let cancels = CancelLog()
+        let server = try await hardenedServer(port: 53926, dest: dest, fileSize: 3000, sessionTimeout: 1, cancels: cancels)
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53926)
+
+        // 100 bytes, then 2.5 s of silence (longer than the 1 s session timeout, shorter than the idle timeout).
+        let status = try await Task.detached { try self.slowUpload(port: 53926, total: 3000, firstPart: 100, pause: 2.5) }.value
+        #expect(status == 200, "a live upload was cut by session expiry (\(status))")
+        #expect((try? Data(contentsOf: dest.appendingPathComponent("blob.bin")))?.count == 3000)
+        #expect(cancels.all.isEmpty)
+    }
+
+    @Test("A finished session is forgotten too, without reporting a cancellation")
+    func finishedSessionIsForgotten() async throws {
+        let dest = try tempDir(); let cancels = CancelLog()
+        let server = try await hardenedServer(port: 53927, dest: dest, fileSize: 10, sessionTimeout: 1, cancels: cancels)
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53927)
+        let r = try rawPost(port: 53927, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: Data(repeating: 1, count: 10))
+        #expect(r.status == 200)
+        try await Task.sleep(nanoseconds: 2_200_000_000)
+        #expect(await server.sessionCount == 0)
+        #expect(cancels.all.isEmpty, "a completed session must not be reported as cancelled")
+    }
+
+    @Test("Two files of one session uploading at once are both recorded as received")
+    func concurrentUploadsAreBothRecorded() async throws {
+        let dest = try tempDir()
+        let server = try await hardenedServer(port: 53928, dest: dest, fileSize: 2000, extraFileSize: 10)
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53928)
+
+        // f1 stalls mid-body while f2 starts and finishes; f1 then completes. Each handler used to
+        // write back the copy of the session it read before awaiting, so the later finisher erased
+        // the earlier one's completion.
+        let slow = Task.detached { try self.slowUpload(port: 53928, total: 2000, firstPart: 100, pause: 1.0) }
+        try await Task.sleep(nanoseconds: 300_000_000)
+        let quick = try rawPost(port: 53928, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f2&token=tok2", body: Data(repeating: 2, count: 10))
+        #expect(quick.status == 200)
+        #expect(try await slow.value == 200)
+        #expect(await server.isSessionComplete("s1"), "one file's completion was lost")
+    }
+
+    @Test("Cancelling a session while a file is streaming leaves no file behind")
+    func cancelMidUploadDeletesTheFile() async throws {
+        let dest = try tempDir()
+        let server = try await hardenedServer(port: 53929, dest: dest, fileSize: 2000)
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53929)
+
+        let status = try await Task.detached {
+            try self.slowUpload(port: 53929, total: 2000, firstPart: 100, pause: 0.5) {
+                _ = try? self.rawPost(port: 53929, path: "/api/localsend/v2/cancel?sessionId=s1", body: Data())
+            }
+        }.value
+        #expect(status == 404, "answered \(status)")
+        #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob.bin").path), "a cancelled upload kept its file")
+        #expect(await server.sessionCount == 0, "the cancelled session was resurrected")
     }
 
     @Test("Finished connections are forgotten, not accumulated")
@@ -5383,6 +5501,7 @@ struct LetheHistoryAtRestTests {
         let room = try #require(manager.createRoom(named: "at-rest-room-name"))
         defer { RoomKeyStore.delete(roomId: room.id) }
         try manager.send(text: "at-rest-message-body", to: room)
+        manager.flushPendingWrites()
 
         let file = dir.appendingPathComponent("rooms.enc")
         let raw = try Data(contentsOf: file)
@@ -5406,6 +5525,7 @@ struct LetheHistoryAtRestTests {
         let room = try #require(first.createRoom(named: "round trip"))
         defer { RoomKeyStore.delete(roomId: room.id) }
         try first.send(text: "remember me", to: room)
+        first.flushPendingWrites()
 
         let second = LetheManager(storeDirectory: dir, historyKey: key)
         second.loadFromDisk()
@@ -5448,6 +5568,7 @@ struct LetheHistoryAtRestTests {
         let room = try #require(a.createRoom(named: "keyed"))
         defer { RoomKeyStore.delete(roomId: room.id) }
         try a.send(text: "secret", to: room)
+        a.flushPendingWrites()
         let original = try Data(contentsOf: dir.appendingPathComponent("rooms.enc"))
 
         let b = LetheManager(storeDirectory: dir, historyKey: LetheCrypto.generateRoomKey())
@@ -5466,6 +5587,7 @@ struct LetheHistoryAtRestTests {
         let room = try #require(a.createRoom(named: "tamper"))
         defer { RoomKeyStore.delete(roomId: room.id) }
         try a.send(text: "x", to: room)
+        a.flushPendingWrites()
 
         let url = dir.appendingPathComponent("rooms.enc")
         var bytes = try Data(contentsOf: url)
@@ -5487,6 +5609,7 @@ struct LetheHistoryAtRestTests {
         let room = try #require(manager.createRoom(named: "AC6 ephemeral room"))
         defer { RoomKeyStore.delete(roomId: room.id) }
         try manager.send(text: "ac6-message-body", to: room)
+        manager.flushPendingWrites()
 
         let file = dir.appendingPathComponent("rooms.enc")
         // Guards the test itself: if these were false the "after" assertions would pass vacuously.
@@ -5502,6 +5625,76 @@ struct LetheHistoryAtRestTests {
         #expect(!after.contains("ac6-message-body"))
         #expect(RoomKeyStore.load(roomId: room.id) == nil)
         #expect(manager.rooms.isEmpty)
+    }
+
+    @Test("Message traffic is debounced, not written synchronously on every message")
+    func testMessagesAreCoalesced() throws {
+        let dir = scratch(); defer { try? FileManager.default.removeItem(at: dir) }
+        let key = LetheCrypto.generateRoomKey()
+        let manager = LetheManager(storeDirectory: dir, historyKey: key)
+        manager.handle = "tester"
+        let room = try #require(manager.createRoom(named: "bursty"))
+        defer { RoomKeyStore.delete(roomId: room.id) }
+        let file = dir.appendingPathComponent("rooms.enc")
+
+        for i in 0..<40 { try manager.send(text: "burst-\(i)", to: room) }
+        // createRoom wrote the file; the 40 sends have not been written yet.
+        #expect(!(try decrypt(file, key: key)).contains("burst-39"), "messages were written synchronously, one rewrite each")
+
+        manager.flushPendingWrites()
+        let after = try decrypt(file, key: key)
+        #expect((0..<40).allSatisfy { after.contains("burst-\($0)") }, "a message was lost in the flush")
+    }
+
+    @Test("A debounced write reaches the disk on its own, without a flush")
+    func testDebouncedWriteFires() async throws {
+        let dir = scratch(); defer { try? FileManager.default.removeItem(at: dir) }
+        let key = LetheCrypto.generateRoomKey()
+        let manager = LetheManager(storeDirectory: dir, historyKey: key)
+        manager.handle = "tester"
+        let room = try #require(manager.createRoom(named: "timer"))
+        defer { RoomKeyStore.delete(roomId: room.id) }
+        try manager.send(text: "eventually", to: room)
+
+        let file = dir.appendingPathComponent("rooms.enc")
+        var found = false
+        for _ in 0..<40 where !found {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            found = ((try? decrypt(file, key: key)) ?? "").contains("eventually")
+        }
+        #expect(found, "the debounced write never happened")
+    }
+
+    @Test("A message received just before quitting is written on app termination")
+    func testTerminationFlushes() throws {
+        let dir = scratch(); defer { try? FileManager.default.removeItem(at: dir) }
+        let key = LetheCrypto.generateRoomKey()
+        let manager = LetheManager(storeDirectory: dir, historyKey: key)
+        let center = NotificationCenter()
+        manager.observeTermination(on: center)
+        manager.handle = "tester"
+        let room = try #require(manager.createRoom(named: "quit"))
+        defer { RoomKeyStore.delete(roomId: room.id) }
+        try manager.send(text: "last-words", to: room)
+
+        center.post(name: NSApplication.willTerminateNotification, object: nil)
+
+        #expect(try decrypt(dir.appendingPathComponent("rooms.enc"), key: key).contains("last-words"))
+    }
+
+    @Test("Structural changes are written immediately, not debounced")
+    func testStructuralChangesAreImmediate() throws {
+        let dir = scratch(); defer { try? FileManager.default.removeItem(at: dir) }
+        let key = LetheCrypto.generateRoomKey()
+        let manager = LetheManager(storeDirectory: dir, historyKey: key)
+        manager.handle = "tester"
+        let room = try #require(manager.createRoom(named: "before"))
+        defer { RoomKeyStore.delete(roomId: room.id) }
+        let file = dir.appendingPathComponent("rooms.enc")
+        #expect(try decrypt(file, key: key).contains("before"))
+
+        manager.rename(room: room, to: "after-rename")
+        #expect(try decrypt(file, key: key).contains("after-rename"), "rename was debounced")
     }
 
     /// Uses a throwaway service name on purpose. The real item (`defaultService`) is created
@@ -5520,6 +5713,56 @@ struct LetheHistoryAtRestTests {
         // key must live under a different one or it would appear as a "room".
         #expect(HistoryKeyStore.defaultService != RoomKeyStore.service)
         #expect(!RoomKeyStore.allRoomIds().contains("history-key"))
+    }
+}
+
+// MARK: - Lethe: sender identity
+
+@Suite("Lethe sender identity", .serialized)
+@MainActor
+struct LetheSenderIdentityTests {
+
+    private func scratch() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("halo-lethe-test-" + UUID().uuidString, isDirectory: true)
+    }
+
+    @Test("Someone using my handle is not me")
+    func testSameHandleIsNotOwn() throws {
+        let dir = scratch(); defer { try? FileManager.default.removeItem(at: dir) }
+        let manager = LetheManager(storeDirectory: dir)
+        manager.handle = "ghost_aaaa"
+        let room = try #require(manager.createRoom(named: "spoof"))
+        defer { RoomKeyStore.delete(roomId: room.id) }
+        manager.activeRoomId = room.id        // on screen: no unread counter, no notification
+        let key = try #require(RoomKeyStore.load(roomId: room.id))
+
+        // Another key-holder picks the same handle. It carries a msgId this device never generated.
+        let payload = try LetheCrypto.encryptMessage(text: "I am definitely ghost_aaaa", handle: "ghost_aaaa", roomKey: key)
+        manager.ingest(roomId: room.id, payload: payload)
+
+        let received = try #require(manager.messagesByRoom[room.id]?.last)
+        #expect(received.text == "I am definitely ghost_aaaa")
+        #expect(received.isOwn == false, "a message from someone else was rendered as mine")
+    }
+
+    @Test("The relay's echo of my own message is dropped, and my message stays mine")
+    func testEchoOfOwnMessageIsDeduped() throws {
+        let dir = scratch(); defer { try? FileManager.default.removeItem(at: dir) }
+        let manager = LetheManager(storeDirectory: dir)
+        manager.handle = "ghost_bbbb"
+        let room = try #require(manager.createRoom(named: "echo"))
+        defer { RoomKeyStore.delete(roomId: room.id) }
+        manager.activeRoomId = room.id
+        let key = try #require(RoomKeyStore.load(roomId: room.id))
+        try manager.send(text: "mine", to: room)
+        let mine = try #require(manager.messagesByRoom[room.id]?.last)
+
+        // The relay broadcasts to every socket in the room, the sender's included.
+        let echo = try LetheCrypto.encryptMessage(text: "mine", handle: "ghost_bbbb", roomKey: key, ts: mine.ts, msgId: mine.id)
+        manager.ingest(roomId: room.id, payload: echo)
+
+        let all = try #require(manager.messagesByRoom[room.id])
+        #expect(all.count == 1 && all[0].isOwn, "the echo was stored again or flipped ownership: \(all)")
     }
 }
 
