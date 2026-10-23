@@ -17,7 +17,7 @@ import Security
 enum RoomKeyStore {
 
     /// Matches the `com.halo.mac.*` service naming used by AIKeyStore.
-    private static let service = "com.halo.mac.lethe"
+    static let service = "com.halo.mac.lethe"
 
     // MARK: - CRUD
 
@@ -98,14 +98,14 @@ enum RoomKeyStore {
 /// malware that can already read this app's Keychain items.
 enum HistoryKeyStore {
 
-    private static let service = "com.halo.mac.lethe.history"
+    static let defaultService = "com.halo.mac.lethe.history"
     private static let account = "history-key"
 
     /// The existing key, or a freshly generated one saved first. `nil` when the
     /// Keychain refuses — callers must then **not write history at all** rather than
     /// fall back to plaintext.
-    static func loadOrCreate() -> Data? {
-        if let existing = load() { return existing }
+    static func loadOrCreate(service: String = defaultService) -> Data? {
+        if let existing = load(service: service) { return existing }
         let key = LetheCrypto.generateRoomKey()
         let add: [String: Any] = [
             kSecClass as String:          kSecClassGenericPassword,
@@ -118,13 +118,13 @@ enum HistoryKeyStore {
         case errSecSuccess:
             return key
         case errSecDuplicateItem:
-            return load()       // lost a race with another launch; use theirs
+            return load(service: service)   // lost a race with another launch; use theirs
         default:
             return nil
         }
     }
 
-    static func load() -> Data? {
+    static func load(service: String = defaultService) -> Data? {
         let query: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -137,5 +137,15 @@ enum HistoryKeyStore {
               let data = out as? Data, data.count == LetheCrypto.keyLength
         else { return nil }
         return data
+    }
+
+    /// Test cleanup for an injected service name.
+    static func delete(service: String) {
+        let query: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        SecItemDelete(query as CFDictionary)
     }
 }

@@ -4,7 +4,11 @@ import CryptoKit
 
 actor LocalShareServer {
     private var listener: NWListener?
-    private var connections: [NWConnection] = []
+    private var connections: [ObjectIdentifier: NWConnection] = [:]
+    private var watchdogs: [ObjectIdentifier: IdleWatchdog] = [:]
+    /// A connection that sends nothing for this long is dropped, so a stalled or
+    /// half-open peer cannot hold a task, a socket and a partial file forever.
+    private var idleTimeout: TimeInterval = 60
     private var activeSessions: [String: ServerSession] = [:]
     private var onPrepareUpload: ((PrepareUploadRequest, String) async -> PrepareUploadResponse?)?
     private var onFileReceived: ((String, String, URL) -> Void)?
@@ -24,11 +28,13 @@ actor LocalShareServer {
     func start(
         port: UInt16 = 53317,
         parameters: NWParameters,
+        idleTimeout: TimeInterval = 60,
         onPrepareUpload: @escaping (PrepareUploadRequest, String) async -> PrepareUploadResponse?,
         onFileReceived: @escaping (String, String, URL) -> Void,
         onCancel: @escaping (String) -> Void,
         onProgress: @escaping (String, String, Int64) -> Void
     ) async throws {
+        self.idleTimeout = idleTimeout
         self.onPrepareUpload = onPrepareUpload
         self.onFileReceived = onFileReceived
         self.onCancel = onCancel
@@ -55,10 +61,12 @@ actor LocalShareServer {
     func stop() {
         listener?.cancel()
         listener = nil
-        for conn in connections {
+        for conn in connections.values {
             conn.cancel()
         }
         connections.removeAll()
+        for dog in watchdogs.values { dog.stop() }
+        watchdogs.removeAll()
     }
 
     func registerSession(id: String, tokens: [String: String], files: [String: ShareFile], destDirectory: URL) {
@@ -71,6 +79,10 @@ actor LocalShareServer {
         )
     }
 
+    /// Connections currently held open. Exposed for tests; the server forgets each one as soon
+    /// as it has been served.
+    var openConnectionCount: Int { connections.count }
+
     func isSessionComplete(_ sessionId: String) -> Bool {
         guard let session = activeSessions[sessionId] else { return false }
         return session.completed.count == session.files.count
@@ -79,9 +91,17 @@ actor LocalShareServer {
     // MARK: - Connection Handling
 
     private func handleConnection(_ connection: NWConnection) {
-        connections.append(connection)
+        let key = ObjectIdentifier(connection)
+        connections[key] = connection
+        watchdogs[key] = IdleWatchdog(timeout: idleTimeout, connection: connection)
         connection.start(queue: .global(qos: .userInitiated))
-        Task { await self.serve(connection) }
+        Task {
+            await self.serve(connection)
+            // Forget it once served; otherwise this array grew by one NWConnection per
+            // request for the life of the app.
+            self.watchdogs.removeValue(forKey: key)?.stop()
+            self.connections.removeValue(forKey: key)
+        }
     }
 
     /// One request per connection (`Connection: close`).
@@ -177,12 +197,14 @@ actor LocalShareServer {
     }
 
     private func receive(on connection: NWConnection, maximum: Int) async -> Data? {
-        await withCheckedContinuation { continuation in
+        let data: Data? = await withCheckedContinuation { continuation in
             connection.receive(minimumIncompleteLength: 1, maximumLength: max(1, maximum)) { data, _, _, _ in
                 if let data, !data.isEmpty { continuation.resume(returning: data) }
                 else { continuation.resume(returning: nil) }
             }
         }
+        if data != nil { watchdogs[ObjectIdentifier(connection)]?.touch() }
+        return data
     }
 
     private func send(_ data: Data, on connection: NWConnection) async {
@@ -237,8 +259,13 @@ actor LocalShareServer {
             return
         }
 
-        // Delegate to manager for consent flow
-        guard let response = await onPrepareUpload?(request, sourceIP) else {
+        // Delegate to manager for consent flow. The user may take minutes to answer, and the
+        // sender is rightly waiting, so the idle timer is paused for exactly that wait.
+        let dog = watchdogs[ObjectIdentifier(connection)]
+        dog?.pause()
+        let decision = await onPrepareUpload?(request, sourceIP)
+        dog?.resume()
+        guard let response = decision else {
             sendResponse(connection: connection, status: 403, body: "{\"error\":\"Transfer rejected\"}")
             return
         }
@@ -276,6 +303,14 @@ actor LocalShareServer {
 
         let destURL = destinationURL(for: fileInfo, base: session.destDirectory)
         try? FileManager.default.createDirectory(at: destURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+        // The user approved a file of `fileInfo.size` bytes. A sender may not stream more than
+        // that under the same approval (disk-fill after consent); it is refused before any
+        // byte is written. `0` means the size was not announced, so there is nothing to cap.
+        if fileInfo.size > 0, head.contentLength > Int(fileInfo.size) {
+            sendResponse(connection: connection, status: 413, body: "{\"error\":\"Larger than announced\"}")
+            return
+        }
 
         // Trust `Content-Length`; fall back to the size announced in prepare-upload.
         let expected = head.contentLength > 0 ? head.contentLength : Int(fileInfo.size)
@@ -379,6 +414,9 @@ actor LocalShareServer {
         case 400: statusText = "Bad Request"
         case 403: statusText = "Forbidden"
         case 404: statusText = "Not Found"
+        case 411: statusText = "Length Required"
+        case 413: statusText = "Payload Too Large"
+        case 422: statusText = "Unprocessable Content"
         case 500: statusText = "Internal Server Error"
         default: statusText = "Unknown"
         }
@@ -516,5 +554,39 @@ enum ShareFileName {
             if !fileManager.fileExists(atPath: next.path) { return next }
             n += 1
         }
+    }
+}
+
+
+// MARK: - IdleWatchdog
+
+/// Cancels a connection that has been silent for `timeout` seconds. `NWConnection.cancel()`
+/// completes any pending `receive` with an error, which ends the read loops above, so an
+/// abandoned upload falls through the normal "incomplete" path (partial file removed).
+/// Can be paused while the server itself — not the peer — is the one holding things up.
+private final class IdleWatchdog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var last = Date()
+    private var pausedCount = 0
+    private var task: Task<Void, Never>?
+
+    init(timeout: TimeInterval, connection: NWConnection) {
+        task = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(max(0.1, timeout / 4) * 1_000_000_000))
+                guard !Task.isCancelled, let self else { return }
+                if self.isIdle(longerThan: timeout) { connection.cancel(); return }
+            }
+        }
+    }
+
+    func touch() { lock.lock(); last = Date(); lock.unlock() }
+    func pause() { lock.lock(); pausedCount += 1; lock.unlock() }
+    func resume() { lock.lock(); pausedCount = max(0, pausedCount - 1); last = Date(); lock.unlock() }
+    func stop() { task?.cancel() }
+
+    private func isIdle(longerThan timeout: TimeInterval) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return pausedCount == 0 && Date().timeIntervalSince(last) > timeout
     }
 }

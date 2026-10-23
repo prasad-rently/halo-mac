@@ -4553,6 +4553,107 @@ struct HaloShareServerBinaryTests {
                                  body: json, contentType: "application/json")
         #expect(result.status == 403, "expected the consent callback's answer, got \(result.status)")
     }
+
+    // MARK: Hardening (review follow-ups)
+
+    private func hardenedServer(port: UInt16, dest: URL, fileSize: Int64, idleTimeout: TimeInterval = 60,
+                                consentDelay: TimeInterval = 0) async throws -> LocalShareServer {
+        let server = LocalShareServer()
+        try await server.start(port: port, parameters: .tcp, idleTimeout: idleTimeout,
+                               onPrepareUpload: { _, _ in
+                                   if consentDelay > 0 { try? await Task.sleep(nanoseconds: UInt64(consentDelay * 1e9)) }
+                                   return nil
+                               },
+                               onFileReceived: { _, _, _ in }, onCancel: { _ in }, onProgress: { _, _, _ in })
+        let file = ShareFile(id: "f1", fileName: "blob.bin", size: fileSize, fileType: "application/octet-stream")
+        await server.registerSession(id: "s1", tokens: ["f1": "tok"], files: ["f1": file], destDirectory: dest)
+        return server
+    }
+
+    @Test("A sender cannot stream more than the size the user approved")
+    func oversizedUploadIsRefused() async throws {
+        let dest = try tempDir()
+        let server = try await hardenedServer(port: 53921, dest: dest, fileSize: 10)
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53921)
+
+        let result = try rawPost(port: 53921, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
+                                 body: Data(repeating: 7, count: 4096))
+        #expect(result.status == 413, "answered \(result.status)")
+        #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob.bin").path),
+                "bytes beyond the approved size reached the disk")
+        // The approved size itself is still fine.
+        let ok = try rawPost(port: 53921, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
+                             body: Data(repeating: 7, count: 10))
+        #expect(ok.status == 200)
+    }
+
+    /// A raw socket that sends a head promising 5000 bytes, delivers 100, then says nothing.
+    private func stalledUpload(port: UInt16) throws -> (closedAfter: TimeInterval, fd: Int32) {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        var tv = timeval(tv_sec: 12, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET); addr.sin_port = port.bigEndian
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let rc = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+        }
+        guard rc == 0 else { close(fd); throw POSIXError(.ECONNREFUSED) }
+        var message = Data("POST /api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok HTTP/1.1\r\nHost: x\r\nContent-Length: 5000\r\n\r\n".utf8)
+        message.append(Data(repeating: 1, count: 100))
+        _ = message.withUnsafeBytes { send(fd, $0.baseAddress, $0.count, 0) }
+        let start = Date()
+        var buf = [UInt8](repeating: 0, count: 1024)
+        while recv(fd, &buf, buf.count, 0) > 0 {}      // returns 0 when the server closes, -1 on our 12 s guard
+        return (Date().timeIntervalSince(start), fd)
+    }
+
+    @Test("A stalled upload is dropped after the idle timeout and leaves no partial file")
+    func stalledUploadIsDropped() async throws {
+        let dest = try tempDir()
+        let server = try await hardenedServer(port: 53922, dest: dest, fileSize: 5000, idleTimeout: 1)
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53922)
+
+        let (elapsed, fd) = try stalledUpload(port: 53922)
+        close(fd)
+        #expect(elapsed < 8, "the server held a silent connection for \(elapsed) s")
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob.bin").path),
+                "the abandoned upload left a partial file")
+    }
+
+    @Test("The idle timer does not fire while the user is still deciding on a transfer")
+    func slowConsentIsNotCut() async throws {
+        let dest = try tempDir()
+        // Consent takes 3 s; the idle timeout is 1 s.
+        let server = try await hardenedServer(port: 53923, dest: dest, fileSize: 1, idleTimeout: 1, consentDelay: 3)
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53923)
+
+        let json = Data(#"{"info":{"alias":"Pixel","version":"2.1","deviceModel":"Pixel 9","deviceType":"mobile","fingerprint":"abc","port":53317,"protocol":"https","download":false},"files":{"f1":{"id":"f1","fileName":"a.txt","fileType":"text/plain","size":3}}}"#.utf8)
+        let result = try rawPost(port: 53923, path: "/api/localsend/v2/prepare-upload", body: json, contentType: "application/json")
+        #expect(result.status == 403, "the connection was cut while waiting for the user (status \(result.status))")
+    }
+
+    @Test("Finished connections are forgotten, not accumulated")
+    func connectionsAreReleased() async throws {
+        let dest = try tempDir()
+        let server = try await hardenedServer(port: 53924, dest: dest, fileSize: 1)
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53924)
+
+        for _ in 0..<6 {
+            _ = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:53924/api/localsend/v2/info")!)
+        }
+        var open = await server.openConnectionCount
+        for _ in 0..<30 where open > 0 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            open = await server.openConnectionCount
+        }
+        #expect(open == 0, "\(open) finished connections are still held")
+    }
 }
 
 // MARK: - HTTPRequestHead
@@ -5403,11 +5504,21 @@ struct LetheHistoryAtRestTests {
         #expect(manager.rooms.isEmpty)
     }
 
-    @Test("The history key is never listed as a room")
+    /// Uses a throwaway service name on purpose. The real item (`defaultService`) is created
+    /// by whichever build ran first, and a different unsigned test binary touching it makes
+    /// macOS raise a Keychain approval dialog — which blocked this suite for ~3 minutes.
+    @Test("The history key is generated once, is stable, and is never listed as a room")
     func testHistoryKeyIsNotARoom() throws {
-        let key = try #require(HistoryKeyStore.loadOrCreate())
+        let service = "com.halo.mac.lethe.history.test-" + UUID().uuidString
+        defer { HistoryKeyStore.delete(service: service) }
+
+        let key = try #require(HistoryKeyStore.loadOrCreate(service: service))
         #expect(key.count == LetheCrypto.keyLength)
-        #expect(HistoryKeyStore.loadOrCreate() == key, "must be stable across calls")
+        #expect(HistoryKeyStore.loadOrCreate(service: service) == key, "must be stable across calls")
+
+        // Room enumeration lists accounts under RoomKeyStore.service only; the history
+        // key must live under a different one or it would appear as a "room".
+        #expect(HistoryKeyStore.defaultService != RoomKeyStore.service)
         #expect(!RoomKeyStore.allRoomIds().contains("history-key"))
     }
 }

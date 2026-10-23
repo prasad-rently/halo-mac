@@ -20,13 +20,29 @@ final class LuckyDrawStore: ObservableObject {
     private static let fileName = "luckyDraw.json"
 
     private var saveWorkItem: DispatchWorkItem?
+    private let fileURL: URL?
 
-    private init() {
+    private convenience init() {
+        self.init(fileURL: Self.defaultStorageURL)
+    }
+
+    /// Test seam: a scratch file and a private notification center, so a test never
+    /// touches the user's rosters or posts a real app-termination notification.
+    init(fileURL: URL?, notificationCenter: NotificationCenter = .default) {
+        self.fileURL = fileURL
         loadFromDisk()
         if rosters.isEmpty {
             rosters = [DrawRoster.starter()]
         }
         selectedRosterID = rosters.first?.id
+
+        // Saves are debounced 0.6 s, so an edit made just before ⌘Q would otherwise be
+        // lost. Write whatever is pending as the app terminates.
+        notificationCenter.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.flushToDisk() }
+        }
     }
 
     // MARK: - Selection
@@ -176,15 +192,23 @@ final class LuckyDrawStore: ObservableObject {
         let formatter = ISO8601DateFormatter()
         var lines = ["drawn_at,label,put_back"]
         for row in roster.history.reversed() {
-            let escaped = row.label.replacingOccurrences(of: "\"", with: "\"\"")
+            let escaped = Self.csvSafe(row.label).replacingOccurrences(of: "\"", with: "\"\"")
             lines.append("\(formatter.string(from: row.drawnAt)),\"\(escaped)\",\(row.wasReturned)")
         }
         return lines.joined(separator: "\n")
     }
 
+    /// A name typed by the user (or pasted from a stranger's list) that starts with
+    /// `= + - @` is a *formula* when the exported CSV is opened in Excel or Numbers.
+    /// A leading apostrophe makes the spreadsheet read it as plain text.
+    static func csvSafe(_ field: String) -> String {
+        guard let first = field.first, "=+-@\t\r".contains(first) else { return field }
+        return "'" + field
+    }
+
     // MARK: - Persistence
 
-    private static let storageURL: URL? = {
+    private static let defaultStorageURL: URL? = {
         guard let base = FileManager.default.urls(for: .applicationSupportDirectory,
                                                   in: .userDomainMask).first else { return nil }
         let dir = base.appendingPathComponent(directoryName, isDirectory: true)
@@ -197,8 +221,9 @@ final class LuckyDrawStore: ObservableObject {
     private func scheduleSave() {
         saveWorkItem?.cancel()
         let snapshot = rosters
+        let fileURL = self.fileURL
         let item = DispatchWorkItem {
-            guard let url = Self.storageURL else { return }
+            guard let url = fileURL else { return }
             let encoder = JSONEncoder()
             encoder.outputFormatting = .prettyPrinted
             guard let data = try? encoder.encode(snapshot) else { return }
@@ -208,15 +233,19 @@ final class LuckyDrawStore: ObservableObject {
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.6, execute: item)
     }
 
+    /// Writes any pending edit now. A no-op when nothing was edited this session, so
+    /// quitting never rewrites a roster file the user did not change.
     func flushToDisk() {
-        saveWorkItem?.cancel()
-        guard let url = Self.storageURL,
+        guard let pending = saveWorkItem else { return }
+        pending.cancel()
+        saveWorkItem = nil
+        guard let url = fileURL,
               let data = try? JSONEncoder().encode(rosters) else { return }
         try? data.write(to: url, options: .atomic)
     }
 
     private func loadFromDisk() {
-        guard let url = Self.storageURL,
+        guard let url = fileURL,
               let data = try? Data(contentsOf: url) else { return }
         do {
             rosters = try JSONDecoder().decode([DrawRoster].self, from: data)

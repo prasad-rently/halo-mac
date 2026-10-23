@@ -150,6 +150,7 @@ public actor HaloShareServer {
     private final class Watchdog: @unchecked Sendable {
         private let lock = NSLock()
         private var last = Date()
+        private var paused = 0
         private var task: Task<Void, Never>?
         func start(timeout: TimeInterval, connection: NWConnection) {
             task = Task { [weak self] in
@@ -162,7 +163,11 @@ public actor HaloShareServer {
             }
         }
         func touch() { lock.withLock { last = Date() } }
-        private func idleSeconds() -> TimeInterval { lock.withLock { Date().timeIntervalSince(last) } }
+        /// While the *receiver* is the one holding things up (waiting for the user to accept),
+        /// the peer being silent is expected, not a stall.
+        func pause() { lock.withLock { paused += 1 } }
+        func resume() { lock.withLock { paused = max(0, paused - 1); last = Date() } }
+        private func idleSeconds() -> TimeInterval { lock.withLock { paused > 0 ? 0 : Date().timeIntervalSince(last) } }
         func stop() { task?.cancel() }
     }
 
@@ -201,7 +206,11 @@ public actor HaloShareServer {
                   let request = try? JSONDecoder().decode(PrepareUploadRequest.self, from: body) else {
                 await respond(connection, HTTPResponse.error(400, "Invalid body")); return
             }
-            await respond(connection, await prepareUpload(request, address: address))
+            // The consent handler may take as long as the user takes; don't treat that as a stall.
+            watchdog.pause()
+            let reply = await prepareUpload(request, address: address)
+            watchdog.resume()
+            await respond(connection, reply)
 
         case ("POST", "\(api)/upload"):
             await respond(connection, await upload(connection, head: head, prefix: prefix, watchdog: watchdog))
@@ -259,6 +268,12 @@ public actor HaloShareServer {
         guard let descriptor = session.files[fileId] else { return HTTPResponse.error(404, "File not found") }
         guard !session.received.contains(fileId), session.inFlight[fileId] == nil else {
             return HTTPResponse.error(409, "Already uploaded")
+        }
+
+        // The user approved `descriptor.size` bytes; the sender may not stream more under that
+        // approval. Refused before anything is written. `0` = size not announced, nothing to cap.
+        if descriptor.size > 0, Int64(head.contentLength) > descriptor.size {
+            return HTTPResponse.error(413, "Larger than announced")
         }
 
         let directory = config.receiveDirectory
