@@ -160,10 +160,18 @@ server over a real socket, and — for the traversal — a mutation check that t
    unchanged: `../victim.txt` wrote outside the approved folder, and existing files were overwritten.
 4. **Truncated uploads** left a partial file on disk that looked like the real one.
 
+Fixed separately on `fix/haloshare-sha256-verify` (PR #40, stacked on #37):
+
+5. **`sha256` was not verified** on the desktop receive path — the field was carried into the session and
+   never compared, so `422` could never be returned and a file that arrived whole but damaged looked normal.
+   The receive loop now hashes as it writes (one pass) when the sender supplies a digest; a mismatch answers
+   `422` and deletes the file. (Both mobile implementations already verified; this brought desktop in line.)
+
 **Not fixed (tracked as risks in the requirements doc):**
 
-- **§8.5 `sha256` is not verified** on the desktop receive path (the field is carried, never checked), so `422`
-  is never returned.
 - **§8.6** Desktop's client trusts any TLS certificate; harmless while desktop only uses `http`, wrong the day it
   talks to an `https` peer.
 - **§8.7** The desktop's hand-assembled X.509 certificate is built but never used for transport.
+- **§8.8** No sender computes a digest yet — desktop forwards `ShareFile.sha256` only if already set, and neither
+  mobile app sends one — so verification protects only transfers whose sender supplies it. Receivers all verify
+  whenever it is present.

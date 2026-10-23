@@ -71,7 +71,7 @@ IDs are stable; the **Status** column is kept current in §9.
 - **MR-RX-4** Never overwrite (protocol §7.3). A truncated/cancelled upload deletes its partial (protocol §7.4).
 - **MR-RX-5** Tokens: per file, per session, unguessable; wrong token ⇒ `403` and no write.
 - **MR-RX-6** Save location is visible to the user and reachable from the app (Files on iOS; scoped storage on Android).
-- **MR-RX-7** Optional: verify `sha256` and answer `422` on mismatch.
+- **MR-RX-7** Optional: verify `sha256` and answer `422` on mismatch. *Status: implemented and tested on the Swift Kit and the Kotlin core; on desktop via PR #40. **No sender computes a digest yet**, so this protects only transfers whose sender supplies one.*
 
 ### Protocol conformance
 - **MR-PR-1** Wire format exactly per the protocol doc; JSON key names and optionality are the contract.

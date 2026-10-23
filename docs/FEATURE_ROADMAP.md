@@ -3399,7 +3399,7 @@ several cross-platform features and a new HaloShare peer.
 >
 > **Deviations from the spec, for the owner:** v1 is plain HTTP, matching what desktop actually serves (the spec's TLS description is not what exists) — a security trade-off flagged as MD1; iOS discovery is an HTTP /24 scan + manual address because multicast needs a restricted Apple entitlement.
 >
-> **Not built:** Share Extension / Sharesheet, background receive (Android foreground service — MR-OS-2 unmet), multicast on Android, desktop adoption of the shared Kit, `sha256` verification on the *desktop* receive path.
+> **Not built:** Share Extension / Sharesheet, background receive (Android foreground service — MR-OS-2 unmet), multicast on Android, desktop adoption of the shared Kit, and a *sender* that computes `sha256` (every receiver now verifies one when present — desktop via PR #40).
 
 ### Intent
 Extend **HaloShare** — currently desktop↔desktop over the LocalSend-compatible
