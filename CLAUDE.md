@@ -748,6 +748,9 @@ and **all three must keep it** — `scripts/audit-entitlements.sh` enforces this
 | `8195` / `8196` | DrawResultOverlay.swift file ref / sources build file |
 | `8197` / `8198` | LuckyDrawView.swift file ref / sources build file |
 | `8199` / `8200` | LuckyDrawTests.swift file ref / sources build file (HaloTests) |
+| `8217` / `8218` | RosterImport.swift file ref / sources build file |
+| `8219` / `8220` | LuckyDrawSound.swift file ref / sources build file |
+| `8221` / `8222` | DrawSequenceOverlay.swift file ref / sources build file |
 | `9001` / `9002` | GetHealthScoreIntent.swift file ref / sources build file |
 | `9003` / `9004` | GetCPUUsageIntent.swift file ref / sources build file |
 | `9005` / `9006` | GetBatteryHealthIntent.swift file ref / sources build file |
@@ -797,7 +800,9 @@ a branch that has not merged yet.
 | `8163`–`8164` | `ShellReader` (Phase 0 / P0.2) | claimed |
 | `8171`–`8172` | `AsyncTimeout` (Phase 0 / P0.5) | claimed |
 | `8181`–`8200` | F-051 Lucky Draw Spinner Wheel | claimed |
-| `8201`+ | — | **free — take the next block from here** |
+| `8201`–`8216` | F-052 Lethe (PR #36, `feat/f052-lethe`) | claimed — not yet on this branch's base |
+| `8217`–`8224` | F-051 Lucky Draw follow-up pass (import, sound, draw-N) | claimed |
+| `8225`+ | — | **free — take the next block from here** |
 
 Auditing the whole batch for collisions:
 
@@ -970,6 +975,49 @@ ancestor, so real collisions still print.
   presentation, not a shortened spin**: the wheel does not rotate at all, the winning
   segment is highlighted, and the card fades in without scale, blur, stagger, shockwave
   or confetti.
+
+### Follow-up pass (the six items the first pass left unbuilt)
+
+- **`RosterImport` is pure.** It decides what a paste or a dropped file *means* and which
+  labels are duplicates, with no store or view in sight. `.csv` with several rows takes
+  the **first column** of each row (quote-aware); a single row is a comma list like a
+  paste; **no header row is guessed at and dropped** — silently discarding something the
+  user may have meant is worse than one chip to delete. Duplicates compare the
+  **stored** (60-char-truncated) form, case/accent/whitespace-insensitively, and the
+  *repeat* is the duplicate, not the first occurrence. The roster panel *classifies
+  first, adds second* (`prepareImport` → `commitImport`) and asks Keep both / Skip
+  duplicates (FR-4) — nothing is ever merged silently.
+- **Adding a field to `DrawRoster` needs `decodeIfPresent`.** `loadFromDisk()` answers
+  *any* decode failure by moving the whole file to `luckyDraw.corrupt.json` and starting
+  empty, so a synthesized decoder meeting a missing `soundEnabled` would have sent every
+  existing user's rosters to the corrupt backup. `DrawRoster.init(from:)` defaults every
+  later-added field, and `DrawRosterPersistenceTests` decodes a file written *before* the
+  field existed. Do the same for the next field.
+- **Draw N in a row = `DrawSequence`** (pure). Winners within a run are drawn **without
+  replacement regardless of Retire-winners**; N is clamped to 2…10 and to the number
+  eligible. **Stop never interrupts a spin already turning** (FR-18 — that would invite
+  "re-roll until I like it"); it only prevents the next spin. One winners-list card at
+  the end, not N reveals.
+- **Sound (D9) is opt-in, per roster, default off — the first audio Halo makes.** The
+  cues are *synthesised in code* (`SoundSynth`): no bundled asset, deterministic, so
+  tests assert non-silent / non-clipping / decays-to-silence and a valid WAV. Tick times
+  are computed up front from the plan (`RatchetSchedule`) by sampling the pure
+  `SpinnerAnimator` angle and detecting `segmentIndex` changes, capped at **20/s**;
+  nothing couples to the audio clock. After the last boundary the wheel only creeps
+  *inside* the winning segment, so the ratchet legitimately falls silent before the wheel
+  stops. Reduced Motion gets the chime but no ticks (the wheel does not turn).
+- **Keyboard (FR-17):** ⌘N new roster, ⌘⇧R reset (opens the *same confirmation* as the
+  button — a shortcut is not a reason to skip "this clears the log"), Esc dismisses the
+  result, ⌫ removes the selected chip. ⌫ is a hidden `.keyboardShortcut(.delete)` button
+  that is **disabled whenever any text field has focus** — including the roster-rename
+  field, via `externalFieldActive` — so Backspace keeps deleting characters.
+- **What is verified and what is not.** Unit-tested: import/duplicates/CSV/encodings,
+  sequences (incl. end-to-end distinct winners via the real engine), migration,
+  duplication, tick scheduling, synthesis, WAV. Rendered offscreen and inspected:
+  the whole screen, roster panel, winners overlay (`LuckyDrawRenderingTests`;
+  `HALO_RENDER_DIR` writes PNGs). **Not verified in a running app:** the drop gesture,
+  the ⌫/⌘N/⌘⇧R key paths, the double- vs single-tap on chips, and — because nothing here
+  can be heard — that the cues *sound* right. `docs/MANUAL_TEST_PLAN.md` §20.2 lists them.
 
 ---
 

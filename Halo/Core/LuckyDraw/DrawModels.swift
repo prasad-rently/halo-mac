@@ -93,6 +93,9 @@ struct DrawRoster: Identifiable, Codable {
     var history: [DrawResult]
     var autoRetireWinner: Bool
     var spinDuration: SpinDuration
+    /// D9 — off by default, and per roster. Halo had never made a sound before this
+    /// feature, so audio is opt-in rather than something a user discovers by surprise.
+    var soundEnabled: Bool
     var modifiedAt: Date
 
     static let entryCap = 500
@@ -100,13 +103,15 @@ struct DrawRoster: Identifiable, Codable {
 
     init(id: UUID = UUID(), name: String, entries: [DrawEntry] = [],
          history: [DrawResult] = [], autoRetireWinner: Bool = true,
-         spinDuration: SpinDuration = .standard, modifiedAt: Date = Date()) {
+         spinDuration: SpinDuration = .standard, soundEnabled: Bool = false,
+         modifiedAt: Date = Date()) {
         self.id = id
         self.name = name
         self.entries = entries
         self.history = history
         self.autoRetireWinner = autoRetireWinner
         self.spinDuration = spinDuration
+        self.soundEnabled = soundEnabled
         self.modifiedAt = modifiedAt
     }
 
@@ -230,4 +235,90 @@ extension DrawRoster {
 
     /// True when there is something for Reset to actually undo.
     var canReset: Bool { !history.isEmpty || retiredCount > 0 }
+}
+
+
+// MARK: - DrawRoster decoding
+
+extension DrawRoster {
+
+    /// Every field added after the first release decodes with `decodeIfPresent`.
+    ///
+    /// This is not tidiness. The synthesized decoder throws `keyNotFound` for a missing
+    /// key, and `LuckyDrawStore.loadFromDisk()` answers *any* decode failure by moving the
+    /// whole file to `luckyDraw.corrupt.json` and starting empty — so adding
+    /// `soundEnabled` with the synthesized decoder would have made every existing user's
+    /// rosters vanish into the corrupt backup on first launch of the update.
+    /// `LuckyDrawTests` decodes a file written *before* the field existed to keep it so.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        entries = try c.decodeIfPresent([DrawEntry].self, forKey: .entries) ?? []
+        history = try c.decodeIfPresent([DrawResult].self, forKey: .history) ?? []
+        autoRetireWinner = try c.decodeIfPresent(Bool.self, forKey: .autoRetireWinner) ?? true
+        spinDuration = try c.decodeIfPresent(SpinDuration.self, forKey: .spinDuration) ?? .standard
+        soundEnabled = try c.decodeIfPresent(Bool.self, forKey: .soundEnabled) ?? false
+        modifiedAt = try c.decodeIfPresent(Date.self, forKey: .modifiedAt) ?? Date()
+    }
+
+    /// FR-13 "duplicate": same entries and settings, fresh ids, an empty draw log and
+    /// nobody retired — a copy is a new round, not a clone of the old one's history.
+    func duplicated(named newName: String) -> DrawRoster {
+        DrawRoster(name: newName,
+                   entries: entries.map { DrawEntry(label: $0.label, isExcluded: $0.isExcluded) },
+                   history: [],
+                   autoRetireWinner: autoRetireWinner,
+                   spinDuration: spinDuration,
+                   soundEnabled: soundEnabled)
+    }
+}
+
+// MARK: - DrawSequence
+
+/// **Draw N in a row** (FR-10): the state of one multi-winner run.
+///
+/// Winners within a run are drawn **without replacement**, whatever the roster's
+/// Retire-winners setting says. "Draw 3" that can name the same person three times is
+/// not drawing three winners. With auto-retire on, the roster already removes each
+/// winner; with it off, this is what stops a repeat inside the run — and it does so
+/// without touching the roster, so a later run starts from the full wheel again.
+struct DrawSequence: Equatable {
+    static let allowedRange = 2...10
+
+    /// How many winners this run will produce: the request, clamped to 2…10 and to the
+    /// number of entries actually eligible (a run of 5 over 3 entries can only be 3).
+    let total: Int
+    /// What was asked for, before clamping — kept so the UI can say so.
+    let requested: Int
+    private(set) var winners: [DrawEntry] = []
+    /// Set by **Stop**. Deliberately does not abort the spin in flight (FR-18 forbids
+    /// interrupting a draw once it has started — that would invite "re-roll until I like
+    /// it"); it only prevents the *next* one.
+    private(set) var stopRequested = false
+
+    /// `nil` when nothing is eligible, so there is no run to start.
+    init?(requested: Int, eligibleCount: Int) {
+        guard eligibleCount > 0 else { return nil }
+        let clamped = min(max(requested, Self.allowedRange.lowerBound), Self.allowedRange.upperBound)
+        self.requested = requested
+        self.total = min(clamped, eligibleCount)
+    }
+
+    var remaining: Int { max(0, total - winners.count) }
+    var isComplete: Bool { winners.count >= total }
+    var wasReducedToFit: Bool { total < min(max(requested, Self.allowedRange.lowerBound), Self.allowedRange.upperBound) }
+    var shouldContinue: Bool { !isComplete && !stopRequested }
+    /// 1-based position of the spin that is next to run (or currently running).
+    var position: Int { min(winners.count + 1, total) }
+
+    mutating func record(_ entry: DrawEntry) { winners.append(entry) }
+    mutating func requestStop() { stopRequested = true }
+
+    /// The pool the next spin draws from: everyone eligible who hasn't already won
+    /// *in this run*.
+    func pool(from eligible: [DrawEntry]) -> [DrawEntry] {
+        let won = Set(winners.map(\.id))
+        return eligible.filter { !won.contains($0.id) }
+    }
 }

@@ -1,6 +1,6 @@
 # F-051 — Lucky Draw Spinner Wheel (NFeat-128)
 
-> **Status:** 🗓 Planned · **Platform:** Desktop (mobile: ✅ Port — see §11)
+> **Status:** ✅ Built (follow-up pass complete; see §14) · **Platform:** Desktop (mobile: ✅ Port — see §11)
 > **Depends on:** `CelebrationOverlay` (F-037 particle engine) · `AppModule` sidebar
 > **Reserved pbxproj ID block:** `8181`–`8190` (claimed in `CLAUDE.md`)
 
@@ -389,8 +389,10 @@ tune once the numbers underneath them are already trustworthy.
 
 Built on `feat/f051-lucky-draw`. See `docs/FEATURE_ROADMAP.md` → F-051 → **As actually
 built** for the full list of deltas from this document and, importantly, the list of
-specced requirements that were **not** built in this pass (file-drop import, duplicate
-detection, draw-N-in-a-row, the wider keyboard map, sound, roster rename UI).
+specced requirements that were **not** built in the first pass (file-drop import,
+duplicate detection, draw-N-in-a-row, the wider keyboard map, sound, roster rename UI).
+**All six were built in the follow-up pass**; still open: FR-15 "copy full history" and
+the per-roster confetti toggle (FR-19).
 
 The two behavioural decisions worth reading back into §5 if this is ever revised:
 

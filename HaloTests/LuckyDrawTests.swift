@@ -2,6 +2,7 @@ import Testing
 import SwiftUI
 import AppKit
 import Foundation
+import AVFoundation
 @testable import Halo
 
 // MARK: - DrawEngine
@@ -359,5 +360,451 @@ struct SegmentPaletteTests {
     private func contrastRatio(_ a: Color, _ b: Color) -> Double {
         let la = relativeLuminance(a), lb = relativeLuminance(b)
         return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+    }
+}
+
+// MARK: - RosterImport (FR-2, FR-3, FR-4)
+
+@Suite("RosterImport")
+struct RosterImportTests {
+
+    @Test("Pasted lines split per line; blanks and padding are dropped")
+    func pastedLines() {
+        #expect(RosterImport.labels(fromPasted: "  Anna \n\nMarcus\r\nYuki\n") == ["Anna", "Marcus", "Yuki"])
+    }
+
+    @Test("A single line with commas and no newline splits on the commas")
+    func pastedCommas() {
+        #expect(RosterImport.labels(fromPasted: "Anna, Marcus,,Yuki") == ["Anna", "Marcus", "Yuki"])
+    }
+
+    @Test("A line that merely contains a comma is NOT split when there is a newline")
+    func commasInsideLines() {
+        #expect(RosterImport.labels(fromPasted: "Doe, Jane\nSmith, John") == ["Doe, Jane", "Smith, John"])
+    }
+
+    @Test("Labels are truncated to the stored length before anything compares them")
+    func truncation() {
+        let long = String(repeating: "x", count: 100)
+        #expect(RosterImport.labels(fromPasted: long).first?.count == RosterImport.labelLimit)
+    }
+
+    @Test("CSV: first column of each row")
+    func csvFirstColumn() {
+        #expect(RosterImport.labels(fromCSV: "Anna,Sales\nMarcus,Eng\nYuki,Design\n") == ["Anna", "Marcus", "Yuki"])
+    }
+
+    @Test("CSV: quoted cells keep their commas and escaped quotes")
+    func csvQuoted() {
+        let csv = "\"Doe, Jane\",Sales\n\"The \"\"Boss\"\"\",Eng\n"
+        #expect(RosterImport.labels(fromCSV: csv) == ["Doe, Jane", "The \"Boss\""])
+    }
+
+    @Test("CSV: a single row is a comma list of names, like a paste")
+    func csvSingleRow() {
+        #expect(RosterImport.labels(fromCSV: "Anna,Marcus,Yuki") == ["Anna", "Marcus", "Yuki"])
+    }
+
+    @Test("CSV: no header row is guessed at and silently dropped")
+    func csvKeepsHeaderLikeRows() {
+        #expect(RosterImport.labels(fromCSV: "name,team\nAnna,Sales\n").first == "name")
+    }
+
+    @Test("Extension decides the parser, case-insensitively")
+    func byExtension() {
+        #expect(RosterImport.labels(fromFileContents: "a,b\nc,d", fileExtension: "CSV") == ["a", "c"])
+        #expect(RosterImport.labels(fromFileContents: "a,b\nc,d", fileExtension: "txt") == ["a,b", "c,d"])
+    }
+
+    // MARK: Files
+
+    private func tempFile(_ name: String, _ data: Data) throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("halo-roster-import-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent(name)
+        try data.write(to: url)
+        return url
+    }
+
+    @Test("A dropped .txt file is read into labels")
+    func readTxt() throws {
+        let url = try tempFile("names.txt", Data("Anna\nMarcus\n".utf8))
+        #expect(try RosterImport.read(fileAt: url) == ["Anna", "Marcus"])
+    }
+
+    @Test("Accented names survive UTF-8 and the old Mac Roman encoding")
+    func readEncodings() throws {
+        let utf8 = try tempFile("a.txt", Data("Tomás\nZoë\n".utf8))
+        #expect(try RosterImport.read(fileAt: utf8) == ["Tomás", "Zoë"])
+        // 0x8E is é in Mac Roman and an invalid lone byte sequence in UTF-8.
+        let roman = try tempFile("b.csv", Data([0x4A, 0x6F, 0x73, 0x8E, 0x0A, 0x41, 0x6E, 0x61, 0x0A]))
+        #expect(try RosterImport.read(fileAt: roman) == ["José", "Ana"])
+    }
+
+    @Test("Unsupported types and oversized files are refused, not half-read")
+    func refusals() throws {
+        let pdf = try tempFile("names.pdf", Data("x".utf8))
+        #expect(throws: RosterImport.ReadError.unsupportedType("pdf")) { try RosterImport.read(fileAt: pdf) }
+
+        let big = try tempFile("big.txt", Data(repeating: 0x41, count: RosterImport.maxFileBytes + 1))
+        #expect(throws: RosterImport.ReadError.tooLarge(bytes: RosterImport.maxFileBytes + 1)) {
+            try RosterImport.read(fileAt: big)
+        }
+    }
+
+    // MARK: Duplicates (FR-4)
+
+    @Test("Case, accents and spacing do not make a different name")
+    func keyNormalisation() {
+        let key = RosterImport.key(for: "Anna")
+        #expect(RosterImport.key(for: "  ANNA ") == key)
+        #expect(RosterImport.key(for: "anna") == key)
+        #expect(RosterImport.key(for: "Tomás") == RosterImport.key(for: "tomas"))
+        #expect(RosterImport.key(for: "Mary   Jane") == RosterImport.key(for: "mary jane"))
+        #expect(RosterImport.key(for: "Anna") != RosterImport.key(for: "Anne"))
+    }
+
+    @Test("A label already on the roster is flagged; new ones are not")
+    func duplicatesAgainstExisting() {
+        let plan = RosterImport.plan(incoming: ["anna", "Zed"], existing: ["Anna", "Marcus"])
+        #expect(plan.items == [.init(label: "anna", isDuplicate: true),
+                               .init(label: "Zed", isDuplicate: false)])
+        #expect(plan.hasDuplicates)
+    }
+
+    @Test("A repeat within one batch is the duplicate — the first occurrence is not")
+    func duplicatesWithinBatch() {
+        let plan = RosterImport.plan(incoming: ["Sam", "Lee", "sam"], existing: [])
+        #expect(plan.items.map(\.isDuplicate) == [false, false, true])
+    }
+
+    @Test("Keep both adds everything; Skip duplicates adds only the new — in arrival order")
+    func policies() {
+        let plan = RosterImport.plan(incoming: ["Anna", "Zed", "anna", "Yu"], existing: ["Anna"])
+        #expect(plan.labels(for: .keepBoth) == ["Anna", "Zed", "anna", "Yu"])
+        #expect(plan.labels(for: .skipDuplicates) == ["Zed", "Yu"])
+        #expect(plan.duplicateCount == 2)
+        #expect(plan.duplicateLabels == ["Anna", "anna"])
+    }
+
+    @Test("No duplicates means no prompt")
+    func noDuplicates() {
+        #expect(!RosterImport.plan(incoming: ["A", "B"], existing: ["C"]).hasDuplicates)
+    }
+
+    @Test("Names that only differ past the stored length are the same name")
+    func duplicatesUseTheStoredForm() {
+        let a = String(repeating: "x", count: 60) + "AAAA"
+        let b = String(repeating: "x", count: 60) + "BBBB"
+        let labels = RosterImport.labels(fromPasted: a + "\n" + b)
+        #expect(RosterImport.plan(incoming: labels, existing: []).items.map(\.isDuplicate) == [false, true])
+    }
+}
+
+// MARK: - DrawSequence (FR-10)
+
+@Suite("DrawSequence")
+struct DrawSequenceTests {
+
+    private func entries(_ n: Int) -> [DrawEntry] { (0..<n).map { DrawEntry(label: "E\($0)") } }
+
+    @Test("Requests are clamped to 2…10 and to what is eligible")
+    func clamping() throws {
+        #expect(try #require(DrawSequence(requested: 1, eligibleCount: 20)).total == 2)
+        #expect(try #require(DrawSequence(requested: 99, eligibleCount: 20)).total == 10)
+        let few = try #require(DrawSequence(requested: 5, eligibleCount: 3))
+        #expect(few.total == 3)
+        #expect(few.wasReducedToFit)
+        #expect(try #require(DrawSequence(requested: 5, eligibleCount: 9)).wasReducedToFit == false)
+    }
+
+    @Test("Nothing eligible means no run at all")
+    func nothingEligible() {
+        #expect(DrawSequence(requested: 3, eligibleCount: 0) == nil)
+    }
+
+    @Test("A run counts down, completes, and reports its position")
+    func progress() throws {
+        var run = try #require(DrawSequence(requested: 3, eligibleCount: 10))
+        let pool = entries(10)
+        #expect(run.position == 1 && run.remaining == 3 && run.shouldContinue)
+        run.record(pool[0]); run.record(pool[1])
+        #expect(run.position == 3 && run.remaining == 1 && !run.isComplete)
+        run.record(pool[2])
+        #expect(run.isComplete && !run.shouldContinue && run.position == 3)
+    }
+
+    @Test("Winners within a run are drawn without replacement — even with retire off")
+    func withoutReplacement() throws {
+        var run = try #require(DrawSequence(requested: 3, eligibleCount: 5))
+        let all = entries(5)
+        run.record(all[1])
+        let pool = run.pool(from: all)
+        #expect(pool.count == 4)
+        #expect(!pool.contains(all[1]))
+    }
+
+    @Test("Stop blocks the next spin but does not undo winners already drawn")
+    func stop() throws {
+        var run = try #require(DrawSequence(requested: 5, eligibleCount: 9))
+        run.record(entries(1)[0])
+        run.requestStop()
+        #expect(run.stopRequested && !run.shouldContinue)
+        #expect(run.winners.count == 1)
+    }
+
+    @Test("End to end: N spins from the real engine name N distinct winners")
+    func distinctWinnersFromTheEngine() throws {
+        var rng = DrawEngineTests.SeededGenerator(seed: 7)
+        let all = entries(8)
+        var run = try #require(DrawSequence(requested: 8, eligibleCount: all.count))
+        while run.shouldContinue {
+            let pool = run.pool(from: all)
+            let plan = try #require(DrawEngine.plan(eligibleCount: pool.count, currentAngle: 0,
+                                                    duration: 5, idForIndex: { pool[$0].id }, using: &rng))
+            run.record(try #require(pool.first { $0.id == plan.winnerID }))
+        }
+        #expect(run.isComplete)
+        #expect(Set(run.winners.map(\.id)).count == 8, "a run named someone twice")
+    }
+}
+
+// MARK: - Roster persistence & duplication
+
+@Suite("DrawRoster persistence")
+struct DrawRosterPersistenceTests {
+
+    /// A roster file as it was written **before** `soundEnabled` existed.
+    private let legacyJSON = """
+    [{"id":"8E1B5B64-7C6A-4B0B-9E55-2F8C2E5C7A11","name":"Standup order",
+      "entries":[{"id":"1A1B5B64-7C6A-4B0B-9E55-2F8C2E5C7A11","label":"Priya","isExcluded":false,
+                  "isRetired":true,"addedAt":0}],
+      "history":[],"autoRetireWinner":true,"spinDuration":"standard","modifiedAt":0}]
+    """
+
+    @Test("A roster file written before soundEnabled existed still decodes — nobody's rosters vanish")
+    func legacyFileDecodes() throws {
+        let rosters = try JSONDecoder().decode([DrawRoster].self, from: Data(legacyJSON.utf8))
+        #expect(rosters.count == 1)
+        #expect(rosters[0].name == "Standup order")
+        #expect(rosters[0].soundEnabled == false, "sound must default OFF for existing rosters")
+        #expect(rosters[0].entries.first?.isRetired == true)
+    }
+
+    @Test("soundEnabled round-trips")
+    func soundRoundTrips() throws {
+        var roster = DrawRoster(name: "R", entries: [DrawEntry(label: "A")])
+        roster.soundEnabled = true
+        let back = try JSONDecoder().decode(DrawRoster.self, from: JSONEncoder().encode(roster))
+        #expect(back.soundEnabled)
+        #expect(back.entries.map(\.label) == ["A"])
+    }
+
+    @Test("Sound is off by default (D9)")
+    func soundDefaultsOff() {
+        #expect(DrawRoster(name: "x").soundEnabled == false)
+    }
+
+    @Test("Duplicating a roster copies entries and settings but starts a fresh round")
+    func duplicate() {
+        var original = DrawRoster(name: "Team", entries: [DrawEntry(label: "A"), DrawEntry(label: "B", isExcluded: true)],
+                                  autoRetireWinner: false, spinDuration: .dramatic, soundEnabled: true)
+        original.recordWin(entryID: original.entries[0].id, label: "A")
+
+        let copy = original.duplicated(named: "Team copy")
+        #expect(copy.id != original.id)
+        #expect(copy.name == "Team copy")
+        #expect(copy.entries.map(\.label) == ["A", "B"])
+        #expect(copy.entries[1].isExcluded, "exclusions are a user choice and carry over")
+        #expect(copy.history.isEmpty, "a copy does not inherit the old draw log")
+        #expect(copy.entries.allSatisfy { !$0.isRetired })
+        #expect(Set(copy.entries.map(\.id)).isDisjoint(with: original.entries.map(\.id)))
+        #expect(copy.autoRetireWinner == false && copy.spinDuration == .dramatic && copy.soundEnabled)
+    }
+}
+
+// MARK: - Sound (D9)
+
+@Suite("Lucky Draw sound")
+struct LuckyDrawSoundTests {
+
+    private func plan(count: Int, duration: Double = 5, seed: UInt64 = 3) -> SpinPlan {
+        var rng = DrawEngineTests.SeededGenerator(seed: seed)
+        let ids = (0..<count).map { _ in UUID() }
+        return DrawEngine.plan(eligibleCount: count, currentAngle: 0, duration: duration,
+                               idForIndex: { ids[$0] }, using: &rng)!
+    }
+
+    @Test("Ticks never exceed the 20-per-second cap — even on a 200-entry wheel")
+    func rateCap() {
+        let p = plan(count: 200)
+        let times = RatchetSchedule.tickTimes(for: p, segmentCount: 200)
+        #expect(!times.isEmpty)
+        for (a, b) in zip(times, times.dropFirst()) {
+            #expect(b - a >= RatchetSchedule.minimumInterval - 1e-9, "ticks \(a) and \(b) are closer than 50 ms")
+        }
+        #expect(Double(times.count) <= RatchetSchedule.maxTicksPerSecond * p.totalDuration + 1)
+    }
+
+    @Test("Ticks are ordered and fall inside the spin")
+    func ordered() {
+        let p = plan(count: 12)
+        let times = RatchetSchedule.tickTimes(for: p, segmentCount: 12)
+        #expect(times == times.sorted())
+        #expect(times.allSatisfy { $0 >= SpinPlan.windupDuration && $0 <= p.totalDuration })
+    }
+
+    @Test("There is nothing to tick on a one-entry wheel")
+    func singleEntry() {
+        #expect(RatchetSchedule.tickTimes(for: plan(count: 1), segmentCount: 1).isEmpty)
+    }
+
+    @Test("The ratchet audibly slows: gaps widen into countable clicks rather than a buzz")
+    func slowingIsAudible() {
+        let p = plan(count: 24)
+        let times = RatchetSchedule.tickTimes(for: p, segmentCount: 24)
+        let gaps = zip(times, times.dropFirst()).map { $1 - $0 }
+        #expect(gaps.count > 10)
+
+        // Deceleration shows up as widening gaps: the final stretch is slower than the
+        // stretch before it.
+        let tail = Array(gaps.suffix(5)), before = Array(gaps.dropLast(5).suffix(5))
+        #expect(tail.reduce(0, +) / 5 > before.reduce(0, +) / 5,
+                "the ticks are not slowing down — the wheel's deceleration is inaudible")
+        // The last clicks are distinct and countable, not a blur.
+        #expect((gaps.last ?? 0) >= 0.10, "the final ticks run together")
+        // And it keeps ticking well into the decay rather than falling silent early. After
+        // the last crossing the wheel only creeps *inside* the winning segment, so there is
+        // nothing further to tick — which is why this is measured against the spin, not the
+        // final second.
+        #expect((times.last ?? 0) > p.totalDuration * 0.6)
+    }
+
+    @Test("A spin crossing N boundaries produces about N ticks when slow enough not to be capped")
+    func tickPerCrossing() {
+        // 4 segments over a long, slow spin: far below 20 crossings/s, so nothing is dropped.
+        let p = plan(count: 4, duration: 8)
+        let times = RatchetSchedule.tickTimes(for: p, segmentCount: 4)
+        let crossings = Int(abs(p.targetAngle + p.overshoot - p.fromAngle) / 90)
+        #expect(abs(times.count - crossings) <= 2, "\(times.count) ticks for ≈\(crossings) crossings")
+    }
+
+    @Test("The synthesised cues are non-silent, never clip, and decay to silence")
+    func synthesis() {
+        for samples in [SoundSynth.tickSamples(), SoundSynth.fanfareSamples()] {
+            let peak = samples.map { abs($0) }.max() ?? 0
+            #expect(peak > 0.05, "silent")
+            #expect(peak < 0.98, "clips")
+            let tail = samples.suffix(samples.count / 20).map { abs($0) }.max() ?? 0
+            #expect(tail < 0.01, "does not decay to silence — will click at the end")
+        }
+        #expect(SoundSynth.tickSamples().count < SoundSynth.sampleRate / 20, "a tick must be well under 50 ms")
+    }
+
+    @Test("The WAV container is well-formed")
+    func wavHeader() {
+        let samples = SoundSynth.tickSamples()
+        let wav = SoundSynth.wav(from: samples)
+        #expect(String(decoding: wav.prefix(4), as: UTF8.self) == "RIFF")
+        #expect(String(decoding: wav[8..<12], as: UTF8.self) == "WAVE")
+        #expect(String(decoding: wav[12..<16], as: UTF8.self) == "fmt ")
+        #expect(wav.count == 44 + samples.count * 2)
+        let declared = wav[4..<8].withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
+        #expect(Int(UInt32(littleEndian: declared)) == wav.count - 8)
+    }
+
+    @Test("AVFoundation accepts the generated audio")
+    func playable() throws {
+        // Construction only — nothing is played, so this does not need an audio device.
+        _ = try AVAudioPlayer(data: SoundSynth.wav(from: SoundSynth.tickSamples()))
+        _ = try AVAudioPlayer(data: SoundSynth.wav(from: SoundSynth.fanfareSamples()))
+    }
+}
+
+// MARK: - Rendering smoke
+
+/// Renders the real SwiftUI views offscreen. This is not a pixel-diff test — it proves
+/// the views construct, lay out and draw something (a `fixedSize` or layout mistake in
+/// the new overlays would otherwise only show up at runtime), and, when
+/// `HALO_RENDER_DIR` is set, writes PNGs so a human can look at them.
+@Suite("Lucky Draw rendering", .serialized)
+@MainActor
+struct LuckyDrawRenderingTests {
+
+    /// Renders through a real (offscreen) window rather than `ImageRenderer`, because
+    /// `ImageRenderer` cannot draw AppKit-backed controls: a `ScrollView` comes out blank
+    /// and a `Stepper` as a "no entry" placeholder — which is most of the roster panel.
+    private func render<V: View>(_ view: V, size: CGSize, name: String) throws -> CGImage {
+        let framed = view
+            .frame(width: size.width, height: size.height)
+            .background(Color.haloBackground)
+            .environment(\.colorScheme, .dark)
+        let host = NSHostingView(rootView: framed)
+        host.frame = CGRect(origin: .zero, size: size)
+
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless],
+                              backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        // Let SwiftUI settle: onAppear work and the first layout pass.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        host.layoutSubtreeIfNeeded()
+
+        let rep = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds),
+                               "\(name): no bitmap")
+        host.cacheDisplay(in: host.bounds, to: rep)
+        let image = try #require(rep.cgImage, "\(name) did not render")
+
+        if let dir = ProcessInfo.processInfo.environment["HALO_RENDER_DIR"] {
+            let url = URL(fileURLWithPath: dir, isDirectory: true).appendingPathComponent("\(name).png")
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                     withIntermediateDirectories: true)
+            if let dest = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) {
+                CGImageDestinationAddImage(dest, image, nil)
+                CGImageDestinationFinalize(dest)
+            }
+        }
+        return image
+    }
+
+    /// More than one distinct colour somewhere — i.e. something was actually drawn.
+    private func isNotBlank(_ image: CGImage) -> Bool {
+        guard let data = image.dataProvider?.data, let ptr = CFDataGetBytePtr(data) else { return false }
+        let bpp = image.bitsPerPixel / 8
+        let first = (ptr[0], ptr[1], ptr[2])
+        let total = image.width * image.height
+        var i = 0
+        while i < total {
+            let o = i * bpp
+            if (ptr[o], ptr[o + 1], ptr[o + 2]) != first { return true }
+            i += 997
+        }
+        return false
+    }
+
+    @Test("The winners list renders, in order, at a sensible size")
+    func sequenceOverlay() throws {
+        let winners = ["Priya", "Marcus", "Yuki", "Amara"].map { DrawEntry(label: $0) }
+        let image = try render(DrawSequenceOverlay(winners: winners, plannedCount: 6,
+                                                   reducedMotion: true, onCopy: {}, onClose: {}),
+                               size: CGSize(width: 520, height: 360), name: "sequence-overlay-stopped")
+        #expect(isNotBlank(image))
+    }
+
+    @Test("The whole Lucky Draw screen renders")
+    func wholeView() throws {
+        let image = try render(LuckyDrawView(), size: CGSize(width: 1080, height: 720), name: "lucky-draw-screen")
+        #expect(isNotBlank(image))
+    }
+
+    @Test("The roster panel renders with its new controls")
+    func rosterPanel() throws {
+        let image = try render(RosterPanelView(store: LuckyDrawStore.shared,
+                                               viewModel: LuckyDrawViewModel(),
+                                               addFieldIsFocused: .constant(false)),
+                               size: CGSize(width: 312, height: 760), name: "roster-panel")
+        #expect(isNotBlank(image))
     }
 }

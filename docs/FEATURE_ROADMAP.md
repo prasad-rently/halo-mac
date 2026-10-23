@@ -3493,17 +3493,26 @@ Shipped on `feat/f051-lucky-draw`. Nine source files under `Halo/Core/LuckyDraw/
   behind the sidebar. The wheel's centre is reported up through a `PreferenceKey`.
 - **Decay exponent 3.4, not 4.2** (already recorded in the spec; confirmed on screen).
 
-**Specced but NOT built in this pass** — none of it is stubbed or faked, it simply is not
-there yet, and the roadmap should not imply otherwise:
+**Follow-up pass — everything above that the first pass left unbuilt is now built:**
 
-- FR-3 drag-and-drop `.txt`/`.csv` import (multi-line and comma paste *are* implemented).
-- FR-4 duplicate-label detection and the Keep both / Skip prompt.
-- FR-10 "Draw N in a row".
-- FR-17 beyond Space: ⌘N, ⌫ on a selected chip, ⌘⇧R.
-- Sound (D9). Not built at all, rather than built and defaulted off.
-- Roster rename UI (`LuckyDrawStore.renameSelected` exists and is unused).
+- FR-3 drag-and-drop `.txt` / `.csv` import (`RosterImport.read(fileAt:)`: 1 MB cap, UTF-8
+  then Mac Roman, CSV first-column semantics).
+- FR-4 duplicate detection with the **Keep both / Skip duplicates** prompt.
+- FR-10 **Draw N in a row** (2–10, without replacement, cancellable between spins).
+- FR-17 full keyboard map: ⌘N, ⌘⇧R, Esc, ⌫ on the selected chip (plus Space from before).
+- D9 **Sound**, opt-in per roster, default off: ratchet tick (≤20/s) + reveal chime,
+  synthesised in code.
+- Roster **rename UI**, and FR-13's **duplicate roster** (also missing from the first pass
+  and not on its list).
 
-**Verified:** 370 tests pass, including 20 new ones — χ² uniformity over 100 k draws, the
+**Still not built:** FR-15 "copy full history" (copy-winner and CSV export exist), the
+per-roster confetti toggle from FR-19 (confetti follows the global `enableCelebrations`).
+
+**Not verified in a running app** (rendered and inspected offscreen, unit-tested, but not
+driven): the drop gesture, the ⌫/⌘N/⌘⇧R key paths, chip double- vs single-tap, and that
+the audio actually *sounds* right — see `MANUAL_TEST_PLAN.md` §20.2.
+
+**Verified:** 370 tests pass at the first pass (412 after the follow-up), including 20 new ones — χ² uniformity over 100 k draws, the
 landing angle resolving to the chosen index for every entry count 1…500, the put-back and
 reset semantics above, and the palette contrast floor. The wheel, reveal, confetti,
 put-back state and reset were checked on screen in a running build.

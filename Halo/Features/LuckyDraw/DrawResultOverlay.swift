@@ -48,8 +48,10 @@ struct DrawResultOverlay: View {
                     }
                     Button("Copy", action: onCopy)
                         .buttonStyle(ResultButtonStyle())
+                    // FR-17: Esc dismisses the result.
                     Button("Close", action: onClose)
                         .buttonStyle(ResultButtonStyle())
+                        .keyboardShortcut(.cancelAction)
                 }
                 .padding(.top, 2)
             }
@@ -141,7 +143,7 @@ private struct ConicHalo: View {
 
 // MARK: - ResultButtonStyle
 
-private struct ResultButtonStyle: ButtonStyle {
+struct ResultButtonStyle: ButtonStyle {
     var prominent = false
 
     func makeBody(configuration: Configuration) -> some View {

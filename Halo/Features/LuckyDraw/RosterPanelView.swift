@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - RosterPanelView
 
@@ -10,6 +11,9 @@ struct RosterPanelView: View {
     /// Reported upward so the Space shortcut can stand down while a name is being
     /// typed — otherwise the space bar spins the wheel instead of separating two words.
     @Binding var addFieldIsFocused: Bool
+    /// True while a text field *outside* this panel (the roster-rename field) has focus,
+    /// so ⌫ edits that text rather than deleting the selected chip.
+    var externalFieldActive = false
 
     @FocusState private var fieldFocus: Bool
     @State private var newEntry = ""
@@ -18,6 +22,9 @@ struct RosterPanelView: View {
     @State private var confirmReset = false
     @State private var confirmClear = false
     @State private var limitNotice: String?
+    @State private var selectedEntryID: UUID?
+    @State private var pendingImport: RosterImport.Plan?
+    @State private var dropTargeted = false
 
     private var roster: DrawRoster? { store.selected }
 
@@ -31,6 +38,20 @@ struct RosterPanelView: View {
             .padding(16)
         }
         .background(Color.haloBackground)
+        .confirmationDialog(duplicateTitle(pendingImport),
+                            isPresented: Binding(get: { pendingImport != nil },
+                                                 set: { if !$0 { pendingImport = nil } }),
+                            titleVisibility: .visible,
+                            presenting: pendingImport) { plan in
+            // FR-4: never silently merged — two people can share a name.
+            Button("Keep both") { finishImport(plan.labels(for: .keepBoth), skipped: 0) }
+            Button("Skip duplicates") {
+                finishImport(plan.labels(for: .skipDuplicates), skipped: plan.duplicateCount)
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: { plan in
+            Text(duplicateMessage(plan))
+        }
     }
 
     // MARK: - Entries
@@ -39,7 +60,7 @@ struct RosterPanelView: View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader("Entries", count: roster?.entries.count ?? 0)
 
-            TextField("Add a name — ⏎, or paste a list", text: $newEntry)
+            TextField("Add a name — ⏎, paste a list, or drop a .txt/.csv", text: $newEntry)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
                 .foregroundColor(.haloText)
@@ -77,6 +98,16 @@ struct RosterPanelView: View {
                     .foregroundColor(.haloText3)
             }
         }
+        // FR-3: drop a .txt / .csv on the entries to import it.
+        .onDrop(of: [.fileURL], isTargeted: $dropTargeted, perform: handleDrop)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.haloAccent, style: StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
+                .padding(-6)
+                .opacity(dropTargeted ? 1 : 0)
+                .allowsHitTesting(false)
+        )
+        .background(deleteShortcut)
         .confirmationDialog("Remove every entry from this roster?",
                             isPresented: $confirmClear, titleVisibility: .visible) {
             Button("Clear all", role: .destructive) { store.clearEntries() }
@@ -144,16 +175,22 @@ struct RosterPanelView: View {
             .padding(.vertical, 5)
             .background(Color.haloSurface2)
             .overlay(
-                Capsule().stroke(entry.isExcluded ? Color.haloAmber.opacity(0.35) : Color.haloBorder,
-                                 style: StrokeStyle(lineWidth: 1,
-                                                    dash: entry.isExcluded ? [3, 2] : []))
+                Capsule().stroke(selectedEntryID == entry.id ? Color.haloAccent
+                                    : (entry.isExcluded ? Color.haloAmber.opacity(0.35) : Color.haloBorder),
+                                 style: StrokeStyle(lineWidth: selectedEntryID == entry.id ? 1.5 : 1,
+                                                    dash: entry.isExcluded && selectedEntryID != entry.id ? [3, 2] : []))
             )
             .clipShape(Capsule())
             .opacity(entry.isEligible ? 1 : 0.55)
+            // Order matters: the double-tap has to be declared before the single tap or
+            // the single tap swallows it.
             .onTapGesture(count: 2) {
                 editingText = entry.label
                 editingID = entry.id
             }
+            // FR-17: a selected chip is what ⌫ removes.
+            .onTapGesture { selectedEntryID = entry.id }
+            .accessibilityAddTraits(selectedEntryID == entry.id ? .isSelected : [])
             .transition(.scale(scale: 0.6).combined(with: .opacity))
         }
     }
@@ -184,7 +221,10 @@ struct RosterPanelView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(store.canReset ? .haloAccent : .haloText3)
                 .disabled(!store.canReset)
-                .help("Put everyone back on the wheel and clear this log")
+                // FR-17: ⌘⇧R. It opens the same confirmation as clicking — a shortcut
+                // is not a reason to skip "this clears the log".
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .help("Put everyone back on the wheel and clear this log (⌘⇧R)")
             }
 
             if let roster, !roster.history.isEmpty {
@@ -261,6 +301,21 @@ struct RosterPanelView: View {
                     Text("Takes the winner off the wheel so the round can't repeat")
                         .font(.system(size: 10)).foregroundColor(.haloText3)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .toggleStyle(.switch)
+            .tint(.haloAccent)
+
+            Toggle(isOn: Binding(
+                get: { roster?.soundEnabled ?? false },
+                set: { store.setSoundEnabled($0) }
+            )) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Sound").font(.system(size: 12)).foregroundColor(.haloText)
+                    Text("A soft tick as the wheel turns and a chime for the winner. Off by default")
+                        .font(.system(size: 10)).foregroundColor(.haloText3)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .toggleStyle(.switch)
             .tint(.haloAccent)
@@ -301,14 +356,106 @@ struct RosterPanelView: View {
     private func commitNewEntry() {
         let raw = newEntry
         newEntry = ""
-        guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        let added = store.addEntries(from: raw)
-        let requested = raw.contains("\n")
-            ? raw.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count
-            : raw.components(separatedBy: ",").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count
-        limitNotice = added < requested
-            ? "Roster is full at \(DrawRoster.entryCap) entries — \(requested - added) not added."
-            : nil
+        beginImport(RosterImport.labels(fromPasted: raw))
+    }
+
+    // MARK: - Import (FR-2, FR-3, FR-4)
+
+    /// Classifies first, adds second. Anything that duplicates a name already there — or
+    /// repeats within the batch — raises the Keep both / Skip prompt instead of being
+    /// merged or added blindly.
+    private func beginImport(_ labels: [String]) {
+        guard !labels.isEmpty else { return }
+        let plan = store.prepareImport(labels)
+        if plan.hasDuplicates {
+            pendingImport = plan
+        } else {
+            finishImport(labels, skipped: 0)
+        }
+    }
+
+    private func finishImport(_ labels: [String], skipped: Int) {
+        let requested = labels.count
+        let added = store.commitImport(labels)
+        var notes: [String] = []
+        if added < requested {
+            notes.append("Roster is full at \(DrawRoster.entryCap) entries — \(requested - added) not added.")
+        }
+        if skipped > 0 {
+            notes.append("Skipped \(skipped) duplicate\(skipped == 1 ? "" : "s").")
+        }
+        limitNotice = notes.isEmpty ? nil : notes.joined(separator: " ")
+    }
+
+    private func duplicateTitle(_ plan: RosterImport.Plan?) -> String {
+        guard let plan else { return "Duplicate names" }
+        return plan.duplicateCount == 1 ? "1 name is already on the roster"
+                                        : "\(plan.duplicateCount) names are already on the roster"
+    }
+
+    private func duplicateMessage(_ plan: RosterImport.Plan) -> String {
+        let shown = plan.duplicateLabels.prefix(5).joined(separator: ", ")
+        let more = plan.duplicateCount > 5 ? " and \(plan.duplicateCount - 5) more" : ""
+        return "\(shown)\(more). Two people can share a name, so you choose: keep both, or skip the repeats."
+    }
+
+    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
+        guard let provider = providers.first(where: {
+            $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+        }) else { return false }
+
+        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+            let url: URL?
+            if let data = item as? Data { url = URL(dataRepresentation: data, relativeTo: nil) }
+            else { url = item as? URL }
+            guard let url else { return }
+            let result = Result { try RosterImport.read(fileAt: url) }
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let labels):
+                    if labels.isEmpty { limitNotice = "No names found in \(url.lastPathComponent)." }
+                    else { beginImport(labels) }
+                case .failure(let error):
+                    limitNotice = Self.message(for: error)
+                }
+            }
+        }
+        return true
+    }
+
+    private static func message(for error: Error) -> String {
+        switch error as? RosterImport.ReadError {
+        case .unsupportedType: return "Only .txt and .csv files can be dropped here."
+        case .tooLarge:        return "That file is over 1 MB — too big for a name list."
+        default:               return "Couldn't read that file."
+        }
+    }
+
+    // MARK: - Keyboard (FR-17)
+
+    private var selectedEntry: DrawEntry? {
+        guard let id = selectedEntryID else { return nil }
+        return roster?.entries.first { $0.id == id }
+    }
+
+    /// ⌫ removes the selected chip — but never while any text is being typed, where
+    /// Backspace has to keep meaning "delete a character".
+    private var canDeleteSelected: Bool {
+        selectedEntry != nil && !fieldFocus && editingID == nil && !externalFieldActive
+    }
+
+    private var deleteShortcut: some View {
+        Button("Remove selected entry") {
+            if let entry = selectedEntry {
+                store.removeEntry(entry)
+                selectedEntryID = nil
+            }
+        }
+        .keyboardShortcut(.delete, modifiers: [])
+        .disabled(!canDeleteSelected)
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .accessibilityHidden(true)
     }
 }
 

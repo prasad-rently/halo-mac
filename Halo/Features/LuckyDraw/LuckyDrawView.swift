@@ -11,6 +11,7 @@ struct LuckyDrawView: View {
     @State private var addFieldIsFocused = false
     @State private var renaming = false
     @State private var rosterName = ""
+    @FocusState private var renameFocused: Bool
 
     private var roster: DrawRoster? { store.selected }
     private var pool: [DrawEntry] { roster?.eligible ?? [] }
@@ -23,7 +24,8 @@ struct LuckyDrawView: View {
                 stage
                 Divider().overlay(Color.haloBorder)
                 RosterPanelView(store: store, viewModel: viewModel,
-                                addFieldIsFocused: $addFieldIsFocused)
+                                addFieldIsFocused: $addFieldIsFocused,
+                                externalFieldActive: renaming)
                     .frame(width: 312)
             }
         }
@@ -37,16 +39,41 @@ struct LuckyDrawView: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
-                    Picker("", selection: Binding(
-                        get: { store.selectedRosterID ?? store.rosters.first?.id ?? UUID() },
-                        set: { store.selectedRosterID = $0 }
-                    )) {
-                        ForEach(store.rosters) { r in
-                            Text(r.name).tag(r.id)
+                    if renaming {
+                        TextField("Roster name", text: $rosterName)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 13))
+                            .foregroundColor(.haloText)
+                            .padding(.horizontal, 9).padding(.vertical, 5)
+                            .background(Color.haloSurface2)
+                            .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.haloAccent, lineWidth: 1))
+                            .clipShape(RoundedRectangle(cornerRadius: 7))
+                            .frame(width: 190)
+                            .focused($renameFocused)
+                            .onSubmit(commitRename)
+                            .onExitCommand { renaming = false }
+                    } else {
+                        Picker("", selection: Binding(
+                            get: { store.selectedRosterID ?? store.rosters.first?.id ?? UUID() },
+                            set: { store.selectedRosterID = $0 }
+                        )) {
+                            ForEach(store.rosters) { r in
+                                Text(r.name).tag(r.id)
+                            }
                         }
+                        .labelsHidden()
+                        .frame(maxWidth: 190)
                     }
-                    .labelsHidden()
-                    .frame(maxWidth: 190)
+
+                    Button {
+                        if renaming { commitRename() } else { beginRename() }
+                    } label: {
+                        Image(systemName: renaming ? "checkmark.circle.fill" : "pencil")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(renaming ? .haloAccent : .haloText3)
+                    .help(renaming ? "Save the new name" : "Rename this roster")
+                    .disabled(viewModel.isSpinning || viewModel.isSequenceActive)
 
                     Button {
                         store.addRoster()
@@ -55,7 +82,18 @@ struct LuckyDrawView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundColor(.haloText3)
-                    .help("New roster")
+                    .help("New roster (⌘N)")
+                    // FR-17.
+                    .keyboardShortcut("n", modifiers: .command)
+
+                    Button {
+                        store.duplicateSelected()
+                    } label: {
+                        Image(systemName: "plus.square.on.square")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.haloText3)
+                    .help("Duplicate this roster — same entries, a fresh draw")
 
                     if store.rosters.count > 1 {
                         Button {
@@ -131,7 +169,7 @@ struct LuckyDrawView: View {
                                      plan: viewModel.plan,
                                      spinStart: viewModel.spinStart,
                                      restAngle: viewModel.restAngle,
-                                     highlightID: viewModel.showWinner ? viewModel.winner?.id : nil,
+                                     highlightID: viewModel.showWinner ? viewModel.winner?.id : viewModel.interimWinner?.id,
                                      reducedMotion: viewModel.reducedMotion)
                         .frame(width: side, height: side)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -161,12 +199,18 @@ struct LuckyDrawView: View {
                     .disabled(!viewModel.canSpin)
                     // Nil while the name field has focus, so typing "Anna Maria" adds
                     // one entry rather than spinning the wheel mid-word.
-                    .keyboardShortcut(addFieldIsFocused ? nil
-                                                        : KeyboardShortcut(.space, modifiers: []))
+                    .keyboardShortcut(addFieldIsFocused || renaming ? nil
+                                                                    : KeyboardShortcut(.space, modifiers: []))
 
-                    Text(hintText)
-                        .font(.system(size: 10.5))
-                        .foregroundColor(.haloText3)
+                    drawCountRow
+
+                    if let run = viewModel.sequence {
+                        sequenceBanner(run)
+                    } else {
+                        Text(viewModel.sequenceNotice ?? hintText)
+                            .font(.system(size: 10.5))
+                            .foregroundColor(viewModel.sequenceNotice == nil ? .haloText3 : .haloAmber)
+                    }
                 }
 
                 Spacer(minLength: 8)
@@ -185,12 +229,70 @@ struct LuckyDrawView: View {
                 )
                 .transition(.opacity)
             }
+
+            if let winners = viewModel.sequenceSummary {
+                DrawSequenceOverlay(
+                    winners: winners,
+                    plannedCount: viewModel.sequenceSummaryPlanned,
+                    reducedMotion: viewModel.reducedMotion,
+                    onCopy: { viewModel.copyWinnersList() },
+                    onClose: { viewModel.dismissSequenceSummary() }
+                )
+                .transition(.opacity)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             RadialGradient(colors: [Color.haloAccent.opacity(0.07), .clear],
                            center: .center, startRadius: 10, endRadius: 360)
         )
+    }
+
+    // MARK: - Draw N in a row
+
+    /// FR-10. 1 is a normal single draw; 2…10 runs that many spins back to back.
+    private var drawCountRow: some View {
+        HStack(spacing: 8) {
+            Text(viewModel.drawCount < DrawSequence.allowedRange.lowerBound
+                 ? "Single draw"
+                 : "Draw \(viewModel.drawCount) in a row")
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundColor(.haloText2)
+            Stepper("", value: $viewModel.drawCount, in: 1...DrawSequence.allowedRange.upperBound)
+                .labelsHidden()
+        }
+        .disabled(viewModel.isSpinning || viewModel.isSequenceActive)
+        .accessibilityLabel("Winners to draw in a row")
+        .accessibilityValue(viewModel.drawCount < 2 ? "one" : "\(viewModel.drawCount)")
+    }
+
+    private func sequenceBanner(_ run: DrawSequence) -> some View {
+        HStack(spacing: 10) {
+            Text(run.stopRequested
+                 ? "Stopping after this spin…"
+                 : "Draw \(run.position) of \(run.total)")
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundColor(.haloAccent)
+            Button("Stop") { viewModel.stopSequence() }
+                .buttonStyle(.plain)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundColor(run.stopRequested ? .haloText3 : .haloRed)
+                .disabled(run.stopRequested)
+                .help("Finish the spin in progress, then stop — a draw already turning is never interrupted")
+        }
+    }
+
+    // MARK: - Rename
+
+    private func beginRename() {
+        rosterName = roster?.name ?? ""
+        renaming = true
+        renameFocused = true
+    }
+
+    private func commitRename() {
+        store.renameSelected(to: rosterName)
+        renaming = false
     }
 
     private var hintText: String {

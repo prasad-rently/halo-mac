@@ -46,21 +46,31 @@ final class LuckyDrawStore: ObservableObject {
 
     // MARK: - Entries
 
-    /// Adds one or many. Multi-line text splits per line; a single line with commas
-    /// and no newline splits on commas — the two shapes a pasted list actually arrives in.
+    /// Adds one or many with **no duplicate check** — pasted text, split the way
+    /// `RosterImport.labels(fromPasted:)` splits it. The roster panel does not call this
+    /// any more: it goes through `prepareImport` / `commitImport` so a duplicate is
+    /// something the user is asked about (FR-4). Kept for callers that want a blind add.
     /// Returns the number added, which is less than requested when the cap is hit.
     @discardableResult
     func addEntries(from raw: String) -> Int {
-        let separators: CharacterSet = raw.contains("\n") ? .newlines : CharacterSet(charactersIn: ",")
-        let labels = raw.components(separatedBy: separators)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        guard !labels.isEmpty else { return 0 }
+        commitImport(RosterImport.labels(fromPasted: raw))
+    }
 
+    /// Step one of an add: classify what is about to be added against what is already on
+    /// the selected roster. Changes nothing.
+    func prepareImport(_ labels: [String]) -> RosterImport.Plan {
+        RosterImport.plan(incoming: labels, existing: selected?.entries.map(\.label) ?? [])
+    }
+
+    /// Step two: add `labels`, capped at `DrawRoster.entryCap`. Labels arrive already
+    /// trimmed and truncated by `RosterImport`.
+    @discardableResult
+    func commitImport(_ labels: [String]) -> Int {
+        guard !labels.isEmpty else { return 0 }
         var added = 0
         mutateSelected { roster in
             for label in labels where roster.entries.count < DrawRoster.entryCap {
-                roster.entries.append(DrawEntry(label: String(label.prefix(60))))
+                roster.entries.append(DrawEntry(label: String(label.prefix(RosterImport.labelLimit))))
                 added += 1
             }
         }
@@ -124,12 +134,25 @@ final class LuckyDrawStore: ObservableObject {
         mutateSelected { $0.spinDuration = duration }
     }
 
+    func setSoundEnabled(_ on: Bool) {
+        mutateSelected { $0.soundEnabled = on }
+    }
+
     // MARK: - Rosters
 
     func addRoster(named name: String = "New roster") {
         let roster = DrawRoster(name: name)
         rosters.append(roster)
         selectedRosterID = roster.id
+        scheduleSave()
+    }
+
+    /// FR-13 "duplicate". The copy becomes the selected roster.
+    func duplicateSelected() {
+        guard let source = selected else { return }
+        let copy = source.duplicated(named: String("\(source.name) copy".prefix(60)))
+        rosters.append(copy)
+        selectedRosterID = copy.id
         scheduleSave()
     }
 
