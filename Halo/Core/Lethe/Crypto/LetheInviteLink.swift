@@ -19,6 +19,10 @@ struct LetheInvite: Equatable {
     let roomName: String
 }
 
+extension LetheInvite: Identifiable {
+    var id: String { roomId }
+}
+
 enum LetheInviteLink {
 
     static let scheme = "lethe"

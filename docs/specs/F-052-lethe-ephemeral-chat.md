@@ -435,7 +435,7 @@ was **not** done before building.
 |---|--------|----------------------------------|
 | OQ-1 | **Open** | Default relay is the Render free tier. The ~50 s cold start is handled with a distinct `.waking` state ("Waking the relay…"), and the relay URL is user-overridable (FR-L-32). |
 | OQ-2 | **Open** | §6.2 constraints implemented (scrubber + no-logging test); the privacy panel states that Halo includes opt-in Sentry. Whether that is *sufficient* remains a judgement call. |
-| OQ-3 | **Open** | History is **plain JSON** in `Application Support/Halo/lethe/rooms.json` — readable by anything running as the user. Option "encrypt with a Keychain-held key" is not implemented. |
+| OQ-3 | **Resolved** | History is encrypted at rest: `Application Support/Halo/lethe/rooms.enc` = `"HLT1"` ‖ AES-256-GCM of the JSON store, under a per-install key in the Keychain (`com.halo.mac.lethe.history`, `WhenUnlockedThisDeviceOnly`). A pre-existing plaintext `rooms.json` is migrated and removed on first load. Protects against file copies, backups and processes without Keychain access; **not** against malware that can already read this app's Keychain items. Still weaker than mobile's SQLCipher in that the whole file is rewritten per change. |
 | OQ-4 | **Open** (UI note only) | No rotation or member removal. The invite sheet says so plainly ("There is no way to remove a member — make a new room instead"). |
 | OQ-5 | **Open** | Treated as separate products sharing a protocol; Flutter web client unaffected. |
 | OQ-6 | **Open** | §7.4 not pursued; nothing in F-045 changed. |

@@ -114,11 +114,11 @@ struct HaloApp: App {
                 // F-052: and lethe:// invites, which the mobile app also emits
                 .onOpenURL { url in
                     if url.scheme == LetheInviteLink.scheme {
-                        // Joining is not silent: it writes a key to the Keychain
-                        // and adds a room, from a link that arrived from outside
-                        // the app. Route the user to the module rather than
-                        // acting on it behind their back.
-                        _ = try? LetheManager.shared.join(inviteLink: url.absoluteString)
+                        // Joining is not silent: it writes a key to the Keychain and
+                        // connects this Mac to a room, from a link that arrived from
+                        // outside the app. So the link is only *staged* here; LetheView
+                        // shows what it is and the user decides.
+                        _ = LetheManager.shared.handleIncomingURL(url)
                         appState.selectedModule = .lethe
                     } else {
                         ActionShareManager.shared.handleURL(url)

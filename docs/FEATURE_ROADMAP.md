@@ -3551,7 +3551,7 @@ a phone share a room. Not a new protocol.
 
 ### Not built / deliberately dropped
 - **QR scanning (FR-L-08, FR-L-33)** — not in v1. QR *rendering* is. Needs camera permission plumbing.
-- **At-rest encryption of history (OQ-3)** — history is plain JSON; weaker than mobile's SQLCipher. Undecided.
+- ~~At-rest encryption of history (OQ-3)~~ — done: `rooms.enc`, AES-256-GCM, Keychain-held key; legacy `rooms.json` migrated. A `lethe://` link from outside the app now asks before joining.
 
 ### Why this is not ✅ Done
 The spec's own ship gate (AC-1: Mac ↔ real phone against the production relay) has not been run — only the Node reference client has been exercised. See the spec's §8.1 for the per-criterion verification table. Mobile feasibility study: done (`HALO_MOBILE_ROADMAP.md` §3 / §9).

@@ -106,6 +106,52 @@ struct LetheJoinRoomSheet: View {
     }
 }
 
+// MARK: - Confirm an invite that arrived from outside the app
+
+/// Shown for a `lethe://` link opened by something else (a browser, Messages, …).
+/// Nothing has been saved or joined at this point; Cancel leaves no trace.
+struct LetheInviteConfirmSheet: View {
+    let invite: LetheInvite
+    let onJoin: () -> String?       // error text, or nil on success
+    let onCancel: () -> Void
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Join this room?").font(HaloFont.display(17, weight: .bold)).foregroundColor(.haloText)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(invite.roomName).font(.headline).foregroundColor(.haloText)
+                Text("Room \(invite.roomId)").font(HaloFont.mono(10)).foregroundColor(.haloText3)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.haloSurface2))
+
+            Text("This link came from outside Halo. Joining saves the room's key on this Mac and "
+                 + "connects it to the relay in that room. Everyone who has the link can read and "
+                 + "write there, and the room's name was chosen by whoever made the link. "
+                 + "Only join rooms you expect.")
+                .font(.caption).foregroundColor(.haloAmber)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let error {
+                Text(error).font(.caption).foregroundColor(.haloRed)
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel") { onCancel() }.keyboardShortcut(.cancelAction)
+                Button("Join room") { error = onJoin() }
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+        .background(Color.haloSurface)
+    }
+}
+
 // MARK: - Invite
 
 struct LetheInviteSheet: View {
@@ -212,6 +258,10 @@ struct LethePrivacyPanel: View {
                  Messages are encrypted on this Mac with AES-256-GCM before they leave it, \
                  and the key never goes to the relay. The relay keeps the last 50 messages \
                  for up to 6 hours so someone joining late can catch up, then forgets them.
+
+                 Your message history is stored on this Mac encrypted with AES-256-GCM; the \
+                 key is in your Keychain and never syncs to iCloud. Leaving a room deletes \
+                 its history.
 
                  Your IP is visible to the relay — that is unavoidable at the transport layer. \
                  A VPN is the answer if that matters to you.

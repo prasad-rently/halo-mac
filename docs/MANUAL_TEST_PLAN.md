@@ -1016,14 +1016,15 @@ Read-only S.M.A.R.T./NVMe health reader via `diskutil info -plist` + an `IONVMeC
 | TC-LETHE-09 | P1 | Unread + notification | Receive a message in a room that is not open | Sidebar badge increments; notification shows room + sender but **no message text**; opening the room clears the badge |
 | TC-LETHE-10 | P0 | Leave room — AC-6 | Leave a room (confirm dialog) → `security find-generic-password -s com.halo.mac.lethe` and `grep <roomId> ~/Library/Application\ Support/Halo/lethe/rooms.json` | Confirmation shown first; Keychain item **gone**; roomId, name and messages **absent** from `rooms.json` |
 | TC-LETHE-11 | P1 | Wrong-key blob — AC-7 | With a third client that lacks the key, post to the room | Nothing renders: no crash, no placeholder row |
-| TC-LETHE-12 | P1 | Deep link | `open "lethe://join#roomId=…&roomKey=…&name=…"` | Halo comes forward on the Lethe module with the join flow |
+| TC-LETHE-12 | P0 | Deep link asks first | `open "lethe://join#roomId=…&roomKey=…&name=…"` | Halo comes forward on Lethe and shows **Join this room?** with the room name/id. **Cancel** → no room, no Keychain item (`security find-generic-password -s com.halo.mac.lethe`). **Join room** → room appears. A malformed link shows an amber notice and joins nothing. *Not yet run in a live app.* |
 | TC-LETHE-13 | P1 | Settings sheet | Gear → change handle; enter `http://x` then `wss://example.com` as relay | Handle persists; invalid relay rejected, `ws/wss` host accepted and reconnects |
 | TC-LETHE-14 | P1 | Privacy panel | Gear → privacy panel | States: what the relay can/cannot see (your IP is visible; text, sender, room name and key are not); the 50-message / 6 h relay buffer; Halo includes opt-in Sentry and nothing from the module is attached to a report |
 | TC-LETHE-15 | P0 | Sandboxed build — AC-9 | Build Release (`Halo.entitlements`, sandbox ON); run TC-LETHE-04, 06, 07 | Full functionality; no sandbox denial in Console |
 | TC-LETHE-16 | P1 | Nothing readable on the wire — AC-2 | Capture relay traffic (e.g. mitmproxy/Wireshark TLS-terminated test relay) while chatting | No message text, handle, room name or key in any frame |
 | TC-LETHE-17 | P2 | Rate limit / size | Send >10 msgs/sec; send >2,000 chars | Client-side throttle; clear "too long" message, no opaque relay ERROR |
 | TC-LETHE-18 | P2 | Telemetry scrub (unit) | Run `LetheTelemetryTests` | Invite links, room ids/names and handle redacted; no logging/Sentry calls in Lethe sources |
-| TC-LETHE-19 | P2 | Leave-on-disk (unit) | Run `LetheLeaveOnDiskTests` | `rooms.json` in a scratch dir loses the room, name and history on leave |
+| TC-LETHE-19 | P2 | History at rest (unit) | Run `LetheHistoryAtRestTests` | `rooms.enc` contains no readable room id/name/text; leave removes the room from the decrypted store; legacy `rooms.json` is migrated and deleted; wrong key/tampered file is set aside as `rooms.enc.unreadable` |
+| TC-LETHE-21 | P1 | No plaintext on a real Mac | Send a message, then `ls ~/Library/Application\ Support/Halo/lethe/` and `grep -c <your message text> …/rooms.enc` | Only `rooms.enc` exists; grep finds nothing. *Not yet run in a live app.* |
 | TC-LETHE-20 | P3 | QR scan (**not built**) | — | Expected to be **absent** in v1 (FR-L-08 deferred); QR *render* works |
 
 ## 20.2 Lucky Draw (F-051)
