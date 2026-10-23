@@ -1,7 +1,7 @@
 # HaloShare protocol reference (LocalSend v2.x)
 
 > **Purpose:** the single cross-platform contract for HaloShare — desktop (Swift, `Halo/Core/LocalShare`),
-> iOS (Swift, `ios/Packages/HaloShareKit`) and Android (Kotlin, `android/haloshare`). This is F-050's
+> iOS (Swift, `ios/HaloShareKit`) and Android (Kotlin, `android/haloshare`). This is F-050's
 > "Phase 0: protocol reference". Where the three implementations disagree, **this document wins** and the
 > implementation is the bug.
 >

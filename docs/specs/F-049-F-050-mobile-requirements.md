@@ -43,7 +43,7 @@ after the cloud foundation exists.
 | **MD2 ⟲ D2** | **iOS discovery = HTTP /24 scan + manual address.** Multicast is Android/macOS only. | V5. iOS is findable only by others' scans. |
 | **MD3** | One written contract (`HALOSHARE_PROTOCOL.md`); one native implementation per platform; **desktop is not refactored onto the shared Kit in this milestone.** | Refactoring shipped desktop transfer code is its own risk. Duplication is accepted and tracked (R3). |
 | **MD4** | **F-049's cloud features are not started.** The app shell reserves their place and says so. | V6. Building them against an unresolved Firebase spike would be building on sand. |
-| **MD5** | **Layout:** `ios/Packages/HaloShareKit` (SwiftPM) + `ios/HaloMobile` (SwiftUI app); `android/` Gradle with `:haloshare` (pure Kotlin, JVM-testable) + `:app` (Compose). Monorepo, per F-049 D6. | F-049 D1/D6. |
+| **MD5** | **Layout:** `ios/HaloShareKit` (SwiftPM) + `ios/HaloMobile` (SwiftUI app); `android/` Gradle with `:haloshare` (pure Kotlin, JVM-testable) + `:app` (Compose). Monorepo, per F-049 D6. | F-049 D1/D6. |
 | **MD6** | **Every behaviour is verified against an independent HTTP client** (`curl`), not only against our own client — see §7. | V1 was invisible to Halo-to-Halo testing for exactly this reason. |
 
 ## 4. Functional requirements
@@ -133,9 +133,9 @@ None of these are started. Starting them against an unfrozen contract would prod
 |---|---|---|
 | Protocol contract written | ✅ `HALOSHARE_PROTOCOL.md` | ✅ (shared) |
 | Desktop receive fixed (V1–V4) | ✅ `fix/haloshare-binary-upload` | — |
-| Protocol core + tests | ⏳ | ⏳ |
-| Discovery (scan + manual) | ⏳ | ⏳ |
-| Send / Receive + consent | ⏳ | ⏳ |
+| Protocol core + tests | ✅ `ios/HaloShareKit` — 56 tests | ⏳ |
+| Discovery (scan + manual) | ✅ HTTP /24 scan + manual address (multicast: not on iOS, §3 MD2) | ⏳ |
+| Send / Receive + consent | ✅ library level, verified vs desktop both ways + curl (UI: ⏳) | ⏳ |
 | App shell | ⏳ | ⏳ |
 | Share extension / Sharesheet | ❌ deferred | ❌ deferred |
 | Background receive | ❌ deferred | ❌ deferred |
