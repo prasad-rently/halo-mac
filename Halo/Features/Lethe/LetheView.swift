@@ -28,6 +28,14 @@ struct LetheView: View {
         VStack(spacing: 0) {
             header
             Divider().overlay(Color.haloSurface2)
+            if let notice = manager.inviteNotice {
+                HStack {
+                    Text(notice).font(.caption).foregroundColor(.haloAmber)
+                    Spacer()
+                    Button("Dismiss") { manager.inviteNotice = nil }.buttonStyle(.link)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 8)
+            }
             if manager.rooms.isEmpty {
                 emptyState
             } else {
@@ -66,6 +74,18 @@ struct LetheView: View {
                     return error.localizedDescription
                 }
             }
+        }
+        .sheet(item: Binding(get: { manager.pendingInvite },
+                             set: { if $0 == nil { manager.cancelPendingInvite() } })) { invite in
+            LetheInviteConfirmSheet(
+                invite: invite,
+                onJoin: {
+                    do {
+                        if let room = try manager.confirmPendingInvite() { selectedRoomID = room.id }
+                        return nil
+                    } catch { return error.localizedDescription }
+                },
+                onCancel: { manager.cancelPendingInvite() })
         }
         .sheet(isPresented: $showSettings) {
             LetheSettingsSheet(manager: manager)

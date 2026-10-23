@@ -1060,11 +1060,18 @@ Mac and a phone sit in the same room.
 - **`RoomKeyStore`** — keys in the **Keychain** (`com.halo.mac.lethe`,
   `WhenUnlockedThisDeviceOnly`, never iCloud-synced). Never in UserDefaults or
   the JSON store.
-- **History** — JSON at `Application Support/Halo/lethe/rooms.json`, the
-  `MemoryTrendTracker` precedent. This codebase has no SQLite/CoreData
-  dependency and one module is not the place to add one. Known consequence,
-  recorded as OQ-3 in the spec: **weaker at rest than the mobile client's
-  SQLCipher store.**
+- **History** — `Application Support/Halo/lethe/rooms.enc`: `"HLT1"` ‖ AES-256-GCM
+  of the JSON store (the `MemoryTrendTracker` precedent for location; this codebase
+  has no SQLite/CoreData dependency). The key is `HistoryKeyStore`
+  (`com.halo.mac.lethe.history`, Keychain, ThisDeviceOnly) — a **different service**
+  from room keys so it never appears in `RoomKeyStore.allRoomIds()`. **Fail closed:**
+  no key ⇒ nothing is written, never a plaintext fallback. An unreadable file
+  (wrong key / tampered) is moved to `rooms.enc.unreadable`, not overwritten. A legacy
+  plaintext `rooms.json` is migrated and removed on load (OQ-3, resolved).
+- **`lethe://` links from outside the app are staged, never joined.**
+  `LetheManager.handleIncomingURL` sets `pendingInvite`; `LetheView` shows
+  `LetheInviteConfirmSheet`; only `confirmPendingInvite()` saves the key and joins.
+  `HaloApp.onOpenURL` must not call a joining API (a test scans for it).
 - **`LetheRelayClient`** — `actor`, one `URLSessionWebSocketTask` for *all*
   rooms (the protocol carries `roomId` per frame), exponential backoff with
   jitter, offline queue, client-side 10 msg/sec limit matching the relay.

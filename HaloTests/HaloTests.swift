@@ -5246,45 +5246,281 @@ struct LetheOfflineQueueTests {
     }
 }
 
-// MARK: - Lethe: leaving a room on disk (AC-6)
+// MARK: - Lethe: history at rest (OQ-3) and leaving a room on disk (AC-6)
 
-/// AC-6 is "verified on disk, not just in the UI". `LetheKeyStoreTests` covers
-/// the Keychain half; this covers the history file, using a scratch directory
-/// so a developer's real rooms are never read or written.
-@Suite("Lethe leave-room on disk", .serialized)
+/// The history file used to be plain JSON. These tests read the **real bytes on
+/// disk** — a test that only round-trips through the manager would pass even if the
+/// file were still plaintext. A scratch directory and an injected key keep a
+/// developer's real rooms and real history key out of it.
+@Suite("Lethe history at rest", .serialized)
 @MainActor
-struct LetheLeaveOnDiskTests {
+struct LetheHistoryAtRestTests {
 
-    @Test("Leaving a room removes it, its name and its history from rooms.json — AC-6")
-    func testLeaveScrubsHistoryFile() throws {
-        let dir = FileManager.default.temporaryDirectory
+    private func scratch() -> URL {
+        FileManager.default.temporaryDirectory
             .appendingPathComponent("halo-lethe-test-" + UUID().uuidString, isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
+    }
 
-        let manager = LetheManager(storeDirectory: dir)
+    private func decrypt(_ url: URL, key: Data) throws -> String {
+        let blob = try Data(contentsOf: url)
+        #expect(blob.starts(with: Data("HLT1".utf8)), "unexpected file header")
+        let json = try LetheCrypto.open(Data(blob.dropFirst(4)), key: key)
+        return String(decoding: json, as: UTF8.self)
+    }
+
+    private struct LegacyStore: Codable {
+        var rooms: [LetheRoom]
+        var messages: [String: [LetheMessage]]
+    }
+
+    @Test("History on disk is ciphertext: no room id, name or message text is readable")
+    func testNothingReadableOnDisk() throws {
+        let dir = scratch(); defer { try? FileManager.default.removeItem(at: dir) }
+        let key = LetheCrypto.generateRoomKey()
+        let manager = LetheManager(storeDirectory: dir, historyKey: key)
+        manager.handle = "tester"
+        let room = try #require(manager.createRoom(named: "at-rest-room-name"))
+        defer { RoomKeyStore.delete(roomId: room.id) }
+        try manager.send(text: "at-rest-message-body", to: room)
+
+        let file = dir.appendingPathComponent("rooms.enc")
+        let raw = try Data(contentsOf: file)
+        for needle in [room.id, "at-rest-room-name", "at-rest-message-body", "tester"] {
+            #expect(raw.range(of: Data(needle.utf8)) == nil, "\"\(needle)\" is readable in rooms.enc")
+        }
+        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("rooms.json").path),
+                "a plaintext rooms.json must not exist")
+
+        // And the guard against a vacuous pass: the right key does recover it.
+        let clear = try decrypt(file, key: key)
+        #expect(clear.contains("at-rest-message-body") && clear.contains(room.id))
+    }
+
+    @Test("A fresh manager with the same key reads the history back")
+    func testRoundTrip() throws {
+        let dir = scratch(); defer { try? FileManager.default.removeItem(at: dir) }
+        let key = LetheCrypto.generateRoomKey()
+        let first = LetheManager(storeDirectory: dir, historyKey: key)
+        first.handle = "tester"
+        let room = try #require(first.createRoom(named: "round trip"))
+        defer { RoomKeyStore.delete(roomId: room.id) }
+        try first.send(text: "remember me", to: room)
+
+        let second = LetheManager(storeDirectory: dir, historyKey: key)
+        second.loadFromDisk()
+        #expect(second.rooms.map(\.id) == [room.id])
+        #expect(second.messagesByRoom[room.id]?.map(\.text) == ["remember me"])
+    }
+
+    @Test("A pre-encryption rooms.json is migrated, then the plaintext file is gone")
+    func testLegacyMigration() throws {
+        let dir = scratch(); defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let roomKey = LetheCrypto.generateRoomKey()
+        let roomId = LetheCrypto.deriveRoomId(from: roomKey)
+        #expect(RoomKeyStore.save(roomKey, roomId: roomId))
+        defer { RoomKeyStore.delete(roomId: roomId) }
+
+        let msg = LetheMessage(id: "m1", roomId: roomId, handle: "old", text: "legacy-plaintext-body",
+                               ts: 1_700_000_000_000, isOwn: false)
+        let legacy = LegacyStore(rooms: [LetheRoom(id: roomId, name: "legacy-room")], messages: [roomId: [msg]])
+        let legacyURL = dir.appendingPathComponent("rooms.json")
+        try JSONEncoder().encode(legacy).write(to: legacyURL)
+
+        let key = LetheCrypto.generateRoomKey()
+        let manager = LetheManager(storeDirectory: dir, historyKey: key)
+        manager.loadFromDisk()
+
+        #expect(manager.messagesByRoom[roomId]?.first?.text == "legacy-plaintext-body", "history was lost in migration")
+        #expect(!FileManager.default.fileExists(atPath: legacyURL.path), "plaintext rooms.json survived migration")
+        let enc = try Data(contentsOf: dir.appendingPathComponent("rooms.enc"))
+        #expect(enc.range(of: Data("legacy-plaintext-body".utf8)) == nil)
+        #expect(try decrypt(dir.appendingPathComponent("rooms.enc"), key: key).contains("legacy-plaintext-body"))
+    }
+
+    @Test("The wrong key never yields history; the file is set aside, not destroyed")
+    func testWrongKeyIsQuarantined() throws {
+        let dir = scratch(); defer { try? FileManager.default.removeItem(at: dir) }
+        let keyA = LetheCrypto.generateRoomKey()
+        let a = LetheManager(storeDirectory: dir, historyKey: keyA)
+        a.handle = "tester"
+        let room = try #require(a.createRoom(named: "keyed"))
+        defer { RoomKeyStore.delete(roomId: room.id) }
+        try a.send(text: "secret", to: room)
+        let original = try Data(contentsOf: dir.appendingPathComponent("rooms.enc"))
+
+        let b = LetheManager(storeDirectory: dir, historyKey: LetheCrypto.generateRoomKey())
+        b.loadFromDisk()
+        #expect(b.rooms.isEmpty && b.messagesByRoom.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("rooms.enc").path))
+        #expect(try Data(contentsOf: dir.appendingPathComponent("rooms.enc.unreadable")) == original)
+    }
+
+    @Test("A tampered file is rejected by the GCM tag, not half-read")
+    func testTamperedFileRejected() throws {
+        let dir = scratch(); defer { try? FileManager.default.removeItem(at: dir) }
+        let key = LetheCrypto.generateRoomKey()
+        let a = LetheManager(storeDirectory: dir, historyKey: key)
+        a.handle = "tester"
+        let room = try #require(a.createRoom(named: "tamper"))
+        defer { RoomKeyStore.delete(roomId: room.id) }
+        try a.send(text: "x", to: room)
+
+        let url = dir.appendingPathComponent("rooms.enc")
+        var bytes = try Data(contentsOf: url)
+        bytes[bytes.count - 20] ^= 0x01
+        try bytes.write(to: url)
+
+        let b = LetheManager(storeDirectory: dir, historyKey: key)
+        b.loadFromDisk()
+        #expect(b.rooms.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("rooms.enc.unreadable").path))
+    }
+
+    @Test("Leaving a room removes it, its name and its history from the file — AC-6")
+    func testLeaveScrubsHistoryFile() throws {
+        let dir = scratch(); defer { try? FileManager.default.removeItem(at: dir) }
+        let key = LetheCrypto.generateRoomKey()
+        let manager = LetheManager(storeDirectory: dir, historyKey: key)
         manager.handle = "tester"   // not setHandle(): that writes the user's real UserDefaults
         let room = try #require(manager.createRoom(named: "AC6 ephemeral room"))
         defer { RoomKeyStore.delete(roomId: room.id) }
-
         try manager.send(text: "ac6-message-body", to: room)
 
-        let file = dir.appendingPathComponent("rooms.json")
-        let before = try String(contentsOf: file, encoding: .utf8)
-        // Guards the test itself: if these were false the "after" assertions
-        // below would pass vacuously.
-        #expect(before.contains(room.id))
-        #expect(before.contains("AC6 ephemeral room"))
-        #expect(before.contains("ac6-message-body"))
+        let file = dir.appendingPathComponent("rooms.enc")
+        // Guards the test itself: if these were false the "after" assertions would pass vacuously.
+        let before = try decrypt(file, key: key)
+        #expect(before.contains(room.id) && before.contains("AC6 ephemeral room") && before.contains("ac6-message-body"))
         #expect(RoomKeyStore.load(roomId: room.id) != nil)
 
         manager.leave(room: room)
 
-        let after = try String(contentsOf: file, encoding: .utf8)
+        let after = try decrypt(file, key: key)
         #expect(!after.contains(room.id))
         #expect(!after.contains("AC6 ephemeral room"))
         #expect(!after.contains("ac6-message-body"))
         #expect(RoomKeyStore.load(roomId: room.id) == nil)
         #expect(manager.rooms.isEmpty)
+    }
+
+    @Test("The history key is never listed as a room")
+    func testHistoryKeyIsNotARoom() throws {
+        let key = try #require(HistoryKeyStore.loadOrCreate())
+        #expect(key.count == LetheCrypto.keyLength)
+        #expect(HistoryKeyStore.loadOrCreate() == key, "must be stable across calls")
+        #expect(!RoomKeyStore.allRoomIds().contains("history-key"))
+    }
+}
+
+// MARK: - Lethe: invites that arrive from outside the app
+
+/// A `lethe://` URL can be opened by any web page or app. It used to join the room
+/// on the spot. Now it is only staged until the user confirms.
+@Suite("Lethe invites from outside the app", .serialized)
+@MainActor
+struct LetheIncomingInviteTests {
+
+    private func scratch() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("halo-lethe-test-" + UUID().uuidString, isDirectory: true)
+    }
+
+    private func makeInvite(name: String) throws -> (url: URL, roomId: String) {
+        let key = LetheCrypto.generateRoomKey()
+        let roomId = LetheCrypto.deriveRoomId(from: key)
+        let link = try LetheInviteLink.create(roomId: roomId, roomKey: key, roomName: name)
+        return (try #require(URL(string: link)), roomId)
+    }
+
+    private func isEmptyDir(_ dir: URL) -> Bool {
+        ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []).isEmpty
+    }
+
+    @Test("An incoming link is staged: no key stored, no room added, nothing written")
+    func testStagedNotJoined() throws {
+        let dir = scratch(); defer { try? FileManager.default.removeItem(at: dir) }
+        let manager = LetheManager(storeDirectory: dir)
+        let (url, roomId) = try makeInvite(name: "Stranger's room")
+        defer { RoomKeyStore.delete(roomId: roomId) }
+
+        let result = manager.handleIncomingURL(url)
+
+        guard case .staged(let invite) = result else { Issue.record("expected .staged, got \(result)"); return }
+        #expect(invite.roomName == "Stranger's room")
+        #expect(manager.pendingInvite == invite)
+        #expect(manager.rooms.isEmpty, "a room was added without confirmation")
+        #expect(RoomKeyStore.load(roomId: roomId) == nil, "a key was stored without confirmation")
+        #expect(isEmptyDir(dir), "history was written without confirmation")
+    }
+
+    @Test("Confirming joins exactly the staged room")
+    func testConfirmJoins() throws {
+        let dir = scratch(); defer { try? FileManager.default.removeItem(at: dir) }
+        let manager = LetheManager(storeDirectory: dir)
+        let (url, roomId) = try makeInvite(name: "Confirmed")
+        defer { RoomKeyStore.delete(roomId: roomId) }
+
+        manager.handleIncomingURL(url)
+        let room = try #require(try manager.confirmPendingInvite())
+
+        #expect(room.id == roomId && manager.rooms.map(\.id) == [roomId])
+        #expect(RoomKeyStore.load(roomId: roomId) != nil)
+        #expect(manager.pendingInvite == nil)
+    }
+
+    @Test("Cancelling leaves no trace")
+    func testCancelLeavesNoTrace() throws {
+        let dir = scratch(); defer { try? FileManager.default.removeItem(at: dir) }
+        let manager = LetheManager(storeDirectory: dir)
+        let (url, roomId) = try makeInvite(name: "Declined")
+        defer { RoomKeyStore.delete(roomId: roomId) }
+
+        manager.handleIncomingURL(url)
+        manager.cancelPendingInvite()
+
+        #expect(manager.pendingInvite == nil && manager.rooms.isEmpty)
+        #expect(RoomKeyStore.load(roomId: roomId) == nil)
+        #expect(isEmptyDir(dir))
+        #expect(try manager.confirmPendingInvite() == nil, "confirm after cancel must do nothing")
+    }
+
+    @Test("A room this Mac is already in needs no confirmation")
+    func testAlreadyMember() throws {
+        let dir = scratch(); defer { try? FileManager.default.removeItem(at: dir) }
+        let manager = LetheManager(storeDirectory: dir)
+        let (url, roomId) = try makeInvite(name: "Mine")
+        defer { RoomKeyStore.delete(roomId: roomId) }
+        manager.handleIncomingURL(url)
+        _ = try manager.confirmPendingInvite()
+
+        #expect(manager.handleIncomingURL(url) == .alreadyMember(roomId: roomId))
+        #expect(manager.pendingInvite == nil)
+    }
+
+    @Test("A malformed link stages nothing and says so")
+    func testInvalidLink() throws {
+        let dir = scratch(); defer { try? FileManager.default.removeItem(at: dir) }
+        let manager = LetheManager(storeDirectory: dir)
+        let result = manager.handleIncomingURL(try #require(URL(string: "lethe://join#roomId=abc&roomKey=AAAA&name=zzz")))
+        #expect(result == .invalid)
+        #expect(manager.pendingInvite == nil && manager.rooms.isEmpty)
+        #expect(manager.inviteNotice != nil)
+        #expect(isEmptyDir(dir))
+    }
+
+    /// The behaviour above is only useful if the app's URL handler actually goes through
+    /// it. This pins the wiring: `HaloApp` must route `lethe://` to `handleIncomingURL`
+    /// and must not call a joining API itself.
+    @Test("HaloApp's URL handler stages lethe:// links and never joins")
+    func testAppHandlerDoesNotJoin() throws {
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let source = try String(contentsOf: repoRoot.appendingPathComponent("Halo/App/HaloApp.swift"), encoding: .utf8)
+        let code = source.split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }.joined(separator: "\n")
+        #expect(code.contains("LetheManager.shared.handleIncomingURL"))
+        #expect(!code.contains(".join(") && !code.contains("confirmPendingInvite"),
+                "HaloApp must not join or confirm on the user's behalf")
     }
 }
 

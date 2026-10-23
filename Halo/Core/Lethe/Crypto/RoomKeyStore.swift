@@ -83,3 +83,59 @@ enum RoomKeyStore {
         return Set(items.compactMap { $0[kSecAttrAccount as String] as? String })
     }
 }
+
+// MARK: - HistoryKeyStore
+
+/// The key that encrypts the on-disk message history (`rooms.enc`).
+///
+/// One random 256-bit key per install, in the Keychain with the same protection as
+/// the room keys (`WhenUnlockedThisDeviceOnly`, never iCloud-synced). It is stored
+/// under its **own service name**: `RoomKeyStore.allRoomIds()` lists every account
+/// under `com.halo.mac.lethe`, and this item must never show up there as a "room".
+///
+/// What this protects: the history file copied off the Mac, swept into a backup, or
+/// read by a process that has file access but not Keychain access. What it does not:
+/// malware that can already read this app's Keychain items.
+enum HistoryKeyStore {
+
+    private static let service = "com.halo.mac.lethe.history"
+    private static let account = "history-key"
+
+    /// The existing key, or a freshly generated one saved first. `nil` when the
+    /// Keychain refuses — callers must then **not write history at all** rather than
+    /// fall back to plaintext.
+    static func loadOrCreate() -> Data? {
+        if let existing = load() { return existing }
+        let key = LetheCrypto.generateRoomKey()
+        let add: [String: Any] = [
+            kSecClass as String:          kSecClassGenericPassword,
+            kSecAttrService as String:    service,
+            kSecAttrAccount as String:    account,
+            kSecValueData as String:      key,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+        ]
+        switch SecItemAdd(add as CFDictionary, nil) {
+        case errSecSuccess:
+            return key
+        case errSecDuplicateItem:
+            return load()       // lost a race with another launch; use theirs
+        default:
+            return nil
+        }
+    }
+
+    static func load() -> Data? {
+        let query: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String:  true,
+            kSecMatchLimit as String:  kSecMatchLimitOne,
+        ]
+        var out: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &out) == errSecSuccess,
+              let data = out as? Data, data.count == LetheCrypto.keyLength
+        else { return nil }
+        return data
+    }
+}

@@ -24,6 +24,13 @@ final class LetheManager: ObservableObject {
     @Published private(set) var connection: LetheConnectionState = .offline
     @Published private(set) var lastRelayError: String?
     @Published var handle: String = ""
+    /// An invite that arrived from *outside* the app (a `lethe://` link opened in
+    /// the browser, Messages, …). It is only ever **staged** here: nothing is
+    /// written to the Keychain, no room is added and no socket joins until the
+    /// user confirms in `LetheView` (`confirmPendingInvite()`).
+    @Published private(set) var pendingInvite: LetheInvite?
+    /// Shown when an incoming link could not be used, so a bad link is not silent either.
+    @Published var inviteNotice: String?
 
     var totalUnread: Int { rooms.reduce(0) { $0 + $1.unreadCount } }
 
@@ -51,20 +58,26 @@ final class LetheManager: ObservableObject {
     /// Where history is written. `nil` means the real Application Support
     /// folder; tests pass a scratch directory so they never touch a user's rooms.
     private let storeDirectory: URL?
+    /// Key for the history file. Tests inject one so they never touch the real
+    /// Keychain item; the shared instance resolves it lazily (see `historyKey()`).
+    private let injectedHistoryKey: Data?
     /// Off in tests — `connectIfNeeded()` would otherwise open a socket to the
     /// production relay from a unit test.
     private let connectsToRelay: Bool
 
     private init() {
         storeDirectory = nil
+        injectedHistoryKey = nil
         connectsToRelay = true
     }
 
     /// Test seam. The directory argument is required (no default) so a bare
     /// `LetheManager()` still cannot compile and a second live instance cannot
     /// appear by accident — `shared` remains the only one the app uses.
-    init(storeDirectory: URL, connectsToRelay: Bool = false) {
+    init(storeDirectory: URL, connectsToRelay: Bool = false,
+         historyKey: Data = LetheCrypto.generateRoomKey()) {
         self.storeDirectory = storeDirectory
+        self.injectedHistoryKey = historyKey
         self.connectsToRelay = connectsToRelay
     }
 
@@ -206,21 +219,75 @@ final class LetheManager: ObservableObject {
         return room
     }
 
+    /// Joins straight from a link the user typed or pasted into the Join sheet —
+    /// an explicit action, so no further confirmation. Links that arrive from
+    /// outside the app go through `handleIncomingURL` instead.
     @discardableResult
     func join(inviteLink: String) throws -> LetheRoom {
         guard let invite = LetheInviteLink.parse(inviteLink) else {
             throw LetheError.badInviteLink
         }
+        return try join(invite)
+    }
+
+    @discardableResult
+    func join(_ invite: LetheInvite) throws -> LetheRoom {
         if let existing = rooms.first(where: { $0.id == invite.roomId }) {
             return existing   // Already a member; joining twice is a no-op.
         }
-        _ = RoomKeyStore.save(invite.roomKey, roomId: invite.roomId)
+        // A room whose key was not stored could never be decrypted, so do not add it.
+        guard RoomKeyStore.save(invite.roomKey, roomId: invite.roomId) else {
+            throw LetheError.keyStoreFailed
+        }
         let room = LetheRoom(id: invite.roomId, name: invite.roomName)
         rooms.append(room)
         persist()
         connectIfNeeded()
         Task { [client] in await client?.join(roomId: invite.roomId) }
         return room
+    }
+
+    // MARK: - Invites from outside the app
+
+    enum IncomingInvite: Equatable {
+        /// Valid and new: waiting for the user's confirmation.
+        case staged(LetheInvite)
+        /// Valid, but this Mac is already in the room — nothing to confirm.
+        case alreadyMember(roomId: String)
+        case invalid
+    }
+
+    /// Entry point for a `lethe://` URL opened by something other than the user
+    /// typing in this app. **Never joins.** Any web page or app can open such a
+    /// URL, and joining stores a key chosen by whoever made the link and connects
+    /// this Mac to the room, so the user must see what they are joining first.
+    @discardableResult
+    func handleIncomingURL(_ url: URL) -> IncomingInvite {
+        guard let invite = LetheInviteLink.parse(url.absoluteString) else {
+            pendingInvite = nil
+            inviteNotice = "That doesn't look like a Lethe invite link, so nothing was joined."
+            return .invalid
+        }
+        inviteNotice = nil
+        if rooms.contains(where: { $0.id == invite.roomId }) {
+            pendingInvite = nil
+            return .alreadyMember(roomId: invite.roomId)
+        }
+        pendingInvite = invite
+        return .staged(invite)
+    }
+
+    /// The user said yes. Throws if the key could not be stored.
+    @discardableResult
+    func confirmPendingInvite() throws -> LetheRoom? {
+        guard let invite = pendingInvite else { return nil }
+        pendingInvite = nil
+        return try join(invite)
+    }
+
+    /// The user said no (or dismissed the sheet). Leaves no trace.
+    func cancelPendingInvite() {
+        pendingInvite = nil
     }
 
     func inviteLink(for room: LetheRoom) -> String? {
@@ -293,19 +360,26 @@ final class LetheManager: ObservableObject {
 
     // MARK: - Persistence
     //
-    // JSON in Application Support, following MemoryTrendTracker — this codebase
-    // has no SQLite or CoreData dependency and one module is not the place to
-    // introduce one. Keys are NOT here; they are in the Keychain.
+    // Rooms and history live in Application Support, **encrypted** with AES-256-GCM
+    // under a per-install key held in the Keychain (`HistoryKeyStore`). Room keys are
+    // not in this file; they have their own Keychain items. This closes spec OQ-3:
+    // before, the file was plain JSON, readable by anything with file access and
+    // swept into backups.
     //
-    // Known limitation, recorded in the spec as OQ-3: this is weaker at rest
-    // than the mobile client's SQLCipher store.
+    // File: `rooms.enc` = magic "HLT1" ‖ AES-GCM combined box (nonce ‖ ct ‖ tag) of
+    // the JSON `Store`. A pre-encryption `rooms.json` is migrated on first load and
+    // then removed. If no key is available nothing is written (fail closed).
 
     private struct Store: Codable {
         var rooms: [LetheRoom]
         var messages: [String: [LetheMessage]]
     }
 
-    private var storeURL: URL? {
+    static let encryptedFileName = "rooms.enc"
+    static let legacyFileName = "rooms.json"
+    private static let fileMagic = Data("HLT1".utf8)
+
+    private var storeFolder: URL? {
         let folder: URL
         if let storeDirectory {
             folder = storeDirectory
@@ -315,24 +389,85 @@ final class LetheManager: ObservableObject {
             folder = dir.appendingPathComponent("Halo/lethe", isDirectory: true)
         }
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        return folder.appendingPathComponent("rooms.json")
+        return folder
+    }
+
+    private var cachedHistoryKey: Data?
+    /// `nil` when the Keychain is unavailable; history is then neither read nor written.
+    private func historyKey() -> Data? {
+        if let injectedHistoryKey { return injectedHistoryKey }
+        if let cachedHistoryKey { return cachedHistoryKey }
+        cachedHistoryKey = HistoryKeyStore.loadOrCreate()
+        return cachedHistoryKey
     }
 
     private func persist() {
         // Every path that changes rooms or the handle ends here, so this is
         // the one place the telemetry scrubber's snapshot needs refreshing.
         refreshTelemetrySnapshot()
-        guard let url = storeURL else { return }
+        guard let folder = storeFolder, let key = historyKey() else { return }
         let store = Store(rooms: rooms, messages: messagesByRoom)
-        guard let data = try? JSONEncoder().encode(store) else { return }
-        try? data.write(to: url, options: [.atomic])
+        guard let json = try? JSONEncoder().encode(store),
+              let sealed = try? LetheCrypto.seal(json, key: key) else { return }
+        let url = folder.appendingPathComponent(Self.encryptedFileName)
+        guard (try? (Self.fileMagic + sealed).write(to: url, options: [.atomic])) != nil else { return }
+        // The encrypted copy is safely on disk, so a leftover plaintext one must go.
+        removeLegacyFile(in: folder)
     }
 
-    private func loadFromDisk() {
-        guard let url = storeURL,
-              let data = try? Data(contentsOf: url),
-              let store = try? JSONDecoder().decode(Store.self, from: data)
+    /// Best-effort: overwrite then unlink. (An SSD or APFS snapshot may still hold old
+    /// blocks; this narrows the window, it does not guarantee erasure.)
+    private func removeLegacyFile(in folder: URL) {
+        let legacy = folder.appendingPathComponent(Self.legacyFileName)
+        guard let size = (try? FileManager.default.attributesOfItem(atPath: legacy.path)[.size]) as? Int
         else { return }
+        if let handle = try? FileHandle(forWritingTo: legacy) {
+            try? handle.write(contentsOf: Data(count: size))
+            try? handle.synchronize()
+            try? handle.close()
+        }
+        try? FileManager.default.removeItem(at: legacy)
+    }
+
+    /// Unreadable history (wrong/lost key, truncated or tampered file) is moved aside,
+    /// never overwritten and never shown.
+    private func quarantine(_ url: URL) {
+        let aside = url.appendingPathExtension("unreadable")
+        try? FileManager.default.removeItem(at: aside)
+        try? FileManager.default.moveItem(at: url, to: aside)
+    }
+
+    private func readStore() -> (store: Store, wasLegacy: Bool)? {
+        guard let folder = storeFolder else { return nil }
+        let enc = folder.appendingPathComponent(Self.encryptedFileName)
+        let legacy = folder.appendingPathComponent(Self.legacyFileName)
+
+        if let blob = try? Data(contentsOf: enc) {
+            // No key at all (Keychain unavailable this launch) is not evidence the file is
+            // bad: leave it exactly where it is rather than set it aside.
+            guard let key = historyKey() else { return nil }
+            guard blob.starts(with: Self.fileMagic),
+                  let json = try? LetheCrypto.open(Data(blob.dropFirst(Self.fileMagic.count)), key: key),
+                  let store = try? JSONDecoder().decode(Store.self, from: json)
+            else { quarantine(enc); return nil }
+            return (store, false)
+        }
+        // Pre-encryption file: read once; the caller re-saves it encrypted, which also
+        // removes the plaintext copy.
+        if let data = try? Data(contentsOf: legacy) {
+            guard let store = try? JSONDecoder().decode(Store.self, from: data) else {
+                quarantine(legacy); return nil
+            }
+            return (store, true)
+        }
+        return nil
+    }
+
+    /// Internal (not private) so tests can reload a scratch store without `start()`,
+    /// which touches the user's real UserDefaults and relay.
+    func loadFromDisk() {
+        guard let loaded = readStore() else { return }
+        let store = loaded.store
 
         // Reconcile against the Keychain. A room whose key is gone cannot be
         // entered or decrypted, so listing it would be a lie.
@@ -342,5 +477,6 @@ final class LetheManager: ObservableObject {
         messagesByRoom = store.messages.filter { liveIds.contains($0.key) }
         seenMessageIds = Set(messagesByRoom.values.flatMap { $0 }.map(\.id))
         refreshTelemetrySnapshot()
+        if loaded.wasLegacy { persist() }   // encrypt now; don't leave plaintext until the next message
     }
 }

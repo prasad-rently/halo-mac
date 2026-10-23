@@ -155,6 +155,7 @@ enum LetheError: LocalizedError, Equatable {
     case payloadTooLarge(bytes: Int)
     case messageTooLong(count: Int)
     case notConnected
+    case keyStoreFailed
 
     var errorDescription: String? {
         switch self {
@@ -168,6 +169,8 @@ enum LetheError: LocalizedError, Equatable {
             return "Messages are limited to \(LetheLimits.maxMessageCharacters) characters (\(count) typed)."
         case .notConnected:
             return "Not connected to the relay."
+        case .keyStoreFailed:
+            return "The room key could not be saved to the Keychain, so the room was not joined."
         }
     }
 }
