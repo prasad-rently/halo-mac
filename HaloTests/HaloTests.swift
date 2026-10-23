@@ -4254,6 +4254,23 @@ struct BuildLabelTests {
     }
 }
 
+
+// MARK: - Listener readiness
+
+/// `LocalShareServer.start()` returns as soon as `NWListener.start` is *called*, not when it is
+/// ready, so a test that sleeps a fixed 300 ms and then connects fails with "connection refused"
+/// whenever the machine is busy — and passes on a quiet one. Poll the real port instead.
+func waitUntilListening(port: UInt16, timeout: TimeInterval = 10) async throws {
+    let deadline = Date().addingTimeInterval(timeout)
+    var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/api/localsend/v2/info")!)
+    request.timeoutInterval = 1
+    while Date() < deadline {
+        if let (_, response) = try? await URLSession.shared.data(for: request), response is HTTPURLResponse { return }
+        try await Task.sleep(nanoseconds: 100_000_000)
+    }
+    throw NSError(domain: "HaloTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "nothing listened on \(port) within \(timeout) s"])
+}
+
 // MARK: - HaloShare desktop server: binary-safe uploads
 
 /// F-050 requires desktop↔mobile transfers and official-LocalSend interop. A phone sends
@@ -4347,7 +4364,7 @@ struct HaloShareServerBinaryTests {
         #expect(String(data: payload, encoding: .utf8) == nil, "fixture must not be valid UTF-8")
         let server = try await makeServer(port: 53913, dest: dest, fileSize: Int64(payload.count))
         defer { Task { await server.stop() } }
-        try await Task.sleep(nanoseconds: 300_000_000)
+        try await waitUntilListening(port: 53913)
 
         let result = try rawPost(port: 53913,
                                  path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
@@ -4363,7 +4380,7 @@ struct HaloShareServerBinaryTests {
         let payload = Data((0..<4096).map { UInt8(truncatingIfNeeded: $0 &* 31 &+ 7) })   // includes 0x80+ bytes
         let server = try await makeServer(port: 53911, dest: dest, fileSize: Int64(payload.count))
         defer { Task { await server.stop() } }
-        try await Task.sleep(nanoseconds: 300_000_000)
+        try await waitUntilListening(port: 53911)
 
         let status = try await upload(payload, port: 53911)
         #expect(status == 200, "server answered \(status)")
@@ -4378,7 +4395,7 @@ struct HaloShareServerBinaryTests {
         payload.withUnsafeMutableBytes { _ = SecRandomCopyBytes(kSecRandomDefault, $0.count, $0.baseAddress!) }
         let server = try await makeServer(port: 53912, dest: dest, fileSize: Int64(payload.count))
         defer { Task { await server.stop() } }
-        try await Task.sleep(nanoseconds: 300_000_000)
+        try await waitUntilListening(port: 53912)
 
         let status = try await upload(payload, port: 53912)
         #expect(status == 200, "server answered \(status)")
@@ -4393,7 +4410,7 @@ struct HaloShareServerBinaryTests {
         let payload = Data((0..<3000).map { UInt8(truncatingIfNeeded: $0 &* 13 &+ 200) })
         let server = try await makeServer(port: 53914, dest: dest, fileSize: Int64(payload.count))
         defer { Task { await server.stop() } }
-        try await Task.sleep(nanoseconds: 300_000_000)
+        try await waitUntilListening(port: 53914)
 
         let result = try rawPost(port: 53914, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
                                  body: payload, splitAfterHead: true)
@@ -4407,7 +4424,7 @@ struct HaloShareServerBinaryTests {
         let full = Data(repeating: 0xAB, count: 5000)
         let server = try await makeServer(port: 53915, dest: dest, fileSize: Int64(full.count))
         defer { Task { await server.stop() } }
-        try await Task.sleep(nanoseconds: 300_000_000)
+        try await waitUntilListening(port: 53915)
 
         // Declares 5000 bytes, delivers 1200, then the peer goes away.
         let result = try rawPost(port: 53915, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
@@ -4433,7 +4450,7 @@ struct HaloShareServerBinaryTests {
         defer { Task { await server.stop() } }
         let evil = ShareFile(id: "f1", fileName: "../victim.txt", size: 5, fileType: "text/plain")
         await server.registerSession(id: "s1", tokens: ["f1": "tok"], files: ["f1": evil], destDirectory: dest)
-        try await Task.sleep(nanoseconds: 300_000_000)
+        try await waitUntilListening(port: 53918)
 
         let result = try rawPost(port: 53918, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
                                  body: Data("PWNED".utf8))
@@ -4447,7 +4464,7 @@ struct HaloShareServerBinaryTests {
         let dest = try tempDir()
         let server = try await makeServer(port: 53916, dest: dest, fileSize: 10)
         defer { Task { await server.stop() } }
-        try await Task.sleep(nanoseconds: 300_000_000)
+        try await waitUntilListening(port: 53916)
 
         let result = try rawPost(port: 53916, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=WRONG",
                                  body: Data(repeating: 1, count: 10))
@@ -4460,7 +4477,7 @@ struct HaloShareServerBinaryTests {
         let dest = try tempDir()
         let server = try await makeServer(port: 53917, dest: dest, fileSize: 1)
         defer { Task { await server.stop() } }
-        try await Task.sleep(nanoseconds: 300_000_000)
+        try await waitUntilListening(port: 53917)
 
         // The server's onPrepareUpload returns nil here, i.e. "declined" → 403. Reaching
         // *that* answer (rather than 400 "Invalid body") proves the JSON was framed and
@@ -4696,7 +4713,7 @@ struct HaloShareInteropTests {
         let dest = try tempDir(), src = try tempDir()
         let server = try await desktopServer(port: 53931, into: dest)
         defer { Task { await server.stop() } }
-        try await Task.sleep(nanoseconds: 400_000_000)
+        try await waitUntilListening(port: 53931)
 
         let text = src.appendingPathComponent("note.txt"); try Data("from the kit".utf8).write(to: text)
         let bin = try randomFile("photo.bin", bytes: 300_000, in: src)
@@ -4714,7 +4731,7 @@ struct HaloShareInteropTests {
         let dest = try tempDir()
         let server = try await desktopServer(port: 53932, into: dest)
         defer { Task { await server.stop() } }
-        try await Task.sleep(nanoseconds: 400_000_000)
+        try await waitUntilListening(port: 53932)
         let r = try runCLI(["info", "127.0.0.1:53932"])
         #expect(r.status == 0, "\(r.out)")
         #expect(r.out.contains("desktop"), "\(r.out)")
