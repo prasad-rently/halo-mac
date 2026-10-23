@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import CryptoKit
 
 actor LocalShareServer {
     private var listener: NWListener?
@@ -278,13 +279,28 @@ actor LocalShareServer {
 
         // Trust `Content-Length`; fall back to the size announced in prepare-upload.
         let expected = head.contentLength > 0 ? head.contentLength : Int(fileInfo.size)
-        guard await receiveFileStream(connection: connection, prefix: bodyPrefix, destURL: destURL,
-                                      expectedSize: expected, sessionId: sessionId, fileId: fileId) else {
+        let wantedDigest = fileInfo.sha256?.lowercased().trimmingCharacters(in: .whitespaces)
+        let outcome = await receiveFileStream(connection: connection, prefix: bodyPrefix, destURL: destURL,
+                                              expectedSize: expected, sessionId: sessionId, fileId: fileId,
+                                              computeDigest: wantedDigest?.isEmpty == false)
+        switch outcome {
+        case .failed:
             // A short or failed transfer must not leave a truncated file that looks like
             // the real one (FR-6).
             try? FileManager.default.removeItem(at: destURL)
             sendResponse(connection: connection, status: 400, body: "{\"error\":\"Incomplete upload\"}")
             return
+
+        case .complete(let digest):
+            // The sender told us what the file should hash to; take it at its word. A file
+            // that arrived whole but damaged (flaky Wi-Fi, a buggy sender) is worse than one
+            // that failed loudly, because nothing about it looks wrong. `422` is the
+            // protocol's answer (docs/HALOSHARE_PROTOCOL.md §3), and the file is not kept.
+            if let wantedDigest, !wantedDigest.isEmpty, let digest, digest != wantedDigest {
+                try? FileManager.default.removeItem(at: destURL)
+                sendResponse(connection: connection, status: 422, body: "{\"error\":\"Checksum mismatch\"}")
+                return
+            }
         }
 
         session.completed.insert(fileId)
@@ -302,37 +318,48 @@ actor LocalShareServer {
 
     // MARK: - File Streaming
 
+    private enum StreamOutcome {
+        case complete(sha256: String?)
+        case failed
+    }
+
     /// Writes `prefix` (body bytes that arrived with the head) and then reads the rest from
-    /// the connection until `expectedSize` bytes are on disk. Returns false if the peer
-    /// closes early or the file can't be written.
+    /// the connection until `expectedSize` bytes are on disk, hashing as it goes when asked
+    /// (one pass, no re-read of a file that may be gigabytes). `.failed` if the peer closes
+    /// early or the file can't be written.
     private func receiveFileStream(connection: NWConnection, prefix: Data, destURL: URL,
-                                   expectedSize: Int, sessionId: String, fileId: String) async -> Bool {
+                                   expectedSize: Int, sessionId: String, fileId: String,
+                                   computeDigest: Bool) async -> StreamOutcome {
         FileManager.default.createFile(atPath: destURL.path, contents: nil)
-        guard let handle = try? FileHandle(forWritingTo: destURL) else { return false }
+        guard let handle = try? FileHandle(forWritingTo: destURL) else { return .failed }
         defer { try? handle.close() }
 
+        var hasher = SHA256()
         var received = 0
-        let first = prefix.prefix(expectedSize)
-        if !first.isEmpty {
-            handle.write(Data(first))
-            received += first.count
+        func write(_ data: Data) {
+            handle.write(data)
+            if computeDigest { hasher.update(data: data) }
+            received += data.count
         }
+
+        let first = prefix.prefix(expectedSize)
+        if !first.isEmpty { write(Data(first)) }
 
         let chunkSize = 256 * 1024
         var lastReported = 0
         while received < expectedSize {
             guard let chunk = await receive(on: connection, maximum: min(chunkSize, expectedSize - received)) else {
-                return false
+                return .failed
             }
-            handle.write(chunk)
-            received += chunk.count
+            write(chunk)
             if received - lastReported >= 1024 * 1024 {
                 lastReported = received
                 onProgress?(sessionId, fileId, Int64(received))
             }
         }
         onProgress?(sessionId, fileId, Int64(received))
-        return true
+        let digest = computeDigest ? hasher.finalize().map { String(format: "%02x", $0) }.joined() : nil
+        return .complete(sha256: digest)
     }
 
     // MARK: - Helpers
