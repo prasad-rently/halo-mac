@@ -116,7 +116,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | **Report export (PDF)** | ✅ | ✅ | PDFKit / PdfDocument | P2 | Assessed |
 | **Scheduled Reports / Weekly Digest (F-029)** | ✅ | ✅ | Local notifications + BGTaskScheduler/WorkManager + share sheet, all direct equivalents of already-assessed rows above | P2 | Assessed ✓ (§9) |
 | **Siri Shortcuts / App Intents** | ✅ | 🟡 | iOS App Intents (rich); Android App Actions (lighter) | P2 | Assessed |
-| **HaloShare (P2P)** | ✅ | ✅ | LocalSend v2.1 native peer | P0 | Planned (F-050) |
+| **HaloShare (P2P)** | ✅ | ✅ | LocalSend v2 native peer — **built** on both (`ios/HaloShareKit`, `android/haloshare`); iOS discovery is HTTP-scan + manual (no multicast without Apple's restricted entitlement) | P0 | **In progress (F-050)** — simulator/emulator-verified |
 | **Code Beautifier** | ✅ | ✅ | Pure text/render + PNG export; fully portable | P1 | Assessed ✓ (§9) |
 | System controls (mic/cam/DDC) | ❌ | ❌ | No mic-mute/DDC; own-screen brightness only | — | Won't do |
 | Launch at login | ❌ | 🟡 | Android BOOT_COMPLETED partial; iOS none | P3 | Assessed |
@@ -240,6 +240,7 @@ Copy this block into a study when assessing a feature for mobile.
 | 2026-08 | Desktop F-022 (Time Machine Backup Health Monitor) shipped. Feasibility study added (§9): Won't do / Reimagine → Time Machine has no mobile equivalent; the mobile-exclusive "iCloud Backup Health" idea (§5) is a distinct, much coarser reimagining, not a port. |
 | 2026-08 | F-020 (S.M.A.R.T. Disk Health Monitor) shipped on desktop. Feasibility study added (§9): both iOS and Android verdict ❌ Blocked — neither OS exposes SMART/drive-health data to third-party apps. Row added to §3; status `Won't do`. |
 | 2026-07 | Formal feasibility studies added (§9): Code Beautifier, Snippets, Speed Test, cloud AI. |
+| 2026-10 | F-050 (HaloShare) **built on iOS and Android** and verified on the iOS Simulator and Android Emulator against a separate implementation. Two feasibility facts learned by building: (1) iOS cannot do multicast discovery without a restricted entitlement, so an iPhone is found only by others' HTTP scans; (2) shipped desktop could not receive a file from a phone at all until its HTTP framing was fixed. F-049's cloud features (SMS/clipboard/pairing) remain blocked on F-044. See `specs/F-049-F-050-mobile-requirements.md`. |
 | 2026-07 | Document created. Assessed all shipped desktop capabilities (F-001–F-043) + planned cloud features (F-044–F-048) for iOS/Android. Established governance rules. First wave specced: F-044/F-045/F-048/F-049/F-050. |
 
 ---

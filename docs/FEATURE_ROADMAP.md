@@ -76,8 +76,8 @@
 | [F-046](#f-046--ai-querying--cloud-providers-nfeat-124) | AI Querying — Cloud Providers (NFeat-124) | ✅ Done | Desktop | none |
 | [F-047](#f-047--on-device-ai--custom-rag-nfeat-125) | On-Device AI & Custom RAG (NFeat-125) | 🗓 Planned | TBD | none |
 | [F-048](#f-048--personal-expenditure-tracker-nfeat-126) | Personal Expenditure Tracker (NFeat-126) | 🗓 Planned | TBD | F-044 |
-| [F-049](#f-049--halo-mobile-app-product-line) | Halo Mobile App (product line) | 🗓 Planned | TBD | F-044, F-045, F-050 |
-| [F-050](#f-050--haloshare-mobile--desktop-nfeat-127) | HaloShare Mobile ↔ Desktop (NFeat-127) | 🗓 Planned | TBD | HaloShare (LocalSend) |
+| [F-049](#f-049--halo-mobile-app-product-line) | Halo Mobile App (product line) | 🔧 App shell built (iOS + Android); cloud features blocked on F-044 | TBD | F-044, F-045, F-050 |
+| [F-050](#f-050--haloshare-mobile--desktop-nfeat-127) | HaloShare Mobile ↔ Desktop (NFeat-127) | 🔧 Built on iOS + Android (simulator/emulator-verified); not yet on a device or vs official LocalSend | ~6 d so far | HaloShare (LocalSend) |
 | [F-051](#f-051--lucky-draw-spinner-wheel-nfeat-128) | Lucky Draw Spinner Wheel (NFeat-128) | ✅ Done | ~6 d | CelebrationOverlay (F-037) |
 
 > **Status legend:** ✅ Done · 📋 Queued (next up) · 🗓 Planned (user-requested, spec pending discussion) · 💡 Future Idea (unsolicited) · ⏭ Skipped
@@ -3369,7 +3369,9 @@ produce a spending overview. Take inspiration from the *Hamza* project.
 
 ## F-049 — Halo Mobile App (product line)
 
-**Status:** 🗓 Planned · **Effort:** TBD · **Depends on:** F-044, F-045, F-050
+**Status:** 🔧 App shell built on iOS + Android; the cloud-backed features are **not started** (blocked) · **Effort:** TBD · **Depends on:** F-044, F-045, F-050
+
+> **Where this stands (2026-10-23).** What is real: the `ios/HaloMobile` and `android/app` shells (Share / Inbox / Settings) and, through F-050, working file transfer. What is *not*: QR pairing, SMS sync and clipboard sync — all need the F-044 `Halo/Core/Cloud` foundation, which is not on the integration line (PR #7), plus spikes S1/S2. The apps say so ("Not yet" rows) instead of shipping dead buttons. Numbered requirements, decisions and verification records: [`specs/F-049-F-050-mobile-requirements.md`](specs/F-049-F-050-mobile-requirements.md).
 
 ### Intent
 A **mobile app that extends the Halo desktop app**. It is the device-side half of
@@ -3390,7 +3392,15 @@ several cross-platform features and a new HaloShare peer.
 
 ## F-050 — HaloShare Mobile ↔ Desktop (NFeat-127)
 
-**Status:** 🗓 Planned · **Effort:** TBD · **Depends on:** HaloShare (LocalSend Protocol v2.1)
+**Status:** 🔧 Built on iOS + Android; verified on the iOS Simulator and Android Emulator against a separate implementation (not yet on physical devices or the official LocalSend app) · **Effort:** ~6 d so far · **Depends on:** HaloShare (LocalSend Protocol v2.1)
+
+> **As actually built (2026-10-23).** Contract: [`HALOSHARE_PROTOCOL.md`](HALOSHARE_PROTOCOL.md). `ios/HaloShareKit` (Swift, 56 tests + CLI) and `android/haloshare` (Kotlin, 58 tests) implement the same peer; each was tested against `curl`, raw sockets and the *other* implementation; the apps were driven end to end (Mac→phone with consent, decline, phone→Mac).
+>
+> **Reading the code first changed the plan, and fixed real desktop bugs** (branch `fix/haloshare-binary-upload`): the desktop server returned `400` to any upload not sent URLSession-style (so a phone could not send to a Mac); it let a sender write outside the approved folder and overwrite files; it left truncated files after a dropped upload; it couldn't decode official peers' `/info`; and its first fix for the traversal saved every file as "file" under a `/private` path. Each has a regression test; the traversal one was mutation-checked.
+>
+> **Deviations from the spec, for the owner:** v1 is plain HTTP, matching what desktop actually serves (the spec's TLS description is not what exists) — a security trade-off flagged as MD1; iOS discovery is an HTTP /24 scan + manual address because multicast needs a restricted Apple entitlement.
+>
+> **Not built:** Share Extension / Sharesheet, background receive (Android foreground service — MR-OS-2 unmet), multicast on Android, desktop adoption of the shared Kit, and a *sender* that computes `sha256` (every receiver now verifies one when present — desktop via PR #40).
 
 ### Intent
 Extend **HaloShare** — currently desktop↔desktop over the LocalSend-compatible

@@ -5,6 +5,7 @@ import ImageIO
 import UniformTypeIdentifiers
 import SwiftUI
 import AppKit
+import CryptoKit
 @testable import Halo
 
 // MARK: - FileSystemScanner Tests
@@ -4251,5 +4252,581 @@ struct BuildLabelTests {
     func testMissingBuildNumber() {
         #expect(Build.fullLabel(bundleID: "com.halo.mac", version: "2.3", buildNumber: "")
                 .hasPrefix("v2.3 ·"))
+    }
+}
+
+
+// MARK: - Listener readiness
+
+/// `LocalShareServer.start()` returns as soon as `NWListener.start` is *called*, not when it is
+/// ready, so a test that sleeps a fixed 300 ms and then connects fails with "connection refused"
+/// whenever the machine is busy — and passes on a quiet one. Poll the real port instead.
+func waitUntilListening(port: UInt16, timeout: TimeInterval = 10) async throws {
+    let deadline = Date().addingTimeInterval(timeout)
+    var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/api/localsend/v2/info")!)
+    request.timeoutInterval = 1
+    while Date() < deadline {
+        if let (_, response) = try? await URLSession.shared.data(for: request), response is HTTPURLResponse { return }
+        try await Task.sleep(nanoseconds: 100_000_000)
+    }
+    throw NSError(domain: "HaloTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "nothing listened on \(port) within \(timeout) s"])
+}
+
+// MARK: - HaloShare desktop server: binary-safe uploads
+
+/// F-050 requires desktop↔mobile transfers and official-LocalSend interop. A phone sends
+/// an upload as `POST …/upload` with a *binary* body. These tests drive the real desktop
+/// `LocalShareServer` over a real TCP socket with real binary bytes, which is the only
+/// way to find out whether it can receive what a phone will send.
+@Suite("HaloShare desktop server — binary uploads", .serialized)
+struct HaloShareServerBinaryTests {
+
+    private func makeServer(port: UInt16, dest: URL, fileSize: Int64, sha256: String? = nil) async throws -> LocalShareServer {
+        let server = LocalShareServer()
+        try await server.start(port: port,
+                               parameters: .tcp,
+                               onPrepareUpload: { _, _ in nil },
+                               onFileReceived: { _, _, _ in },
+                               onCancel: { _ in },
+                               onProgress: { _, _, _ in })
+        let file = ShareFile(id: "f1", fileName: "blob.bin", size: fileSize, fileType: "application/octet-stream", sha256: sha256)
+        await server.registerSession(id: "s1", tokens: ["f1": "tok"], files: ["f1": file], destDirectory: dest)
+        return server
+    }
+
+    private func upload(_ data: Data, port: UInt16) async throws -> Int {
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok")!)
+        request.httpMethod = "POST"
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 20
+        let (_, response) = try await URLSession.shared.upload(for: request, from: data)
+        return (response as? HTTPURLResponse)?.statusCode ?? -1
+    }
+
+    private func tempDir() throws -> URL {
+        let d = FileManager.default.temporaryDirectory.appendingPathComponent("halo-share-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    /// One `send()` carrying the request line, headers *and* body, which is what curl, OkHttp
+    /// and Dart's HTTP client do for a small body. URLSession happens to write the headers
+    /// and the body separately, so a server that only works for URLSession passes the other
+    /// tests here while still failing every other client.
+    private func rawPost(port: UInt16, path: String, body: Data,
+                         declaredLength: Int? = nil, splitAfterHead: Bool = false,
+                         contentType: String = "application/octet-stream") throws -> (status: Int, response: String) {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { throw POSIXError(.EBADF) }
+        defer { close(fd) }
+        var tv = timeval(tv_sec: 10, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = port.bigEndian
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let rc = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+        }
+        guard rc == 0 else { throw POSIXError(.ECONNREFUSED) }
+
+        let head = Data("POST \(path) HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: \(contentType)\r\nContent-Length: \(declaredLength ?? body.count)\r\nConnection: close\r\n\r\n".utf8)
+        if splitAfterHead {
+            // The two-write shape URLSession uses — kept so both shapes stay covered.
+            _ = head.withUnsafeBytes { send(fd, $0.baseAddress, $0.count, 0) }
+            usleep(150_000)
+            _ = body.withUnsafeBytes { send(fd, $0.baseAddress, $0.count, 0) }
+        } else {
+            var message = head
+            message.append(body)
+            _ = message.withUnsafeBytes { send(fd, $0.baseAddress, $0.count, 0) }
+        }
+        if declaredLength != nil && declaredLength! > body.count {
+            // A peer that dies mid-upload: close the write side so the server sees EOF.
+            shutdown(fd, SHUT_WR)
+        }
+
+        var reply = Data()
+        var buf = [UInt8](repeating: 0, count: 4096)
+        while true {
+            let n = recv(fd, &buf, buf.count, 0)
+            if n <= 0 { break }
+            reply.append(buf, count: n)
+        }
+        let text = String(decoding: reply, as: UTF8.self)
+        let status = text.split(separator: " ").dropFirst().first.flatMap { Int($0) } ?? -1
+        return (status, text)
+    }
+
+    @Test("A binary body sent in the SAME write as the headers arrives intact")
+    func headersAndBodyInOneWrite() async throws {
+        let dest = try tempDir()
+        let payload = Data((0..<2048).map { UInt8(truncatingIfNeeded: $0 &* 37 &+ 129) })   // high bytes, not valid UTF-8
+        #expect(String(data: payload, encoding: .utf8) == nil, "fixture must not be valid UTF-8")
+        let server = try await makeServer(port: 53913, dest: dest, fileSize: Int64(payload.count))
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53913)
+
+        let result = try rawPost(port: 53913,
+                                 path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
+                                 body: payload)
+        #expect(result.status == 200, "server answered \(result.status): \(result.response.prefix(120))")
+        let received = try? Data(contentsOf: dest.appendingPathComponent("blob.bin"))
+        #expect(received == payload, "received \(received?.count ?? -1) bytes, sent \(payload.count)")
+    }
+
+    @Test("A small binary file arrives byte-for-byte")
+    func smallBinary() async throws {
+        let dest = try tempDir()
+        let payload = Data((0..<4096).map { UInt8(truncatingIfNeeded: $0 &* 31 &+ 7) })   // includes 0x80+ bytes
+        let server = try await makeServer(port: 53911, dest: dest, fileSize: Int64(payload.count))
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53911)
+
+        let status = try await upload(payload, port: 53911)
+        #expect(status == 200, "server answered \(status)")
+        let received = try? Data(contentsOf: dest.appendingPathComponent("blob.bin"))
+        #expect(received == payload, "received \(received?.count ?? -1) bytes, sent \(payload.count)")
+    }
+
+    @Test("A file larger than one socket read arrives complete")
+    func largeBinary() async throws {
+        let dest = try tempDir()
+        var payload = Data(count: 512 * 1024)
+        payload.withUnsafeMutableBytes { _ = SecRandomCopyBytes(kSecRandomDefault, $0.count, $0.baseAddress!) }
+        let server = try await makeServer(port: 53912, dest: dest, fileSize: Int64(payload.count))
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53912)
+
+        let status = try await upload(payload, port: 53912)
+        #expect(status == 200, "server answered \(status)")
+        let received = try? Data(contentsOf: dest.appendingPathComponent("blob.bin"))
+        #expect(received?.count == payload.count, "received \(received?.count ?? -1) of \(payload.count) bytes")
+        #expect(received == payload, "content differs")
+    }
+
+    @Test("Headers and body in separate writes still work (what URLSession does)")
+    func headersThenBody() async throws {
+        let dest = try tempDir()
+        let payload = Data((0..<3000).map { UInt8(truncatingIfNeeded: $0 &* 13 &+ 200) })
+        let server = try await makeServer(port: 53914, dest: dest, fileSize: Int64(payload.count))
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53914)
+
+        let result = try rawPost(port: 53914, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
+                                 body: payload, splitAfterHead: true)
+        #expect(result.status == 200, "server answered \(result.status)")
+        #expect((try? Data(contentsOf: dest.appendingPathComponent("blob.bin"))) == payload)
+    }
+
+    @Test("A truncated upload is rejected and leaves no partial file behind")
+    func truncatedUploadLeavesNothing() async throws {
+        let dest = try tempDir()
+        let full = Data(repeating: 0xAB, count: 5000)
+        let server = try await makeServer(port: 53915, dest: dest, fileSize: Int64(full.count))
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53915)
+
+        // Declares 5000 bytes, delivers 1200, then the peer goes away.
+        let result = try rawPost(port: 53915, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
+                                 body: Data(full.prefix(1200)), declaredLength: 5000)
+        #expect(result.status != 200, "a short upload must not be acknowledged as OK")
+        #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob.bin").path),
+                "a truncated file was left on disk looking like the real one")
+    }
+
+    @Test("A hostile file name cannot write outside the destination, and nothing is overwritten")
+    func hostileNameAndCollision() async throws {
+        let parent = try tempDir()
+        let dest = parent.appendingPathComponent("inbox")
+        try FileManager.default.createDirectory(at: dest, withIntermediateDirectories: true)
+        // A file that already exists where the hostile name would land if "../" were honoured.
+        let victim = parent.appendingPathComponent("victim.txt")
+        try Data("do not touch".utf8).write(to: victim)
+
+        let server = LocalShareServer()
+        try await server.start(port: 53918, parameters: .tcp,
+                               onPrepareUpload: { _, _ in nil }, onFileReceived: { _, _, _ in },
+                               onCancel: { _ in }, onProgress: { _, _, _ in })
+        defer { Task { await server.stop() } }
+        let evil = ShareFile(id: "f1", fileName: "../victim.txt", size: 5, fileType: "text/plain")
+        await server.registerSession(id: "s1", tokens: ["f1": "tok"], files: ["f1": evil], destDirectory: dest)
+        try await waitUntilListening(port: 53918)
+
+        let result = try rawPost(port: 53918, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
+                                 body: Data("PWNED".utf8))
+        #expect(result.status == 200)
+        #expect((try? String(contentsOf: victim, encoding: .utf8)) == "do not touch", "the sender wrote outside the folder")
+        #expect((try? String(contentsOf: dest.appendingPathComponent("victim.txt"), encoding: .utf8)) == "PWNED")
+    }
+
+    // MARK: sha256 (protocol doc §7.5)
+
+    private func hex(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+
+    @Test("A matching sha256 is accepted — in either case of hex")
+    func sha256Matches() async throws {
+        let payload = Data((0..<4096).map { UInt8(truncatingIfNeeded: $0 &* 29 &+ 131) })
+        for (port, digest) in [(UInt16(53921), hex(payload)), (UInt16(53922), hex(payload).uppercased())] {
+            let dest = try tempDir()
+            let server = try await makeServer(port: port, dest: dest, fileSize: Int64(payload.count), sha256: digest)
+            defer { Task { await server.stop() } }
+            try await waitUntilListening(port: port)
+
+            let result = try rawPost(port: port, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: payload)
+            #expect(result.status == 200, "digest \(digest.prefix(8))…: server answered \(result.status)")
+            #expect((try? Data(contentsOf: dest.appendingPathComponent("blob.bin"))) == payload)
+        }
+    }
+
+    @Test("A sha256 mismatch is 422 and the corrupt file is NOT kept")
+    func sha256Mismatch() async throws {
+        let dest = try tempDir()
+        let payload = Data((0..<4096).map { UInt8(truncatingIfNeeded: $0 &* 29 &+ 131) })
+        let server = try await makeServer(port: 53923, dest: dest, fileSize: Int64(payload.count),
+                                          sha256: String(repeating: "0", count: 64))
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53923)
+
+        let result = try rawPost(port: 53923, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: payload)
+        #expect(result.status == 422, "server answered \(result.status)")
+        #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob.bin").path),
+                "a file that failed its checksum was left on disk")
+    }
+
+    @Test("A mismatch is caught on a multi-read body too (3 MB), not only the part that arrived with the head")
+    func sha256MismatchOnLargeBody() async throws {
+        let dest = try tempDir()
+        var payload = Data(count: 3 << 20)
+        payload.withUnsafeMutableBytes { _ = SecRandomCopyBytes(kSecRandomDefault, $0.count, $0.baseAddress!) }
+        var tampered = payload; tampered[tampered.count - 1] ^= 0xFF          // last byte differs
+        let server = try await makeServer(port: 53924, dest: dest, fileSize: Int64(payload.count), sha256: hex(payload))
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53924)
+
+        let result = try rawPost(port: 53924, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: tampered)
+        #expect(result.status == 422, "a one-byte corruption at the very end went undetected (\(result.status))")
+        #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob.bin").path))
+    }
+
+    @Test("A mismatch must not clobber an existing file of the same name")
+    func sha256MismatchLeavesExistingFileAlone() async throws {
+        let dest = try tempDir()
+        try Data("precious".utf8).write(to: dest.appendingPathComponent("blob.bin"))
+        let payload = Data(repeating: 0x42, count: 2048)
+        let server = try await makeServer(port: 53925, dest: dest, fileSize: Int64(payload.count), sha256: String(repeating: "f", count: 64))
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53925)
+
+        let result = try rawPost(port: 53925, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: payload)
+        #expect(result.status == 422)
+        #expect((try? String(contentsOf: dest.appendingPathComponent("blob.bin"), encoding: .utf8)) == "precious")
+        #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob (1).bin").path),
+                "the rejected file's renamed copy was kept")
+    }
+
+    @Test("A wrong token is refused and writes nothing")
+    func wrongToken() async throws {
+        let dest = try tempDir()
+        let server = try await makeServer(port: 53916, dest: dest, fileSize: 10)
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53916)
+
+        let result = try rawPost(port: 53916, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=WRONG",
+                                 body: Data(repeating: 1, count: 10))
+        #expect(result.status == 403)
+        #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob.bin").path))
+    }
+
+    @Test("A JSON endpoint reads its body even when it shares a write with the headers")
+    func prepareUploadBodyInSameWrite() async throws {
+        let dest = try tempDir()
+        let server = try await makeServer(port: 53917, dest: dest, fileSize: 1)
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53917)
+
+        // The server's onPrepareUpload returns nil here, i.e. "declined" → 403. Reaching
+        // *that* answer (rather than 400 "Invalid body") proves the JSON was framed and
+        // decoded correctly.
+        let json = Data(#"{"info":{"alias":"Pixel","version":"2.1","deviceModel":"Pixel 9","deviceType":"mobile","fingerprint":"abc","port":53317,"protocol":"https","download":false},"files":{"f1":{"id":"f1","fileName":"a.txt","fileType":"text/plain","size":3}}}"#.utf8)
+        let result = try rawPost(port: 53917, path: "/api/localsend/v2/prepare-upload",
+                                 body: json, contentType: "application/json")
+        #expect(result.status == 403, "expected the consent callback's answer, got \(result.status)")
+    }
+}
+
+// MARK: - HTTPRequestHead
+
+@Suite("HTTPRequestHead")
+struct HTTPRequestHeadTests {
+
+    private func parse(_ s: String) -> HTTPRequestHead? { HTTPRequestHead.parse(Data(s.utf8)) }
+
+    @Test("Method, path, query and headers are parsed; header names are case-insensitive")
+    func basics() throws {
+        let h = try #require(parse("POST /api/localsend/v2/upload?sessionId=s%201&fileId=f&token=t HTTP/1.1\r\nHost: x\r\nCONTENT-LENGTH: 42\r\nContent-Type: application/octet-stream"))
+        #expect(h.method == "POST")
+        #expect(h.path == "/api/localsend/v2/upload")
+        #expect(h.queryParams == ["sessionId": "s 1", "fileId": "f", "token": "t"])
+        #expect(h.contentLength == 42)
+        #expect(h.headers["content-type"] == "application/octet-stream")
+    }
+
+    @Test("A missing or garbage Content-Length is 0, not a crash")
+    func contentLengthEdgeCases() throws {
+        #expect(try #require(parse("GET /a HTTP/1.1\r\nHost: x")).contentLength == 0)
+        #expect(try #require(parse("POST /a HTTP/1.1\r\nContent-Length: banana")).contentLength == 0)
+    }
+
+    @Test("Chunked and Expect: 100-continue are recognised")
+    func flags() throws {
+        #expect(try #require(parse("POST /a HTTP/1.1\r\nTransfer-Encoding: chunked")).isChunked)
+        #expect(try #require(parse("POST /a HTTP/1.1\r\nExpect: 100-continue")).expectsContinue)
+        #expect(!(try #require(parse("POST /a HTTP/1.1\r\nHost: x")).isChunked))
+    }
+
+    @Test("A malformed request line is rejected")
+    func malformed() {
+        #expect(parse("") == nil)
+        #expect(parse("GET") == nil)
+        #expect(parse("GET nopath HTTP/1.1") == nil)
+    }
+
+    @Test("A stray high byte in a header does not invalidate the request")
+    func lossyHeaders() {
+        var data = Data("GET /api/localsend/v2/info HTTP/1.1\r\nX-Weird: ".utf8)
+        data.append(0xFF)
+        #expect(HTTPRequestHead.parse(data)?.path == "/api/localsend/v2/info")
+    }
+}
+
+// MARK: - ShareFileName
+
+@Suite("ShareFileName")
+struct ShareFileNameTests {
+
+    private func tempDir() throws -> URL {
+        let d = FileManager.default.temporaryDirectory.appendingPathComponent("halo-filename-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    @Test("A plain name and a legitimate sub-folder path are kept")
+    func keepsGoodNames() {
+        #expect(ShareFileName.safeRelativePath("photo.jpg") == "photo.jpg")
+        #expect(ShareFileName.safeRelativePath("trip/2026/a.jpg") == "trip/2026/a.jpg")
+        #expect(ShareFileName.safeRelativePath("Windows\\Style\\a.txt") == "Windows/Style/a.txt")
+    }
+
+    @Test("Anything that could climb out of the destination is neutralised")
+    func neutralisesTraversal() {
+        #expect(ShareFileName.safeRelativePath("../../.zshrc") == ".zshrc")
+        #expect(ShareFileName.safeRelativePath("/etc/passwd") == "etc/passwd")
+        #expect(ShareFileName.safeRelativePath("a/../../b") == "a/b")
+        #expect(ShareFileName.safeRelativePath("..\\..\\x") == "x")
+        #expect(ShareFileName.safeRelativePath("..") == nil)
+        #expect(ShareFileName.safeRelativePath("") == nil)
+        #expect(ShareFileName.safeRelativePath("a\0b") == nil)
+    }
+
+    @Test("The destination always resolves inside the chosen folder")
+    func stayInside() throws {
+        let base = try tempDir()
+        let root = base.standardizedFileURL.path
+        for hostile in ["../../escape", "/tmp/escape", "a/../../../escape", "..", "", "....//x", "\\\\server\\share\\x"] {
+            let url = ShareFileName.uniqueDestination(for: hostile, in: base)
+            #expect(url.standardizedFileURL.path.hasPrefix(root + "/"), "\"\(hostile)\" resolved to \(url.path)")
+        }
+    }
+
+    @Test("A destination under /private/… keeps the real file name (regression: it became \"file\")")
+    func privatePrefixedDestination() throws {
+        // standardizedFileURL strips "/private" only for paths that exist; the destination
+        // directory does, the file about to be written doesn't.
+        let base = URL(fileURLWithPath: "/private/tmp/halo-private-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        #expect(ShareFileName.uniqueDestination(for: "hello.txt", in: base).lastPathComponent == "hello.txt")
+        let hostile = ShareFileName.uniqueDestination(for: "../../escape.txt", in: base)
+        #expect(hostile.path.hasPrefix(base.path + "/"))
+        #expect(hostile.lastPathComponent == "escape.txt")
+    }
+
+    @Test("An existing file is never overwritten — a free name is chosen")
+    func noOverwrite() throws {
+        let base = try tempDir()
+        try Data("original".utf8).write(to: base.appendingPathComponent("report.pdf"))
+        try Data("second".utf8).write(to: base.appendingPathComponent("report (1).pdf"))
+        let url = ShareFileName.uniqueDestination(for: "report.pdf", in: base)
+        #expect(url.lastPathComponent == "report (2).pdf")
+        try Data("noext".utf8).write(to: base.appendingPathComponent("README"))
+        #expect(ShareFileName.uniqueDestination(for: "README", in: base).lastPathComponent == "README (1)")
+    }
+}
+
+// MARK: - DeviceInfoDTO wire compatibility
+
+@Suite("DeviceInfoDTO wire compatibility")
+struct DeviceInfoDTOWireTests {
+
+    @Test("An official LocalSend /info response — which has no port or protocol — decodes")
+    func officialInfoResponse() throws {
+        let json = #"{"alias":"Nice Orange","version":"2.0","deviceModel":"Samsung","deviceType":"mobile","fingerprint":"random string","download":true}"#
+        let dto = try JSONDecoder().decode(DeviceInfoDTO.self, from: Data(json.utf8))
+        #expect(dto.alias == "Nice Orange")
+        #expect(dto.deviceType == "mobile")
+        #expect(dto.port == 53317, "defaults to the standard port")
+        #expect(dto.protocol_ == "http", "defaults to the scheme the probe used")
+        #expect(dto.download == true)
+    }
+
+    @Test("A multicast announcement with port and protocol keeps them")
+    func announcementKeepsValues() throws {
+        let json = #"{"alias":"Pixel","version":"2.1","deviceModel":null,"deviceType":"mobile","fingerprint":"abc","port":53400,"protocol":"https","download":false,"announce":true}"#
+        let dto = try JSONDecoder().decode(DeviceInfoDTO.self, from: Data(json.utf8))
+        #expect(dto.port == 53400)
+        #expect(dto.protocol_ == "https")
+        #expect(dto.announce == true)
+        #expect(dto.deviceModel == nil)
+    }
+
+    @Test("Halo's own encoding round-trips")
+    func roundTrip() throws {
+        let original = DeviceInfoDTO(alias: "Mac", version: "2.1", deviceModel: "Mac15,6", deviceType: "desktop",
+                                     fingerprint: "ff", port: 53317, protocol_: "http", download: false, announce: nil)
+        let back = try JSONDecoder().decode(DeviceInfoDTO.self, from: JSONEncoder().encode(original))
+        #expect(back.alias == original.alias && back.port == original.port && back.protocol_ == original.protocol_)
+    }
+
+    @Test("Required fields are still required")
+    func stillRequiresIdentity() {
+        let noFingerprint = #"{"alias":"x","version":"2.0"}"#
+        #expect(throws: (any Error).self) { try JSONDecoder().decode(DeviceInfoDTO.self, from: Data(noFingerprint.utf8)) }
+    }
+}
+
+
+// MARK: - HaloShare: desktop ⇄ HaloShareKit interop (opt-in)
+
+/// F-050's acceptance criteria need desktop and mobile to exchange files. This drives the
+/// **real desktop `LocalShareServer` / `LocalShareClient`** against `halosharecli`, the
+/// command-line peer built from `ios/HaloShareKit` — a separate implementation.
+///
+///     (cd ios/HaloShareKit && swift build)
+///     TEST_RUNNER_HALO_SHARE_CLI=$PWD/ios/HaloShareKit/.build/debug/halosharecli \
+///         xcodebuild test … -only-testing:HaloTests/HaloShareInteropTests
+///
+/// Disabled unless `HALO_SHARE_CLI` is set.
+@Suite("HaloShare desktop ⇄ HaloShareKit interop", .serialized,
+       .enabled(if: ProcessInfo.processInfo.environment["HALO_SHARE_CLI"] != nil))
+struct HaloShareInteropTests {
+
+    private var cli: URL { URL(fileURLWithPath: ProcessInfo.processInfo.environment["HALO_SHARE_CLI"] ?? "/nonexistent") }
+
+    private func tempDir() throws -> URL {
+        let d = FileManager.default.temporaryDirectory.appendingPathComponent("halo-interop-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    private func runCLI(_ args: [String], timeout: TimeInterval = 60) throws -> (status: Int32, out: String) {
+        let p = Process()
+        p.executableURL = cli
+        p.arguments = args
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = pipe
+        try p.run()
+        let deadline = Date().addingTimeInterval(timeout)
+        while p.isRunning && Date() < deadline { usleep(50_000) }
+        if p.isRunning { p.terminate() }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        return (p.terminationStatus, String(decoding: data, as: UTF8.self))
+    }
+
+    private func randomFile(_ name: String, bytes: Int, in dir: URL) throws -> URL {
+        var data = Data(count: bytes)
+        data.withUnsafeMutableBytes { _ = SecRandomCopyBytes(kSecRandomDefault, $0.count, $0.baseAddress!) }
+        let url = dir.appendingPathComponent(name)
+        try data.write(to: url)
+        return url
+    }
+
+    /// The desktop server wired the way `LocalShareManager` wires it: accept every offer and
+    /// register a session with per-file tokens.
+    private func desktopServer(port: UInt16, into dest: URL) async throws -> LocalShareServer {
+        let server = LocalShareServer()
+        try await server.start(
+            port: port, parameters: .tcp,
+            onPrepareUpload: { request, _ in
+                let sessionId = UUID().uuidString
+                var tokens: [String: String] = [:]
+                var files: [String: ShareFile] = [:]
+                for (id, f) in request.files {
+                    tokens[id] = UUID().uuidString
+                    files[id] = ShareFile(id: id, fileName: f.fileName, size: f.size, fileType: f.fileType, sha256: f.sha256)
+                }
+                await server.registerSession(id: sessionId, tokens: tokens, files: files, destDirectory: dest)
+                return PrepareUploadResponse(sessionId: sessionId, files: tokens)
+            },
+            onFileReceived: { _, _, _ in }, onCancel: { _ in }, onProgress: { _, _, _ in })
+        return server
+    }
+
+    @Test("HaloShareKit (sender) → desktop server: text, binary, several files, and 24 MB")
+    func kitSendsToDesktop() async throws {
+        let dest = try tempDir(), src = try tempDir()
+        let server = try await desktopServer(port: 53931, into: dest)
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53931)
+
+        let text = src.appendingPathComponent("note.txt"); try Data("from the kit".utf8).write(to: text)
+        let bin = try randomFile("photo.bin", bytes: 300_000, in: src)
+        let big = try randomFile("big.bin", bytes: 24 << 20, in: src)
+
+        let r = try runCLI(["send", "--to", "127.0.0.1:53931", text.path, bin.path, big.path])
+        #expect(r.status == 0, "cli exited \(r.status):\n\(r.out)")
+        #expect((try? String(contentsOf: dest.appendingPathComponent("note.txt"), encoding: .utf8)) == "from the kit")
+        #expect((try? Data(contentsOf: dest.appendingPathComponent("photo.bin"))) == (try Data(contentsOf: bin)))
+        #expect((try? Data(contentsOf: dest.appendingPathComponent("big.bin"))) == (try Data(contentsOf: big)), "24 MB file differs")
+    }
+
+    @Test("HaloShareKit probes the desktop server and gets a usable identity")
+    func kitProbesDesktop() async throws {
+        let dest = try tempDir()
+        let server = try await desktopServer(port: 53932, into: dest)
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53932)
+        let r = try runCLI(["info", "127.0.0.1:53932"])
+        #expect(r.status == 0, "\(r.out)")
+        #expect(r.out.contains("desktop"), "\(r.out)")
+    }
+
+    @Test("Desktop client → HaloShareKit receiver: binary files arrive intact")
+    func desktopSendsToKit() async throws {
+        let dest = try tempDir(), src = try tempDir()
+        let readyFile = src.appendingPathComponent("ready.txt")
+        let p = Process()
+        p.executableURL = cli
+        p.arguments = ["receive", "--dir", dest.path, "--port", "53933", "--ready-file", readyFile.path, "--timeout", "90"]
+        p.standardOutput = Pipe(); p.standardError = Pipe()
+        try p.run()
+        defer { p.terminate() }
+        for _ in 0..<100 where !FileManager.default.fileExists(atPath: readyFile.path) { usleep(100_000) }
+        #expect(FileManager.default.fileExists(atPath: readyFile.path), "the kit receiver never came up")
+
+        let bin = try randomFile("fromdesktop.bin", bytes: 700_000, in: src)
+        let device = ShareDevice(alias: "kit", version: "2.1", deviceModel: nil, deviceType: .headless, fingerprint: "kit",
+                                 port: 53933, protocol_: .http, download: false, ipAddress: "127.0.0.1", lastSeen: Date())
+        var file = ShareFile(id: "f1", fileName: "fromdesktop.bin", size: 700_000, fileType: "application/octet-stream")
+        file.sourceURL = bin
+
+        let prepared = try await LocalShareClient.shared.prepareUpload(to: device, files: [file])
+        let token = try #require(prepared.files["f1"])
+        try await LocalShareClient.shared.uploadFile(file.with(token: token), sessionId: prepared.sessionId, to: device) { _, _ in }
+
+        for _ in 0..<50 where !FileManager.default.fileExists(atPath: dest.appendingPathComponent("fromdesktop.bin").path) { usleep(100_000) }
+        #expect((try? Data(contentsOf: dest.appendingPathComponent("fromdesktop.bin"))) == (try Data(contentsOf: bin)))
     }
 }
