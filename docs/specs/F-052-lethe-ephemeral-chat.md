@@ -362,7 +362,7 @@ converge. Recorded as OQ-5.
 
 | AC | Status | Evidence / what is missing |
 |----|--------|----------------------------|
-| 1 | ❌ **Open — ship gate** | Only the Node reference client has exchanged messages with Halo on the production relay. No iOS/Android session has been run. |
+| 1 | 🟡 **Verified on iOS Simulator; Android and a physical phone still open** | 2026-10-23: Halo's own Swift code and the **real Lethe Flutter app** (built from `~/Github/Lethe`, running in the iOS Simulator) exchanged messages both ways on the **unmodified production relay**. See §8.2. Not yet run on Android or a physical device. |
 | 2 | 🟡 Substantially met | A third client without the key captured the frames: payload and handle opaque. No literal packet capture (pcap) was taken. |
 | 3 | ✅ Verified on screen | Quit/relaunch restored room, message and handle; key came from the Keychain. |
 | 4 | 🟡 Partly | Offline queue unit-tested; echo + replay dedup observed on screen. Pulling the network mid-session in the real app has not been done. |
@@ -372,6 +372,38 @@ converge. Recorded as OQ-5.
 | 8 | ✅ Verified (test) | Arms in `AlertLog.swift`; `AlertManagerTests` iterate `allCases`. |
 | 9 | ❌ **Open** | Both entitlement files carry `network.client`, which is all Lethe needs; no sandboxed run has been recorded. |
 | 10 | ✅ Done | `HALO_MOBILE_ROADMAP.md` §3 row + §9 study. |
+
+### 8.2 AC-1 run record (2026-10-23)
+
+Re-runnable: `LetheLiveInteropTests` in `HaloTests`, disabled unless
+`TEST_RUNNER_HALO_LETHE_LIVE_DIR` is set (see the doc comment on the suite).
+
+**Setup.** The Lethe Flutter app (`~/Github/Lethe/app`, copied to a scratch dir so the
+working tree was untouched) was built for the iOS Simulator (iPhone 17, iOS 27.2) and
+ad-hoc signed with a `keychain-access-groups` entitlement (an unsigned simulator build
+fails `flutter_secure_storage` with `-34018`). The Mac half was Halo's own
+`LetheRelayClient` / `LetheCrypto` / `LetheInviteLink`, creating a throwaway room on
+`wss://lethe-relay.onrender.com`.
+
+| Step | Result |
+|------|--------|
+| Halo creates a room and emits a `lethe://join#…` invite | Flutter app opened it, joined, and **decrypted the room name** ("AC-1 interop") — so Halo's invite encoding (incl. percent-encoded `=` padding) and name encryption are readable by Dart |
+| Mac → phone: `pong from the Mac 🍎 https://example.com/a/b?c=d` | Rendered in the Flutter transcript **intact**: emoji, `://`, `/`, `?`, `=` — handle `halo-mac-ac1` shown |
+| Phone → Mac: `ping from the phone`, typed in the Flutter composer | Halo's test decrypted it from handle `cipher_dbdb`; text matched exactly; **test passed** |
+| Persistence | After relaunching the Flutter app, the Mac's message was still in its SQLCipher store, so Dart also persists what Swift sent |
+
+**Still not covered by this run:** Android (the Dart wire/crypto code is shared, so no new
+*protocol* risk is expected, but the platform has not been run — `flutter doctor` reports
+Android cmdline-tools and licenses missing on this machine), and a physical phone.
+
+**Finding in the Lethe app (not Halo; separate repo, not changed):** when the app is
+launched with no rooms and a room is then joined via a `lethe://` link, the connection
+badge stays "offline" and the composer is **disabled** ("Offline — will send on reconnect")
+even though the socket is up and messages are being received. Relaunching the app clears
+it. The likely cause is `connectionProvider` being a `StreamProvider` over a *broadcast*
+`statusStream`, which does not replay the current value to a late subscriber, so `.value`
+stays null and falls back to `offline`. A first-time user who opens an invite link cannot
+type until they restart the app.
 
 §6.2 (telemetry): `LetheTelemetryScrubber` redacts invite links, room ids, room
 names and the handle from Sentry breadcrumbs and events; a source-scan test

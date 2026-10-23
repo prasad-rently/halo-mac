@@ -4801,3 +4801,124 @@ struct LetheTelemetryTests {
         #expect(offenders.isEmpty, "Lethe must not log or call Sentry directly: \(offenders)")
     }
 }
+
+// MARK: - Lethe: live cross-client interop (AC-1) — opt-in
+
+/// AC-1 is the ship gate: a Mac running Halo and the *real* Lethe Flutter app
+/// exchange messages in both directions against the *unmodified production
+/// relay*. That cannot run unattended in CI — it needs a second client — so it
+/// is opt-in: the suite is disabled unless `HALO_LETHE_LIVE_DIR` is set.
+///
+///     TEST_RUNNER_HALO_LETHE_LIVE_DIR=/some/dir xcodebuild test … \
+///         -only-testing:HaloTests/LetheLiveInteropTests
+///
+/// (xcodebuild strips the `TEST_RUNNER_` prefix before the test process sees it.)
+///
+/// The test is the Mac half, and drives Halo's own `LetheRelayClient` /
+/// `LetheCrypto` / `LetheInviteLink` — the same code the app uses. It talks to
+/// whatever is driving the other half through files in that directory:
+///
+///   invite.txt     written first: a throwaway room's `lethe://` invite
+///   state.log      relay connection state transitions, appended
+///   go-send        create this file to make the Mac send its message
+///   sent.json      what the Mac sent, written after `go-send`
+///   received.jsonl every decrypted message from another handle, appended
+///
+/// It passes only if a message from *another* client arrives, decrypts, and
+/// matches `HALO_LETHE_LIVE_EXPECT` (default `ping from the phone`).
+@Suite("Lethe live interop (AC-1)", .serialized,
+       .enabled(if: ProcessInfo.processInfo.environment["HALO_LETHE_LIVE_DIR"] != nil))
+struct LetheLiveInteropTests {
+
+    private final class Inbox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var lines: [String] = []
+        func append(_ s: String) { lock.lock(); lines.append(s); lock.unlock() }
+        var snapshot: [String] { lock.lock(); defer { lock.unlock() }; return lines }
+    }
+
+    @Test("Mac ↔ Flutter client round trip on the production relay", .timeLimit(.minutes(12)))
+    func testRoundTrip() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let dir = URL(fileURLWithPath: try #require(env["HALO_LETHE_LIVE_DIR"]), isDirectory: true)
+        let expected = env["HALO_LETHE_LIVE_EXPECT"] ?? "ping from the phone"
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        func append(_ line: String, to name: String) {
+            let url = dir.appendingPathComponent(name)
+            let data = Data((line + "\n").utf8)
+            if let h = try? FileHandle(forWritingTo: url) {
+                h.seekToEndOfFile(); h.write(data); try? h.close()
+            } else {
+                try? data.write(to: url)
+            }
+        }
+
+        let key = LetheCrypto.generateRoomKey()
+        let roomId = LetheCrypto.deriveRoomId(from: key)
+        let myHandle = "halo-mac-ac1"
+        let invite = try LetheInviteLink.create(roomId: roomId, roomKey: key, roomName: "AC-1 interop")
+        try invite.write(to: dir.appendingPathComponent("invite.txt"), atomically: true, encoding: .utf8)
+
+        let inbox = Inbox()
+        let relay = URL(string: env["HALO_LETHE_RELAY"] ?? LetheLimits.defaultRelayURL)!
+        let client = LetheRelayClient(relayURL: relay)
+        await client.setEventHandler { event in
+            switch event {
+            case .state(let s):
+                append("\(Date().timeIntervalSince1970) \(s)", to: "state.log")
+            case .relayError(let code, let message):
+                append("\(Date().timeIntervalSince1970) relay error \(code)", to: "state.log")
+                _ = message
+            case .message(_, let payload, _):
+                guard let m = try? LetheCrypto.decryptMessage(payload: payload, roomKey: key) else {
+                    append("undecryptable frame dropped", to: "state.log")
+                    return
+                }
+                // The relay echoes our own message back; only other clients count.
+                guard m.handle != myHandle else { return }
+                let line = "{\"handle\":\(Self.q(m.handle)),\"text\":\(Self.q(m.text)),\"ts\":\(m.ts)}"
+                inbox.append(m.text)
+                append(line, to: "received.jsonl")
+            }
+        }
+        await client.connect()
+        await client.join(roomId: roomId)
+
+        // Phase 1 — wait for the driver to say the phone has joined, then send.
+        let goFile = dir.appendingPathComponent("go-send")
+        try await Self.wait(timeout: 300) { FileManager.default.fileExists(atPath: goFile.path) }
+
+        let outgoing = "pong from the Mac 🍎 https://example.com/a/b?c=d"
+        let payload = try LetheCrypto.encryptMessage(text: outgoing, handle: myHandle, roomKey: key)
+        let queued = await client.send(roomId: roomId, payload: payload)
+        #expect(queued)
+        try "{\"text\":\(Self.q(outgoing))}".write(to: dir.appendingPathComponent("sent.json"),
+                                                   atomically: true, encoding: .utf8)
+
+        // Phase 2 — wait for the phone's reply to arrive and decrypt.
+        try await Self.wait(timeout: 400) { !inbox.snapshot.isEmpty }
+        let received = inbox.snapshot
+        #expect(received.contains(expected), "got \(received), wanted \"\(expected)\"")
+
+        await client.disconnect()
+    }
+
+    private static func q(_ s: String) -> String {
+        let data = try? JSONSerialization.data(withJSONObject: [s], options: [.fragmentsAllowed])
+        let arr = data.flatMap { String(data: $0, encoding: .utf8) } ?? "[\"\"]"
+        return String(arr.dropFirst().dropLast())
+    }
+
+    private static func wait(timeout: TimeInterval, until condition: @escaping @Sendable () -> Bool) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            if Date() > deadline { throw LiveInteropTimeout() }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+    }
+
+    private struct LiveInteropTimeout: Error, CustomStringConvertible {
+        var description: String { "timed out waiting on the other client" }
+    }
+}
