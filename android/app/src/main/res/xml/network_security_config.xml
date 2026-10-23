@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  HaloShare talks plain HTTP to peers on the LAN (requirements MD1: it matches what Halo desktop
+  serves). Android blocks cleartext by default, and the peers are bare IP addresses, so there is no
+  domain to allow-list. This is a stated trade-off pending the owner's decision, not an oversight.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

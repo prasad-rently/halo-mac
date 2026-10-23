@@ -4710,10 +4710,10 @@ struct DeviceInfoDTOWireTests {
 
 /// F-050's acceptance criteria need desktop and mobile to exchange files. This drives the
 /// **real desktop `LocalShareServer` / `LocalShareClient`** against `halosharecli`, the
-/// command-line peer built from `ios/Packages/HaloShareKit` — a separate implementation.
+/// command-line peer built from `ios/HaloShareKit` — a separate implementation.
 ///
-///     (cd ios/Packages/HaloShareKit && swift build)
-///     TEST_RUNNER_HALO_SHARE_CLI=$PWD/ios/Packages/HaloShareKit/.build/debug/halosharecli \
+///     (cd ios/HaloShareKit && swift build)
+///     TEST_RUNNER_HALO_SHARE_CLI=$PWD/ios/HaloShareKit/.build/debug/halosharecli \
 ///         xcodebuild test … -only-testing:HaloTests/HaloShareInteropTests
 ///
 /// Disabled unless `HALO_SHARE_CLI` is set.
