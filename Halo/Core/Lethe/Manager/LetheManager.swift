@@ -95,6 +95,7 @@ final class LetheManager: ObservableObject {
         }()
 
         loadFromDisk()
+        observeTermination()
         connectIfNeeded()
     }
 
@@ -152,7 +153,8 @@ final class LetheManager: ObservableObject {
     /// Decrypt and store. A blob that fails authentication is dropped without a
     /// trace in the UI: it did not come from a key-holder, so rendering it —
     /// even as an error row — would be giving a stranger a line in the room.
-    private func ingest(roomId: String, payload: String) {
+    /// Internal (not private) so tests can feed a payload without a socket.
+    func ingest(roomId: String, payload: String) {
         guard let key = RoomKeyStore.load(roomId: roomId) else { return }
         guard let decoded = try? LetheCrypto.decryptMessage(payload: payload, roomKey: key) else {
             return
@@ -160,13 +162,16 @@ final class LetheManager: ObservableObject {
         guard !seenMessageIds.contains(decoded.msgId) else { return }
         seenMessageIds.insert(decoded.msgId)
 
-        let isOwn = decoded.handle == handle
+        // Anything not already stored under a msgId this device generated is *not* ours, whatever
+        // handle it carries: a handle is a free-text label, so anyone holding the room key can
+        // send as "my" handle. (Our own sends are inserted — and their msgId recorded — in
+        // `send`, so the relay's echo of them is dropped as a duplicate above and never reaches here.)
         let message = LetheMessage(id: decoded.msgId,
                                    roomId: roomId,
                                    handle: decoded.handle,
                                    text: decoded.text,
                                    ts: decoded.ts,
-                                   isOwn: isOwn)
+                                   isOwn: false)
 
         var list = messagesByRoom[roomId] ?? []
         list.append(message)
@@ -176,13 +181,11 @@ final class LetheManager: ObservableObject {
         }
         messagesByRoom[roomId] = list
 
-        if !isOwn {
-            if let idx = rooms.firstIndex(where: { $0.id == roomId }), activeRoomId != roomId {
-                rooms[idx].unreadCount += 1
-                notify(room: rooms[idx], handle: decoded.handle)
-            }
+        if let idx = rooms.firstIndex(where: { $0.id == roomId }), activeRoomId != roomId {
+            rooms[idx].unreadCount += 1
+            notify(room: rooms[idx], handle: decoded.handle)
         }
-        persist()
+        persistSoon()
     }
 
     /// The room currently on screen — messages arriving here are read, not unread.
@@ -192,7 +195,7 @@ final class LetheManager: ObservableObject {
         guard let idx = rooms.firstIndex(where: { $0.id == roomId }), rooms[idx].unreadCount != 0
         else { return }
         rooms[idx].unreadCount = 0
-        persist()
+        persistSoon()
     }
 
     /// Local notification only. Lethe's BRD rules out server push as
@@ -342,7 +345,7 @@ final class LetheManager: ObservableObject {
         list.append(LetheMessage(id: msgId, roomId: room.id, handle: handle,
                                  text: trimmed, ts: ts, isOwn: true))
         messagesByRoom[room.id] = list
-        persist()
+        persistSoon()
 
         connectIfNeeded()
         Task { [client] in await client?.send(roomId: room.id, payload: payload) }
@@ -375,9 +378,9 @@ final class LetheManager: ObservableObject {
         var messages: [String: [LetheMessage]]
     }
 
-    static let encryptedFileName = "rooms.enc"
-    static let legacyFileName = "rooms.json"
-    private static let fileMagic = Data("HLT1".utf8)
+    nonisolated static let encryptedFileName = "rooms.enc"
+    nonisolated static let legacyFileName = "rooms.json"
+    private nonisolated static let fileMagic = Data("HLT1".utf8)
 
     private var storeFolder: URL? {
         let folder: URL
@@ -401,23 +404,71 @@ final class LetheManager: ObservableObject {
         return cachedHistoryKey
     }
 
+    private let writeQueue = DispatchQueue(label: "com.halo.lethe.history", qos: .utility)
+    private var pendingWrite: DispatchWorkItem?
+
+    /// Debounce for message traffic. Every message used to re-encode, re-encrypt and rewrite the
+    /// whole store (up to 1,000 messages per room) synchronously on the main actor.
+    private static let writeDelay: TimeInterval = 0.5
+
+    /// Structural changes — create, join, leave, rename, legacy migration — are written **now**
+    /// and synchronously: "leave" must have removed the room's history from disk by the time it
+    /// returns (AC-6), and a joined room must survive a crash.
     private func persist() {
-        // Every path that changes rooms or the handle ends here, so this is
-        // the one place the telemetry scrubber's snapshot needs refreshing.
+        pendingWrite?.cancel(); pendingWrite = nil
         refreshTelemetrySnapshot()
+        writeNow(synchronously: true)
+    }
+
+    /// Message traffic: coalesced, and the encode/encrypt/write happens off the main actor.
+    private func persistSoon() {
+        refreshTelemetrySnapshot()
+        pendingWrite?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.pendingWrite = nil
+                self.writeNow(synchronously: false)
+            }
+        }
+        pendingWrite = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.writeDelay, execute: item)
+    }
+
+    /// Writes any debounced change immediately. Called when the app terminates; tests call it too.
+    func flushPendingWrites() {
+        guard pendingWrite != nil else { return }
+        pendingWrite?.cancel(); pendingWrite = nil
+        writeNow(synchronously: true)
+    }
+
+    /// Without this a message received in the last half second before ⌘Q would be lost.
+    func observeTermination(on center: NotificationCenter = .default) {
+        center.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.flushPendingWrites() }
+        }
+    }
+
+    private func writeNow(synchronously: Bool) {
         guard let folder = storeFolder, let key = historyKey() else { return }
-        let store = Store(rooms: rooms, messages: messagesByRoom)
+        let store = Store(rooms: rooms, messages: messagesByRoom)   // value snapshot taken on the main actor
+        let job = { Self.write(store, key: key, folder: folder) }
+        // One serial queue for both paths keeps writes in the order they were requested.
+        if synchronously { writeQueue.sync(execute: job) } else { writeQueue.async(execute: job) }
+    }
+
+    private nonisolated static func write(_ store: Store, key: Data, folder: URL) {
         guard let json = try? JSONEncoder().encode(store),
               let sealed = try? LetheCrypto.seal(json, key: key) else { return }
-        let url = folder.appendingPathComponent(Self.encryptedFileName)
-        guard (try? (Self.fileMagic + sealed).write(to: url, options: [.atomic])) != nil else { return }
+        let url = folder.appendingPathComponent(encryptedFileName)
+        guard (try? (fileMagic + sealed).write(to: url, options: [.atomic])) != nil else { return }
         // The encrypted copy is safely on disk, so a leftover plaintext one must go.
         removeLegacyFile(in: folder)
     }
 
     /// Best-effort: overwrite then unlink. (An SSD or APFS snapshot may still hold old
     /// blocks; this narrows the window, it does not guarantee erasure.)
-    private func removeLegacyFile(in folder: URL) {
+    private nonisolated static func removeLegacyFile(in folder: URL) {
         let legacy = folder.appendingPathComponent(Self.legacyFileName)
         guard let size = (try? FileManager.default.attributesOfItem(atPath: legacy.path)[.size]) as? Int
         else { return }

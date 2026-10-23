@@ -65,6 +65,8 @@ class HaloShareServer(
     private val listener: ServerListener = object : ServerListener {},
     private val idleTimeoutMs: Int = 60_000,
     private val maxConcurrentSessions: Int = 4,
+    /** A session nobody has touched for this long is forgotten (tokens stop working, partials are deleted). */
+    private val sessionTimeoutMs: Long = 600_000,
 ) {
     private class Session(
         val id: String,
@@ -74,6 +76,7 @@ class HaloShareServer(
     ) {
         val received = HashSet<String>()
         val inFlight = HashMap<String, File>()
+        var lastActivityMs = System.currentTimeMillis()
     }
 
     private val sessions = ConcurrentHashMap<String, Session>()
@@ -81,6 +84,27 @@ class HaloShareServer(
     private val pool = Executors.newCachedThreadPool { r -> Thread(r, "haloshare-conn").apply { isDaemon = true } }
     private var serverSocket: ServerSocket? = null
     private val running = AtomicBoolean(false)
+    private val sweeper = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "haloshare-sweep").apply { isDaemon = true } }
+
+    /** Sessions currently held. For tests. */
+    val sessionCount: Int get() = sessions.size
+
+    /**
+     * Forgets sessions idle longer than [sessionTimeoutMs] that have no upload in flight. Without
+     * this, `maxConcurrentSessions` abandoned sessions answered every later sender with 429 until
+     * the app restarted, and their tokens stayed valid forever.
+     */
+    fun sweepExpiredSessions(nowMs: Long = System.currentTimeMillis()) {
+        synchronized(lock) {
+            val it = sessions.entries.iterator()
+            while (it.hasNext()) {
+                val (id, s) = it.next()
+                if (s.inFlight.isEmpty() && nowMs - s.lastActivityMs > sessionTimeoutMs) {
+                    it.remove(); discardPartials(s); listener.onSessionCancelled(id)
+                }
+            }
+        }
+    }
 
     /** The bound port, or 0 before [start]. */
     val port: Int get() = serverSocket?.localPort ?: 0
@@ -97,6 +121,8 @@ class HaloShareServer(
             throw e
         }
         serverSocket = socket
+        val period = (sessionTimeoutMs / 4).coerceIn(250, 30_000)
+        sweeper.scheduleWithFixedDelay({ runCatching { sweepExpiredSessions() } }, period, period, java.util.concurrent.TimeUnit.MILLISECONDS)
         Thread({ acceptLoop(socket) }, "haloshare-accept").apply { isDaemon = true }.start()
         return socket.localPort
     }
@@ -110,6 +136,7 @@ class HaloShareServer(
             sessions.clear()
         }
         pool.shutdownNow()
+        sweeper.shutdownNow()
     }
 
     private fun acceptLoop(socket: ServerSocket) {
@@ -170,6 +197,7 @@ class HaloShareServer(
 
     private fun prepareUpload(request: PrepareUploadRequest, address: String): ByteArray {
         if (request.files.isEmpty()) return HttpResponse.error(400, "No files")
+        sweepExpiredSessions()
         if (sessions.size >= maxConcurrentSessions) return HttpResponse.error(429, "Too many sessions")
 
         val offer = IncomingOffer(request.info, address, request.files.values.sortedBy { it.fileName })
@@ -188,6 +216,7 @@ class HaloShareServer(
     private fun upload(input: InputStream, head: HttpRequestHead, prefix: ByteArray): ByteArray {
         val sessionId = head.query["sessionId"]; val fileId = head.query["fileId"]; val token = head.query["token"]
         if (sessionId == null || fileId == null || token == null) return HttpResponse.error(400, "Missing params")
+        sweepExpiredSessions()
         val session = sessions[sessionId] ?: return HttpResponse.error(404, "Session not found")
         val expected = session.tokens[fileId]
         if (expected == null || !MessageDigest.isEqual(expected.toByteArray(), token.toByteArray())) return HttpResponse.error(403, "Invalid token")
@@ -204,6 +233,7 @@ class HaloShareServer(
             if (!(destination.parentFile!!.mkdirs() || destination.parentFile!!.isDirectory)) return HttpResponse.error(500, "Cannot create folder")
             partial = File(destination.parentFile, ".${destination.name}.${UUID.randomUUID().toString().take(8)}.halopart")
             session.inFlight[fileId] = partial
+            session.lastActivityMs = System.currentTimeMillis()
         }
 
         val expectedSize = if (head.contentLength > 0) head.contentLength.toLong() else descriptor.size
@@ -216,6 +246,7 @@ class HaloShareServer(
 
         synchronized(lock) {
             session.inFlight.remove(fileId)
+            session.lastActivityMs = System.currentTimeMillis()
             // A cancel may have removed the session while we were streaming.
             if (sessions[sessionId] == null) { partial.delete(); return HttpResponse.error(404, "Session cancelled") }
             if (!ok) { partial.delete(); return HttpResponse.error(400, "Incomplete upload") }

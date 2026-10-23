@@ -1042,6 +1042,16 @@ ancestor, so real collisions still print.
   but the timer is paused while the user is deciding.** Desktop, iOS kit and Android all cap `Content-Length`
   to the announced size. The iOS idle watchdog once cut a connection during a >60 s consent; both desktop
   and iOS now pause it around the consent handler (`slowConsentIsNotCut` tests, all three platforms).
+- **HaloShare sessions expire (default 10 min idle, none in flight).** Desktop, iOS kit and Android all sweep
+  lazily (on prepare/upload) and on a timer; an expired incomplete session is reported as cancelled so the UI
+  and the Mac's power assertion are released. Desktop session state is mutated through
+  `activeSessions[id]?` — never a copy held across an `await` — after a copy-and-write-back lost one file's
+  completion when two files of a session uploaded at once (`concurrentUploadsAreBothRecorded`).
+- **Lethe**: a received message is never `isOwn` (a handle is a free-text label; own sends are recorded by
+  `msgId` in `send`, so the relay's echo is dropped as a duplicate). History writes: *structural* changes
+  (create/join/leave/rename/migration) are synchronous so "leave" has scrubbed the file on return; *message
+  traffic* is debounced 0.5 s and encoded/encrypted/written on a serial background queue, flushed on
+  `willTerminateNotification`. Tests must call `flushPendingWrites()` before reading `rooms.enc` after a send.
 - **Lucky Draw flushes pending edits on `willTerminateNotification`** (saves are debounced 0.6 s), and CSV
   export prefixes `= + - @` cells with `'` so a name cannot become a spreadsheet formula.
 - **Plain HTTP is a stated trade-off (MD1)**, not an oversight: it matches what desktop serves. Android allows cleartext app-wide for LAN peers.
