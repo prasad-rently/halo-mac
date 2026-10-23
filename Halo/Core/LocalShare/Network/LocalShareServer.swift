@@ -460,18 +460,23 @@ enum ShareFileName {
     }
 
     /// `base/<safe path>`, with ` (1)`, ` (2)` … inserted before the extension if it already
-    /// exists, and guaranteed to resolve inside `base`.
+    /// exists, and guaranteed to be inside `base`.
+    ///
+    /// Containment is **lexical**. An earlier version compared `standardizedFileURL` paths,
+    /// but that strips a `/private` prefix only for paths that *exist* — the destination
+    /// directory does, the file about to be written doesn't — so the check failed and every
+    /// received file was saved as "file". `safeRelativePath` has already removed `.`, `..`
+    /// and empty components, so containment holds by construction.
     static func uniqueDestination(for rawName: String, in base: URL,
                                   fileManager: FileManager = .default) -> URL {
-        let relative = safeRelativePath(rawName) ?? "file"
-        var candidate = base.appendingPathComponent(relative)
-
-        // Belt and braces: whatever the component filtering did, the standardised result
-        // must still be under `base`.
-        let root = base.standardizedFileURL.path
-        if !(candidate.standardizedFileURL.path + "/").hasPrefix(root.hasSuffix("/") ? root : root + "/") {
-            candidate = base.appendingPathComponent("file")
+        func build(_ relative: String) -> URL {
+            var url = base
+            for component in relative.split(separator: "/") { url.appendPathComponent(String(component)) }
+            return url
         }
+        var candidate = build(safeRelativePath(rawName) ?? "file")
+        let root = base.path.hasSuffix("/") ? base.path : base.path + "/"
+        if !candidate.path.hasPrefix(root) { candidate = build("file") }
 
         guard fileManager.fileExists(atPath: candidate.path) else { return candidate }
         let dir = candidate.deletingLastPathComponent()
