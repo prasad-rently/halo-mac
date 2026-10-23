@@ -998,6 +998,36 @@ Read-only S.M.A.R.T./NVMe health reader via `diskutil info -plist` + an `IONVMeC
 
 ---
 
+## 20.2 Lucky Draw (F-051)
+
+**Files:** `Core/LuckyDraw/*`, `Features/LuckyDraw/*` · **Spec:** `docs/specs/F-051-lucky-draw-spinner.md`
+The cases marked **◆** are the ones unit tests and offscreen renders cannot reach — they have **not** been run in a live app and need a human.
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-DRAW-01 | P0 | Spin and reveal | Open Lucky Draw → Space | Wheel winds up, spins, slows, lands; winner card appears with confetti; winner is logged and (Retire on) leaves the wheel |
+| TC-DRAW-02 | P1 | Typing a space does not spin | Click the name field, type "Anna Maria" | One entry "Anna Maria"; the wheel never spins mid-word |
+| TC-DRAW-03 | P1 | Paste a list | Paste 5 lines (or "a, b, c" on one line) | One entry per line / per comma; blanks dropped |
+| TC-DRAW-04 ◆ | P1 | Drop a .txt | Drag a `.txt` of names onto the Entries area | Dashed accent outline while hovering; names added |
+| TC-DRAW-05 ◆ | P1 | Drop a .csv | Drop a 2-column CSV | First column imported; header row (if any) kept as an entry |
+| TC-DRAW-06 | P2 | Drop a wrong file | Drop a `.pdf` / a >1 MB file | Amber notice; nothing added |
+| TC-DRAW-07 | P0 | Duplicate prompt | Add "anna" when "Anna" exists | Prompt "1 name is already on the roster" — **Keep both / Skip duplicates / Cancel**; nothing merged silently |
+| TC-DRAW-08 | P1 | Skip duplicates | Paste "Zed, zed, Anna" → Skip | Only "Zed" added; notice "Skipped 2 duplicates." |
+| TC-DRAW-09 ◆ | P0 | Draw N in a row | Set the stepper to 4 → Spin | Banner "Draw 1 of 4"; each winner is held highlighted ~1.5 s; 4 spins; one winners-list card, in order; **no repeats** even with Retire off |
+| TC-DRAW-10 ◆ | P1 | Stop mid-run | Start a run of 5 → press Stop during spin 2 | "Stopping after this spin…"; spin 2 **still completes**; no spin 3; card reads "Stopped after 2 of 5" |
+| TC-DRAW-11 | P2 | N larger than the roster | 3 entries, N = 8 | Notice "Only 3 on the wheel — drawing 3." |
+| TC-DRAW-12 ◆ | P1 | ⌫ removes the selected chip | Click a chip (accent outline) → ⌫ | Chip removed. With the name field or the roster-rename field focused, ⌫ edits text instead |
+| TC-DRAW-13 ◆ | P1 | ⌘N / ⌘⇧R / Esc | ⌘N; spin then Esc; ⌘⇧R | New roster; Esc closes the result; ⌘⇧R opens the **same confirmation** as Reset |
+| TC-DRAW-14 ◆ | P1 | Double- vs single-tap on a chip | Single-click, then double-click a chip | Single selects; double edits in place (single does not swallow double) |
+| TC-DRAW-15 ◆ | P1 | Rename roster | Pencil → type → Return (Esc cancels) | Name updates in the picker; Space does not spin while the field has focus |
+| TC-DRAW-16 | P2 | Duplicate roster | Duplicate icon | "<name> copy", same entries/settings, **empty draw log**, nobody retired |
+| TC-DRAW-17 ◆ | P1 | Sound is off by default | Fresh roster → spin | **Silent.** Sound toggle off |
+| TC-DRAW-18 ◆ | P1 | Sound on | Toggle Sound → spin | Ticks while turning, **slowing audibly**, then a soft chime at the reveal. Not a buzz on a 200-entry wheel |
+| TC-DRAW-19 | P2 | Reduced Motion + sound | Reduce Motion on, Sound on | Chime only; no ticks (the wheel does not turn) |
+| TC-DRAW-20 | P0 | Existing rosters survive the update | Launch the build with a pre-update `luckyDraw.json` | Rosters intact, Sound off; **no** `luckyDraw.corrupt.json` created |
+
+---
+
 ## 21. Cross-Cutting / Non-Functional
 
 ### 21.1 Permissions

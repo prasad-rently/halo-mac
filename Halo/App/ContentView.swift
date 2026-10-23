@@ -393,6 +393,7 @@ struct DetailView: View {
             case .ports:          PortManagerView()
             case .localShare:     LocalShareView()
             case .ai:             AIAssistantView()
+            case .luckyDraw:      LuckyDrawView()
             case .menuBarPreview: MenuBarPreviewView()
             }
         }
