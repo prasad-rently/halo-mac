@@ -4568,3 +4568,44 @@ struct ShareFileNameTests {
     }
 }
 
+// MARK: - DeviceInfoDTO wire compatibility
+
+@Suite("DeviceInfoDTO wire compatibility")
+struct DeviceInfoDTOWireTests {
+
+    @Test("An official LocalSend /info response — which has no port or protocol — decodes")
+    func officialInfoResponse() throws {
+        let json = #"{"alias":"Nice Orange","version":"2.0","deviceModel":"Samsung","deviceType":"mobile","fingerprint":"random string","download":true}"#
+        let dto = try JSONDecoder().decode(DeviceInfoDTO.self, from: Data(json.utf8))
+        #expect(dto.alias == "Nice Orange")
+        #expect(dto.deviceType == "mobile")
+        #expect(dto.port == 53317, "defaults to the standard port")
+        #expect(dto.protocol_ == "http", "defaults to the scheme the probe used")
+        #expect(dto.download == true)
+    }
+
+    @Test("A multicast announcement with port and protocol keeps them")
+    func announcementKeepsValues() throws {
+        let json = #"{"alias":"Pixel","version":"2.1","deviceModel":null,"deviceType":"mobile","fingerprint":"abc","port":53400,"protocol":"https","download":false,"announce":true}"#
+        let dto = try JSONDecoder().decode(DeviceInfoDTO.self, from: Data(json.utf8))
+        #expect(dto.port == 53400)
+        #expect(dto.protocol_ == "https")
+        #expect(dto.announce == true)
+        #expect(dto.deviceModel == nil)
+    }
+
+    @Test("Halo's own encoding round-trips")
+    func roundTrip() throws {
+        let original = DeviceInfoDTO(alias: "Mac", version: "2.1", deviceModel: "Mac15,6", deviceType: "desktop",
+                                     fingerprint: "ff", port: 53317, protocol_: "http", download: false, announce: nil)
+        let back = try JSONDecoder().decode(DeviceInfoDTO.self, from: JSONEncoder().encode(original))
+        #expect(back.alias == original.alias && back.port == original.port && back.protocol_ == original.protocol_)
+    }
+
+    @Test("Required fields are still required")
+    func stillRequiresIdentity() {
+        let noFingerprint = #"{"alias":"x","version":"2.0"}"#
+        #expect(throws: (any Error).self) { try JSONDecoder().decode(DeviceInfoDTO.self, from: Data(noFingerprint.utf8)) }
+    }
+}
+

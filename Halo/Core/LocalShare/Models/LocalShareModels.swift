@@ -181,3 +181,30 @@ struct PersistedSession: Codable {
     var createdAt: Date
     var destDirectory: URL?
 }
+
+
+// MARK: - DeviceInfoDTO leniency
+
+extension DeviceInfoDTO {
+    /// The official LocalSend protocol's `info` and `register` *responses* carry
+    /// `alias`, `version`, `deviceModel`, `deviceType`, `fingerprint` and `download` — and
+    /// **not** `port` or `protocol` (those travel in the multicast announcement and in the
+    /// register *request*). The synthesized decoder required both, so decoding an official
+    /// peer's `/info` threw, and the HTTP-scan fallback silently found no official peers.
+    ///
+    /// Defaults are what the caller already knew when it made the request: the standard
+    /// port, and plain HTTP (the scheme the probe used). Declared in an extension so the
+    /// memberwise initialiser is kept.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        alias = try c.decode(String.self, forKey: .alias)
+        version = try c.decode(String.self, forKey: .version)
+        deviceModel = try c.decodeIfPresent(String.self, forKey: .deviceModel)
+        deviceType = try c.decodeIfPresent(String.self, forKey: .deviceType)
+        fingerprint = try c.decode(String.self, forKey: .fingerprint)
+        port = try c.decodeIfPresent(Int.self, forKey: .port) ?? 53317
+        protocol_ = try c.decodeIfPresent(String.self, forKey: .protocol_) ?? "http"
+        download = try c.decodeIfPresent(Bool.self, forKey: .download)
+        announce = try c.decodeIfPresent(Bool.self, forKey: .announce)
+    }
+}
