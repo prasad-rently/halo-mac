@@ -1038,6 +1038,12 @@ ancestor, so real collisions still print.
 - **A cancel notification must not use an API that throws when the Task is cancelled.** `session.data(for:)` from inside a cancelled Task throws immediately, so `POST /cancel` never left the device. Use a completion-handler data task.
 - **Loopback is too fast to cancel a real upload** (100 MB in ~0.1 s). Test cancellation against a receiver that stops reading (`StallingReceiver`), never a race.
 - **`.gitignore` has a blanket `Packages/` rule** (SwiftPM checkouts). A package at `ios/Packages/…` is silently untracked — which is why the Kit lives at `ios/HaloShareKit`.
+- **Receivers refuse more than was approved (`413`) and drop silent connections after an idle timeout —
+  but the timer is paused while the user is deciding.** Desktop, iOS kit and Android all cap `Content-Length`
+  to the announced size. The iOS idle watchdog once cut a connection during a >60 s consent; both desktop
+  and iOS now pause it around the consent handler (`slowConsentIsNotCut` tests, all three platforms).
+- **Lucky Draw flushes pending edits on `willTerminateNotification`** (saves are debounced 0.6 s), and CSV
+  export prefixes `= + - @` cells with `'` so a name cannot become a spreadsheet formula.
 - **Plain HTTP is a stated trade-off (MD1)**, not an oversight: it matches what desktop serves. Android allows cleartext app-wide for LAN peers.
 - Opt-in live tests: `HaloShareInteropTests` (desktop ⇄ Swift CLI, `HALO_SHARE_CLI`), `LetheLiveInteropTests` (`HALO_LETHE_LIVE_DIR`), Kotlin `CrossImplementationTest` (`HALO_SHARE_CLI`).
 

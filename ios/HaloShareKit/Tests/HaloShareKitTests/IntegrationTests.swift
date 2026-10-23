@@ -28,13 +28,16 @@ struct Rig {
     let peer: Peer
 
     static func make(decision: ConsentDecision = .accept, idleTimeout: TimeInterval = 30,
-                     maxSessions: Int = 4) async throws -> Rig {
+                     maxSessions: Int = 4, consentDelay: TimeInterval = 0) async throws -> Rig {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("hsk-rx-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         let receiverIdentity = DeviceIdentity(alias: "Receiver", fingerprint: DeviceIdentity.randomFingerprint(), deviceType: "desktop")
         let server = HaloShareServer(configuration: .init(identity: receiverIdentity, receiveDirectory: dir,
-                                                         idleTimeout: idleTimeout, maxConcurrentSessions: maxSessions)) { _ in decision }
+                                                         idleTimeout: idleTimeout, maxConcurrentSessions: maxSessions)) { _ in
+            if consentDelay > 0 { try? await Task.sleep(nanoseconds: UInt64(consentDelay * 1_000_000_000)) }
+            return decision
+        }
         let log = EventLog()
         Task { for await e in server.events { log.append(e) } }
         let port = Int(try await server.start(port: 0))
@@ -426,6 +429,20 @@ struct LoopbackTests {
         #expect(await waitUntil { rig.log.cancelled == 1 })
     }
 
+    @Test("A sender cannot stream more than the size the user approved")
+    func oversizedUploadRefused() async throws {
+        let rig = try await Rig.make(); defer { Task { await rig.stop() } }
+        let desc = FileDescriptor(id: "f1", fileName: "t.bin", size: 10, fileType: "application/octet-stream")
+        let prep = try Raw.post(port: rig.port, path: "/api/localsend/v2/prepare-upload", body: try prepareBody(files: [desc]), contentType: "application/json")
+        let json = String(prep.body.split(separator: "\r\n\r\n", maxSplits: 1).last ?? "")
+        let resp = try JSONDecoder().decode(PrepareUploadResponse.self, from: Data(json.utf8))
+        let url = "/api/localsend/v2/upload?sessionId=\(resp.sessionId)&fileId=f1&token=\(resp.files["f1"]!)"
+        let big = try Raw.post(port: rig.port, path: url, body: Data(repeating: 1, count: 4096))
+        #expect(big.status == 413, "answered \(big.status)")
+        #expect(rig.filesOnDisk.isEmpty, "bytes beyond the approved size reached the disk")
+        #expect(try Raw.post(port: rig.port, path: url, body: Data(repeating: 1, count: 10)).status == 200)
+    }
+
     @Test("A wrong token is refused and writes nothing")
     func wrongToken() async throws {
         let rig = try await Rig.make(); defer { Task { await rig.stop() } }
@@ -611,6 +628,16 @@ struct IndependentClientTests {
         let rig = try await Rig.make(); defer { Task { await rig.stop() } }
         #expect(try curl(["http://127.0.0.1:\(rig.port)/nope"]).status == 404)
         #expect(try Raw.post(port: rig.port, path: "/api/localsend/v2/prepare-upload", body: Data("not json".utf8), contentType: "application/json").status == 400)
+    }
+
+    @Test("The idle timeout does not cut a connection while the user is still deciding")
+    func slowConsentIsNotCut() async throws {
+        // The user takes 3 s to answer; the idle timeout is 1 s. The sender is rightly waiting.
+        let rig = try await Rig.make(idleTimeout: 1, consentDelay: 3); defer { Task { await rig.stop() } }
+        let d = FileDescriptor(id: "f", fileName: "a.bin", size: 3, fileType: "application/octet-stream")
+        let r = try Raw.post(port: rig.port, path: "/api/localsend/v2/prepare-upload",
+                             body: try prepareBody(files: [d]), contentType: "application/json")
+        #expect(r.status == 200, "the connection was cut while waiting for the user (status \(r.status))")
     }
 
     @Test("A connection that stalls mid-request is dropped after the idle timeout")

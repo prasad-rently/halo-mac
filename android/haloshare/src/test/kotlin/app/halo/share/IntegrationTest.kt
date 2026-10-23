@@ -136,6 +136,15 @@ class LoopbackTest {
         assertEquals(200, Raw.post(rig.port, "/api/localsend/v2/upload?sessionId=${resp.sessionId}&fileId=f1&token=${resp.files["f1"]}", ByteArray(10) { 1 }).status)
     }
 
+    @Test fun aSenderCannotStreamMoreThanTheSizeTheUserApproved() = Rig().use { rig ->
+        val d = FileDescriptor("f1", "t.bin", 10)
+        val resp = parseResponse(Raw.post(rig.port, "/api/localsend/v2/prepare-upload", prepareBody(d), "application/json").text)
+        val url = "/api/localsend/v2/upload?sessionId=${resp.sessionId}&fileId=f1&token=${resp.files["f1"]}"
+        assertEquals(413, Raw.post(rig.port, url, ByteArray(4096) { 1 }).status)
+        assertTrue("bytes beyond the approved size reached the disk", rig.filesOnDisk().isEmpty())
+        assertEquals(200, Raw.post(rig.port, url, ByteArray(10) { 1 }).status)
+    }
+
     @Test fun tokensAreUniquePerFileAndPerSession() = Rig().use { rig ->
         val descs = (1..3).map { FileDescriptor("f$it", "f$it", 1) }.toTypedArray()
         val all = (0 until 2).flatMap { parseResponse(Raw.post(rig.port, "/api/localsend/v2/prepare-upload", prepareBody(*descs), "application/json").text).files.values }
@@ -225,6 +234,12 @@ class IndependentClientTest {
             assertTrue("the server should have closed the stalled connection", n <= 0)
             assertTrue("took ${System.currentTimeMillis() - started} ms", System.currentTimeMillis() - started < 5000)
         }
+    }
+
+    @Test fun theIdleTimeoutDoesNotCutAConnectionWhileTheUserIsStillDeciding() = Rig(idleTimeoutMs = 1000, consentDelayMs = 3000).use { rig ->
+        val d = FileDescriptor("f", "a.bin", 3, "application/octet-stream")
+        val r = Raw.post(rig.port, "/api/localsend/v2/prepare-upload", prepareBody(d), "application/json")
+        assertEquals("the connection was cut while waiting for the user", 200, r.status)
     }
 
     @Test fun curlGetInfoReturnsTheReceiversIdentity() = Rig().use { rig ->

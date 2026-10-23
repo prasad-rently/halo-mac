@@ -82,6 +82,7 @@
 |  | `400` | Missing params, or **incomplete body** (peer closed early). |
 |  | `403` | Invalid token. |
 |  | `404` | Unknown session / file. |
+|  | `413` | `Content-Length` is larger than the size announced in `prepare-upload`. |
 |  | `409`, `422`, `500` | Blocked / **sha256 mismatch** / receiver error. |
 
 ## 4. Sequence
@@ -142,7 +143,11 @@ That is a degraded-but-working design, not a bug; it is why the HTTP scan is a f
 4. **Partials don't survive.** A truncated or cancelled upload deletes its partial file and is not
    acknowledged `200`.
 5. **Verify when told.** If `sha256` is supplied, hash what was written and answer `422` on mismatch.
-6. Keep the device awake during a transfer (desktop: power assertion; Android: wake lock/foreground
+6. **Never take more than was approved.** If `Content-Length` exceeds the announced `size`, answer `413`
+   before writing anything.
+7. **Don't confuse "the user is deciding" with "the peer stalled".** An idle timeout (default 60 s) drops a
+   silent connection, but is suspended while the receiver waits for the user's accept/decline.
+8. Keep the device awake during a transfer (desktop: power assertion; Android: wake lock/foreground
    service; iOS: idle-timer disabled while foregrounded).
 
 ## 8. Where Halo desktop differed from this contract

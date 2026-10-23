@@ -193,6 +193,10 @@ class HaloShareServer(
         if (expected == null || !MessageDigest.isEqual(expected.toByteArray(), token.toByteArray())) return HttpResponse.error(403, "Invalid token")
         val descriptor = session.files[fileId] ?: return HttpResponse.error(404, "File not found")
 
+        // The user approved `descriptor.size` bytes; the sender may not stream more under that
+        // approval. Refused before anything is written. 0 = size not announced, nothing to cap.
+        if (descriptor.size > 0 && head.contentLength.toLong() > descriptor.size) return HttpResponse.error(413, "Larger than announced")
+
         val partial: File
         synchronized(lock) {
             if (fileId in session.received || fileId in session.inFlight) return HttpResponse.error(409, "Already uploaded")

@@ -38,12 +38,13 @@ class Rig(
     decision: ConsentDecision = ConsentDecision.ACCEPT,
     idleTimeoutMs: Int = 30_000,
     maxSessions: Int = 4,
+    consentDelayMs: Long = 0,
 ) : AutoCloseable {
     val dir: File = Files.createTempDirectory("hsk-rx").toFile()
     val log = EventLog()
     val server = HaloShareServer(
         DeviceIdentity("Receiver", DeviceIdentity.randomFingerprint(), deviceType = "desktop"),
-        dir, { decision }, log, idleTimeoutMs, maxSessions,
+        dir, { if (consentDelayMs > 0) Thread.sleep(consentDelayMs); decision }, log, idleTimeoutMs, maxSessions,
     )
     val port: Int = server.start(0)
     val client = HaloShareClient(DeviceIdentity("Sender", DeviceIdentity.randomFingerprint()))

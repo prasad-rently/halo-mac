@@ -808,3 +808,63 @@ struct LuckyDrawRenderingTests {
         #expect(isNotBlank(image))
     }
 }
+
+
+// MARK: - Durability and export safety
+
+@Suite("Lucky Draw durability")
+@MainActor
+struct LuckyDrawDurabilityTests {
+
+    private func scratchFile() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("halo-draw-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("luckyDraw.json")
+    }
+
+    @Test("An edit made just before quitting is written on app termination, not lost to the debounce")
+    func editSurvivesQuit() throws {
+        let file = scratchFile(); defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let center = NotificationCenter()
+        let store = LuckyDrawStore(fileURL: file, notificationCenter: center)
+
+        store.addEntries(from: "quit-survivor")
+        #expect(!FileManager.default.fileExists(atPath: file.path), "precondition: the 0.6 s debounce has not fired yet")
+
+        center.post(name: NSApplication.willTerminateNotification, object: nil)
+
+        let data = try Data(contentsOf: file)
+        #expect(String(decoding: data, as: UTF8.self).contains("quit-survivor"))
+        // And a second launch sees it.
+        let reopened = LuckyDrawStore(fileURL: file, notificationCenter: NotificationCenter())
+        #expect(reopened.selected?.entries.contains { $0.label == "quit-survivor" } == true)
+    }
+
+    @Test("Quitting without having edited anything does not touch the file")
+    func quitWithoutEditsWritesNothing() throws {
+        let file = scratchFile(); defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let center = NotificationCenter()
+        _ = LuckyDrawStore(fileURL: file, notificationCenter: center)
+        center.post(name: NSApplication.willTerminateNotification, object: nil)
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+    }
+
+    @Test("A name that would be a spreadsheet formula is exported as text")
+    func csvFormulaGuard() throws {
+        let file = scratchFile(); defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+        let store = LuckyDrawStore(fileURL: file, notificationCenter: NotificationCenter())
+        for label in ["=HYPERLINK(\"http://evil\",\"x\")", "+1+1", "-2", "@SUM(A1)", "Anna"] {
+            store.recordWin(entryID: UUID(), label: label)
+        }
+        let csv = store.historyCSV()
+        #expect(csv.contains("\"'=HYPERLINK("), Comment(rawValue: csv))
+        #expect(csv.contains("\"'+1+1\"") && csv.contains("\"'-2\"") && csv.contains("\"'@SUM(A1)\""))
+        #expect(csv.contains("\"Anna\""), "an ordinary name must be left alone")
+        for line in csv.split(separator: "\n").dropFirst() {
+            let cell = line.split(separator: ",", maxSplits: 2)[1]
+            #expect(!"=+-@".contains(cell.dropFirst().first ?? " "), "unguarded cell: \(cell)")
+        }
+    }
+}
