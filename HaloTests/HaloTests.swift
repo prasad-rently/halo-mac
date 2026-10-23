@@ -4417,6 +4417,31 @@ struct HaloShareServerBinaryTests {
                 "a truncated file was left on disk looking like the real one")
     }
 
+    @Test("A hostile file name cannot write outside the destination, and nothing is overwritten")
+    func hostileNameAndCollision() async throws {
+        let parent = try tempDir()
+        let dest = parent.appendingPathComponent("inbox")
+        try FileManager.default.createDirectory(at: dest, withIntermediateDirectories: true)
+        // A file that already exists where the hostile name would land if "../" were honoured.
+        let victim = parent.appendingPathComponent("victim.txt")
+        try Data("do not touch".utf8).write(to: victim)
+
+        let server = LocalShareServer()
+        try await server.start(port: 53918, parameters: .tcp,
+                               onPrepareUpload: { _, _ in nil }, onFileReceived: { _, _, _ in },
+                               onCancel: { _ in }, onProgress: { _, _, _ in })
+        defer { Task { await server.stop() } }
+        let evil = ShareFile(id: "f1", fileName: "../victim.txt", size: 5, fileType: "text/plain")
+        await server.registerSession(id: "s1", tokens: ["f1": "tok"], files: ["f1": evil], destDirectory: dest)
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        let result = try rawPost(port: 53918, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
+                                 body: Data("PWNED".utf8))
+        #expect(result.status == 200)
+        #expect((try? String(contentsOf: victim, encoding: .utf8)) == "do not touch", "the sender wrote outside the folder")
+        #expect((try? String(contentsOf: dest.appendingPathComponent("victim.txt"), encoding: .utf8)) == "PWNED")
+    }
+
     @Test("A wrong token is refused and writes nothing")
     func wrongToken() async throws {
         let dest = try tempDir()
@@ -4491,3 +4516,55 @@ struct HTTPRequestHeadTests {
         #expect(HTTPRequestHead.parse(data)?.path == "/api/localsend/v2/info")
     }
 }
+
+// MARK: - ShareFileName
+
+@Suite("ShareFileName")
+struct ShareFileNameTests {
+
+    private func tempDir() throws -> URL {
+        let d = FileManager.default.temporaryDirectory.appendingPathComponent("halo-filename-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    @Test("A plain name and a legitimate sub-folder path are kept")
+    func keepsGoodNames() {
+        #expect(ShareFileName.safeRelativePath("photo.jpg") == "photo.jpg")
+        #expect(ShareFileName.safeRelativePath("trip/2026/a.jpg") == "trip/2026/a.jpg")
+        #expect(ShareFileName.safeRelativePath("Windows\\Style\\a.txt") == "Windows/Style/a.txt")
+    }
+
+    @Test("Anything that could climb out of the destination is neutralised")
+    func neutralisesTraversal() {
+        #expect(ShareFileName.safeRelativePath("../../.zshrc") == ".zshrc")
+        #expect(ShareFileName.safeRelativePath("/etc/passwd") == "etc/passwd")
+        #expect(ShareFileName.safeRelativePath("a/../../b") == "a/b")
+        #expect(ShareFileName.safeRelativePath("..\\..\\x") == "x")
+        #expect(ShareFileName.safeRelativePath("..") == nil)
+        #expect(ShareFileName.safeRelativePath("") == nil)
+        #expect(ShareFileName.safeRelativePath("a\0b") == nil)
+    }
+
+    @Test("The destination always resolves inside the chosen folder")
+    func stayInside() throws {
+        let base = try tempDir()
+        let root = base.standardizedFileURL.path
+        for hostile in ["../../escape", "/tmp/escape", "a/../../../escape", "..", "", "....//x", "\\\\server\\share\\x"] {
+            let url = ShareFileName.uniqueDestination(for: hostile, in: base)
+            #expect(url.standardizedFileURL.path.hasPrefix(root + "/"), "\"\(hostile)\" resolved to \(url.path)")
+        }
+    }
+
+    @Test("An existing file is never overwritten — a free name is chosen")
+    func noOverwrite() throws {
+        let base = try tempDir()
+        try Data("original".utf8).write(to: base.appendingPathComponent("report.pdf"))
+        try Data("second".utf8).write(to: base.appendingPathComponent("report (1).pdf"))
+        let url = ShareFileName.uniqueDestination(for: "report.pdf", in: base)
+        #expect(url.lastPathComponent == "report (2).pdf")
+        try Data("noext".utf8).write(to: base.appendingPathComponent("README"))
+        #expect(ShareFileName.uniqueDestination(for: "README", in: base).lastPathComponent == "README (1)")
+    }
+}
+
