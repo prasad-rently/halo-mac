@@ -60,3 +60,7 @@ Secrets.plist
 *.swp
 .idea/
 .vscode/
+
+# Index store xcodebuild drops here when building with `-target Halo`
+# (the recipe in CLAUDE.md, and what scripts/build-dev.sh runs).
+Halo.xcodeproj/-Xcc/

@@ -565,8 +565,18 @@ struct SettingsView: View {
                     .font(.system(size: 48))
                     .foregroundColor(.haloAccent)
                 Text("Halo").font(HaloFont.display(24, weight: .heavy))
-                Text("Version 2.2 (Build \(Build.commit))").foregroundColor(.secondary)
-                Text("dev · \(Build.token)").font(.caption2).foregroundColor(.secondary)
+                // Read from the bundle, never a literal: this said "Version 2.2"
+                // while the app shipped as 2.3, and showed a git SHA in the
+                // "Build" slot where CFBundleVersion belongs.
+                Text("Version \(Build.version) (Build \(Build.buildNumber))")
+                    .foregroundColor(.secondary)
+                // Dev-only, and gated on the bundle id rather than #if DEBUG —
+                // shipped releases are cut from the Debug configuration, so this
+                // line rendered on every release build too. See Build.isDevBuild.
+                if Build.isDevBuild {
+                    Text("dev · \(Build.token) · \(Build.commit)")
+                        .font(.caption2).foregroundColor(.secondary)
+                }
                 Divider()
                 Button("Check for Updates") {}
                 Button("View Privacy Policy") {}
