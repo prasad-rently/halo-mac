@@ -133,12 +133,12 @@ None of these are started. Starting them against an unfrozen contract would prod
 |---|---|---|
 | Protocol contract written | ✅ `HALOSHARE_PROTOCOL.md` | ✅ (shared) |
 | Desktop receive fixed (V1–V4) | ✅ `fix/haloshare-binary-upload` | — |
-| Protocol core + tests | ✅ `ios/HaloShareKit` — 56 tests | ⏳ |
-| Discovery (scan + manual) | ✅ HTTP /24 scan + manual address (multicast: not on iOS, §3 MD2) | ⏳ |
-| Send / Receive + consent | ✅ library **and app**: Mac→phone (consent, SHA-256 identical), decline (exit 3, nothing written), phone→Mac (5 MB exact) — iOS Simulator | ⏳ |
-| App shell | ✅ `ios/HaloMobile` — Share / Inbox / Settings, consent sheet, cloud placeholders | ⏳ |
+| Protocol core + tests | ✅ `ios/HaloShareKit` — 56 tests | ✅ `android/haloshare` — 58 tests, 3 cross-impl vs Swift |
+| Discovery (scan + manual) | ✅ HTTP /24 scan + manual address (multicast: not on iOS, §3 MD2) | ✅ HTTP /24 scan + manual address. Multicast announce/listen **not built** (MR-DI-4) |
+| Send / Receive + consent | ✅ library **and app**: Mac→phone (consent, SHA-256 identical), decline (exit 3, nothing written), phone→Mac (5 MB exact) — iOS Simulator | ✅ same four flows on the Android Emulator |
+| App shell | ✅ `ios/HaloMobile` — Share / Inbox / Settings, consent sheet, cloud placeholders | ✅ `android/app` — Compose, same structure |
 | Share extension / Sharesheet | ❌ deferred | ❌ deferred |
-| Background receive | ❌ deferred | ❌ deferred |
+| Background receive | ❌ deferred (iOS cannot, by design) | ❌ deferred — **MR-OS-2 unmet on Android**: no foreground service yet, so it receives only while visible |
 | Official-LocalSend interop | ❌ not testable here | ❌ not testable here |
 | Cloud features (SMS, clipboard, pairing) | 🚫 blocked (§6) | 🚫 blocked (§6) |
 
@@ -157,3 +157,18 @@ Driven through the real app UI against the Kit's CLI peer on the Mac:
 A usability defect found by driving it: the keyboard could not be dismissed once the address field was focused and covered the Send button. Fixed (Done button, interactive scroll-dismiss, dismiss on Add).
 
 **Not verified:** the system file picker (the Debug "send test file" exercises the same send path), the HTTP /24 scan against a real LAN peer, Local Network permission prompts, physical devices, the official LocalSend app.
+
+### 9.2 Android verification record (2026-10-23, Android Emulator, API 36.1 arm64)
+
+Driven through the real app with `adb` against the Swift CLI peer on the Mac (`adb forward` for Mac→phone; `10.0.2.2` for phone→Mac):
+
+| Flow | Result |
+|------|--------|
+| Launch | "Ready to receive · port 53317"; cloud rows labelled "Not yet" |
+| Mac → phone, 3 MB binary | Consent dialog showed sender, file and size; `Received/` was **empty before Accept**; after Accept the SHA-256 matched the original |
+| Mac → phone, declined | Sender got "declined by receiver" (exit 3); no file |
+| Phone → Mac, 5 MB | Added `10.0.2.2:53318` by address, sent; app showed "Sent halo-test-5MB.bin to Gokul's Mac."; Mac held exactly 5,242,880 bytes |
+
+Same usability defect as iOS, found the same way: the keyboard covered the Send card and couldn't be dismissed. Fixed (Add/Go clear focus; tap outside dismisses) and re-verified.
+
+**Not verified on Android:** the system file picker (the debug "Send 5 MB test" button exercises the same path from a `File`, *not* the `content://` resolver path), the /24 scan against a real LAN peer, a physical device, the official LocalSend app, Doze/background behaviour. Build notes: Compose is pinned to the BOM matching AGP 8.13 / API 36 (the newest Compose needs AGP 9.1 + compileSdk 37); cleartext HTTP is enabled app-wide in `network_security_config.xml` (MD1).
