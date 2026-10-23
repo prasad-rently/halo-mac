@@ -1,0 +1,59 @@
+name: HaloMobile
+options:
+  bundleIdPrefix: com.halo
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  HaloShareKit:
+    path: ../HaloShareKit
+targets:
+  HaloMobile:
+    type: application
+    platform: iOS
+    sources:
+      - path: HaloMobile
+    dependencies:
+      - package: HaloShareKit
+        product: HaloShareKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.halo.mobile
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: HaloMobile/Info.plist
+        # Sideload distribution (F-049 D7): no store submission, no provisioning profile required for the simulator.
+        CODE_SIGN_STYLE: Automatic
+    info:
+      path: HaloMobile/Info.plist
+      properties:
+        CFBundleDisplayName: Halo
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIUserInterfaceStyle: Dark
+        # MR-RX-6: received files are visible in the Files app.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        # iOS shows this the first time the app touches the LAN (HTTP scan / receiving).
+        NSLocalNetworkUsageDescription: Halo uses your local network to find nearby devices and send or receive files with them. Nothing leaves your network.
+        # HaloShare talks plain HTTP to peers on the LAN (requirements MD1). IP addresses are
+        # exempt from ATS already; this makes the intent explicit.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+schemes:
+  HaloMobile:
+    build:
+      targets:
+        HaloMobile: all
+    run:
+      config: Debug

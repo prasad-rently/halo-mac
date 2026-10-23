@@ -397,6 +397,7 @@ struct DetailView: View {
             case .localShare:     LocalShareView()
             case .lethe:          LetheView()
             case .ai:             AIAssistantView()
+            case .luckyDraw:      LuckyDrawView()
             case .menuBarPreview: MenuBarPreviewView()
             }
         }

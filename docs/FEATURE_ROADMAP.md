@@ -76,8 +76,9 @@
 | [F-046](#f-046--ai-querying--cloud-providers-nfeat-124) | AI Querying — Cloud Providers (NFeat-124) | ✅ Done | Desktop | none |
 | [F-047](#f-047--on-device-ai--custom-rag-nfeat-125) | On-Device AI & Custom RAG (NFeat-125) | 🗓 Planned | TBD | none |
 | [F-048](#f-048--personal-expenditure-tracker-nfeat-126) | Personal Expenditure Tracker (NFeat-126) | 🗓 Planned | TBD | F-044 |
-| [F-049](#f-049--halo-mobile-app-product-line) | Halo Mobile App (product line) | 🗓 Planned | TBD | F-044, F-045, F-050 |
-| [F-050](#f-050--haloshare-mobile--desktop-nfeat-127) | HaloShare Mobile ↔ Desktop (NFeat-127) | 🗓 Planned | TBD | HaloShare (LocalSend) |
+| [F-049](#f-049--halo-mobile-app-product-line) | Halo Mobile App (product line) | 🔧 App shell built (iOS + Android); cloud features blocked on F-044 | TBD | F-044, F-045, F-050 |
+| [F-050](#f-050--haloshare-mobile--desktop-nfeat-127) | HaloShare Mobile ↔ Desktop (NFeat-127) | 🔧 Built on iOS + Android (simulator/emulator-verified); not yet on a device or vs official LocalSend | ~6 d so far | HaloShare (LocalSend) |
+| [F-051](#f-051--lucky-draw-spinner-wheel-nfeat-128) | Lucky Draw Spinner Wheel (NFeat-128) | ✅ Done | ~6 d | CelebrationOverlay (F-037) |
 | [F-052](#f-052--lethe-anonymous-ephemeral-chat-nfeat-128) | Lethe — Anonymous Ephemeral Chat (NFeat-128) | 🔧 Built — awaiting validation | ~8 d | Keychain, `AlertManager` |
 
 > **Status legend:** ✅ Done · 📋 Queued (next up) · 🗓 Planned (user-requested, spec pending discussion) · 💡 Future Idea (unsolicited) · ⏭ Skipped · 🔧 Built on a branch, not yet merged or validated against its ship gate
@@ -3369,7 +3370,9 @@ produce a spending overview. Take inspiration from the *Hamza* project.
 
 ## F-049 — Halo Mobile App (product line)
 
-**Status:** 🗓 Planned · **Effort:** TBD · **Depends on:** F-044, F-045, F-050
+**Status:** 🔧 App shell built on iOS + Android; the cloud-backed features are **not started** (blocked) · **Effort:** TBD · **Depends on:** F-044, F-045, F-050
+
+> **Where this stands (2026-10-23).** What is real: the `ios/HaloMobile` and `android/app` shells (Share / Inbox / Settings) and, through F-050, working file transfer. What is *not*: QR pairing, SMS sync and clipboard sync — all need the F-044 `Halo/Core/Cloud` foundation, which is not on the integration line (PR #7), plus spikes S1/S2. The apps say so ("Not yet" rows) instead of shipping dead buttons. Numbered requirements, decisions and verification records: [`specs/F-049-F-050-mobile-requirements.md`](specs/F-049-F-050-mobile-requirements.md).
 
 ### Intent
 A **mobile app that extends the Halo desktop app**. It is the device-side half of
@@ -3390,7 +3393,15 @@ several cross-platform features and a new HaloShare peer.
 
 ## F-050 — HaloShare Mobile ↔ Desktop (NFeat-127)
 
-**Status:** 🗓 Planned · **Effort:** TBD · **Depends on:** HaloShare (LocalSend Protocol v2.1)
+**Status:** 🔧 Built on iOS + Android; verified on the iOS Simulator and Android Emulator against a separate implementation (not yet on physical devices or the official LocalSend app) · **Effort:** ~6 d so far · **Depends on:** HaloShare (LocalSend Protocol v2.1)
+
+> **As actually built (2026-10-23).** Contract: [`HALOSHARE_PROTOCOL.md`](HALOSHARE_PROTOCOL.md). `ios/HaloShareKit` (Swift, 56 tests + CLI) and `android/haloshare` (Kotlin, 58 tests) implement the same peer; each was tested against `curl`, raw sockets and the *other* implementation; the apps were driven end to end (Mac→phone with consent, decline, phone→Mac).
+>
+> **Reading the code first changed the plan, and fixed real desktop bugs** (branch `fix/haloshare-binary-upload`): the desktop server returned `400` to any upload not sent URLSession-style (so a phone could not send to a Mac); it let a sender write outside the approved folder and overwrite files; it left truncated files after a dropped upload; it couldn't decode official peers' `/info`; and its first fix for the traversal saved every file as "file" under a `/private` path. Each has a regression test; the traversal one was mutation-checked.
+>
+> **Deviations from the spec, for the owner:** v1 is plain HTTP, matching what desktop actually serves (the spec's TLS description is not what exists) — a security trade-off flagged as MD1; iOS discovery is an HTTP /24 scan + manual address because multicast needs a restricted Apple entitlement.
+>
+> **Not built:** Share Extension / Sharesheet, background receive (Android foreground service — MR-OS-2 unmet), multicast on Android, desktop adoption of the shared Kit, and a *sender* that computes `sha256` (every receiver now verifies one when present — desktop via PR #40).
 
 ### Intent
 Extend **HaloShare** — currently desktop↔desktop over the LocalSend-compatible
@@ -3406,6 +3417,122 @@ and mobile↔mobile).
 - Background transfer + power/foreground requirements on mobile.
 - Reuse of the existing `Core/LocalShare` protocol models across platforms.
 
+
+---
+
+## F-051 — Lucky Draw Spinner Wheel (NFeat-128)
+
+**Status:** ✅ Done · **Effort:** ~6 d · **Depends on:** `CelebrationOverlay` (F-037 particle engine)
+**Full spec:** [`docs/specs/F-051-lucky-draw-spinner.md`](specs/F-051-lucky-draw-spinner.md)
+
+### Intent
+A **Lucky Draw** module. The user adds any number of names or items; Halo renders
+them as a colour-segmented wheel and one press spins it to reveal a single random
+winner with a full celebration sequence. Entries can be added, bulk-pasted, edited,
+removed, temporarily **excluded**, and — the point of a draw — automatically
+**retired once they win**, so a roster is drawn down round by round with no repeats.
+
+Halo's first purely *social* surface. No scanning, no system access, no network.
+**The animation quality is the feature**: a draw that reveals its winner without
+tension is a random-number generator with a circle drawn around it.
+
+### What it delivers
+- New sidebar module `luckyDraw` (reorderable), multiple saved rosters, JSON-persisted.
+- Add / paste-many / drop-a-file / edit / remove / exclude entries, up to 500.
+- Auto-retire winners (default on), **Put back** any single winner, **Reset draw**.
+- Draw N in a row; per-roster draw history (200) + CSV export.
+- The full §8 animation spec: wind-up recoil → launch → cruise with motion smear →
+  eased deceleration (1 − (1−t)³·⁴) → ratchet pointer → near-miss spotlight → overshoot-and-settle →
+  confetti poppers + per-character name reveal + shockwave → continuous segment re-flow.
+- A **Fairness** popover, because the honesty point below has to be visible in the app.
+
+### The one architectural rule
+**The winner is chosen before the wheel moves.** `SystemRandomNumberGenerator` picks
+the index; the wheel then animates to a pre-computed target angle. Simulating friction
+and reading off whatever lands under the pointer would make the distribution a property
+of the physics code — much harder to prove uniform and trivially skewed by a float
+rounding bug. The animation presents the result; it never produces it.
+
+### Implementation steps
+See §13 of the spec — P1 data + engine (UI-free, fully unit-tested) → P2 roster UI →
+P3 spin + wheel → P4 reveal + celebration → P5 settings/a11y/tuning → P6 docs.
+
+### Test plan
+`DrawEngineTests` (χ² uniformity over 100 k draws; landing angle resolves to the chosen
+index for **every** entry count 1…500 — the 0°/360° seam), `SpinnerAnimatorTests`
+(monotonic angle, exact arrival, velocity profile), `LuckyDrawStoreTests` (round-trip,
+history cap, corrupt-file fallback), plus a manual checklist for the §8 animation beats,
+which cannot be asserted in code.
+
+### Acceptance criteria
+See §9 of the spec — 11 criteria. The load-bearing ones: N draws over an N-entry roster
+yield N distinct winners; the segment under the pointer is always the entry on the card;
+Reduced Motion gets a real alternative presentation rather than a faster spin; 60 fps at
+200 entries.
+
+### Mobile parity (governance)
+✅ Port / ✅ Port, **P2** — pure computation and drawing, no OS API involved.
+`CoreHaptics` / `VibrationEffect` make the ratchet better on a phone than on the Mac.
+Row + study in [`HALO_MOBILE_ROADMAP.md`](HALO_MOBILE_ROADMAP.md) §3 / §9.
+
+### As actually built
+
+Shipped on `feat/f051-lucky-draw`. Nine source files under `Halo/Core/LuckyDraw/` and
+`Halo/Features/LuckyDraw/`, plus `HaloTests/LuckyDrawTests.swift` (ID block 8181–8200).
+
+**Changed from the spec, deliberately:**
+
+- **Put back keeps its row in the Already-drawn log** (`DrawResult.wasReturned`). The spec
+  left this implicit; the log is a record of *draws*, not a mirror of the retired set, so
+  returning a winner to the wheel must not erase the fact that they were drawn. The row
+  stays, marked "Back on the wheel", and the entry is eligible again — it can win twice,
+  and the second win writes its own row. Only **Reset draw** clears the log, and it leaves
+  exclusions alone.
+- **Segment palette rebuilt.** The first implementation held fills at brightness 0.24/0.32
+  so they would sit politely on `haloSurface`; on screen that read as an unfinished pie
+  chart of near-black wedges. Final: the arc Halo's accent gradient already travels
+  (blue ≈210° → violet ≈276°), brightness alternating **0.56 / 0.40**, radial shading per
+  wedge, neighbours separating on luminance parity rather than hue. Cyan is out of range —
+  at these brightnesses it is the one Halo hue that risks the label contrast. One
+  near-white label colour on every fill, enforced at 4.5:1 by `SegmentPaletteTests`.
+- **Labels flip on the left half** so no name is ever rendered upside-down, which the
+  straightforward radial transform does to half the wheel.
+- **The Space shortcut stands down while the name field has focus** — otherwise typing
+  "Anna Maria" spins the wheel mid-word.
+- **`CelebrationManager.focusPoint` added.** The celebration overlay spans the whole
+  window, so the poppers fired from the window's corners and half the confetti landed
+  behind the sidebar. The wheel's centre is reported up through a `PreferenceKey`.
+- **Decay exponent 3.4, not 4.2** (already recorded in the spec; confirmed on screen).
+
+**Follow-up pass — everything above that the first pass left unbuilt is now built:**
+
+- FR-3 drag-and-drop `.txt` / `.csv` import (`RosterImport.read(fileAt:)`: 1 MB cap, UTF-8
+  then Mac Roman, CSV first-column semantics).
+- FR-4 duplicate detection with the **Keep both / Skip duplicates** prompt.
+- FR-10 **Draw N in a row** (2–10, without replacement, cancellable between spins).
+- FR-17 full keyboard map: ⌘N, ⌘⇧R, Esc, ⌫ on the selected chip (plus Space from before).
+- D9 **Sound**, opt-in per roster, default off: ratchet tick (≤20/s) + reveal chime,
+  synthesised in code.
+- Roster **rename UI**, and FR-13's **duplicate roster** (also missing from the first pass
+  and not on its list).
+
+**Still not built:** FR-15 "copy full history" (copy-winner and CSV export exist), the
+per-roster confetti toggle from FR-19 (confetti follows the global `enableCelebrations`).
+
+**Not verified in a running app** (rendered and inspected offscreen, unit-tested, but not
+driven): the drop gesture, the ⌫/⌘N/⌘⇧R key paths, chip double- vs single-tap, and that
+the audio actually *sounds* right — see `MANUAL_TEST_PLAN.md` §20.2.
+
+**Verified:** 370 tests pass at the first pass (412 after the follow-up), including 20 new ones — χ² uniformity over 100 k draws, the
+landing angle resolving to the chosen index for every entry count 1…500, the put-back and
+reset semantics above, and the palette contrast floor. The wheel, reveal, confetti,
+put-back state and reset were checked on screen in a running build.
+
+**Known, unrelated:** a signed local build raises the macOS *"Halo would like to access
+data from other apps"* consent prompt for the App Group, and `AppState.writeWidgetData()`
+blocks on `HaloWidgetData.save()` until it is answered. That is the F-051-independent
+consequence of `58952d0` restoring the App Group entitlement (gotcha 27) — worth its own
+look, since an unanswered prompt hangs launch.
 ---
 
 ## F-052 — Lethe: Anonymous Ephemeral Chat (NFeat-128)
