@@ -5,6 +5,7 @@ import ImageIO
 import UniformTypeIdentifiers
 import SwiftUI
 import AppKit
+import CryptoKit
 @testable import Halo
 
 // MARK: - FileSystemScanner Tests
@@ -4280,7 +4281,7 @@ func waitUntilListening(port: UInt16, timeout: TimeInterval = 10) async throws {
 @Suite("HaloShare desktop server — binary uploads", .serialized)
 struct HaloShareServerBinaryTests {
 
-    private func makeServer(port: UInt16, dest: URL, fileSize: Int64) async throws -> LocalShareServer {
+    private func makeServer(port: UInt16, dest: URL, fileSize: Int64, sha256: String? = nil) async throws -> LocalShareServer {
         let server = LocalShareServer()
         try await server.start(port: port,
                                parameters: .tcp,
@@ -4288,7 +4289,7 @@ struct HaloShareServerBinaryTests {
                                onFileReceived: { _, _, _ in },
                                onCancel: { _ in },
                                onProgress: { _, _, _ in })
-        let file = ShareFile(id: "f1", fileName: "blob.bin", size: fileSize, fileType: "application/octet-stream")
+        let file = ShareFile(id: "f1", fileName: "blob.bin", size: fileSize, fileType: "application/octet-stream", sha256: sha256)
         await server.registerSession(id: "s1", tokens: ["f1": "tok"], files: ["f1": file], destDirectory: dest)
         return server
     }
@@ -4457,6 +4458,71 @@ struct HaloShareServerBinaryTests {
         #expect(result.status == 200)
         #expect((try? String(contentsOf: victim, encoding: .utf8)) == "do not touch", "the sender wrote outside the folder")
         #expect((try? String(contentsOf: dest.appendingPathComponent("victim.txt"), encoding: .utf8)) == "PWNED")
+    }
+
+    // MARK: sha256 (protocol doc §7.5)
+
+    private func hex(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+
+    @Test("A matching sha256 is accepted — in either case of hex")
+    func sha256Matches() async throws {
+        let payload = Data((0..<4096).map { UInt8(truncatingIfNeeded: $0 &* 29 &+ 131) })
+        for (port, digest) in [(UInt16(53921), hex(payload)), (UInt16(53922), hex(payload).uppercased())] {
+            let dest = try tempDir()
+            let server = try await makeServer(port: port, dest: dest, fileSize: Int64(payload.count), sha256: digest)
+            defer { Task { await server.stop() } }
+            try await waitUntilListening(port: port)
+
+            let result = try rawPost(port: port, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: payload)
+            #expect(result.status == 200, "digest \(digest.prefix(8))…: server answered \(result.status)")
+            #expect((try? Data(contentsOf: dest.appendingPathComponent("blob.bin"))) == payload)
+        }
+    }
+
+    @Test("A sha256 mismatch is 422 and the corrupt file is NOT kept")
+    func sha256Mismatch() async throws {
+        let dest = try tempDir()
+        let payload = Data((0..<4096).map { UInt8(truncatingIfNeeded: $0 &* 29 &+ 131) })
+        let server = try await makeServer(port: 53923, dest: dest, fileSize: Int64(payload.count),
+                                          sha256: String(repeating: "0", count: 64))
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53923)
+
+        let result = try rawPost(port: 53923, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: payload)
+        #expect(result.status == 422, "server answered \(result.status)")
+        #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob.bin").path),
+                "a file that failed its checksum was left on disk")
+    }
+
+    @Test("A mismatch is caught on a multi-read body too (3 MB), not only the part that arrived with the head")
+    func sha256MismatchOnLargeBody() async throws {
+        let dest = try tempDir()
+        var payload = Data(count: 3 << 20)
+        payload.withUnsafeMutableBytes { _ = SecRandomCopyBytes(kSecRandomDefault, $0.count, $0.baseAddress!) }
+        var tampered = payload; tampered[tampered.count - 1] ^= 0xFF          // last byte differs
+        let server = try await makeServer(port: 53924, dest: dest, fileSize: Int64(payload.count), sha256: hex(payload))
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53924)
+
+        let result = try rawPost(port: 53924, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: tampered)
+        #expect(result.status == 422, "a one-byte corruption at the very end went undetected (\(result.status))")
+        #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob.bin").path))
+    }
+
+    @Test("A mismatch must not clobber an existing file of the same name")
+    func sha256MismatchLeavesExistingFileAlone() async throws {
+        let dest = try tempDir()
+        try Data("precious".utf8).write(to: dest.appendingPathComponent("blob.bin"))
+        let payload = Data(repeating: 0x42, count: 2048)
+        let server = try await makeServer(port: 53925, dest: dest, fileSize: Int64(payload.count), sha256: String(repeating: "f", count: 64))
+        defer { Task { await server.stop() } }
+        try await waitUntilListening(port: 53925)
+
+        let result = try rawPost(port: 53925, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: payload)
+        #expect(result.status == 422)
+        #expect((try? String(contentsOf: dest.appendingPathComponent("blob.bin"), encoding: .utf8)) == "precious")
+        #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob (1).bin").path),
+                "the rejected file's renamed copy was kept")
     }
 
     @Test("A wrong token is refused and writes nothing")
