@@ -50,7 +50,10 @@ func sealV0(_ text: String, key: Data) -> String {
 let inputs: [(name: String, pass: String, salt: Data, text: String)] = [
     ("ascii", "correct horse battery staple", Data((0..<16).map { UInt8($0) }), "Hello, Halo"),
     ("bank-sms", "p@ssw0rd!-with-length", Data("halo-salt-1234!!".utf8), "A/C *XX3833 debited by Rs 1250.00 via UPI"),
-    ("unicode", "café☕ au lait ☕ crème", Data((0..<16).map { UInt8(0xA0 &+ $0) }), "Unicode: café ☕ 日本語 — clipboard")
+    ("unicode", "café☕ au lait ☕ crème", Data((0..<16).map { UInt8(0xA0 &+ $0) }), "Unicode: café ☕ 日本語 — clipboard"),
+    // Typed DECOMPOSED (e + U+0301). The KDF normalises to NFC first, so this must derive the
+    // same key as the precomposed spelling — a port that forgets to normalise fails here.
+    ("nfc-decomposed", "cafe\u{0301} au lait \u{2615} cre\u{0300}me", Data((0..<16).map { UInt8(0x50 &+ $0) }), "NFC check")
 ]
 
 var kdf: [[String: Any]] = [], dec: [[String: Any]] = [], legacy: [[String: Any]] = [], reject: [[String: Any]] = []
@@ -102,6 +105,37 @@ let policy: [(String, String)] = [
     ("café☕café☕café☕", "tooRepetitive"),
 ]
 
+// Pairing payloads (the desktop->phone QR). checksum = SHA-256 hex over the "|"-joined fields
+//   apiKey|projectID|googleAppID|gcmSenderID|databaseURL|storageBucket("" if none)|email|password|saltBase64|schema
+// and, from schema 2 only, "|iterations" appended. Schema 1 never covered iterations, so its
+// formula is frozen to keep validating old payloads; a decoded schema-1 payload means 200 000.
+func sha256hex(_ s: String) -> String { SHA256.hash(data: Data(s.utf8)).map { String(format: "%02x", $0) }.joined() }
+
+func pairing(name: String, schema: Int, iterations: Int?, tamperIterations: Int? = nil) -> [String: Any] {
+    let cfg: [String: String] = ["apiKey": "AIzaSyEXAMPLE-not-a-real-key", "projectID": "halo-example",
+                                 "googleAppID": "1:1234567890:ios:abcdef", "gcmSenderID": "1234567890",
+                                 "databaseURL": "https://halo-example-default-rtdb.firebaseio.com"]
+    let auth = ["email": "halo@example.com", "password": "example-password-0123"]
+    let saltB64 = Data((0..<16).map { UInt8(0x10 &+ $0) }).base64EncodedString()
+    var fields = [cfg["apiKey"]!, cfg["projectID"]!, cfg["googleAppID"]!, cfg["gcmSenderID"]!,
+                  cfg["databaseURL"]!, "", auth["email"]!, auth["password"]!, saltB64, String(schema)]
+    if schema >= 2, let iterations { fields.append(String(iterations)) }
+    var payload: [String: Any] = ["firebaseConfig": cfg, "auth": auth, "saltBase64": saltB64,
+                                  "schema": schema, "checksum": sha256hex(fields.joined(separator: "|"))]
+    // A schema-1 payload has no iterations field at all.
+    if schema >= 2, let iterations { payload["iterations"] = tamperIterations ?? iterations }
+    let json = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys, .withoutEscapingSlashes])
+    return ["name": name, "payloadB64": json.base64EncodedString(),
+            "valid": tamperIterations == nil, "schema": schema,
+            "iterations": schema >= 2 ? (tamperIterations ?? iterations ?? defaultIterations) : legacyIterations,
+            "saltB64": saltB64]
+}
+let pairings: [[String: Any]] = [
+    pairing(name: "schema-2", schema: 2, iterations: defaultIterations),
+    pairing(name: "schema-1-legacy", schema: 1, iterations: nil),
+    pairing(name: "schema-2-iterations-downgraded", schema: 2, iterations: defaultIterations, tamperIterations: 100_000),
+]
+
 let root: [String: Any] = [
     "version": 2,
     "algorithm": [
@@ -116,11 +150,12 @@ let root: [String: Any] = [
     ],
     "kdfVectors": kdf, "decryptVectors": dec, "legacyDecryptVectors": legacy,
     "rejectVectors": reject,
-    "passphraseVectors": policy.map { ["passphrase": $0.0, "verdict": $0.1] }
+    "passphraseVectors": policy.map { ["passphrase": $0.0, "verdict": $0.1] },
+    "pairingVectors": pairings
 ]
 
 let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
 let out = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
     .appendingPathComponent("docs/specs/crypto-parity-vectors.v2.json")
 try data.write(to: out)
-print("Wrote \(out.path) — \(kdf.count) kdf, \(dec.count) decrypt, \(legacy.count) legacy, \(reject.count) reject, \(policy.count) passphrase vectors")
+print("Wrote \(out.path) — \(kdf.count) kdf, \(dec.count) decrypt, \(legacy.count) legacy, \(reject.count) reject, \(policy.count) passphrase, \(pairings.count) pairing vectors")

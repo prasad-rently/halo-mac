@@ -17,7 +17,7 @@
   },
   "decryptVectors" : [
     {
-      "ciphertext" : "v1:t1htSgzMeGDus1oFl6SQEmHabni46uInUvS0IlsvyMNtvfAUlNGU",
+      "ciphertext" : "v1:eL0L8doKiP03GLCu/76TOCoipcRQVkh1Y46HHxnmLxU1YMJF8XE1",
       "iterations" : 600000,
       "name" : "ascii",
       "passphrase" : "correct horse battery staple",
@@ -25,7 +25,7 @@
       "saltB64" : "AAECAwQFBgcICQoLDA0ODw=="
     },
     {
-      "ciphertext" : "v1:u89aybrlaSLObKn/4wfwXG0eVT2B6VjclexsngT0Jk1fzPVnNyKR9CotjOFZmq7mS0hIgrgDnciIEsJUzWgHR7VJdHJg",
+      "ciphertext" : "v1:aDUx/YwXb1iRib8ONnrK/6K5ifReWPnjUouxSSf6svWfpkxXQ64lbp0b6hZ5xjJIc+Zxja41cZA8pCdHjBfmmamnvP6u",
       "iterations" : 600000,
       "name" : "bank-sms",
       "passphrase" : "p@ssw0rd!-with-length",
@@ -33,12 +33,20 @@
       "saltB64" : "aGFsby1zYWx0LTEyMzQhIQ=="
     },
     {
-      "ciphertext" : "v1:rOJ2J2t8CUG+8cHyR+xS0xuFv3JG4XFUCBo98OUrx2DBFGp9KxLpB922xAdaPYQRg2p8QQh2i6UeeZeRW97p1Q47atOf7A==",
+      "ciphertext" : "v1:+R+RIA4R+5dhqBXjvjaKZJnv4PRZJqfew9RM79yZWpERj2JAwbYW+eNVoTgEn3e+Yluo/9IKAomS0GI8Q9zb1alYs9M2OA==",
       "iterations" : 600000,
       "name" : "unicode",
       "passphrase" : "café☕ au lait ☕ crème",
       "plaintext" : "Unicode: café ☕ 日本語 — clipboard",
       "saltB64" : "oKGio6SlpqeoqaqrrK2urw=="
+    },
+    {
+      "ciphertext" : "v1:VGrYEkDDEXHbR4FA3QKbHlqPCQUC5orjmzZcMcn9j6xbj4Vkeg==",
+      "iterations" : 600000,
+      "name" : "nfc-decomposed",
+      "passphrase" : "café au lait ☕ crème",
+      "plaintext" : "NFC check",
+      "saltB64" : "UFFSU1RVVldYWVpbXF1eXw=="
     }
   ],
   "kdfVectors" : [
@@ -64,6 +72,13 @@
       "saltB64" : "oKGio6SlpqeoqaqrrK2urw=="
     },
     {
+      "derivedKeyB64" : "nrepdyR28fEuY52yyRRnfuQyAJqaQdnn+g8abPq5MWM=",
+      "iterations" : 600000,
+      "name" : "nfc-decomposed",
+      "passphrase" : "café au lait ☕ crème",
+      "saltB64" : "UFFSU1RVVldYWVpbXF1eXw=="
+    },
+    {
       "derivedKeyB64" : "Rf6p159YPFaNedmcNclcNPlgOl+9T43Tat9kU3JLecg=",
       "iterations" : 200000,
       "name" : "ascii/legacy-200k",
@@ -83,11 +98,18 @@
       "name" : "unicode/legacy-200k",
       "passphrase" : "café☕ au lait ☕ crème",
       "saltB64" : "oKGio6SlpqeoqaqrrK2urw=="
+    },
+    {
+      "derivedKeyB64" : "1l5+5zCUC9rVieYYEUWVjQwSCa2l1NCeQ2ObSNAhhsM=",
+      "iterations" : 200000,
+      "name" : "nfc-decomposed/legacy-200k",
+      "passphrase" : "café au lait ☕ crème",
+      "saltB64" : "UFFSU1RVVldYWVpbXF1eXw=="
     }
   ],
   "legacyDecryptVectors" : [
     {
-      "ciphertext" : "31ujb/y/Y4VnTAiSyrbaj8K7NfGzKso2HXaHClJcqt44DIHRXedX",
+      "ciphertext" : "POVBKBxgAQ7h9MeeejwA3PpK/M86QmDTiCIzvxY0dnj8zoNlfkNN",
       "iterations" : 200000,
       "name" : "ascii",
       "passphrase" : "correct horse battery staple",
@@ -95,7 +117,7 @@
       "saltB64" : "AAECAwQFBgcICQoLDA0ODw=="
     },
     {
-      "ciphertext" : "kdFD+QpNXlhy4iA8HUCXZOtfdyqzxSXPKTR7a793VBDKyfSkKumr/2Q3mAR6S7gCRvF7DlW5zUepmvjEsU5JcqbumC2g",
+      "ciphertext" : "0wxC7ek7gLxHZSFkjujNnz/2mo1N7sio+ChyVRbj9zf/1gmeAp6cy0KBGdncl6mUphPqLhbLyW6FjSVtVHidGOYMP7Lq",
       "iterations" : 200000,
       "name" : "bank-sms",
       "passphrase" : "p@ssw0rd!-with-length",
@@ -103,12 +125,46 @@
       "saltB64" : "aGFsby1zYWx0LTEyMzQhIQ=="
     },
     {
-      "ciphertext" : "A2aPkqwd4s6vu7ljeGI/ThdsT1wjMOvCfLd8UgNsiWamGNLJ2FDTROZETmMgpxoiI/3NqY5SJlBYtLnBxRVidk3bwJZgjg==",
+      "ciphertext" : "yaTa85k3xKjrfICE31aobyX3/WO68PMXCzNDxFdcSp6rd5b0O2DWpqGI2rJ+xU2Txt5mLmuxUKXq9vjmsa1EoyZEtHEXDw==",
       "iterations" : 200000,
       "name" : "unicode",
       "passphrase" : "café☕ au lait ☕ crème",
       "plaintext" : "Unicode: café ☕ 日本語 — clipboard",
       "saltB64" : "oKGio6SlpqeoqaqrrK2urw=="
+    },
+    {
+      "ciphertext" : "H0Aacz1qRDf2HtybFeF9g4CkqMieU4xjmZ++dc8jkucE7lUYLQ==",
+      "iterations" : 200000,
+      "name" : "nfc-decomposed",
+      "passphrase" : "café au lait ☕ crème",
+      "plaintext" : "NFC check",
+      "saltB64" : "UFFSU1RVVldYWVpbXF1eXw=="
+    }
+  ],
+  "pairingVectors" : [
+    {
+      "iterations" : 600000,
+      "name" : "schema-2",
+      "payloadB64" : "eyJhdXRoIjp7ImVtYWlsIjoiaGFsb0BleGFtcGxlLmNvbSIsInBhc3N3b3JkIjoiZXhhbXBsZS1wYXNzd29yZC0wMTIzIn0sImNoZWNrc3VtIjoiMTMyOWVjNGYzMzJlZmVjNDM4MDA5OTJiZjI1NWVlZTdhZjNiMThkMWUwNmRhYThmNGE2ZmUzMGQyNTk3MTFjYyIsImZpcmViYXNlQ29uZmlnIjp7ImFwaUtleSI6IkFJemFTeUVYQU1QTEUtbm90LWEtcmVhbC1rZXkiLCJkYXRhYmFzZVVSTCI6Imh0dHBzOi8vaGFsby1leGFtcGxlLWRlZmF1bHQtcnRkYi5maXJlYmFzZWlvLmNvbSIsImdjbVNlbmRlcklEIjoiMTIzNDU2Nzg5MCIsImdvb2dsZUFwcElEIjoiMToxMjM0NTY3ODkwOmlvczphYmNkZWYiLCJwcm9qZWN0SUQiOiJoYWxvLWV4YW1wbGUifSwiaXRlcmF0aW9ucyI6NjAwMDAwLCJzYWx0QmFzZTY0IjoiRUJFU0V4UVZGaGNZR1JvYkhCMGVIdz09Iiwic2NoZW1hIjoyfQ==",
+      "saltB64" : "EBESExQVFhcYGRobHB0eHw==",
+      "schema" : 2,
+      "valid" : true
+    },
+    {
+      "iterations" : 200000,
+      "name" : "schema-1-legacy",
+      "payloadB64" : "eyJhdXRoIjp7ImVtYWlsIjoiaGFsb0BleGFtcGxlLmNvbSIsInBhc3N3b3JkIjoiZXhhbXBsZS1wYXNzd29yZC0wMTIzIn0sImNoZWNrc3VtIjoiYWU0OGVhYWFhNzE1NTM1MzE0Y2FhZDVmYzUwODk2NzE2MTAxMjkyZGFlNmVlMTg4YmMwOWIyYjU5MWM2MWU0ZSIsImZpcmViYXNlQ29uZmlnIjp7ImFwaUtleSI6IkFJemFTeUVYQU1QTEUtbm90LWEtcmVhbC1rZXkiLCJkYXRhYmFzZVVSTCI6Imh0dHBzOi8vaGFsby1leGFtcGxlLWRlZmF1bHQtcnRkYi5maXJlYmFzZWlvLmNvbSIsImdjbVNlbmRlcklEIjoiMTIzNDU2Nzg5MCIsImdvb2dsZUFwcElEIjoiMToxMjM0NTY3ODkwOmlvczphYmNkZWYiLCJwcm9qZWN0SUQiOiJoYWxvLWV4YW1wbGUifSwic2FsdEJhc2U2NCI6IkVCRVNFeFFWRmhjWUdSb2JIQjBlSHc9PSIsInNjaGVtYSI6MX0=",
+      "saltB64" : "EBESExQVFhcYGRobHB0eHw==",
+      "schema" : 1,
+      "valid" : true
+    },
+    {
+      "iterations" : 100000,
+      "name" : "schema-2-iterations-downgraded",
+      "payloadB64" : "eyJhdXRoIjp7ImVtYWlsIjoiaGFsb0BleGFtcGxlLmNvbSIsInBhc3N3b3JkIjoiZXhhbXBsZS1wYXNzd29yZC0wMTIzIn0sImNoZWNrc3VtIjoiMTMyOWVjNGYzMzJlZmVjNDM4MDA5OTJiZjI1NWVlZTdhZjNiMThkMWUwNmRhYThmNGE2ZmUzMGQyNTk3MTFjYyIsImZpcmViYXNlQ29uZmlnIjp7ImFwaUtleSI6IkFJemFTeUVYQU1QTEUtbm90LWEtcmVhbC1rZXkiLCJkYXRhYmFzZVVSTCI6Imh0dHBzOi8vaGFsby1leGFtcGxlLWRlZmF1bHQtcnRkYi5maXJlYmFzZWlvLmNvbSIsImdjbVNlbmRlcklEIjoiMTIzNDU2Nzg5MCIsImdvb2dsZUFwcElEIjoiMToxMjM0NTY3ODkwOmlvczphYmNkZWYiLCJwcm9qZWN0SUQiOiJoYWxvLWV4YW1wbGUifSwiaXRlcmF0aW9ucyI6MTAwMDAwLCJzYWx0QmFzZTY0IjoiRUJFU0V4UVZGaGNZR1JvYkhCMGVIdz09Iiwic2NoZW1hIjoyfQ==",
+      "saltB64" : "EBESExQVFhcYGRobHB0eHw==",
+      "schema" : 2,
+      "valid" : false
     }
   ],
   "passphraseVectors" : [
@@ -159,7 +215,7 @@
   ],
   "rejectVectors" : [
     {
-      "ciphertext" : "5MLjhs8w8wQI7AWTOkiT2n3RzzKJhoRsUmuDYpFIa6m3lVQ1zdCw",
+      "ciphertext" : "E8YIySWY7Zxj1Xb9rfDSNRWNtOGBBOm9MEVBHs3o9TRKckLIk/yI",
       "expect" : "decryptionFailed",
       "iterations" : 600000,
       "name" : "ascii/prefix-stripped",
@@ -167,7 +223,7 @@
       "saltB64" : "AAECAwQFBgcICQoLDA0ODw=="
     },
     {
-      "ciphertext" : "Iq28Y3mqQBIu3tdoYL3XLiQDCKRWPnNKpgmIKMwPRcegedejjEkcWi75ZCyr1lqUnhnIiYqYFgTnb88GHFNNKgBHhPGo",
+      "ciphertext" : "1ql+lqf9IdDezHo5mDHhtvTiYE01MEWLohS1u9//YPXBBtaRnrtoc4Z0clFjD+iWR8HkreA8P7w2+nVr+MHhFy+ucFdb",
       "expect" : "decryptionFailed",
       "iterations" : 600000,
       "name" : "bank-sms/prefix-stripped",
@@ -175,7 +231,7 @@
       "saltB64" : "aGFsby1zYWx0LTEyMzQhIQ=="
     },
     {
-      "ciphertext" : "avFvhVvuxhDLjbAm1kNHVOQarA/Ga0Xb6F3JFCQl6kJo2au9tcZuaykJm9bx/m8IBBh5hVtJtv6FeGprBU85iboWbQlIwg==",
+      "ciphertext" : "3l/2uoSZVNG5NR3K/21c2qlD3dQQ39k7ZHpXnngeuXnuGk/80/lrnd0nnDcqcMXClqiqbnuVc2quyJSIZA1VPoBHDm2/6Q==",
       "expect" : "decryptionFailed",
       "iterations" : 600000,
       "name" : "unicode/prefix-stripped",
@@ -183,7 +239,15 @@
       "saltB64" : "oKGio6SlpqeoqaqrrK2urw=="
     },
     {
-      "ciphertext" : "v1:wZzxY2G4Pwc2W6O/w94vpVzmFrlxvUHCFb26ZqMS0/PijFZg930b",
+      "ciphertext" : "bRxguyMPIKf+15DdpNMrpyL3a4ye4K6+TS81Frgq0hqqb3WxLA==",
+      "expect" : "decryptionFailed",
+      "iterations" : 600000,
+      "name" : "nfc-decomposed/prefix-stripped",
+      "passphrase" : "café au lait ☕ crème",
+      "saltB64" : "UFFSU1RVVldYWVpbXF1eXw=="
+    },
+    {
+      "ciphertext" : "v1:wkYBJbO/YL9mlokGpn7+D62y3o6n7n7hJncndtIHF3ijDLmfUQGO",
       "expect" : "decryptionFailed",
       "iterations" : 600000,
       "name" : "ascii/v0-body-with-v1-prefix",

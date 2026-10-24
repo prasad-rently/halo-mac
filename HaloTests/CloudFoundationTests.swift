@@ -680,6 +680,7 @@ struct CryptoParityTests {
         struct SealedVector: Decodable { let name, passphrase, saltB64, plaintext, ciphertext: String; let iterations: Int }
         struct RejectVector: Decodable { let name, passphrase, saltB64, ciphertext, expect: String; let iterations: Int }
         struct PassphraseVector: Decodable { let passphrase, verdict: String }
+        struct PairingVector: Decodable { let name, payloadB64, saltB64: String; let valid: Bool; let schema, iterations: Int }
         let version: Int
         let algorithm: Algo
         let kdfVectors: [KDFVector]
@@ -687,6 +688,7 @@ struct CryptoParityTests {
         let legacyDecryptVectors: [SealedVector]
         let rejectVectors: [RejectVector]
         let passphraseVectors: [PassphraseVector]
+        let pairingVectors: [PairingVector]
     }
 
     private var vectorsURL: URL {
@@ -751,6 +753,43 @@ struct CryptoParityTests {
             let svc = try CryptoService(passphrase: v.passphrase, salt: salt, iterations: v.iterations)
             #expect(v.expect == "decryptionFailed")
             #expect(throws: CryptoError.decryptionFailed, "\(v.name)") { _ = try svc.decrypt(v.ciphertext) }
+        }
+    }
+
+    @Test("The decomposed-passphrase vector derives the same key as its precomposed spelling (NFC is pinned)")
+    func nfcPinned() throws {
+        let v = try #require(try load().kdfVectors.first { $0.name == "nfc-decomposed" })
+        // Swift's `==` treats canonically-equivalent strings as equal, so compare scalars to prove
+        // the vector really is stored decomposed.
+        let precomposed = v.passphrase.precomposedStringWithCanonicalMapping
+        #expect(v.passphrase.unicodeScalars.count > precomposed.unicodeScalars.count)
+        let salt = try #require(Data(base64Encoded: v.saltB64))
+        let viaComposed = try CryptoService.deriveKey(passphrase: precomposed, salt: salt, iterations: v.iterations)
+        #expect(keyB64(viaComposed) == v.derivedKeyB64)
+    }
+
+    /// Kotlin -> Swift. Opt-in because it needs the Kotlin suite to have run first:
+    ///   HALO_KOTLIN_SEALED_OUT=/tmp/k.json ./gradlew :halocloud:test   (in android/)
+    ///   TEST_RUNNER_HALO_KOTLIN_SEALED=/tmp/k.json xcodebuild test …
+    @Test("A box sealed by the Kotlin port opens here (opt-in: HALO_KOTLIN_SEALED=<file>)")
+    func kotlinSealedOpens() throws {
+        guard let path = ProcessInfo.processInfo.environment["HALO_KOTLIN_SEALED"] else { return }
+        struct Sealed: Decodable { let passphrase, saltB64, plaintext, ciphertext: String; let iterations: Int }
+        let v = try JSONDecoder().decode(Sealed.self, from: try Data(contentsOf: URL(fileURLWithPath: path)))
+        #expect(v.ciphertext.hasPrefix(CryptoService.envelopePrefix))
+        let svc = try CryptoService(passphrase: v.passphrase, salt: try #require(Data(base64Encoded: v.saltB64)),
+                                    iterations: v.iterations)
+        #expect(try svc.decrypt(v.ciphertext) == v.plaintext)
+    }
+
+    @Test("Pairing payloads decode, validate (or fail) and carry the iteration count exactly as the contract says")
+    func pairing() throws {
+        for v in try load().pairingVectors {
+            let p = try CloudPairingPayload.decode(v.payloadB64)
+            #expect(p.isValid == v.valid, "\(v.name)")
+            #expect(p.schema == v.schema, "\(v.name)")
+            #expect(p.iterations == v.iterations, "\(v.name)")
+            #expect(p.saltBase64 == v.saltB64, "\(v.name)")
         }
     }
 

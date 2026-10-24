@@ -21,4 +21,7 @@ rootProject.name = "halo-mobile-android"
 // :haloshare is plain Kotlin/JVM on purpose — the protocol core has no Android dependency, so its
 // whole test suite (loopback, raw sockets, curl) runs on the JVM in seconds.
 include(":haloshare")
+// :halocloud is the Kotlin half of the cloud crypto contract (docs/specs/crypto-parity.md). Plain JVM
+// for the same reason as :haloshare — and so the parity vectors run in seconds with no emulator.
+include(":halocloud")
 include(":app")
