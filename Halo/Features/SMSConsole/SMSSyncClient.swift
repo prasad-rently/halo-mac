@@ -1,5 +1,4 @@
 import Foundation
-import FirebaseDatabase   // DatabaseHandle (observer handles for teardown)
 
 // MARK: - SMSSyncClient  (F-044)
 //
@@ -47,7 +46,7 @@ final class SMSSyncClient: ObservableObject {
     /// Devices we've already attached per-device (lines/messages) observers to.
     private var observedDevices: Set<String> = []
     /// (path, handle) pairs so every observer can be torn down on disconnect.
-    private var observers: [(path: String, handle: DatabaseHandle)] = []
+    private var observers: [(path: String, handle: RTDBObserverHandle)] = []
     /// Wall-clock at connect — messages newer than this are "live" and notifiable;
     /// older ones are historical backfill re-delivered by `child_added` on attach.
     private var connectedAt: Date = .distantFuture
@@ -175,7 +174,7 @@ final class SMSSyncClient: ObservableObject {
     }
 
     private func stopObserving() async {
-        for o in observers { try? await rtdb.removeObserver(at: o.path, handle: o.handle) }
+        for o in observers { await rtdb.removeObserver(at: o.path, handle: o.handle) }
         observers.removeAll()
         observedDevices.removeAll()
     }
@@ -189,10 +188,10 @@ final class SMSSyncClient: ObservableObject {
     /// top-level `sms/{uid}` + `devices/{uid}` observers in place. Lets the device
     /// re-attach cleanly (no duplicate observers) if it re-appears.
     private func removeDeviceObservers(_ deviceId: String) async {
-        var kept: [(path: String, handle: DatabaseHandle)] = []
+        var kept: [(path: String, handle: RTDBObserverHandle)] = []
         for o in observers {
             if o.path.contains("/\(deviceId)/") {
-                try? await rtdb.removeObserver(at: o.path, handle: o.handle)
+                await rtdb.removeObserver(at: o.path, handle: o.handle)
             } else {
                 kept.append(o)
             }

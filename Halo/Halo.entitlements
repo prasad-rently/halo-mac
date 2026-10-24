@@ -14,18 +14,12 @@
     <key>com.apple.security.files.downloads.read-write</key>
     <true/>
 
-    <!-- Network client — for signature DB updates + Firebase RTDB/Auth (F-044) -->
+    <!-- Network client — signature DB updates, and the cloud features' REST calls to the
+         user's own Firebase (F-044). Those use Identity Toolkit + RTDB REST directly, so
+         no keychain-access-groups entitlement is needed (it is restricted: it needs a
+         provisioning profile, and a development-signed build carrying it is killed at launch). -->
     <key>com.apple.security.network.client</key>
     <true/>
-
-    <!-- Keychain access group — REQUIRED for FirebaseAuth (F-044) under the App
-         Sandbox. Without it, Auth's Keychain persistence fails at sign-in with
-         errSecMissingEntitlement (-34018). Also the default group for Halo's own
-         CloudConfigStore items, so their unqualified SecItem queries keep working. -->
-    <key>keychain-access-groups</key>
-    <array>
-        <string>$(AppIdentifierPrefix)com.halo.mac</string>
-    </array>
 
     <!-- Temporary exception: read ~/Library for cache/log scanning -->
     <!-- NOTE: Full Disk Access is requested at runtime via user prompt, not via entitlement -->

@@ -206,7 +206,7 @@
 		AE6FACECB50C6D438440D382 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
 		AE9EC9A5F91D3B847ACC8455 /* AIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF3FA79DA36A45E06CF7D667 /* AIModels.swift */; };
 		B235974CEB652C09272B4499 /* FilesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB75AC7A8DBC58FFF8D8070B /* FilesUITests.swift */; };
-		B3193E7F1EEBD24454465DEB /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 8C1BF1F322E67D267C1E31B3 /* FirebaseDatabase */; };
+		B359A9774FABDB8C0EEE7C20 /* CloudRESTClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CF513D852033ACD07DD2CD0 /* CloudRESTClientTests.swift */; };
 		B6E3C305908B409F99263327 /* CloudFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88C159A5C1348117FA9F7CA8 /* CloudFoundationTests.swift */; };
 		B8A113E56E32C2E1E8AB07B8 /* ExpenditureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F450540DB55422C3FAAE03A /* ExpenditureView.swift */; };
 		BC6CC8DD60AB3F804E646D2B /* AIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D2C02D89C828E5968F14081 /* AIProvider.swift */; };
@@ -214,7 +214,6 @@
 		C7FCC24A08F234940C32D22C /* CloudSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C4927677822093E95006BE /* CloudSettingsPane.swift */; };
 		CB68399B0AA4C27AB85AA8C2 /* FirebaseRTDBClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95CB5E046AFEAF8DF5C7502C /* FirebaseRTDBClient.swift */; };
 		CBD199B637DDEE091BBEACAC /* CloudModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E654E24D942547F5E7C88B57 /* CloudModels.swift */; };
-		CDC4F64544D8D4FE4AC0E2EB /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 5BD16F4E4DF8029B5A7C842F /* FirebaseAuth */; };
 		D2BA4D7F84FA257B4490BEDF /* AIQuickAskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEF40F332D70A2AE5393A74C /* AIQuickAskView.swift */; };
 		D52607DADA626DF2FA479956 /* HelperClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00C37BFCA463AB410245B802 /* HelperClientTests.swift */; };
 		D6C27E0D2D06F494CFF23FBF /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
@@ -473,6 +472,7 @@
 		544F38735C12837D57FD1DA7 /* SmartScanUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SmartScanUITests.swift; sourceTree = "<group>"; };
 		5842B4E5994A0687DC32159E /* ExpenditureModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExpenditureModels.swift; sourceTree = "<group>"; };
 		5CEA7F5090B5F253E0E23587 /* ProtectionUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProtectionUITests.swift; sourceTree = "<group>"; };
+		5CF513D852033ACD07DD2CD0 /* CloudRESTClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudRESTClientTests.swift; sourceTree = "<group>"; };
 		629A9D17BDFF863DCB0206F2 /* DriveSpeedTesterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedTesterTests.swift; sourceTree = "<group>"; };
 		67D626412F39854842AE0A36 /* HaloUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6915A2D32038A9761B33CFEA /* ExpenditureStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExpenditureStore.swift; sourceTree = "<group>"; };
@@ -525,8 +525,6 @@
 				000000000000000000001063 /* SystemConfiguration.framework in Frameworks */,
 				000000000000000000002018 /* WidgetKit.framework in Frameworks */,
 				000000000000000000005001 /* Sentry in Frameworks */,
-				B3193E7F1EEBD24454465DEB /* FirebaseDatabase in Frameworks */,
-				CDC4F64544D8D4FE4AC0E2EB /* FirebaseAuth in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -809,6 +807,7 @@
 				00C37BFCA463AB410245B802 /* HelperClientTests.swift */,
 				1EA41949D8E2D368E6AFF7F6 /* AIAssistantTests.swift */,
 				88C159A5C1348117FA9F7CA8 /* CloudFoundationTests.swift */,
+				5CF513D852033ACD07DD2CD0 /* CloudRESTClientTests.swift */,
 			);
 			name = HaloTests;
 			path = HaloTests;
@@ -969,8 +968,6 @@
 			name = Halo;
 			packageProductDependencies = (
 				000000000000000000005002 /* Sentry */,
-				8C1BF1F322E67D267C1E31B3 /* FirebaseDatabase */,
-				5BD16F4E4DF8029B5A7C842F /* FirebaseAuth */,
 			);
 			productName = Halo;
 			productReference = 000000000000000000001015 /* Halo.app */;
@@ -1077,7 +1074,6 @@
 			mainGroup = 000000000000000000001000;
 			packageReferences = (
 				000000000000000000005003 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
-				441AB940EFAB042CF1255E21 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			productRefGroup = 000000000000000000001003 /* Products */;
 			projectDirPath = "";
@@ -1365,6 +1361,7 @@
 				D52607DADA626DF2FA479956 /* HelperClientTests.swift in Sources */,
 				ECC49D0FB93E1F7EA5B51EBD /* AIAssistantTests.swift in Sources */,
 				B6E3C305908B409F99263327 /* CloudFoundationTests.swift in Sources */,
+				B359A9774FABDB8C0EEE7C20 /* CloudRESTClientTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1716,14 +1713,6 @@
 				minimumVersion = 8.0.0;
 			};
 		};
-		441AB940EFAB042CF1255E21 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 11.0.0;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1731,16 +1720,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 000000000000000000005003 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
 			productName = Sentry;
-		};
-		5BD16F4E4DF8029B5A7C842F /* FirebaseAuth */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 441AB940EFAB042CF1255E21 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseAuth;
-		};
-		8C1BF1F322E67D267C1E31B3 /* FirebaseDatabase */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 441AB940EFAB042CF1255E21 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseDatabase;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

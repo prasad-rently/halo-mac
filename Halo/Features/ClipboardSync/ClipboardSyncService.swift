@@ -1,5 +1,4 @@
 import Foundation
-import FirebaseDatabase   // DatabaseHandle
 
 // MARK: - ClipboardSyncService  (F-045)
 //
@@ -42,7 +41,7 @@ final class ClipboardSyncService: ObservableObject {
     private let store = CloudConfigStore.shared
     private let rtdb = FirebaseRTDBClient.shared
     private var crypto: CryptoService?
-    private var observer: (path: String, handle: DatabaseHandle)?
+    private var observer: (path: String, handle: RTDBObserverHandle)?
     private var seenItemIds: Set<String> = []
     private var lastSweep = Date.distantPast
 
@@ -98,7 +97,7 @@ final class ClipboardSyncService: ObservableObject {
 
     private func teardown() async {
         if let o = observer {
-            try? await rtdb.removeObserver(at: o.path, handle: o.handle)
+            await rtdb.removeObserver(at: o.path, handle: o.handle)
             observer = nil
         }
     }
