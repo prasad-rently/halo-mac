@@ -1,0 +1,62 @@
+{
+  "algorithm" : {
+    "aad" : null,
+    "cipher" : "AES-256-GCM",
+    "iterations" : 200000,
+    "kdf" : "PBKDF2-HMAC-SHA256",
+    "keyBytes" : 32,
+    "passwordEncoding" : "UTF-8",
+    "passwordNormalization" : "NFC (precomposed)",
+    "wireFormat" : "nonce12 || ciphertext || tag16, base64"
+  },
+  "decryptVectors" : [
+    {
+      "ciphertextB64" : "WcwHOp2++LrIk2A3ssOp+aKa5+CAi9ZU9QQBntfYVd6Zx60vnUdo",
+      "iterations" : 200000,
+      "name" : "ascii",
+      "passphrase" : "correct horse battery staple",
+      "plaintext" : "Hello, Halo",
+      "saltB64" : "AAECAwQFBgcICQoLDA0ODw=="
+    },
+    {
+      "ciphertextB64" : "8wttxp6+D04nA6VVMvH8RKoCqn9/tUzrgVdBuNcEUVBjAx19UoV/G7Q0dk7e4P+jttZDF2AioEk3KibOefVKaNji2SDu",
+      "iterations" : 200000,
+      "name" : "bank-sms",
+      "passphrase" : "p@ssw0rd!",
+      "plaintext" : "A/C *XX3833 debited by Rs 1250.00 via UPI",
+      "saltB64" : "aGFsby1zYWx0LTEyMzQhIQ=="
+    },
+    {
+      "ciphertextB64" : "j0wiHN7yY7/6F4ZQ1RMdnglPrl7p7CCieOFCvqDnHpoQa1YDOZGOGq9YaBpB+oOfd1ynq21yE6z9MfGORWj0KMSxQocs8Q==",
+      "iterations" : 200000,
+      "name" : "unicode",
+      "passphrase" : "café☕",
+      "plaintext" : "Unicode: café ☕ 日本語 — clipboard",
+      "saltB64" : "oKGio6SlpqeoqaqrrK2urw=="
+    }
+  ],
+  "kdfVectors" : [
+    {
+      "derivedKeyB64" : "Rf6p159YPFaNedmcNclcNPlgOl+9T43Tat9kU3JLecg=",
+      "iterations" : 200000,
+      "name" : "ascii",
+      "passphrase" : "correct horse battery staple",
+      "saltB64" : "AAECAwQFBgcICQoLDA0ODw=="
+    },
+    {
+      "derivedKeyB64" : "Y7Rs1uKr13CTgwW830i0j2jDCjHxzEkblLONlYIgCN8=",
+      "iterations" : 200000,
+      "name" : "bank-sms",
+      "passphrase" : "p@ssw0rd!",
+      "saltB64" : "aGFsby1zYWx0LTEyMzQhIQ=="
+    },
+    {
+      "derivedKeyB64" : "Ufr3GVGrnEFG+eTxk+VAQ6/+596PyPZN2V6i65LV4UI=",
+      "iterations" : 200000,
+      "name" : "unicode",
+      "passphrase" : "café☕",
+      "saltB64" : "oKGio6SlpqeoqaqrrK2urw=="
+    }
+  ],
+  "version" : 1
+}

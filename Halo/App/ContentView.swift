@@ -398,6 +398,8 @@ struct DetailView: View {
             case .lethe:          LetheView()
             case .ai:             AIAssistantView()
             case .luckyDraw:      LuckyDrawView()
+            case .messages:       SMSConsoleView()
+            case .expenditure:    ExpenditureView()
             case .menuBarPreview: MenuBarPreviewView()
             }
         }
