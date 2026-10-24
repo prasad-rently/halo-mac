@@ -34,32 +34,21 @@
 | [F-013](#f-013--icloud-clipboard-sync) | iCloud Clipboard Sync | ⏭ Skipped (user) | 5 d | F-003 |
 | [F-014](#f-014--pdf-health-report-export) | PDF Health Report Export | ✅ Done | 2 d | none |
 | [F-015](#f-015--custom-scan-schedule-ui) | Custom Scan Schedule UI | ✅ Done | 1 d | F-005 |
-| [F-016](#f-016--permission-auditor) | Permission Auditor | 💡 Future Idea | ~3 d | F-002 (release) |
 | [F-017](#f-017--network-traffic-monitor-app-level-firewall-companion) | Network Traffic Monitor | ✅ Done | ~5 d | none |
 | [F-016](#f-016--permission-auditor) | Permission Auditor | ✅ Done | 2 d | none |
-| [F-017](#f-017--network-traffic-monitor-app-level-firewall-companion) | Network Traffic Monitor | 💡 Future Idea | ~5 d | none |
-| [F-018](#f-018--privacy-data-exposure-scanner) | Privacy Data Exposure Scanner | 💡 Future Idea | ~3 d | none |
+| [F-018](#f-018--privacy-data-exposure-scanner) | Privacy Data Exposure Scanner | ✅ Done | ~3 d | none |
 | [F-019](#f-019--security-posture-dashboard) | Security Posture Dashboard | ✅ Done | 1.5 d | none |
-| [F-020](#f-020--smart-disk-health-monitor) | S.M.A.R.T. Disk Health Monitor | 💡 Future Idea | ~3 d | none |
 | [F-021](#f-021--app-usage--screen-time-analytics) | App Usage & Screen Time Analytics | ✅ Done | ~3 d | none |
 | [F-020](#f-020--smart-disk-health-monitor) | S.M.A.R.T. Disk Health Monitor | ✅ Done | 3 d | none |
-| [F-021](#f-021--app-usage--screen-time-analytics) | App Usage & Screen Time Analytics | 💡 Future Idea | ~3 d | none |
-| [F-022](#f-022--time-machine-backup-health-monitor) | Time Machine Backup Health Monitor | 💡 Future Idea | ~1.5 d | AlertManager |
 | [F-023](#f-023--memory-leak--app-bloat-tracker) | Memory Leak & App Bloat Tracker | ✅ Done | ~3 d | ProcessMonitor |
 | [F-022](#f-022--time-machine-backup-health-monitor) | Time Machine Backup Health Monitor | ✅ Done | ~1.5 d | AlertManager |
-| [F-023](#f-023--memory-leak--app-bloat-tracker) | Memory Leak & App Bloat Tracker | 💡 Future Idea | ~3 d | ProcessMonitor |
 | [F-024](#f-024--browser-cleaner) | Browser Cleaner | ✅ Done | 2 d | none |
-| [F-025](#f-025--duplicate-photos-finder-perceptual-hash) | Duplicate Photos Finder (pHash) | 💡 Future Idea | ~5 d | DuplicateDetector |
-| [F-024](#f-024--browser-cleaner) | Browser Cleaner | 💡 Future Idea | ~2 d | none |
 | [F-025](#f-025--duplicate-photos-finder-perceptual-hash) | Duplicate Photos Finder (pHash) | ✅ Done | ~2 d | DuplicateDetector |
 | [F-026](#f-026--downloads-folder-organiser--manager) | Downloads Folder Organiser & Manager | ✅ Done | 2.5 d | AppScanner, FileSystemScanner |
 | [F-027](#f-027--snippet-manager--text-expansion-engine-clipboard-evolution) | Snippet Manager & Text Expansion Engine | ✅ Done | 3.5 d | Clipboard module |
 | [F-028](#f-028--focus-session-companion) | Focus Session Companion | ✅ Done | ~3 d | MenuBarDisplayStyle |
-| [F-029](#f-029--scheduled-reports--weekly-digest) | Scheduled Reports & Weekly Digest | 💡 Future Idea | ~2 d | ReportGenerator |
 | [F-030](#f-030--icloud-storage-analyser) | iCloud Storage Analyser → shipped as **iCloud Drive Analyzer** | ✅ Done | ~4 d | none |
-| [F-028](#f-028--focus-session-companion) | Focus Session Companion | 💡 Future Idea | ~3 d | MenuBarDisplayStyle |
 | [F-029](#f-029--scheduled-reports--weekly-digest) | Scheduled Reports & Weekly Digest | ✅ Done | 2 d | ReportGenerator |
-| [F-030](#f-030--icloud-storage-analyser) | iCloud Storage Analyser | 💡 Future Idea | ~4 d | none |
 | [F-031](#f-031--dock--desktop-tinker-actions) | Dock & Desktop Tinker Actions | ✅ Done | 0.5 d | none |
 | [F-032](#f-032--display--audio-quick-actions) | Display & Audio Quick Actions | ✅ Done | 0.5 d | none |
 | [F-033](#f-033--system-junk--developer-cache-cleaner-actions) | System Junk & Dev Cache Cleaner Actions | ✅ Done | 0.5 d | none |
@@ -76,12 +65,39 @@
 | [F-046](#f-046--ai-querying--cloud-providers-nfeat-124) | AI Querying — Cloud Providers (NFeat-124) | ✅ Done | Desktop | none |
 | [F-047](#f-047--on-device-ai--custom-rag-nfeat-125) | On-Device AI & Custom RAG (NFeat-125) | 🗓 Planned | TBD | none |
 | [F-048](#f-048--personal-expenditure-tracker-nfeat-126) | Personal Expenditure Tracker (NFeat-126) | 🗓 Planned | TBD | F-044 |
-| [F-049](#f-049--halo-mobile-app-product-line) | Halo Mobile App (product line) | 🔧 App shell built (iOS + Android); cloud features blocked on F-044 | TBD | F-044, F-045, F-050 |
-| [F-050](#f-050--haloshare-mobile--desktop-nfeat-127) | HaloShare Mobile ↔ Desktop (NFeat-127) | 🔧 Built on iOS + Android (simulator/emulator-verified); not yet on a device or vs official LocalSend | ~6 d so far | HaloShare (LocalSend) |
+| [F-049](#f-049--halo-mobile-app-product-line) | Halo Mobile App (product line) | 🔧 App shells merged to v2.4; cloud features blocked on F-044 | TBD | F-044, F-045, F-050 |
+| [F-050](#f-050--haloshare-mobile--desktop-nfeat-127) | HaloShare Mobile ↔ Desktop (NFeat-127) | 🔧 Merged to v2.4 — tests and builds pass; not yet run on a device or against official LocalSend | ~6 d so far | HaloShare (LocalSend) |
 | [F-051](#f-051--lucky-draw-spinner-wheel-nfeat-128) | Lucky Draw Spinner Wheel (NFeat-128) | ✅ Done | ~6 d | CelebrationOverlay (F-037) |
-| [F-052](#f-052--lethe-anonymous-ephemeral-chat-nfeat-128) | Lethe — Anonymous Ephemeral Chat (NFeat-128) | 🔧 Built — awaiting validation | ~8 d | Keychain, `AlertManager` |
+| [F-052](#f-052--lethe-anonymous-ephemeral-chat-nfeat-129) | Lethe — Anonymous Ephemeral Chat (NFeat-129) | 🔧 Merged to v2.4 — ship gate (Mac ↔ real phone) not yet run | ~8 d | Keychain, `AlertManager` |
 
 > **Status legend:** ✅ Done · 📋 Queued (next up) · 🗓 Planned (user-requested, spec pending discussion) · 💡 Future Idea (unsolicited) · ⏭ Skipped · 🔧 Built on a branch, not yet merged or validated against its ship gate
+
+---
+
+## v2.4 scope & status (as of `release/v2.4` @ `6ee0a21`, 2026-10-24)
+
+The repo had no written v2.4 scope; this is the reconciled picture. Release is **not yet frozen or tagged**.
+
+**In v2.4**
+
+| Group | Items | Notes |
+|---|---|---|
+| Already shipped on the line before this cycle | F-001 – F-002, F-004 – F-006, F-008 – F-012, F-014 – F-034, F-036 – F-039, F-041 – F-043, F-046 | See table. F-030 shipped scoped-down as iCloud Drive Analyzer. |
+| Merged this cycle | **F-050** HaloShare (desktop receiver hardening + iOS/Android), **F-049** mobile app shells, **F-051** Lucky Draw, **F-052** Lethe | Independently reviewed; follow-ups #43 – #45 fixed every finding except the protocol-inherent "any key-holder can claim any handle". |
+
+**Not in v2.4 / still open**
+
+| Item | State |
+|---|---|
+| Whole-feature manual testing | Not started — nothing has been run on a real device or in a live app (see `docs/MANUAL_TEST_PLAN.md`; cases marked *not yet run* are TC-LETHE-12, -21, TC-DRAW ◆) |
+| F-052 ship gate AC-1 | Mac ↔ real phone via the production relay — not run |
+| F-050 | Physical devices and official LocalSend interop — not done |
+| F-044, F-045, F-047, F-048 | 🗓 Planned, no work merged (F-044 groundwork is PR #7, open) |
+| F-049 cloud features | Blocked on F-044 |
+| Lethe QR scanning | Deliberately not built in v1 |
+| F-003, F-007, F-013 | ⏭ Skipped by decision |
+| PRs #7, #6, #1 | Open, unrelated to v2.4 |
+
 
 ---
 
@@ -127,7 +143,7 @@
 
 ## F-001 · GPU Metrics Dashboard Card
 
-**Status:** 📋 Queued — #1  
+**Status:** ✅ Done  
 **Effort:** 0.5 day  
 **Branch naming:** `feat/f001-gpu-dashboard-card`  
 **Depends on:** Phase 3 merged (GPUMonitor.swift already exists)
@@ -181,7 +197,7 @@
 
 ## F-002 · XPC Helper — Privileged Operations
 
-**Status:** 📋 Queued — #2  
+**Status:** ✅ Done  
 **Effort:** 3 days  
 **Branch naming:** `feat/f002-xpc-helper`  
 **Depends on:** none
@@ -287,7 +303,7 @@ The sandboxed release build cannot call `dscacheutil -flushcache`, `purge`, or `
 
 ## F-003 · StoreKit 2 ProManager
 
-**Status:** 📋 Queued — #3  
+**Status:** ⏭ Skipped (user decision)  
 **Effort:** 3 days  
 **Branch naming:** `feat/f003-storekit-promanager`  
 **Depends on:** none (AppState.isPro already wired)
@@ -387,7 +403,7 @@ com.halo.pro.lifetime   ₹2,499 one-time
 
 ## F-004 · Signature Database — Real Malware Definitions
 
-**Status:** 📋 Queued — #4  
+**Status:** ✅ Done  
 **Effort:** 3 days  
 **Branch naming:** `feat/f004-signature-database`  
 **Depends on:** none (ProtectionScanner.swift has an inline list; this replaces it)
@@ -484,7 +500,7 @@ com.halo.pro.lifetime   ₹2,499 one-time
 
 ## F-005 · BGScheduler — Scheduled Smart Scan
 
-**Status:** 📋 Queued — #5  
+**Status:** ✅ Done  
 **Effort:** 1 day  
 **Branch naming:** `feat/f005-bgscheduler`  
 **Depends on:** none
@@ -569,7 +585,7 @@ Users want Halo to scan automatically in the background (e.g., once a week) with
 
 ## F-006 · Sentry Crash Reporting
 
-**Status:** 📋 Queued — #6  
+**Status:** ✅ Done  
 **Effort:** 0.5 day  
 **Branch naming:** `feat/f006-sentry`  
 **Depends on:** none
@@ -630,7 +646,7 @@ Zero visibility into production crashes. Sentry provides symbolicated crash repo
 
 ## F-007 · PrivacyInfo.xcprivacy + App Store Assets
 
-**Status:** 📋 Queued — #7  
+**Status:** ⏭ Skipped (user decision)  
 **Effort:** 2 days  
 **Branch naming:** `feat/f007-appstore-assets`  
 **Depends on:** F-002 (XPC entitlements finalised), F-003 (Pro monetisation)
@@ -708,7 +724,7 @@ App Store submission requires `PrivacyInfo.xcprivacy` declarations for all APIs 
 
 ## F-008 · Menu Bar Display Styles (Bar / Dot Mode)
 
-**Status:** 📋 Queued — #8  
+**Status:** ✅ Done  
 **Effort:** 1.5 days  
 **Branch naming:** `feat/f008-menubar-styles`  
 **Depends on:** Phase 3 merged (P3-09 added module visibility toggles)
@@ -780,7 +796,7 @@ struct MenuBarModuleConfig: Codable {
 
 ## F-009 · Login Items — Real SMAppService Integration
 
-**Status:** 📋 Queued — #9  
+**Status:** ✅ Done  
 **Effort:** 2 days  
 **Branch naming:** `feat/f009-login-items-real`  
 **Depends on:** none
@@ -845,7 +861,7 @@ struct MenuBarModuleConfig: Codable {
 
 ## F-010 · Applications Deep Uninstall — Real Leftover Scan
 
-**Status:** 📋 Queued — #10  
+**Status:** ✅ Done  
 **Effort:** 2.5 days  
 **Branch naming:** `feat/f010-deep-uninstall`  
 **Depends on:** none
@@ -914,7 +930,7 @@ struct MenuBarModuleConfig: Codable {
 
 ## F-011 · In-App Alert History Log
 
-**Status:** 📋 Queued — #11  
+**Status:** ✅ Done  
 **Effort:** 1 day  
 **Branch naming:** `feat/f011-alert-history`  
 **Depends on:** Phase 3 merged (AlertManager exists)
@@ -980,7 +996,7 @@ struct MenuBarModuleConfig: Codable {
 
 ## F-012 · Maintenance Tasks — Real Execution
 
-**Status:** 📋 Queued — #12  
+**Status:** ✅ Done  
 **Effort:** 1 day  
 **Branch naming:** `feat/f012-maintenance-real`  
 **Depends on:** F-002 (XPC Helper must be built first)
@@ -1038,7 +1054,7 @@ struct MenuBarModuleConfig: Codable {
 
 ## F-013 · iCloud Clipboard Sync
 
-**Status:** 📋 Queued — #13  
+**Status:** ⏭ Skipped (user decision)  
 **Effort:** 5 days  
 **Branch naming:** `feat/f013-icloud-clipboard`  
 **Depends on:** F-003 (Pro feature — requires active subscription)
@@ -1102,7 +1118,7 @@ Power users want clipboard history to sync across their Mac and iPhone/iPad. Thi
 
 ## F-014 · PDF Health Report Export
 
-**Status:** 📋 Queued — #14  
+**Status:** ✅ Done  
 **Effort:** 2 days  
 **Branch naming:** `feat/f014-pdf-report`  
 **Depends on:** none
@@ -1158,7 +1174,7 @@ Enterprise users and IT admins want a point-in-time PDF report of their Mac's he
 
 ## F-015 · Custom Scan Schedule UI
 
-**Status:** 📋 Queued — #15  
+**Status:** ✅ Done  
 **Effort:** 1 day  
 **Branch naming:** `feat/f015-scan-schedule-ui`  
 **Depends on:** F-005 (BGScheduler must be built first)
@@ -1850,7 +1866,7 @@ New **"Similar Photos"** tab in the **Files** module, alongside SpaceLens, Large
 
 ## F-026 · Downloads Folder Organiser & Manager
 
-**Status:** 📋 Queued — #5 (was 💡 Future Idea; promoted and merged with F-035)  
+**Status:** ✅ Done (was 💡 Future Idea; promoted and merged with F-035)  
 **Effort estimate:** 2.5 days  
 **Theme:** Cleanup & Storage  
 **Branch naming (when ready):** `feat/f026-downloads-organiser`  
@@ -1941,7 +1957,7 @@ New **"Downloads"** tab in the **Files** module. Also surfaced as a Smart Scan c
 
 ## F-027 · Snippet Manager & Text Expansion Engine (Clipboard Evolution)
 
-**Status:** 📋 Queued — #10 (was 💡 Future Idea; promoted and merged with F-040)  
+**Status:** ✅ Done (was 💡 Future Idea; promoted and merged with F-040)  
 **Effort estimate:** 3.5 days  
 **Theme:** User Productivity  
 **Branch naming (when ready):** `feat/f027-snippet-manager`  
@@ -2218,10 +2234,7 @@ New **"iCloud"** tab in the **Files** module, alongside SpaceLens, Exact Duplica
 
 ---
 
-*Last updated: v4.1 · F-025 (Duplicate Photos Finder, pHash) shipped — see status column above for the full up-to-date list of done vs. future-idea features · 12 future ideas remaining (F-016–F-024, F-028–F-030)*
-*Last updated: v4.1 · 26 features shipped (F-001–F-015 + F-026, F-027, F-030 (scoped down — see "As actually built"), F-031–F-034, F-036–F-039, F-041–F-042) · 12 future ideas remaining (F-016–F-025, F-028, F-029)*
-*Last updated: v4.2 · 26 features shipped (F-001–F-015 + F-016, F-026, F-027, F-031–F-034, F-036–F-039, F-041–F-042) · 12 future ideas remaining (F-017–F-025, F-028–F-030)*
-*Last updated: v4.1 · 26 features shipped (F-001–F-015 + F-026, F-027, F-028, F-031–F-034, F-036–F-039, F-041–F-042) · 12 future ideas remaining (F-016–F-025, F-029–F-030)*
+*Last updated: 2026-10-24 · `release/v2.4` @ 6ee0a21 · the Pipeline Status table above is authoritative; per-card statuses were reconciled with it and with the code on that date. Features without a card here: F-035 and F-040 (merged into F-026 / F-027).*
 
 ---
 
@@ -2235,7 +2248,7 @@ New **"iCloud"** tab in the **Files** module, alongside SpaceLens, Exact Duplica
 
 ## F-031 · Dock & Desktop Tinker Actions
 
-**Status:** 📋 Queued — #1
+**Status:** ✅ Done
 **Effort:** 0.5 day
 **Branch naming:** `feat/f031-dock-tinker-actions`
 **Depends on:** none
@@ -2297,7 +2310,7 @@ A new **"Dock & Desktop"** action category with 14 shell actions covering spacer
 
 ## F-032 · Display & Audio Quick Actions
 
-**Status:** 📋 Queued — #2
+**Status:** ✅ Done
 **Effort:** 0.5 day
 **Branch naming:** `feat/f032-display-audio-actions`
 **Depends on:** none
@@ -2356,7 +2369,7 @@ Two new action categories: **"Display"** (6 actions) and **"Audio"** (5 actions)
 
 ## F-033 · System Junk & Developer Cache Cleaner Actions
 
-**Status:** 📋 Queued — #3
+**Status:** ✅ Done
 **Effort:** 0.5 day
 **Branch naming:** `feat/f033-junk-cleaner-actions`
 **Depends on:** none
@@ -2409,7 +2422,7 @@ Developer cache cleanup (CocoaPods, Gradle, Docker, pip, Homebrew) and system ju
 
 ## F-034 · Port Manager
 
-**Status:** 📋 Queued — #4
+**Status:** ✅ Done
 **Effort:** 2.5 days
 **Branch naming:** `feat/f034-port-manager`
 **Depends on:** none
@@ -2535,7 +2548,7 @@ struct NamedPort: Codable, Identifiable {
 
 ## F-036 · Customizable Menu Bar Format Strings
 
-**Status:** 📋 Queued — #6
+**Status:** ✅ Done
 **Effort:** 2 days
 **Branch naming:** `feat/f036-menubar-format-strings`
 **Depends on:** MenuBarDisplayStyle (already built)
@@ -2621,7 +2634,7 @@ Raycast's system-monitor menu bar is one of its most praised features — users 
 
 ## F-037 · Celebration & Delight Moments
 
-**Status:** 📋 Queued — #7
+**Status:** ✅ Done
 **Effort:** 1.5 days
 **Branch naming:** `feat/f037-celebration-moments`
 **Depends on:** none
@@ -2716,7 +2729,7 @@ Halo/DesignSystem/CelebrationOverlay.swift    — Canvas particle system
 
 ## F-038 · Code Snippet Beautifier
 
-**Status:** 📋 Queued — #8
+**Status:** ✅ Done
 **Effort:** 3 days
 **Branch naming:** `feat/f038-code-beautifier`
 **Depends on:** Clipboard module
@@ -2842,7 +2855,7 @@ Halo/Features/CodeBeautifier/CodeCardRenderer.swift         — NSView → PNG e
 
 ## F-039 · Auto-Quit Idle Apps
 
-**Status:** 📋 Queued — #9
+**Status:** ✅ Done
 **Effort:** 2.5 days
 **Branch naming:** `feat/f039-auto-quit-idle-apps`
 **Depends on:** none
@@ -2942,7 +2955,7 @@ Halo/Features/Performance/IdleAppsSection.swift   — view section in Performanc
 
 ## F-041 · Shareable Action Configurations
 
-**Status:** 📋 Queued — #11
+**Status:** ✅ Done
 **Effort:** 2 days
 **Branch naming:** `feat/f041-shareable-actions`
 **Depends on:** Actions module
@@ -3305,7 +3318,7 @@ becomes available on the others.
 
 ## F-046 — AI Querying — Cloud Providers (NFeat-124)
 
-**Status:** 🗓 Planned · **Effort:** TBD · **Depends on:** none
+**Status:** ✅ Done · **Effort:** Desktop · **Depends on:** none
 
 ### Intent
 Connect Halo to **leading cloud AI providers** and let the user ask questions /
@@ -3393,7 +3406,7 @@ several cross-platform features and a new HaloShare peer.
 
 ## F-050 — HaloShare Mobile ↔ Desktop (NFeat-127)
 
-**Status:** 🔧 Built on iOS + Android; verified on the iOS Simulator and Android Emulator against a separate implementation (not yet on physical devices or the official LocalSend app) · **Effort:** ~6 d so far · **Depends on:** HaloShare (LocalSend Protocol v2.1)
+**Status:** 🔧 Merged to `release/v2.4`. Independent review (2026-10-23): unit/integration tests, desktop⇄package interop and both app builds pass from clean; **not** run on a device or emulator and **not** tested against the official LocalSend app. The "driven end to end" claims in the note below are the original author's and were not reproduced · **Effort:** ~6 d so far · **Depends on:** HaloShare (LocalSend Protocol v2.1)
 
 > **As actually built (2026-10-23).** Contract: [`HALOSHARE_PROTOCOL.md`](HALOSHARE_PROTOCOL.md). `ios/HaloShareKit` (Swift, 56 tests + CLI) and `android/haloshare` (Kotlin, 58 tests) implement the same peer; each was tested against `curl`, raw sockets and the *other* implementation; the apps were driven end to end (Mac→phone with consent, decline, phone→Mac).
 >
@@ -3535,9 +3548,9 @@ consequence of `58952d0` restoring the App Group entitlement (gotcha 27) — wor
 look, since an unanswered prompt hangs launch.
 ---
 
-## F-052 — Lethe: Anonymous Ephemeral Chat (NFeat-128)
+## F-052 — Lethe: Anonymous Ephemeral Chat (NFeat-129)
 
-**Status:** 🔧 Built — awaiting validation · **Branch:** `feat/f052-lethe` (unmerged, unpushed) · **Spec:** [`docs/specs/F-052-lethe-ephemeral-chat.md`](specs/F-052-lethe-ephemeral-chat.md)
+**Status:** 🔧 Merged to `release/v2.4` (#36, #43, #45) — **ship gate AC-1 (Mac ↔ real phone on the production relay) not yet run** · **Spec:** [`docs/specs/F-052-lethe-ephemeral-chat.md`](specs/F-052-lethe-ephemeral-chat.md)
 
 ### Intent
 A native Swift client for the existing Lethe product (Flutter app + Node relay at

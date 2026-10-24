@@ -1,4 +1,4 @@
-# F-052 — Lethe: Anonymous Ephemeral Chat in Halo (NFeat-128)
+# F-052 — Lethe: Anonymous Ephemeral Chat in Halo (NFeat-129)
 
 > **Status:** 🔧 Built on `feat/f052-lethe` (unmerged, unpushed) — validation open, see §8.1 and §9 · **Platform:** Desktop (+ existing Lethe mobile/web clients)
 > **Source project:** [`~/Github/Lethe`](https://github.com/prasad-rently/Lethe) — private · Flutter app + Node.js relay, relay live at `wss://lethe-relay.onrender.com`
