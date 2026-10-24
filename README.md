@@ -265,7 +265,7 @@ open Halo.xcodeproj
 ```
 
 Set your own Team on the **Halo**, **HaloWidget** and **HaloHelper** targets
-(Signing & Capabilities), then run. The App Group `group.com.halo.mac` must exist
+(Signing & Capabilities), then run. The App Group `R7S39UR27F.group.com.halo.mac` must exist
 on all three or the widget will show no data.
 
 Run the tests with the **HaloTests** scheme (⌘U), or:
@@ -374,7 +374,7 @@ All file removal uses `FileManager.trashItem(at:resultingItemURL:)`. The user al
 ```
 SystemMonitor (every 2 s)
   └─► AppState.writeWidgetData()
-        └─► UserDefaults(suiteName: "group.com.halo.mac")  ← shared container
+        └─► UserDefaults(suiteName: "R7S39UR27F.group.com.halo.mac")  ← shared container
               └─► HaloProvider.getTimeline()  (every 60 s)
                     └─► WidgetKit renders updated view
 ```

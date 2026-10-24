@@ -171,6 +171,7 @@
 		0CBA4BAFF23A6F3013A747F9 /* HaloTestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04C24FA6FA6BE8B3F119901F /* HaloTestFixtures.swift */; };
 		0D95339BD7D85794863633C8 /* HaloUITestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */; };
 		0FD40DC13D3BACC88E9F5526 /* SmartScanUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 544F38735C12837D57FD1DA7 /* SmartScanUITests.swift */; };
+		17FE433E5E93CEC8AAC8CD53 /* AppGroupContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B538907434F4863E07BD21FE /* AppGroupContractTests.swift */; };
 		1A276975BC00655241248D7B /* DriveSpeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C310900DF7BB88C2E7AFC1B /* DriveSpeedView.swift */; };
 		1C35066F666096D6ACA28957 /* OpenAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78C88E9A3466E70C453D9B42 /* OpenAIProvider.swift */; };
 		211137AACE082EA316D20732 /* AIAssistantUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CDCAD725F3EDB1AA147464F /* AIAssistantUITests.swift */; };
@@ -493,6 +494,7 @@
 		99F06F1B0C745181E045DD29 /* ExpenditureViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExpenditureViewModel.swift; sourceTree = "<group>"; };
 		9F450540DB55422C3FAAE03A /* ExpenditureView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExpenditureView.swift; sourceTree = "<group>"; };
 		B4A92E8D0819BCF034A05DF2 /* AIKeyStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIKeyStore.swift; sourceTree = "<group>"; };
+		B538907434F4863E07BD21FE /* AppGroupContractTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppGroupContractTests.swift; sourceTree = "<group>"; };
 		BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloSidebar.swift; sourceTree = "<group>"; };
 		C410A9DA24CA458075531BA7 /* AIAssistantView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAssistantView.swift; sourceTree = "<group>"; };
 		CC277F045F73084A793F8C0D /* TransactionPipeline.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TransactionPipeline.swift; sourceTree = "<group>"; };
@@ -808,6 +810,7 @@
 				1EA41949D8E2D368E6AFF7F6 /* AIAssistantTests.swift */,
 				88C159A5C1348117FA9F7CA8 /* CloudFoundationTests.swift */,
 				5CF513D852033ACD07DD2CD0 /* CloudRESTClientTests.swift */,
+				B538907434F4863E07BD21FE /* AppGroupContractTests.swift */,
 			);
 			name = HaloTests;
 			path = HaloTests;
@@ -1362,6 +1365,7 @@
 				ECC49D0FB93E1F7EA5B51EBD /* AIAssistantTests.swift in Sources */,
 				B6E3C305908B409F99263327 /* CloudFoundationTests.swift in Sources */,
 				B359A9774FABDB8C0EEE7C20 /* CloudRESTClientTests.swift in Sources */,
+				17FE433E5E93CEC8AAC8CD53 /* AppGroupContractTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -16,29 +16,31 @@
     <key>com.apple.security.network.server</key>
     <true/>
 
-    <!-- App Group — REQUIRED for the widget to show anything.
-         `HaloWidget.appex` is sandboxed (WidgetKit requires it) and can only
-         read `~/Library/Group Containers/group.com.halo.mac/…`. Without this key
-         the main app is unsandboxed with no group membership, so
-         `UserDefaults(suiteName:)` silently resolves to
-         `~/Library/Preferences/group.com.halo.mac.plist` instead — a *different
-         file the widget cannot reach*. `HaloWidgetData.load()` then returns its
-         zero placeholder, which renders as a widget stuck on plausible values
-         rather than an obviously broken one.
+    <!-- App Group — REQUIRED for the widget to show anything, and it MUST be team-prefixed.
+         `HaloWidget.appex` is sandboxed (WidgetKit requires it) and can only read the
+         group container. The group is `R7S39UR27F.group.com.halo.mac`, NOT the iOS-style
+         `group.com.halo.mac`. Measured 2026-10-25 on macOS 27.0.1 with probes signed exactly
+         like the DMG (Apple Development certificate, no provisioning profile):
 
-         This key was removed in 7f91bbb (2026-05-07) to stop a per-launch TCC
-         prompt during development, on the stated basis that "release builds
-         (Halo.entitlements) retain the App Group". That stopped being true:
-         every shipped DMG, v2.0 through the v2.3 beta, is built from the Debug
-         configuration and therefore signed with THIS file. The widget has been
-         dead in every release since.
+           group.com.halo.mac             unsandboxed writer -> second process reads nil
+                                          (and a sandboxed reader gets nil: the widget is blind)
+           R7S39UR27F.group.com.halo.mac   unsandboxed <-> sandboxed, both directions, share correctly
 
-         Verified 2026-09-12 with a signed probe: an unsandboxed app carrying
-         this entitlement, signed with a plain Apple Development certificate and
-         no provisioning profile, does get the group container. -->
+         On macOS 15+ an unprefixed group that is not authorised by a provisioning profile is
+         access-controlled; the write is dropped without an error, so `UserDefaults(suiteName:)`
+         still "works" inside one process while no other process ever sees it. `containerURL`
+         even returns a path. The team prefix is what macOS trusts without a profile.
+
+         History: this key was removed in 7f91bbb (2026-05-07) to stop a TCC prompt; restored
+         for v2.3-beta.2 on the belief (gotcha 27, "verified 2026-09-12") that the unprefixed
+         group works for an unsandboxed dev-signed app. It does not on current macOS, so the
+         widget stayed blank through v2.4.0-beta.1. `scripts/audit-entitlements.sh` in its
+         probe mode now proves sharing across real processes instead of trusting a string in a plist.
+
+         Must equal `HaloWidgetData.suiteName` (Shared/HaloSharedData.swift) byte for byte. -->
     <key>com.apple.security.application-groups</key>
     <array>
-        <string>group.com.halo.mac</string>
+        <string>R7S39UR27F.group.com.halo.mac</string>
     </array>
 
     <!-- F-025: Similar Photos — optional Photos Library scan for near-duplicates.
