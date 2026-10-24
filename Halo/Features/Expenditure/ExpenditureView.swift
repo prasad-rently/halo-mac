@@ -81,6 +81,7 @@ struct ExpenditureView: View {
                 .textFieldStyle(.plain).font(HaloFont.body(12)).foregroundColor(.haloText)
                 .padding(8).frame(width: 260).background(Color.haloSurface2).cornerRadius(7)
                 .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.haloBorder, lineWidth: 1))
+            PassphraseStrengthHint(passphrase: passphrase, enforced: false).frame(width: 260)
             HaloPrimaryButton("Unlock", icon: "key") {
                 vm.connect(passphrase: passphrase); passphrase = ""
             }.disabled(passphrase.isEmpty)

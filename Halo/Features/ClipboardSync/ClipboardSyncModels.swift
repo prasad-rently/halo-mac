@@ -74,7 +74,10 @@ enum ClipboardSensitiveFilter {
                 #"^xox[baprs]-[A-Za-z0-9-]{10,}$"#,        // Slack token
                 #"^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$"#,  // JWT
                 #"^sk-[A-Za-z0-9]{20,}$"#,                 // OpenAI-style key
-                #"^[A-Fa-f0-9]{32,}$"#                      // long hex (hashes/keys)
+                // Hex key material only. 64+ chars = a 256-bit key or SHA-256 digest. The
+                // old 32+ rule also swallowed MD5 (32) and git commit SHAs (40), which
+                // developers copy constantly and which are not secrets.
+                #"^[A-Fa-f0-9]{64,}$"#
             ]
             if patterns.contains(where: { t.range(of: $0, options: .regularExpression) != nil }) {
                 return true

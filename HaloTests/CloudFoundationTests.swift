@@ -5,65 +5,234 @@ import CryptoKit
 
 // MARK: - Cloud foundation tests  (F-044 Phase 0)
 
+/// PBKDF2 at the 600 000-round default costs ~1 s a derivation; the suite runs dozens.
+/// Everything that is not *about* the iteration count uses the enforced floor instead,
+/// which is the same code path at a sixth of the price.
+private let fastIterations = CryptoService.minimumIterations
+
 @Suite("CryptoService")
 struct CryptoServiceTests {
 
-    private let salt = CryptoService.generateSalt()
+    private let salt = try! CryptoService.generateSalt()
+
+    private func svc(_ pass: String, salt: Data? = nil) throws -> CryptoService {
+        try CryptoService(passphrase: pass, salt: salt ?? self.salt, iterations: fastIterations)
+    }
 
     @Test("Encrypt → decrypt round-trips")
     func roundTrip() throws {
-        let svc = try CryptoService(passphrase: "correct horse battery staple", salt: salt)
+        let s = try svc("correct horse battery staple")
         let plaintext = "Your OTP is 192699 — do not share. A/C XX3833 debited ₹12,185.00"
-        let ct = try svc.encrypt(plaintext)
-        #expect(ct != plaintext)                 // it's actually encrypted
-        #expect(Data(base64Encoded: ct) != nil)  // base64 combined box
-        #expect(try svc.decrypt(ct) == plaintext)
+        let ct = try s.encrypt(plaintext)
+        #expect(ct != plaintext)                       // it's actually encrypted
+        #expect(ct.hasPrefix(CryptoService.envelopePrefix))
+        #expect(Data(base64Encoded: String(ct.dropFirst(3))) != nil)   // base64 combined box
+        #expect(try s.decrypt(ct) == plaintext)
     }
 
     @Test("Key is deterministic — a second device derives the same key")
     func deterministicKey() throws {
-        let a = try CryptoService(passphrase: "shared-pass", salt: salt)
-        let b = try CryptoService(passphrase: "shared-pass", salt: salt)  // e.g. the phone
+        let a = try svc("shared-pass")
+        let b = try svc("shared-pass")                 // e.g. the phone
         let ct = try a.encrypt("cross-device message")
-        #expect(try b.decrypt(ct) == "cross-device message")  // b decrypts a's ciphertext
+        #expect(try b.decrypt(ct) == "cross-device message")
     }
 
     @Test("Wrong passphrase fails to decrypt")
     func wrongPassphrase() throws {
-        let good = try CryptoService(passphrase: "right", salt: salt)
-        let bad  = try CryptoService(passphrase: "wrong", salt: salt)
+        let good = try svc("right"), bad = try svc("wrong")
         let ct = try good.encrypt("secret")
         #expect(throws: CryptoError.decryptionFailed) { _ = try bad.decrypt(ct) }
     }
 
     @Test("Different salt → different key → cannot decrypt")
     func differentSalt() throws {
-        let a = try CryptoService(passphrase: "same", salt: CryptoService.generateSalt())
-        let b = try CryptoService(passphrase: "same", salt: CryptoService.generateSalt())
+        let a = try svc("same", salt: try CryptoService.generateSalt())
+        let b = try svc("same", salt: try CryptoService.generateSalt())
         let ct = try a.encrypt("secret")
         #expect(throws: CryptoError.decryptionFailed) { _ = try b.decrypt(ct) }
     }
 
     @Test("Malformed ciphertext throws badCiphertext")
     func malformed() throws {
-        let svc = try CryptoService(passphrase: "p", salt: salt)
-        #expect(throws: CryptoError.badCiphertext) { _ = try svc.decrypt("not base64 @@@") }
-        #expect(throws: CryptoError.badCiphertext) { _ = try svc.decrypt("YWJj") } // valid b64, too short
+        let s = try svc("p")
+        #expect(throws: CryptoError.badCiphertext) { _ = try s.decrypt("not base64 @@@") }
+        #expect(throws: CryptoError.badCiphertext) { _ = try s.decrypt("YWJj") }      // valid b64, too short
+        #expect(throws: CryptoError.badCiphertext) { _ = try s.decrypt("v1:@@@") }
+        #expect(throws: CryptoError.badCiphertext) { _ = try s.decrypt("v1:YWJj") }
     }
 
     @Test("Empty + unicode round-trip")
     func edgeStrings() throws {
-        let svc = try CryptoService(passphrase: "p", salt: salt)
-        for s in ["", "🔐 emoji ✅", String(repeating: "x", count: 5000)] {
-            #expect(try svc.decrypt(try svc.encrypt(s)) == s)
+        let s = try svc("p")
+        for text in ["", "🔐 emoji ✅", String(repeating: "x", count: 5000)] {
+            #expect(try s.decrypt(try s.encrypt(text)) == text)
         }
     }
 
     @Test("Salt + random bytes are unique and correctly sized")
-    func randomness() {
-        #expect(CryptoService.generateSalt().count == 16)
-        #expect(CryptoService.generateSalt() != CryptoService.generateSalt())
-        #expect(CryptoService.randomBytes(32).count == 32)
+    func randomness() throws {
+        #expect(try CryptoService.generateSalt().count == 16)
+        #expect(try CryptoService.generateSalt() != CryptoService.generateSalt())
+        #expect(try CryptoService.randomBytes(32).count == 32)
+    }
+
+    // MARK: Review finding 1 — a zero salt must be unrepresentable
+
+    @Test("A generated salt is never all zeros (SecRandomCopyBytes status is checked)")
+    func saltNeverZero() throws {
+        // 16 random bytes are all-zero with probability 2^-128: if this ever fails the
+        // RNG result is being discarded again, which is exactly the regression.
+        for _ in 0..<64 {
+            let salt = try CryptoService.generateSalt()
+            #expect(salt.contains(where: { $0 != 0 }))
+        }
+        #expect(try CryptoService.randomBytes(256).contains(where: { $0 != 0 }))
+    }
+
+    @Test("An RNG failure throws — it never returns a zero-filled buffer that looks valid")
+    func rngFailureThrows() {
+        // The regression: the old code ignored the status and handed back `count` zeros.
+        #expect(throws: CryptoError.randomGenerationFailed) {
+            _ = try CryptoService.randomBytes(16, fill: { _, _ in errSecAllocate })
+        }
+        // And a "successful" fill is returned as written, not replaced.
+        let filled = try? CryptoService.randomBytes(8, fill: { n, p in
+            memset(p, 0xAB, n); return errSecSuccess
+        })
+        #expect(filled == Data(repeating: 0xAB, count: 8))
+    }
+
+    @Test("A salt shorter than the floor is refused, not used")
+    func shortSaltRefused() {
+        #expect(throws: CryptoError.self) {
+            _ = try CryptoService.deriveKey(passphrase: "a long enough passphrase",
+                                            salt: Data([1]), iterations: fastIterations)
+        }
+        #expect(throws: CryptoError.self) {
+            _ = try CryptoService.deriveKey(passphrase: "a long enough passphrase",
+                                            salt: Data(repeating: 7, count: 15), iterations: fastIterations)
+        }
+    }
+
+    // MARK: Review finding 5/6 — KDF preconditions and cost
+
+    @Test("Empty passphrase and sub-floor iterations are refused")
+    func kdfPreconditions() {
+        #expect(throws: CryptoError.self) {
+            _ = try CryptoService.deriveKey(passphrase: "", salt: Data(repeating: 1, count: 16), iterations: fastIterations)
+        }
+        #expect(throws: CryptoError.self) {
+            _ = try CryptoService.deriveKey(passphrase: "x", salt: Data(repeating: 1, count: 16),
+                                            iterations: CryptoService.minimumIterations - 1)
+        }
+        #expect(throws: CryptoError.self) {
+            _ = try CryptoService.deriveKey(passphrase: "x", salt: Data(repeating: 1, count: 16), iterations: 0)
+        }
+    }
+
+    @Test("New keys default to the OWASP 600 000; the legacy 200 000 still derives")
+    func iterationConstants() throws {
+        #expect(CryptoService.defaultIterations == 600_000)
+        #expect(CryptoService.legacyIterations == 200_000)
+        #expect(CryptoService.legacyIterations >= CryptoService.minimumIterations)
+        // The legacy count must remain *acceptable* input, or old keys would be stranded.
+        _ = try CryptoService.deriveKey(passphrase: "legacy key", salt: Data(repeating: 9, count: 16),
+                                        iterations: CryptoService.legacyIterations)
+    }
+
+    @Test("Different iteration counts derive different keys")
+    func iterationsMatter() throws {
+        let s = Data(repeating: 3, count: 16)
+        let a = try CryptoService(passphrase: "same passphrase", salt: s, iterations: 100_000)
+        let b = try CryptoService(passphrase: "same passphrase", salt: s, iterations: 100_001)
+        #expect(throws: CryptoError.decryptionFailed) { _ = try b.decrypt(try a.encrypt("x")) }
+    }
+
+    // MARK: Review finding 4 — versioned envelope
+
+    @Test("Ciphertext is a v1 envelope; the plain-base64 form is no longer written")
+    func envelopeIsVersioned() throws {
+        let ct = try svc("p").encrypt("hello")
+        #expect(ct.hasPrefix("v1:"))
+        #expect(!ct.dropFirst(3).contains(":"))
+    }
+
+    @Test("A legacy (v0) box — no prefix, no AAD — still decrypts")
+    func legacyBoxStillReads() throws {
+        let key = try CryptoService.deriveKey(passphrase: "old passphrase", salt: salt, iterations: fastIterations)
+        let legacy = try AES.GCM.seal(Data("from the old branch".utf8), using: key).combined!.base64EncodedString()
+        let s = try svc("old passphrase")
+        #expect(try s.decrypt(legacy) == "from the old branch")
+    }
+
+    @Test("The version prefix cannot be stripped or forged to downgrade a message")
+    func prefixIsAuthenticated() throws {
+        let s = try svc("p")
+        let v1 = try s.encrypt("secret")
+        // v1 body presented as v0: AAD mismatch → authentication failure.
+        #expect(throws: CryptoError.decryptionFailed) { _ = try s.decrypt(String(v1.dropFirst(3))) }
+        // v0 body wearing a v1 prefix: never sealed with the AAD → failure.
+        let key = try CryptoService.deriveKey(passphrase: "p", salt: salt, iterations: fastIterations)
+        let v0 = try AES.GCM.seal(Data("secret".utf8), using: key).combined!.base64EncodedString()
+        #expect(throws: CryptoError.decryptionFailed) { _ = try s.decrypt("v1:" + v0) }
+    }
+
+    @Test("Each encryption uses a fresh nonce")
+    func freshNonce() throws {
+        let s = try svc("p")
+        #expect(try s.encrypt("same") != s.encrypt("same"))
+    }
+
+    @Test("Encrypt failures are reported as encryption, not decryption (finding 8)")
+    func errorsAreDistinct() {
+        #expect(CryptoError.encryptionFailed != CryptoError.decryptionFailed)
+        #expect(CryptoError.encryptionFailed.errorDescription?.lowercased().contains("encrypt") == true)
+        #expect(CryptoError.decryptionFailed.errorDescription?.lowercased().contains("decrypt") == true)
+    }
+}
+
+// MARK: - PassphrasePolicy (review finding 3)
+
+@Suite("PassphrasePolicy")
+struct PassphrasePolicyTests {
+
+    @Test("A one-character passphrase — the review's example — is rejected")
+    func singleCharacter() {
+        #expect(PassphrasePolicy.evaluate("a") == .tooShort(have: 1))
+        #expect(!PassphrasePolicy.evaluate("a").isAcceptable)
+        #expect(PassphrasePolicy.evaluate("").message != nil)
+    }
+
+    @Test("Length floor is exactly 12")
+    func lengthFloor() {
+        #expect(PassphrasePolicy.evaluate("abcdefghijk") == .tooShort(have: 11))
+        #expect(PassphrasePolicy.evaluate("abcdefghijkl") == .ok)
+    }
+
+    @Test("Long but repetitive passphrases are rejected")
+    func repetitive() {
+        #expect(PassphrasePolicy.evaluate(String(repeating: "a", count: 40)) == .tooRepetitive)
+        #expect(PassphrasePolicy.evaluate("abcabcabcabc") == .tooRepetitive)
+        #expect(PassphrasePolicy.evaluate("abcdefabcdef") == .ok)      // exactly 6 distinct
+    }
+
+    @Test("Characters are counted after NFC normalisation, so combining marks are not double-counted")
+    func nfcCounting() {
+        // Six "é" written as e + U+0301 is 12 code points but 6 characters.
+        let decomposed = String(repeating: "e\u{0301}", count: 6)
+        #expect(PassphrasePolicy.evaluate(decomposed) == .tooShort(have: 6))
+    }
+
+    @Test("Messages are shown only when there is something to fix")
+    func messages() {
+        #expect(PassphrasePolicy.evaluate("correct horse battery staple").message == nil)
+        #expect(PassphrasePolicy.evaluate("short").message?.contains("12") == true)
+    }
+
+    @Test("Existing weak keys can still be derived — the floor is for choosing, not unlocking")
+    func derivationDoesNotEnforcePolicy() throws {
+        _ = try CryptoService(passphrase: "p", salt: Data(repeating: 1, count: 16), iterations: fastIterations)
     }
 }
 
@@ -80,7 +249,7 @@ struct CloudPairingPayloadTests {
     func roundTrip() throws {
         let payload = CloudPairingPayload(firebaseConfig: sampleConfig(),
                                           auth: .init(email: "u@halo", password: "rand-pass"),
-                                          salt: CryptoService.generateSalt())
+                                          salt: try CryptoService.generateSalt())
         #expect(payload.isValid)
         let decoded = try CloudPairingPayload.decode(try payload.encoded())
         #expect(decoded == payload)
@@ -92,9 +261,45 @@ struct CloudPairingPayloadTests {
     func tamper() throws {
         var payload = CloudPairingPayload(firebaseConfig: sampleConfig(),
                                           auth: .init(email: "u@halo", password: "p"),
-                                          salt: CryptoService.generateSalt())
+                                          salt: try CryptoService.generateSalt())
         payload.auth.password = "attacker-changed"   // checksum no longer matches
         #expect(!payload.isValid)
+    }
+
+    @Test("A new payload is schema 2 and carries the KDF cost")
+    func carriesIterations() throws {
+        let payload = CloudPairingPayload(firebaseConfig: sampleConfig(), auth: .init(email: "u", password: "p"),
+                                          salt: try CryptoService.generateSalt())
+        #expect(payload.schema == 2)
+        #expect(payload.iterations == CryptoService.defaultIterations)
+        let decoded = try CloudPairingPayload.decode(try payload.encoded())
+        #expect(decoded.iterations == CryptoService.defaultIterations)
+        #expect(decoded.isValid)
+    }
+
+    @Test("The iteration count is covered by the checksum — it cannot be downgraded in transit")
+    func iterationsAreChecksummed() throws {
+        var payload = CloudPairingPayload(firebaseConfig: sampleConfig(), auth: .init(email: "u", password: "p"),
+                                          salt: try CryptoService.generateSalt())
+        payload.iterations = CryptoService.minimumIterations
+        #expect(!payload.isValid)
+    }
+
+    @Test("A schema-1 payload (no iterations field) still decodes, validates and means 200 000")
+    func schemaOneStillReads() throws {
+        let cfg = sampleConfig(), auth = CloudAuthCredential(email: "u@halo", password: "pw")
+        let salt = Data(repeating: 5, count: 16).base64EncodedString()
+        let checksum = CloudPairingPayload.checksum(config: cfg, auth: auth, saltBase64: salt,
+                                                    schema: 1, iterations: 123 /* ignored by schema 1 */)
+        let json: [String: Any] = [
+            "firebaseConfig": try JSONSerialization.jsonObject(with: JSONEncoder().encode(cfg)),
+            "auth": try JSONSerialization.jsonObject(with: JSONEncoder().encode(auth)),
+            "saltBase64": salt, "schema": 1, "checksum": checksum]
+        let b64 = try JSONSerialization.data(withJSONObject: json).base64EncodedString()
+        let decoded = try CloudPairingPayload.decode(b64)
+        #expect(decoded.schema == 1)
+        #expect(decoded.iterations == CryptoService.legacyIterations)
+        #expect(decoded.isValid)
     }
 
     @Test("FirebaseConfig.isComplete")
@@ -114,13 +319,13 @@ struct CloudConfigStoreTests {
         store.wipe()
         defer { store.wipe() }
 
-        let salt = CryptoService.generateSalt()
+        let salt = try CryptoService.generateSalt()
         let pairing = CloudPairingPayload(
             firebaseConfig: FirebaseConfig(apiKey: "k", projectID: "p", googleAppID: "a",
                                            gcmSenderID: "s", databaseURL: "https://x-rtdb.firebaseio.com",
                                            storageBucket: nil),
             auth: .init(email: "u@halo", password: "pw"),
-            salt: salt)
+            salt: salt, iterations: fastIterations)
 
         store.apply(pairing: pairing)
 
@@ -129,10 +334,38 @@ struct CloudConfigStoreTests {
         guard store.salt == salt else { return }   // Keychain not writable here → skip
         #expect(store.isConfigured)
 
-        let desktop = try CryptoService(passphrase: "user-pass", salt: salt)
-        let mobile = try store.makeCryptoService(passphrase: "user-pass")  // same salt from store
+        #expect(store.kdfIterations == fastIterations)       // the cost travels with the salt
+        let desktop = try CryptoService(passphrase: "user-pass", salt: salt, iterations: fastIterations)
+        let mobile = try store.makeCryptoService(passphrase: "user-pass")  // same salt + cost from store
         let ct = try desktop.encrypt("shared")
         #expect(try mobile.decrypt(ct) == "shared")
+    }
+
+    @Test("A salt stored before iterations were recorded derives at the legacy cost, not the new default")
+    func legacySaltKeepsLegacyCost() throws {
+        let store = CloudConfigStore.shared
+        store.wipe()
+        defer { store.wipe() }
+
+        let salt = Data(repeating: 0x42, count: 16)
+        store.salt = salt                                    // as an old install left it: no kdfIterations
+        guard store.salt == salt else { return }             // Keychain not writable here → skip
+        #expect(store.kdfIterations == nil)
+
+        let old = try CryptoService(passphrase: "old key", salt: salt, iterations: CryptoService.legacyIterations)
+        let viaStore = try store.makeCryptoService(passphrase: "old key")
+        #expect(try viaStore.decrypt(try old.encrypt("still readable")) == "still readable")
+    }
+
+    @Test("wipe() removes the stored iteration count too")
+    func wipeClearsIterations() {
+        let store = CloudConfigStore.shared
+        store.wipe()
+        store.salt = Data(repeating: 1, count: 16)
+        store.kdfIterations = 600_000
+        guard store.kdfIterations == 600_000 else { store.wipe(); return }   // Keychain not writable
+        store.wipe()
+        #expect(store.kdfIterations == nil)
     }
 }
 
@@ -149,14 +382,35 @@ struct GoogleOAuthPKCETests {
     }
 
     @Test("Generated verifier is url-safe and correctly sized; challenge is derived")
-    func generation() {
-        let p = PKCE.generate()
+    func generation() throws {
+        let p = try PKCE.generate()
         #expect((43...128).contains(p.verifier.count))
         let allowed = CharacterSet(charactersIn:
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
         #expect(p.verifier.unicodeScalars.allSatisfy { allowed.contains($0) })
         #expect(p.challenge == PKCE.challenge(for: p.verifier))
         #expect(!p.challenge.contains("=") && !p.challenge.contains("+") && !p.challenge.contains("/"))
+    }
+
+    @Test("A generated verifier is never the constant a failed RNG would produce (finding 2)")
+    func verifierIsNotTheZeroConstant() throws {
+        let zeroVerifier = PKCE.base64url(Data(repeating: 0, count: 32))
+        let a = try PKCE.generate(), b = try PKCE.generate()
+        #expect(a.verifier != zeroVerifier)
+        #expect(a.verifier != b.verifier)
+        #expect(a.challenge != b.challenge)
+    }
+
+    @Test("State values are random, url-safe, and validated in constant time")
+    func stateRoundTrip() throws {
+        let s1 = try PKCE.generateState(), s2 = try PKCE.generateState()
+        #expect(s1 != s2)
+        #expect(s1.count >= 22)
+        #expect(!s1.contains("=") && !s1.contains("+") && !s1.contains("/"))
+        #expect(PKCE.validate(state: s1, against: s1))
+        #expect(!PKCE.validate(state: s1, against: s2))
+        #expect(!PKCE.validate(state: String(s1.dropLast()), against: s1))   // length mismatch
+        #expect(!PKCE.validate(state: "", against: ""))                      // empty is never valid
     }
 
     @Test("Authorization URL carries the PKCE + native-flow query params")
@@ -205,6 +459,14 @@ struct ClipboardSensitiveFilterTests {
         #expect(ClipboardSensitiveFilter.isSensitive("AKIAIOSFODNN7EXAMPLE"))
         #expect(ClipboardSensitiveFilter.isSensitive("-----BEGIN RSA PRIVATE KEY-----"))
     }
+    @Test("Git SHAs and MD5s are not secrets; 256-bit hex key material is (finding 10)")
+    func hexRule() {
+        #expect(!ClipboardSensitiveFilter.isSensitive("9fceb02d0ae598e95dc970b74767f19372d61af8"))      // git SHA-1, 40
+        #expect(!ClipboardSensitiveFilter.isSensitive("d41d8cd98f00b204e9800998ecf8427e"))              // MD5, 32
+        #expect(ClipboardSensitiveFilter.isSensitive(String(repeating: "a1", count: 32)))               // 64 hex
+        #expect(ClipboardSensitiveFilter.isSensitive(String(repeating: "0f", count: 40)))               // 80 hex
+    }
+
     @Test("Passes ordinary content")
     func passesNormal() {
         #expect(!ClipboardSensitiveFilter.isSensitive("Hello, world"))
@@ -234,7 +496,8 @@ struct ClipboardSyncEnvelopeTests {
 struct ClipboardSyncCodecTests {
     @Test("Encrypt → envelope → decrypt reproduces a code item with provenance")
     func encryptRoundTrip() throws {
-        let crypto = try CryptoService(passphrase: "pw", salt: CryptoService.generateSalt())
+        let crypto = try CryptoService(passphrase: "pw", salt: try CryptoService.generateSalt(),
+                                       iterations: fastIterations)
         let original = ClipboardItem(content: .code("let x = 1", language: "swift"))
         let s = try #require(ClipboardSyncService.serialize(original.content))
         let env = ClipboardSyncEnvelope(
@@ -394,60 +657,113 @@ struct TransactionPipelineTests {
 
 // MARK: - Cross-language crypto parity vectors (F-049 D5/D27)
 //
-// Canonical vectors the Android Kotlin CryptoService must reproduce byte-for-byte.
-// KDF vectors are deterministic (re-derivable). Decrypt vectors pin the AES-GCM wire
-// format (nonce12 || ct || tag16, base64) — Kotlin must DECRYPT Swift-sealed ciphertext
-// (the random nonce means we validate by decrypt, not by re-encrypting). Regenerate
-// with HALO_GEN_VECTORS=1; the committed JSON is the source of truth for both platforms.
+// The contract the Android Kotlin CryptoService must reproduce. v2 pins:
+//   - the KDF at the 600 000 default AND the 200 000 legacy cost,
+//   - the "v1:" envelope with its AAD (Kotlin must DECRYPT Swift-sealed text; the random
+//     nonce means we validate by decrypting, not by re-encrypting),
+//   - legacy (v0) boxes still opening,
+//   - rejection cases — a stripped or forged prefix must fail authentication,
+//   - PassphrasePolicy verdicts, including the NFC-before-counting case.
+// Regenerate with `swift scripts/gen_crypto_vectors.swift`; the committed JSON is the
+// source of truth for both platforms, and this suite re-checks it against the REAL code.
 
 @Suite("CryptoParity")
 struct CryptoParityTests {
 
-    struct ParityFile: Codable {
-        struct Algo: Codable {
-            let kdf, cipher, wireFormat, passwordNormalization, passwordEncoding: String
-            let iterations, keyBytes: Int
-            let aad: String?
+    struct ParityFile: Decodable {
+        struct Algo: Decodable {
+            let kdf, cipher, envelope, aad, passwordNormalization, passwordEncoding: String
+            let defaultIterations, legacyIterations, minimumIterations, minimumSaltBytes, keyBytes: Int
+            let passphraseMinimumLength, passphraseMinimumDistinct: Int
         }
-        struct KDFVector: Codable { let name, passphrase, saltB64: String; let iterations: Int; let derivedKeyB64: String }
-        struct DecryptVector: Codable { let name, passphrase, saltB64, plaintext, ciphertextB64: String; let iterations: Int }
+        struct KDFVector: Decodable { let name, passphrase, saltB64: String; let iterations: Int; let derivedKeyB64: String }
+        struct SealedVector: Decodable { let name, passphrase, saltB64, plaintext, ciphertext: String; let iterations: Int }
+        struct RejectVector: Decodable { let name, passphrase, saltB64, ciphertext, expect: String; let iterations: Int }
+        struct PassphraseVector: Decodable { let passphrase, verdict: String }
         let version: Int
         let algorithm: Algo
         let kdfVectors: [KDFVector]
-        let decryptVectors: [DecryptVector]
+        let decryptVectors: [SealedVector]
+        let legacyDecryptVectors: [SealedVector]
+        let rejectVectors: [RejectVector]
+        let passphraseVectors: [PassphraseVector]
     }
-
-    // Deterministic inputs (fixed salts) so the KDF outputs are stable + pinnable.
-    private static let inputs: [(name: String, pass: String, salt: Data, text: String)] = [
-        ("ascii", "correct horse battery staple", Data((0..<16).map { UInt8($0) }), "Hello, Halo"),
-        ("bank-sms", "p@ssw0rd!", Data("halo-salt-1234!!".utf8), "A/C *XX3833 debited by Rs 1250.00 via UPI"),
-        ("unicode", "café☕", Data((0..<16).map { UInt8(0xA0 &+ $0) }), "Unicode: café ☕ 日本語 — clipboard")
-    ]
 
     private var vectorsURL: URL {
         URL(fileURLWithPath: #filePath)              // <repo>/HaloTests/CloudFoundationTests.swift
             .deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("docs/specs/crypto-parity-vectors.v1.json")
+            .appendingPathComponent("docs/specs/crypto-parity-vectors.v2.json")
+    }
+
+    private func load() throws -> ParityFile {
+        try JSONDecoder().decode(ParityFile.self, from: try Data(contentsOf: vectorsURL))
     }
 
     private func keyB64(_ key: SymmetricKey) -> String { key.withUnsafeBytes { Data($0).base64EncodedString() } }
 
-    @Test("KDF + decrypt vectors verify against CryptoService (the cross-language contract)")
-    func verify() throws {
-        let data = try Data(contentsOf: vectorsURL)
-        let file = try JSONDecoder().decode(ParityFile.self, from: data)
-        #expect(file.algorithm.iterations == CryptoService.defaultIterations)
+    @Test("The file's constants match CryptoService — drift on either side fails here")
+    func constants() throws {
+        let a = try load().algorithm
+        #expect(try load().version == 2)
+        #expect(a.defaultIterations == CryptoService.defaultIterations)
+        #expect(a.legacyIterations == CryptoService.legacyIterations)
+        #expect(a.minimumIterations == CryptoService.minimumIterations)
+        #expect(a.minimumSaltBytes == CryptoService.minimumSaltBytes)
+        #expect(a.aad == String(decoding: CryptoService.envelopeAAD, as: UTF8.self))
+        #expect(a.passphraseMinimumLength == PassphrasePolicy.minimumLength)
+        #expect(a.passphraseMinimumDistinct == PassphrasePolicy.minimumDistinctCharacters)
+        #expect(a.keyBytes == 32)
+    }
 
-        for v in file.kdfVectors {
+    @Test("KDF vectors reproduce byte-for-byte")
+    func kdf() throws {
+        for v in try load().kdfVectors {
             let salt = try #require(Data(base64Encoded: v.saltB64))
             let key = try CryptoService.deriveKey(passphrase: v.passphrase, salt: salt, iterations: v.iterations)
-            #expect(keyB64(key) == v.derivedKeyB64)          // deterministic KDF parity
+            #expect(keyB64(key) == v.derivedKeyB64, "\(v.name)")
         }
-        for v in file.decryptVectors {
+    }
+
+    @Test("v1 envelopes decrypt; every one carries the prefix")
+    func decryptV1() throws {
+        for v in try load().decryptVectors {
+            #expect(v.ciphertext.hasPrefix(CryptoService.envelopePrefix), "\(v.name)")
             let salt = try #require(Data(base64Encoded: v.saltB64))
             let svc = try CryptoService(passphrase: v.passphrase, salt: salt, iterations: v.iterations)
-            let pt = try svc.decrypt(v.ciphertextB64)
-            #expect(pt == v.plaintext)                       // wire-format parity
+            #expect(try svc.decrypt(v.ciphertext) == v.plaintext, "\(v.name)")
+        }
+    }
+
+    @Test("Legacy v0 boxes (200 000 rounds, no prefix, no AAD) still decrypt")
+    func decryptLegacy() throws {
+        for v in try load().legacyDecryptVectors {
+            #expect(!v.ciphertext.hasPrefix(CryptoService.envelopePrefix), "\(v.name)")
+            let salt = try #require(Data(base64Encoded: v.saltB64))
+            let svc = try CryptoService(passphrase: v.passphrase, salt: salt, iterations: v.iterations)
+            #expect(try svc.decrypt(v.ciphertext) == v.plaintext, "\(v.name)")
+        }
+    }
+
+    @Test("Stripped or forged prefixes are rejected")
+    func rejects() throws {
+        for v in try load().rejectVectors {
+            let salt = try #require(Data(base64Encoded: v.saltB64))
+            let svc = try CryptoService(passphrase: v.passphrase, salt: salt, iterations: v.iterations)
+            #expect(v.expect == "decryptionFailed")
+            #expect(throws: CryptoError.decryptionFailed, "\(v.name)") { _ = try svc.decrypt(v.ciphertext) }
+        }
+    }
+
+    @Test("Passphrase-policy verdicts match, including the NFC-before-counting case")
+    func policy() throws {
+        for v in try load().passphraseVectors {
+            let got: String
+            switch PassphrasePolicy.evaluate(v.passphrase) {
+            case .ok: got = "ok"
+            case .tooShort(let have): got = "tooShort:\(have)"
+            case .tooRepetitive: got = "tooRepetitive"
+            }
+            #expect(got == v.verdict, "\(v.passphrase.debugDescription)")
         }
     }
 }

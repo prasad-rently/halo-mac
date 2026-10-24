@@ -32,40 +32,71 @@ struct CloudAuthCredential: Codable, Equatable, Sendable {
 }
 
 /// The payload encoded into the desktop→mobile pairing QR (F-044 §7.1, D11).
-/// Carries everything needed to CONNECT (config + auth + salt) but NOT the E2E
-/// passphrase. A leaked QR exposes only ciphertext.
+/// Carries everything needed to CONNECT (config + auth + salt + KDF cost) but NOT the
+/// E2E passphrase. A leaked QR exposes only ciphertext.
+///
+/// Schema history:
+///   1 — original; no iteration count (implicitly `CryptoService.legacyIterations`).
+///   2 — adds `iterations`, so the phone derives with the same cost the desktop used
+///       and raising the default later never orphans an existing key.
 struct CloudPairingPayload: Codable, Equatable, Sendable {
+    static let currentSchema = 2
+
     var firebaseConfig: FirebaseConfig
     var auth: CloudAuthCredential
     var saltBase64: String        // non-secret KDF salt
-    var schema: Int = 1
+    var schema: Int
+    var iterations: Int           // PBKDF2 rounds; schema 1 payloads decode as 200 000
     var checksum: String          // integrity check over the fields
 
     /// Build a payload, computing the checksum.
-    init(firebaseConfig: FirebaseConfig, auth: CloudAuthCredential, salt: Data) {
+    init(firebaseConfig: FirebaseConfig, auth: CloudAuthCredential, salt: Data,
+         iterations: Int = CryptoService.defaultIterations) {
         self.firebaseConfig = firebaseConfig
         self.auth = auth
         self.saltBase64 = salt.base64EncodedString()
-        self.schema = 1
+        self.schema = Self.currentSchema
+        self.iterations = iterations
         self.checksum = CloudPairingPayload.checksum(
-            config: firebaseConfig, auth: auth, saltBase64: saltBase64, schema: 1)
+            config: firebaseConfig, auth: auth, saltBase64: saltBase64,
+            schema: Self.currentSchema, iterations: iterations)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case firebaseConfig, auth, saltBase64, schema, iterations, checksum
+    }
+
+    /// Lenient on the fields that did not exist in schema 1, strict on the rest.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        firebaseConfig = try c.decode(FirebaseConfig.self, forKey: .firebaseConfig)
+        auth = try c.decode(CloudAuthCredential.self, forKey: .auth)
+        saltBase64 = try c.decode(String.self, forKey: .saltBase64)
+        schema = try c.decodeIfPresent(Int.self, forKey: .schema) ?? 1
+        iterations = try c.decodeIfPresent(Int.self, forKey: .iterations) ?? CryptoService.legacyIterations
+        checksum = try c.decode(String.self, forKey: .checksum)
     }
 
     var isValid: Bool {
         checksum == CloudPairingPayload.checksum(
-            config: firebaseConfig, auth: auth, saltBase64: saltBase64, schema: schema)
+            config: firebaseConfig, auth: auth, saltBase64: saltBase64,
+            schema: schema, iterations: iterations)
     }
 
     var salt: Data? { Data(base64Encoded: saltBase64) }
 
+    /// SHA-256 over the `|`-joined fields. Schema 1 never covered `iterations`, so
+    /// its formula is preserved byte-for-byte to keep validating old payloads; from
+    /// schema 2 the count is covered, so it cannot be downgraded in transit.
     static func checksum(config: FirebaseConfig, auth: CloudAuthCredential,
-                         saltBase64: String, schema: Int) -> String {
-        let material = [
+                         saltBase64: String, schema: Int, iterations: Int) -> String {
+        var fields = [
             config.apiKey, config.projectID, config.googleAppID, config.gcmSenderID,
             config.databaseURL, config.storageBucket ?? "",
             auth.email, auth.password, saltBase64, String(schema)
-        ].joined(separator: "|")
-        let digest = SHA256.hash(data: Data(material.utf8))
+        ]
+        if schema >= 2 { fields.append(String(iterations)) }
+        let digest = SHA256.hash(data: Data(fields.joined(separator: "|").utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 

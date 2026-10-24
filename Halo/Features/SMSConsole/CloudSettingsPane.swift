@@ -40,7 +40,7 @@ struct CloudSettingsPane: View {
     }
 
     private var rekeyValid: Bool {
-        !newPass.isEmpty && newPass == confirmPass
+        PassphrasePolicy.evaluate(newPass).isAcceptable && newPass == confirmPass
     }
 
     var body: some View {
@@ -148,6 +148,7 @@ struct CloudSettingsPane: View {
     private var rekeySection: some View {
         section("Re-key (rotate passphrase)", "Set a new encryption passphrase. This wipes the cloud SMS and your devices re-sync under the new key — no data is lost. Also use this if you forgot the old passphrase.") {
             secureField("New passphrase", $newPass)
+            PassphraseStrengthHint(passphrase: newPass, enforced: true)
             secureField("Confirm passphrase", $confirmPass)
             if !confirmPass.isEmpty && newPass != confirmPass {
                 Text("Passphrases don't match.").font(HaloFont.body(10)).foregroundColor(.haloRed)

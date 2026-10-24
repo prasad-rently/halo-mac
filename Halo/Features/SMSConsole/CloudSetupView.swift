@@ -22,6 +22,15 @@ struct CloudSetupView: View {
     @State private var password = ""
     // E2E
     @State private var passphrase = ""
+    /// Set when the OS RNG fails while creating a salt — surfaced instead of ever
+    /// connecting with a zero salt (review finding 1).
+    @State private var keyError: String?
+
+    /// With no salt stored yet this connect *creates* the key, so the passphrase
+    /// strength floor is enforced. With a salt already stored (paired from a phone)
+    /// it only *unlocks* an existing key: a weak one is warned about, not blocked,
+    /// since blocking would lock the user out without making anything safer.
+    private var creatingKey: Bool { CloudConfigStore.shared.salt == nil }
 
     /// Connection fields only — the E2E passphrase is a local key, not part of the
     /// connection, so "Test connection" does not require it.
@@ -31,7 +40,10 @@ struct CloudSetupView: View {
             && !email.isEmpty && !password.isEmpty
     }
 
-    private var canConnect: Bool { canTest && !passphrase.isEmpty }
+    private var canConnect: Bool {
+        guard canTest, !passphrase.isEmpty else { return false }
+        return !creatingKey || PassphrasePolicy.evaluate(passphrase).isAcceptable
+    }
 
     private var isTesting: Bool {
         if case .testing = client.testResult { return true }
@@ -57,6 +69,10 @@ struct CloudSetupView: View {
                 }
                 section("3 · Encryption passphrase", "End-to-end key. Your SMS are encrypted with this before upload — even your Firebase only stores ciphertext. Never leaves your devices.") {
                     secureField("Passphrase", $passphrase)
+                    PassphraseStrengthHint(passphrase: passphrase, enforced: creatingKey)
+                    if let keyError {
+                        Text(keyError).font(HaloFont.body(10)).foregroundColor(.haloRed)
+                    }
                 }
                 controls
                 assistedNote
@@ -179,7 +195,44 @@ struct CloudSetupView: View {
     private func connect() {
         let config = currentConfig()
         let auth = CloudAuthCredential(email: email, password: password)
-        let salt = CloudConfigStore.shared.salt ?? CryptoService.generateSalt()
-        Task { await client.configureAndConnect(config: config, auth: auth, salt: salt, passphrase: passphrase) }
+        let store = CloudConfigStore.shared
+        let salt: Data
+        let iterations: Int
+        if let existing = store.salt {
+            // Keep the cost the existing key was derived with, or it derives a different key.
+            salt = existing
+            iterations = store.kdfIterations ?? CryptoService.legacyIterations
+        } else {
+            do { salt = try CryptoService.generateSalt() }
+            catch { keyError = error.localizedDescription; return }
+            iterations = CryptoService.defaultIterations
+        }
+        keyError = nil
+        Task { await client.configureAndConnect(config: config, auth: auth, salt: salt,
+                                                iterations: iterations, passphrase: passphrase) }
+    }
+}
+
+
+// MARK: - PassphraseStrengthHint
+
+/// One line under a passphrase field. `enforced` is true where the passphrase is
+/// being *chosen* (the control is also disabled), false where an existing key is
+/// merely being unlocked (advice only).
+struct PassphraseStrengthHint: View {
+    let passphrase: String
+    let enforced: Bool
+
+    var body: some View {
+        let verdict = PassphrasePolicy.evaluate(passphrase)
+        if !passphrase.isEmpty, let message = verdict.message {
+            Text(enforced ? message : message + " Consider re-keying from Messages → Cloud settings.")
+                .font(HaloFont.body(10))
+                .foregroundColor(enforced ? .haloRed : .haloAmber)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if passphrase.isEmpty && enforced {
+            Text("At least \(PassphrasePolicy.minimumLength) characters. A few unrelated words works well.")
+                .font(HaloFont.body(10)).foregroundColor(.haloText2)
+        }
     }
 }

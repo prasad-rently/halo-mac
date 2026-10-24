@@ -25,6 +25,11 @@ final class ClipboardSyncService: ObservableObject {
         didSet { UserDefaults.standard.set(filterSensitive, forKey: Self.filterKey) }
     }
 
+    /// Copies the opt-in sensitive filter kept off the cloud this session. Shown in
+    /// the settings so an exclusion is never silent — the keyword rules are
+    /// deliberately broad (they fail safe), so a user must be able to see them act.
+    @Published private(set) var excludedCount = 0
+
     /// Remote item ready to enter local history (history-only, D9).
     var onRemoteItem: ((ClipboardItem) -> Void)?
     /// Cloud purge finished — clear synced items from local history.
@@ -106,7 +111,10 @@ final class ClipboardSyncService: ObservableObject {
         guard syncEnabled, case let .connected(uid) = state, let crypto else { return }
         guard item.syncedFrom == nil else { return }                 // never re-publish (echo, D3)
         guard let s = Self.serialize(item.content) else { return }   // text/url/code only (D6)
-        if filterSensitive && ClipboardSensitiveFilter.isSensitive(s.text) { return }
+        if filterSensitive && ClipboardSensitiveFilter.isSensitive(s.text) {
+            excludedCount += 1
+            return
+        }
 
         let itemId = item.id.uuidString
         seenItemIds.insert(itemId)

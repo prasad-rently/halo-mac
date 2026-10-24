@@ -23,18 +23,35 @@ struct PKCE: Equatable, Sendable {
     let challenge: String    // BASE64URL(SHA256(verifier))
     let method = "S256"
 
-    private enum CodingKeys: String, CodingKey { case verifier, challenge }
-
     init(verifier: String) {
         self.verifier = verifier
         self.challenge = PKCE.challenge(for: verifier)
     }
 
     /// Fresh pair from 32 random bytes (→ a 43-char base64url verifier).
-    static func generate() -> PKCE {
-        var bytes = [UInt8](repeating: 0, count: 32)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        return PKCE(verifier: base64url(Data(bytes)))
+    ///
+    /// Throws if the system RNG fails. It must never fall back to a zero-filled
+    /// buffer: that would make the verifier — and so the challenge — a constant,
+    /// publicly known value, which defeats the whole point of PKCE for a flow that
+    /// requests the restricted `cloud-platform` scope.
+    static func generate() throws -> PKCE {
+        PKCE(verifier: base64url(try CryptoService.randomBytes(32)))
+    }
+
+    /// A fresh anti-CSRF `state` value for the authorization request.
+    static func generateState() throws -> String {
+        base64url(try CryptoService.randomBytes(16))
+    }
+
+    /// Constant-time comparison of the `state` that came back on the redirect with
+    /// the one that was sent. A plain `==` short-circuits on the first differing
+    /// byte; the redirect is attacker-reachable, so don't hand out that timing.
+    static func validate(state received: String, against expected: String) -> Bool {
+        let a = Array(received.utf8), b = Array(expected.utf8)
+        guard a.count == b.count, !a.isEmpty else { return false }
+        var difference: UInt8 = 0
+        for (x, y) in zip(a, b) { difference |= x ^ y }
+        return difference == 0
     }
 
     /// S256 challenge = BASE64URL(SHA256(ASCII(verifier))).

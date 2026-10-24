@@ -105,11 +105,12 @@ final class SMSSyncClient: ObservableObject {
 
     /// Save a fresh config + auth + salt, then connect.
     func configureAndConnect(config: FirebaseConfig, auth: CloudAuthCredential,
-                             salt: Data, passphrase: String) async {
+                             salt: Data, iterations: Int, passphrase: String) async {
         testResult = nil
         store.firebaseConfig = config
         store.authCredential = auth
         store.salt = salt
+        store.kdfIterations = iterations
         await connect(passphrase: passphrase)
     }
 
@@ -284,9 +285,12 @@ final class SMSSyncClient: ObservableObject {
         do {
             try await rtdb.removeValue(at: "sms/\(uid)")
             try await rtdb.removeValue(at: "devices/\(uid)")
-            let newSalt = CryptoService.generateSalt()
+            // Rotating the key is the moment to move to the current KDF cost.
+            let newSalt = try CryptoService.generateSalt()
+            let iterations = CryptoService.defaultIterations
+            crypto = try CryptoService(passphrase: newPassphrase, salt: newSalt, iterations: iterations)
             store.salt = newSalt
-            crypto = try CryptoService(passphrase: newPassphrase, salt: newSalt)
+            store.kdfIterations = iterations
             if store.cachedPassphrase != nil { store.cachedPassphrase = newPassphrase }
             connectedAt = Date()
             resetModel()

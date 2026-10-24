@@ -21,6 +21,7 @@ final class CloudConfigStore: @unchecked Sendable {
         case firebaseConfig
         case authCredential
         case salt
+        case kdfIterations     // PBKDF2 cost the salt was paired with
         case passphrase        // optional convenience cache (device-local only)
     }
 
@@ -44,6 +45,15 @@ final class CloudConfigStore: @unchecked Sendable {
         set { write(newValue, .salt) }
     }
 
+    /// PBKDF2 rounds this key was derived with. `nil` means the salt predates the
+    /// field — i.e. it was paired by a build that always used 200 000 — so
+    /// `makeCryptoService` falls back to `legacyIterations` rather than the new
+    /// default, which would derive a different key and silently orphan the data.
+    var kdfIterations: Int? {
+        get { read(.kdfIterations).flatMap { String(data: $0, encoding: .utf8) }.flatMap(Int.init) }
+        set { write(newValue.map { Data(String($0).utf8) }, .kdfIterations) }
+    }
+
     /// Optional device-local passphrase cache (user opts in). Storing it here is
     /// a convenience; the security model never *requires* it (F-044 D24 re-key).
     var cachedPassphrase: String? {
@@ -58,17 +68,19 @@ final class CloudConfigStore: @unchecked Sendable {
         firebaseConfig = pairing.firebaseConfig
         authCredential = pairing.auth
         salt = pairing.salt
+        kdfIterations = pairing.iterations
     }
 
     /// Build a `CryptoService` from the stored salt + a supplied passphrase.
     func makeCryptoService(passphrase: String) throws -> CryptoService {
         guard let salt = salt else { throw CryptoError.kdfFailed }
-        return try CryptoService(passphrase: passphrase, salt: salt)
+        return try CryptoService(passphrase: passphrase, salt: salt,
+                                 iterations: kdfIterations ?? CryptoService.legacyIterations)
     }
 
     /// Wipe everything (disconnect / re-key). Removes all cloud Keychain items.
     func wipe() {
-        [Key.firebaseConfig, .authCredential, .salt, .passphrase].forEach { delete($0) }
+        [Key.firebaseConfig, .authCredential, .salt, .kdfIterations, .passphrase].forEach { delete($0) }
     }
 
     // MARK: - Codable helpers
