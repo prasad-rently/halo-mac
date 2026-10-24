@@ -42,6 +42,7 @@ struct AlertEntry: Identifiable, Codable {
         case "disk_smart_warning": return "exclamationmark.triangle.fill"   // F-020
         case "disk_smart_failing": return "xmark.octagon.fill"              // F-020
         case "lethe_message":     return "bubble.left.and.bubble.right.fill"  // F-052
+        case "sms_new":           return "message.fill"                        // F-044
         default:                  return "bell.fill"
         }
     }
@@ -60,6 +61,7 @@ struct AlertEntry: Identifiable, Codable {
         // for "no arm was written", so an explicit .haloAccent would be
         // indistinguishable from the bug the test exists to catch.
         case "lethe_message":                return .haloPurple  // F-052
+        case "sms_new":                      return .haloCyan    // F-044
         default:                             return .haloAccent
         }
     }

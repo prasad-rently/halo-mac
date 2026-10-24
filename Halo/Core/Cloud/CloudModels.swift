@@ -114,3 +114,53 @@ struct CloudPairingPayload: Codable, Equatable, Sendable {
         return try JSONDecoder().decode(CloudPairingPayload.self, from: data)
     }
 }
+
+
+// MARK: - CloudTelemetryScrubber
+
+/// The cloud client authenticates with an ID token carried in the URL query
+/// (`…/path.json?auth=<token>` — that is how the RTDB REST API takes it), and sign-in
+/// bodies carry the account password. Sentry is opt-in, but *even when a user has opted
+/// in* none of that may reach a report: its automatic network breadcrumbs record request
+/// URLs, and an error string can be built from a response body.
+///
+/// Matched by **shape**, not from a registry, so it also catches a token Halo never
+/// registered. Pure string work with no Sentry import; the hooks that call it live in
+/// `HaloApp.configureSentry()` beside `LetheTelemetryScrubber`.
+enum CloudTelemetryScrubber {
+
+    static let redaction = "[cloud-redacted]"
+
+    private static let rules: [(regex: NSRegularExpression, template: String)] = {
+        let specs: [(String, String)] = [
+            // ?auth=…  &key=…  &access_token=…  — keep the parameter name, drop the value.
+            (#"([?&](?:auth|key|access_token|id_token|refresh_token|token)=)[^&\s"'<>]+"#, "$1\(redaction)"),
+            // Compact JWTs (Firebase ID tokens) wherever they appear.
+            (#"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*"#, redaction),
+            // JSON credential fields: "password": "…", "idToken": "…", "refresh_token": "…"
+            (#"("(?:password|idToken|refreshToken|id_token|refresh_token)"\s*:\s*")[^"]*(")"#, "$1\(redaction)$2"),
+        ]
+        return specs.compactMap { pattern, template in
+            (try? NSRegularExpression(pattern: pattern)).map { ($0, template) }
+        }
+    }()
+
+    static func scrub(_ text: String) -> String {
+        var out = text
+        for (regex, template) in rules {
+            out = regex.stringByReplacingMatches(
+                in: out, range: NSRange(out.startIndex..., in: out), withTemplate: template)
+        }
+        return out
+    }
+
+    /// Recurses through nested dictionaries/arrays, scrubbing every string.
+    static func scrub(_ value: Any) -> Any {
+        switch value {
+        case let s as String:          return scrub(s)
+        case let d as [String: Any]:   return d.mapValues { scrub($0) }
+        case let a as [Any]:           return a.map { scrub($0) }
+        default:                       return value
+        }
+    }
+}

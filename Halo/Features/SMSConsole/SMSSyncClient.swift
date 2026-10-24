@@ -373,11 +373,23 @@ final class SMSSyncClient: ObservableObject {
         // D30 — notify only for genuinely-new messages that arrived *after* connect
         // (skip the historical backfill `child_added` re-delivers on attach).
         if isNew, date >= connectedAt, notificationsEnabled {
-            AlertManager.fireExternal(
-                kindRaw: "sms_new",
-                title: "New SMS · \(address)",
-                body: body.count > 120 ? String(body.prefix(120)) + "…" : body)
+            let note = Self.newMessageNotification(sender: address)
+            AlertManager.fireExternal(kindRaw: "sms_new", title: note.title, body: note.body)
         }
+    }
+
+    /// What a new-SMS notification says. **Never the message text.**
+    ///
+    /// Notification content is rendered by the OS — it appears on the lock screen, is
+    /// mirrored to other devices, and `fireExternal` also writes it to `AlertLog`, which is
+    /// plaintext UserDefaults and is printed in the PDF health report. An SMS routinely
+    /// carries an OTP or a bank balance, so putting its body here would write the very
+    /// thing the end-to-end encryption protects to disk in the clear. The sender is enough
+    /// to know whether to open the console; same rule as Lethe's `letheMessage`.
+    static func newMessageNotification(sender: String) -> (title: String, body: String) {
+        let who = sender.trimmingCharacters(in: .whitespacesAndNewlines)
+        let shown = who.count > 40 ? String(who.prefix(40)) + "…" : who
+        return ("New SMS", shown.isEmpty ? "A new message arrived." : "From \(shown)")
     }
 
     private func publishDevices() {

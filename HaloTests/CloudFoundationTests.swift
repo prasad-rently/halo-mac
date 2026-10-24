@@ -767,3 +767,97 @@ struct CryptoParityTests {
         }
     }
 }
+
+
+// MARK: - New-SMS notification privacy (found while verifying P3)
+
+@Suite("SMS notifications never carry message text")
+@MainActor
+struct SMSNotificationPrivacyTests {
+
+    @Test("The notification names the sender and nothing from the body")
+    func noBodyText() {
+        let n = SMSSyncClient.newMessageNotification(sender: "HDFCBK")
+        #expect(n.title == "New SMS")
+        #expect(n.body == "From HDFCBK")
+    }
+
+    @Test("Long or empty senders are bounded and never produce an empty body")
+    func edgeSenders() {
+        #expect(SMSSyncClient.newMessageNotification(sender: String(repeating: "A", count: 200)).body.count <= 50)
+        #expect(SMSSyncClient.newMessageNotification(sender: "   ").body == "A new message arrived.")
+    }
+
+    @Test("sms_new has its own icon and colour in the alert history, not the generic bell")
+    func hasIconAndColour() {
+        let e = AlertEntry(title: "New SMS", body: "From X", kindRaw: "sms_new")
+        #expect(e.icon != "bell.fill")
+        #expect(e.accentColor != .haloAccent)       // .haloAccent is the "no arm was written" sentinel
+    }
+}
+
+
+// MARK: - CloudTelemetryScrubber
+
+@Suite("CloudTelemetryScrubber")
+struct CloudTelemetryScrubberTests {
+
+    private let jwt = "eyJhbGciOiJSUzI1NiIsImtpZCI6IjEyMyJ9.eyJ1aWQiOiJhYmMxMjMiLCJpYXQiOjE3MDAwMDAwMDB9.c2lnbmF0dXJlLWJ5dGVzLWhlcmU"
+
+    @Test("An ID token in a request URL's query is redacted, the rest of the URL kept")
+    func authQuery() {
+        let url = "https://x-default-rtdb.firebaseio.com/sms/u1/devA.json?auth=\(jwt)"
+        let out = CloudTelemetryScrubber.scrub(url)
+        #expect(!out.contains("eyJ"))
+        #expect(out == "https://x-default-rtdb.firebaseio.com/sms/u1/devA.json?auth=[cloud-redacted]")
+    }
+
+    @Test("API keys and refresh tokens in query strings are redacted, other parameters survive")
+    func otherQueryParams() {
+        let out = CloudTelemetryScrubber.scrub("POST https://securetoken.googleapis.com/v1/token?key=AIzaSyFAKEKEY123&foo=bar&refresh_token=RT-secret")
+        #expect(!out.contains("AIzaSyFAKEKEY123"))
+        #expect(!out.contains("RT-secret"))
+        #expect(out.contains("foo=bar"))
+    }
+
+    @Test("A bare JWT anywhere in text is redacted")
+    func bareJWT() {
+        let out = CloudTelemetryScrubber.scrub("Failed with token \(jwt) for user")
+        #expect(!out.contains("eyJhbGci"))
+        #expect(out.hasPrefix("Failed with token [cloud-redacted]"))
+    }
+
+    @Test("Credential fields in a JSON body are redacted, their names kept")
+    func jsonFields() {
+        let body = #"{"email":"me@example.com","password":"hunter2-long","returnSecureToken":true,"idToken":"abc.def.ghi","refreshToken":"RTOK"}"#
+        let out = CloudTelemetryScrubber.scrub(body)
+        #expect(!out.contains("hunter2-long"))
+        #expect(!out.contains("abc.def.ghi"))
+        #expect(!out.contains("RTOK"))
+        #expect(out.contains(#""password":"[cloud-redacted]""#))
+        #expect(out.contains("me@example.com"))                 // not a secret; keeps the report useful
+    }
+
+    @Test("Ordinary text and numbers pass through untouched")
+    func benign() {
+        let text = "Network error: The Internet connection appears to be offline. (code -1009)"
+        #expect(CloudTelemetryScrubber.scrub(text) == text)
+        #expect(CloudTelemetryScrubber.scrub("keyboard=us&author=me") == "keyboard=us&author=me")   // not key=/auth=
+    }
+
+    @Test("Nested dictionaries and arrays are scrubbed recursively")
+    func nested() throws {
+        let value: [String: Any] = ["url": "https://h/x.json?auth=SECRET1", "list": ["?token=SECRET2", 3], "n": 1]
+        let out = try #require(CloudTelemetryScrubber.scrub(value) as? [String: Any])
+        #expect((out["url"] as? String)?.contains("SECRET1") == false)
+        #expect(((out["list"] as? [Any])?.first as? String)?.contains("SECRET2") == false)
+        #expect(out["n"] as? Int == 1)
+    }
+
+    @Test("The Sentry hooks' combined scrub covers both Lethe and cloud secrets")
+    func combined() {
+        let out = HaloApp.scrubTelemetry("join lethe://room/KEYMATERIAL via https://h/x.json?auth=SECRET")
+        #expect(!out.contains("KEYMATERIAL"))
+        #expect(!out.contains("SECRET"))
+    }
+}

@@ -23,6 +23,16 @@ struct HaloApp: App {
 
     // MARK: - Sentry (F-006)
 
+    /// Every Sentry hook funnels through here, so a new class of secret is added in one
+    /// place. Order is irrelevant — the two scrubbers match disjoint shapes.
+    static func scrubTelemetry(_ text: String) -> String {
+        CloudTelemetryScrubber.scrub(LetheTelemetryScrubber.scrub(text))
+    }
+
+    static func scrubTelemetry(_ value: Any) -> Any {
+        CloudTelemetryScrubber.scrub(LetheTelemetryScrubber.scrub(value))
+    }
+
     private static func configureSentry() {
         // Respect user's analytics opt-in (defaults to false = off).
         let analyticsEnabled = UserDefaults.standard.bool(forKey: "enableAnalytics")
@@ -47,23 +57,23 @@ struct HaloApp: App {
             // F-052 §6.2: even with analytics opted in, nothing about a Lethe
             // conversation (room id/name, handle, invite link) may leave.
             options.beforeBreadcrumb = { crumb in
-                if let message = crumb.message { crumb.message = LetheTelemetryScrubber.scrub(message) }
+                if let message = crumb.message { crumb.message = Self.scrubTelemetry(message) }
                 if let data = crumb.data,
-                   let scrubbed = LetheTelemetryScrubber.scrub(data) as? [String: Any] {
+                   let scrubbed = Self.scrubTelemetry(data) as? [String: Any] {
                     crumb.data = scrubbed
                 }
                 return crumb
             }
             options.beforeSend = { event in
                 if let message = event.message {
-                    event.message = SentryMessage(formatted: LetheTelemetryScrubber.scrub(message.formatted))
+                    event.message = SentryMessage(formatted: Self.scrubTelemetry(message.formatted))
                 }
-                event.exceptions?.forEach { $0.value = LetheTelemetryScrubber.scrub($0.value) }
+                event.exceptions?.forEach { $0.value = Self.scrubTelemetry($0.value) }
                 if let tags = event.tags {
-                    event.tags = tags.mapValues { LetheTelemetryScrubber.scrub($0) }
+                    event.tags = tags.mapValues { Self.scrubTelemetry($0) }
                 }
                 if let extra = event.extra,
-                   let scrubbed = LetheTelemetryScrubber.scrub(extra) as? [String: Any] {
+                   let scrubbed = Self.scrubTelemetry(extra) as? [String: Any] {
                     event.extra = scrubbed
                 }
                 return event
