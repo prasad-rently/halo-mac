@@ -47,10 +47,17 @@ enum AIToolError: LocalizedError {
 final class AIToolExecutor {
     private let metrics: AIMetricsSource
     private weak var appState: AppState?   // for the two acts (Smart Scan / report)
+    /// The context-set search behind `search_context`. Injectable so tests never touch the
+    /// user's real index in Application Support.
+    private let contextSearch: (String, Int) async -> [RAGHit]
 
-    init(metrics: AIMetricsSource, appState: AppState?) {
+    init(metrics: AIMetricsSource, appState: AppState?,
+         contextSearch: @escaping (String, Int) async -> [RAGHit] = { query, k in
+             await RAGService.shared.search(query, k: k)
+         }) {
         self.metrics = metrics
         self.appState = appState
+        self.contextSearch = contextSearch
     }
     /// Convenience — bind to the running app.
     static func live() -> AIToolExecutor? {
@@ -90,6 +97,8 @@ final class AIToolExecutor {
         case "get_top_processes":
             let sortBy = (input["sortBy"] as? String) == "memory" ? "mem" : "cpu"
             return try topProcesses(sortBy: sortBy)
+        case "search_context":
+            return try await searchContext(input)
         case "run_smart_scan":
             return try await runSmartScan()
         case "export_health_report":
@@ -118,6 +127,22 @@ final class AIToolExecutor {
         let out = try Self.shell("/bin/ps", ["-Aceo", "pid,pcpu,pmem,comm", flag])
         let rows = out.split(separator: "\n").prefix(6)   // header + top 5
         return "Top processes (by \(sortBy == "mem" ? "memory" : "CPU")):\n" + rows.joined(separator: "\n")
+    }
+
+    /// F-047 — search the local context set. Checked here as well as at registration: the
+    /// tool is only *offered* when the user opted in, but a model can name any tool, and the
+    /// consequence of answering is sending file excerpts to a provider.
+    private func searchContext(_ input: [String: Any]) async throws -> String {
+        guard RAGSettings.assistantMaySearch else {
+            throw AIToolError.unavailable("Searching your files is turned off. The user can enable it in the assistant's Context settings.")
+        }
+        guard let query = (input["query"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !query.isEmpty else {
+            throw AIToolError.unavailable("search_context needs a non-empty \"query\".")
+        }
+        let count = min(max((input["count"] as? Int) ?? 5, 1), 8)
+        let hits = await contextSearch(query, count)
+        return RAGService.formatForModel(hits)
     }
 
     // MARK: Acts (confirmed upstream by AgentRunner)

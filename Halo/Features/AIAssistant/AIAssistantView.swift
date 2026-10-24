@@ -11,6 +11,7 @@ struct AIAssistantView: View {
     @ObservedObject private var store = ConversationStore.shared
     @State private var keyDraft = ""
     @State private var showHistory = false
+    @State private var showContext = false
     // Defensive: keep the key field from auto-acquiring first responder on
     // appear (doesn't hurt, though the sidebar-scroll bug turned out not to
     // be about focus at all — see the ScrollView note on `keySetup` below).
@@ -25,7 +26,11 @@ struct AIAssistantView: View {
         .background(Color.haloSurface)
         .sheet(item: $vm.pendingConfirm) { confirmSheet($0) }
         .sheet(isPresented: $showHistory) { historySheet }
+        .sheet(isPresented: $showContext) {
+            RAGContextView(onChange: { Task { await vm.refreshContextCount() } })
+        }
         .onAppear { isKeyFieldFocused = false }
+        .task { await vm.refreshContextCount() }
     }
 
     // MARK: Header
@@ -42,6 +47,11 @@ struct AIAssistantView: View {
             }
             .labelsHidden().frame(width: 150)
             .accessibilityIdentifier("ai.providerPicker")
+            // Context files work with or without a key — indexing and searching are local.
+            Button { showContext = true } label: { Image(systemName: "doc.text.magnifyingglass") }
+                .buttonStyle(.plain).foregroundColor(.haloText2)
+                .help(vm.contextFileCount == 0 ? "Context files" : "Context files (\(vm.contextFileCount) indexed)")
+                .accessibilityIdentifier("ai.contextButton")
             if vm.hasKey {
                 Picker("", selection: $vm.selectedModelID) {
                     ForEach(vm.models) { m in Text(m.displayName).tag(m.id) }
