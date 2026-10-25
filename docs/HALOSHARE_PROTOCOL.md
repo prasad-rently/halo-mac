@@ -130,8 +130,8 @@ That is a degraded-but-working design, not a bug; it is why the HTTP scan is a f
   credential — anyone on the LAN can claim any value. Receive consent is the only gate.
 - **`https` peers:** the fingerprint is the lower-case hex **SHA-256 of the peer's DER certificate**. A Halo
   client connecting to an `https` peer **must** compare the presented certificate's SHA-256 to the fingerprint
-  that peer announced, and refuse on mismatch. (Desktop's current `URLSession` delegate trusts every
-  certificate unconditionally — acceptable only because desktop never uses `https` today; §8.3.)
+  that peer announced, and refuse on mismatch. Desktop does this since v2.5 (`TLSManager.shouldTrustServer`;
+  pins are registered per `host:port` and it **fails closed** when no pin is known — §8.9).
 - Halo peers generate their fingerprint once and persist it.
 
 ## 7. Receiver obligations
@@ -176,10 +176,18 @@ Fixed separately on `fix/haloshare-sha256-verify` (PR #40, stacked on #37):
    The receive loop now hashes as it writes (one pass) when the sender supplies a digest; a mismatch answers
    `422` and deletes the file. (Both mobile implementations already verified; this brought desktop in line.)
 
+Fixed in v2.5:
+
+9. **TLS pinning (was risk §8.6).** The desktop client accepted *any* certificate from an `https` peer. It was
+   described as "harmless while desktop only uses `http`" — but the **official LocalSend app announces `https`
+   by default**, so every send from Halo to one was open to anyone on the LAN impersonating the peer. The
+   client now pins each https peer's certificate (SHA-256 of the DER) to the fingerprint it announced and
+   refuses on mismatch or when it holds no pin. Tests drive the real `URLSession` trust callback with genuine
+   `SecTrust` objects built from a real certificate whose fingerprint was computed independently by `openssl`;
+   removing the check turns five of them red. Not verified: a live handshake with the official app.
+
 **Not fixed (tracked as risks in the requirements doc):**
 
-- **§8.6** Desktop's client trusts any TLS certificate; harmless while desktop only uses `http`, wrong the day it
-  talks to an `https` peer.
 - **§8.7** The desktop's hand-assembled X.509 certificate is built but never used for transport.
 - **§8.8** No sender computes a digest yet — desktop forwards `ShareFile.sha256` only if already set, and neither
   mobile app sends one — so verification protects only transfers whose sender supplies it. Receivers all verify
