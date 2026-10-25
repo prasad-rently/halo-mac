@@ -311,7 +311,10 @@ struct CloudPairingPayloadTests {
     }
 }
 
-@Suite("CloudConfigStore")
+/// Every test here reads and writes the one Keychain-backed `CloudConfigStore.shared` and calls
+/// `wipe()`, so they must not interleave — run in parallel, one test's `apply(pairing:)` landed
+/// between another's `wipe()` and its "no iteration count yet" assertion.
+@Suite("CloudConfigStore", .serialized)
 struct CloudConfigStoreTests {
 
     @Test("Apply pairing → derive matching CryptoService")
