@@ -33,7 +33,7 @@
 
     <key>com.apple.security.application-groups</key>
     <array>
-        <string>group.com.halo.mac</string>
+        <string>R7S39UR27F.group.com.halo.mac</string>
     </array>
 
     <!-- F-025 Similar Photos: the Photos Library entitlement is deliberately

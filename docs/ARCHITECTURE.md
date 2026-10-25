@@ -31,7 +31,7 @@ This document describes the data flow, concurrency model, and key design decisio
             └────────┬─────────┘
                      │ writeWidgetData() every 2 s
                      ▼
-        UserDefaults(suiteName: "group.com.halo.mac")
+        UserDefaults(suiteName: "R7S39UR27F.group.com.halo.mac")
                      │ reloadAllTimelines() every 60 s
                      ▼
               HaloWidget.appex
@@ -190,7 +190,7 @@ Detailed in [`docs/WIDGET.md`](WIDGET.md). Summary:
 
 - Extension target: `com.halo.mac.widget`
 - Shared data: `Shared/HaloSharedData.swift` compiled into **both** targets
-- Transport: `UserDefaults(suiteName: "group.com.halo.mac")`
+- Transport: `UserDefaults(suiteName: "R7S39UR27F.group.com.halo.mac")`
 - Timeline: 5 entries × 1-minute apart, refreshed every minute
 - Three size variants: `HaloSmallView`, `HaloMediumView`, `HaloLargeView`
 
