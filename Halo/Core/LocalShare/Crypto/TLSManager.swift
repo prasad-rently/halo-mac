@@ -43,12 +43,46 @@ final class TLSManager: @unchecked Sendable {
 
     // MARK: - URLSession Trust Delegate
 
-    func shouldTrustServer(challenge: URLAuthenticationChallenge) -> (URLSession.AuthChallengeDisposition, URLCredential?) {
+    /// Certificate pinning for `https` peers (docs/HALOSHARE_PROTOCOL.md §6).
+    ///
+    /// LocalSend peers use self-signed certificates, so the system trust store can never vouch for
+    /// them — and the previous implementation therefore accepted *any* certificate. The official
+    /// LocalSend app announces `https` by default, so every send to one was open to anyone on the
+    /// LAN impersonating the peer. The protocol's answer is that an `https` peer's fingerprint is
+    /// the lower-case hex SHA-256 of its DER certificate: compare the certificate actually presented
+    /// against the fingerprint the peer announced, and refuse on mismatch.
+    ///
+    /// Fails **closed**: no pin registered for the host (we never saw this peer announce one) means
+    /// the connection is refused, not trusted by default.
+    func shouldTrustServer(challenge: URLAuthenticationChallenge,
+                           expectedFingerprint: String?) -> (URLSession.AuthChallengeDisposition, URLCredential?) {
         guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
               let serverTrust = challenge.protectionSpace.serverTrust else {
             return (.performDefaultHandling, nil)
         }
+        let presented = (SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate])?.first
+            .map(Self.certificateFingerprint)
+        guard Self.fingerprintMatches(presented: presented, expected: expectedFingerprint) else {
+            return (.cancelAuthenticationChallenge, nil)
+        }
         return (.useCredential, URLCredential(trust: serverTrust))
+    }
+
+    /// Lower-case hex SHA-256 of the certificate's DER encoding — the LocalSend fingerprint for https.
+    static func certificateFingerprint(_ certificate: SecCertificate) -> String {
+        SHA256.hash(data: SecCertificateCopyData(certificate) as Data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Both sides must be present and non-empty, and equal ignoring case (some peers announce
+    /// upper-case hex). Compared in constant time: the fingerprint is public, but there is no
+    /// reason to hand out a timing oracle for a check that guards a file transfer.
+    static func fingerprintMatches(presented: String?, expected: String?) -> Bool {
+        guard let presented, let expected, !presented.isEmpty, !expected.isEmpty else { return false }
+        let a = Array(presented.lowercased().utf8), b = Array(expected.lowercased().utf8)
+        guard a.count == b.count else { return false }
+        var difference: UInt8 = 0
+        for (x, y) in zip(a, b) { difference |= x ^ y }
+        return difference == 0
     }
 
     // MARK: - Device Info
