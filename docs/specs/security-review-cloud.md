@@ -49,3 +49,24 @@ Branch is clean from an exploitable-vulnerability standpoint. The one substantiv
 real-world hardening opportunity is **automated RTDB-rules deployment** (item 2) —
 a configuration-safety improvement, not a code vulnerability. The CSV cell-prefix
 guard (item 1) is optional defense-in-depth.
+
+---
+
+## v2.5 addendum (2026-10) — what the July review did not catch
+
+The July pass found no exploitable vulnerability. Verifying the branch before merging it found these, all fixed in v2.5:
+
+| Finding | Severity | Fix |
+|---|---|---|
+| `CryptoService.randomBytes` / `PKCE.generate` ignored the `SecRandomCopyBytes` status → an RNG failure returned zero bytes that looked valid (zero KDF salt; constant, publicly known PKCE verifier) | Critical (PR #7 review #1, #2) | Throw; a test injects a failing RNG |
+| No passphrase floor — `"a"` accepted | Critical (#3) | `PassphrasePolicy`; hard at creation, advisory at unlock |
+| No envelope version; weak KDF preconditions; 200 000 rounds; key not wiped; wrong error type; over-broad hex filter | Medium/Low (#4–#10) | `v1:` envelope + AAD, preconditions, 600 000 rounds persisted with the salt, wipe, `encryptionFailed`, 64+ hex |
+| **New-SMS notifications carried the first 120 characters of the decrypted message** — onto the lock screen, and via `AlertManager.fireExternal` into plaintext `AlertLog` and the PDF report. An SMS routinely holds an OTP or a balance, so this wrote exactly what the E2E encryption protects to disk in the clear | **High** | Sender only |
+| **firebase-ios-sdk cannot sign in from a DMG** (data-protection keychain needs a restricted entitlement; the build carrying it is killed at launch) — the cloud features would have shipped non-functional | High (availability) | REST client, in-memory tokens |
+| The ID token travels in the URL query and Sentry's network breadcrumbs record URLs | Medium (opt-in telemetry) | `CloudTelemetryScrubber` on every Sentry hook |
+| Password-manager copies were recorded and, with F-045 on, uploaded | Medium | nspasteboard.org markers honoured |
+| A database left in test mode was invisible to the user | Medium (config safety) | "Test connection" warns when an unauthenticated read succeeds (the review's item 2, partly: it *detects* open rules; it still does not *deploy* the safe ones) |
+| CSV export formula guard (review item 1) | Low | `'` prefix on text cells |
+| HaloShare desktop client trusted **any** TLS certificate from an https peer | Medium | Pinned to the announced fingerprint, fail-closed (§6/§8.9 of `HALOSHARE_PROTOCOL.md`) |
+
+**Still true / not done:** no live end-to-end test against a real Firebase project; owner-only isolation still depends on the user publishing the rules (now *detected*, not *deployed*); `docs/specs/crypto-parity-vectors.v1.json` no longer exists — v2 carries the legacy vectors.

@@ -1,5 +1,7 @@
 # Implementation Status — NFeat-122→127 (F-044…F-050)
 
+> ⚠️ **Historical (2026-07).** This was the session handoff for PR #7. It is superseded by [`docs/V2_5_PLAN.md`](../V2_5_PLAN.md) and the v2.5 section of [`FEATURE_ROADMAP.md`](../FEATURE_ROADMAP.md): the work described here was merged in v2.5 with the PR #7 review findings fixed, the Firebase SDK replaced by REST (it cannot sign in from a DMG), and the crypto contract bumped to v2 (`crypto-parity-vectors.v2.json`). References below to the SDK, `crypto-parity-vectors.v1.json` and 200 000 PBKDF2 rounds are no longer current.
+
 > **Session handoff.** Where the build stands, what's on which branch/PR, and the
 > exact next steps. Read this first when resuming.
 > **Last updated:** 2026-07 (end of the planning + F-044 Phase 0 session).

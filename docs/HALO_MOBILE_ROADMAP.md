@@ -122,9 +122,9 @@ feasibility study (§6). iOS / Android assessed separately.
 | Launch at login | ❌ | 🟡 | Android BOOT_COMPLETED partial; iOS none | P3 | Assessed |
 | **AI assistant — cloud (F-046)** | ✅ | ✅ | Cloud providers portable; fewer agent tools on mobile | P1 | Assessed ✓ (§9) |
 | **AI — on-device (F-047)** | 🟡 | 🟡 | MLX is Mac-only → mobile uses Core ML / MLC-LLM / llama.cpp | P2 | Assessed |
-| **SMS console (F-044)** | 🟡 | ✅ | Android sync source; iOS viewer only | P0 | Planned (F-044) |
-| **Expenditure (F-048)** | ✅ | ✅ | Parse device SMS (Android) / cloud (iOS) | P1 | Planned (F-048) |
-| **Clipboard sync (F-045)** | 🟡 | 🟡 | F-045 (AccessibilityService Android) | P1 | Planned (F-045) |
+| **SMS console (F-044)** | 🟡 | ✅ | Android sync source; iOS viewer only | P0 | Desktop merged (v2.5); Kotlin crypto/pairing port done (`android/halocloud`); device sync not started |
+| **Expenditure (F-048)** | ✅ | ✅ | Parse device SMS (Android) / cloud (iOS) | P1 | Desktop v1 merged (v2.5); mobile not started |
+| **Clipboard sync (F-045)** | 🟡 | 🟡 | F-045 (AccessibilityService Android) | P1 | Desktop merged (v2.5); mobile not started |
 | **Browser Cleaner (F-024)** | ❌ | ❌ | Sandbox blocks reading/deleting another app's (browser's) data entirely | — | Won't do |
 | **Permission Auditor (F-016)** | ❌ | 🟡 | iOS exposes zero introspection into other apps' TCC/permission grants — no viable path; Android `PackageManager` can enumerate other installed apps' declared + granted permissions, gated by `QUERY_ALL_PACKAGES` visibility and Play policy | P3 | Assessed ✓ (§9) |
 | **Security Posture Dashboard (F-019)** | ❌ | 🟡 | Both OSes block reading passcode/encryption/Find-My status from 3rd-party apps → reimagine as an advisory checklist + Settings deep-links only, no automated pass/fail scoring | P3 | Assessed ✓ (§9) |
@@ -243,6 +243,7 @@ Copy this block into a study when assessing a feature for mobile.
 | 2026-08 | Desktop F-022 (Time Machine Backup Health Monitor) shipped. Feasibility study added (§9): Won't do / Reimagine → Time Machine has no mobile equivalent; the mobile-exclusive "iCloud Backup Health" idea (§5) is a distinct, much coarser reimagining, not a port. |
 | 2026-08 | F-020 (S.M.A.R.T. Disk Health Monitor) shipped on desktop. Feasibility study added (§9): both iOS and Android verdict ❌ Blocked — neither OS exposes SMART/drive-health data to third-party apps. Row added to §3; status `Won't do`. |
 | 2026-07 | Formal feasibility studies added (§9): Code Beautifier, Snippets, Speed Test, cloud AI. |
+| 2026-10 | v2.5: the cloud line (F-044/F-045/F-048) landed for desktop and its crypto contract is now **shared and tested in both directions** — `android/halocloud` (Kotlin, plain JVM) reproduces `CryptoService` (PBKDF2 600k, `v1:` AES-GCM envelope with AAD, legacy v0 read-only, passphrase policy, pairing payload schema 1+2) against `docs/specs/crypto-parity-vectors.v2.json`. Feasibility fact learned: **the Firebase *iOS/macOS* SDK cannot sign in from a development-signed build** (data-protection keychain needs a restricted entitlement), so desktop uses REST; the Android SDK has no such limit, and the mobile apps may use either. Still blocked on devices + a live Firebase project: SMS sync, clipboard, QR pairing. |
 | 2026-10 | F-050 (HaloShare) **built on iOS and Android** and verified on the iOS Simulator and Android Emulator against a separate implementation. Two feasibility facts learned by building: (1) iOS cannot do multicast discovery without a restricted entitlement, so an iPhone is found only by others' HTTP scans; (2) shipped desktop could not receive a file from a phone at all until its HTTP framing was fixed. F-049's cloud features (SMS/clipboard/pairing) remain blocked on F-044. See `specs/F-049-F-050-mobile-requirements.md`. |
 | 2026-07 | Document created. Assessed all shipped desktop capabilities (F-001–F-043) + planned cloud features (F-044–F-048) for iOS/Android. Established governance rules. First wave specced: F-044/F-045/F-048/F-049/F-050. |
 

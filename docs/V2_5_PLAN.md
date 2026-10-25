@@ -1,83 +1,68 @@
-# Halo v2.5 — plan
+# Halo v2.5 — plan and record
 
 > **Theme: land the cloud line.** F-044 (cloud core + SMS console), F-045 (clipboard sync) and F-048
-> (expenditure tracker) were built for desktop in July on `feature/f-044-cloud-foundation` (PR #7) and
-> never merged. The roadmap lists them as "Planned"; the code exists, reviewed, with a defect list.
-> v2.5 brings that work onto the current release line, fixes the review findings, makes it safe to ship,
-> and unblocks the mobile side (F-049) with a Kotlin crypto-parity port.
+> (expenditure tracker) were built for desktop in July on `feature/f-044-cloud-foundation` (PR #7) and never
+> merged. The roadmap listed them as "Planned"; the code existed, reviewed, with a defect list. v2.5 brings that
+> work onto the current release line, fixes the review findings, makes it safe to ship, and unblocks the mobile
+> side (F-049) with a Kotlin crypto-parity port.
 >
 > Cut from `release/v2.4` @ `92636ec` (v2.4.0-beta.1). Integration branch `release/v2.5`; work branch
-> `feat/v2.5-cloud-line`.
+> `feat/v2.5-cloud-line`. This document was the plan; it has been updated to record what actually happened,
+> including the work the plan did not anticipate (marked **unplanned**).
 
 ---
 
-## 1. What is pending (survey, 2026-10-25)
+## 1. What was pending (survey, 2026-10-25)
 
-| Item | State | v2.5? |
+| Item | State at survey | Outcome |
 |---|---|---|
-| **F-044/F-045/F-048 desktop** | Built on PR #7 (15 commits, 3 merge conflicts vs v2.4); never merged | **Yes — P1** |
-| PR #7 review: 3 critical, 3 medium, 4 low findings | Open since 2026-09-04 | **Yes — P2** |
-| Release-config safety of the cloud code (sandbox, keychain group, App Group, audits) | Never checked on the merged line | **Yes — P3** |
-| Crypto parity for Android (`docs/specs/crypto-parity-vectors.v1.json`) | Vectors exist; no Kotlin implementation | **Yes — P4** |
-| Docs: roadmap says "Planned", CLAUDE.md has no cloud section | Stale | **Yes — P5** |
-| Desktop widget showing no data on the installed v2.4 | Unconfirmed; needs a look at the machine | **Investigate — P6** |
-| F-047 on-device AI + RAG | Gated on spike S3 (MLX tokens/sec, packaging) — needs hardware benchmarking and a model download | No |
-| F-049 cloud features on phones (SMS sync, clipboard, QR pairing) | Needs physical Android/iOS device **and** a live Firebase project | No (P4 removes the code-side blocker) |
-| Live end-to-end against real Firebase | Needs the user's Firebase project and credentials | No |
-| Assisted Firebase provisioning (S2) | Blocked on Google restricted-scope app verification (policy, not code) | No |
-| Notarisation | Needs a paid Developer ID | No |
-| `main` is ~119 commits behind `release/v2.4`; stale PRs #1/#6/#7; 12 `worktree-agent-*` branches | Owner decisions | No — listed in the PR for the owner |
+| F-044/F-045/F-048 desktop | Built on PR #7 (15 commits, 3 conflicts vs v2.4); never merged | **Merged** (P1) |
+| PR #7 review: 3 critical, 3 medium, 4 low | Open since 2026-09-04 | **All 10 fixed** (P2) |
+| Release-config safety of the cloud code | Never checked on the merged line | Checked — **found it could not work** (P3) |
+| Crypto parity for Android | Vectors existed; no Kotlin implementation | **Done, both directions** (P4) |
+| Docs stale | Roadmap said "Planned" | **Updated** (P5) |
+| Desktop widget blank on installed v2.4 | Unconfirmed | **Root-caused and fixed** (P6) |
+| F-047 on-device AI + RAG | Gated on spike S3 (MLX) | **Phase 3 (retrieval) built**; generation not started |
+| F-049 device features, live Firebase validation, assisted provisioning, notarisation | Need devices / accounts / a paid cert | Not attempted |
+| `main` ~119 behind, stale PRs, housekeeping | Owner decisions | Not touched |
 
-## 2. Phases
+## 2. Phases — as executed
 
-### P1 — Land F-044 / F-045 / F-048 on the v2.4 line
-- [x] Merge `feature/f-044-cloud-foundation`; resolve `AppState.swift` / `ContentView.swift` (additive enum cases: `.messages`, `.expenditure` beside `.ai`, `.luckyDraw`, `.lethe`).
-- [x] `project.pbxproj`: **not** hand-merged (sorted blocks interleave; a wrong merge silently drops a file from Sources). Took the v2.4 file and re-added the 20 sources + `CloudFoundationTests` + `firebase-ios-sdk` (Database, Auth) with the repo's `scripts/add_*.rb`, then checked programmatically: none missing, none duplicated.
-- [ ] Compiles on the merged line; exhaustive `switch` over `AppModule` fixed wherever the new cases appear.
-- [ ] Sidebar, module ordering migration (existing users' saved order gains the new modules), icons.
+### P1 — Land F-044 / F-045 / F-048 ✅
+- Merged `feature/f-044-cloud-foundation`; `AppState.swift` / `ContentView.swift` conflicts were additive enum cases.
+- `project.pbxproj` was **not** hand-merged (sorted blocks interleave; a wrong merge silently drops a file from Sources). Took the v2.4 file and re-added the sources with `scripts/add_source_files.rb`; verified none missing, none duplicated.
 
-### P2 — Fix every PR #7 review finding (with a test each)
-| # | Finding | Fix |
-|---|---|---|
-| 1 | `CryptoService.randomBytes` discards the `SecRandomCopyBytes` status → all-zero salt on failure | Check status, throw `randomGenerationFailed`; test that `generateSalt()` is never all-zero |
-| 2 | Same in `GoogleOAuthPKCE` → constant, publicly known PKCE verifier | Same; add `generateState()` + constant-time `validate(state:)` (finding 9) |
-| 3 | Any non-empty E2E passphrase accepted (`"a"`) | Passphrase strength floor enforced in `CryptoService` **and** all three UIs; shared validator |
-| 4 | Ciphertext envelope has no version | Versioned envelope (`v` byte) with a read path for the unversioned v0 blobs; **this is a wire-format change, so the Kotlin vectors are regenerated after it** |
-| 5 | KDF preconditions missing (empty passphrase, 1-byte salt, low stored iterations) | Explicit preconditions: salt ≥ 16 B, iterations ≥ floor |
-| 6 | 200 000 PBKDF2 iterations | 600 000 (OWASP 2023); stored alongside salt so old keys still derive |
-| 7 | Derived key bytes not wiped | `defer` wipe |
-| 8 | `encrypt` throws a *decryption* error | `encryptionFailed` case |
-| 10 | Clipboard filter flags every 32+ hex string (git SHAs) | Narrow to ≥ 64 hex; show a count of excluded items |
+### P2 — PR #7 review findings 1–10 ✅
+Zero-salt RNG, constant PKCE verifier, passphrase floor, versioned `v1:` envelope with AAD, KDF preconditions, 600 000 rounds **persisted with the salt** (the old code never stored the count, so raising the default would have orphaned keys), key wipe, `encryptionFailed`, PKCE state helpers, narrower clipboard hex filter. Each has a test; the RNG one injects a failing RNG, since the real one cannot be made to fail.
 
-### P3 — Make it safe to ship
-- [ ] Entitlements: `keychain-access-groups` for FirebaseAuth (-34018) present in **both** `Halo.entitlements` and `Halo-Debug.entitlements`; App Group still present in all three (run `scripts/audit-entitlements.sh`); `network.client` in the sandboxed file.
-- [ ] `scripts/audit-subprocess-spawning.sh` still passes (no `Process` outside `ShellReader`).
-- [ ] Confirm no secret-shaped values are logged or reach Sentry from the new code (the v2.4 Sentry scrubber must cover cloud/clipboard payloads).
-- [ ] New `AlertKind` cases (new-SMS notification) have matching arms in `AlertEntry.icon` / `.accentColor` — `HaloTests` enforces this.
+### P3 — Make it safe to ship ✅ — and what that found (**unplanned, the biggest result**)
+- **The Firebase SDK cannot sign in from a DMG.** FirebaseAuth persists with the data-protection keychain, which needs `keychain-access-groups`, which needs a provisioning profile. Measured with probes signed exactly like the DMG: `SecItemAdd` → **-34018**; the same build *with* the entitlement is **SIGKILLed at launch**. The July "S1 spike passed" proved the SDK *links*, not that it *works*. → `FirebaseRTDBClient` rewritten over Identity Toolkit + RTDB REST (+ SSE), in-memory tokens, SDK removed.
+- **SMS text was written to disk in the clear** via the new-SMS notification (OS notification *and* plaintext `AlertLog`, printed in the PDF report). → sender only.
+- Cloud tokens could reach Sentry via network breadcrumbs. → `CloudTelemetryScrubber` on every hook.
+- Password-manager copies were recorded and uploaded. → nspasteboard.org markers honoured.
+- Open Realtime Database now **detected** during "Test connection" (not deployed — that still needs assisted provisioning); CSV formula guard.
 
-### P4 — Kotlin crypto-parity port (unblocks F-049 M6)
-- [ ] `android/halocloud` module: PBKDF2-HMAC-SHA256 + AES-256-GCM, identical envelope to Swift.
-- [ ] Unit tests driven by the shared `crypto-parity-vectors.v1.json` — the same file the Swift suite reads, so a drift on either side fails a test.
-- [ ] Vectors regenerated from the Swift implementation **after** P2.4/P2.6.
+### P4 — Kotlin crypto-parity port ✅
+`android/halocloud`: PBKDF2 (hand-written over HmacSHA256), the `v1:` envelope, legacy v0, passphrase policy, pairing payload schema 1+2. Contract: `docs/specs/crypto-parity-vectors.v2.json`, generated by Swift, read by both suites. Includes a *decomposed* passphrase vector (a port that skips NFC fails) and the grapheme-vs-UTF-16 passphrase case. Swift→Kotlin by the vectors, **Kotlin→Swift** by an opt-in pair; mutation-checked.
 
-### P5 — Documentation
-- [ ] `FEATURE_ROADMAP.md`: F-044/045/048 status → merged to v2.5 (honest about what is unverified live); v2.5 scope section.
-- [ ] `CLAUDE.md`: Cloud / SMS console / Clipboard sync / Expenditure sections, Modules Status rows, pbxproj ID note.
-- [ ] `MANUAL_TEST_PLAN.md`: cases for the new modules, marked *not yet run* where they need Firebase or a phone.
-- [ ] `HALO_MOBILE_ROADMAP.md`: F-044/045/048 rows reflect the parity port.
+### P5 — Documentation ✅
+Roadmap (v2.5 section, statuses), `CLAUDE.md` (cloud / RAG / pinning sections, gotchas 27–30, module rows, pbxproj advice), `MANUAL_TEST_PLAN.md` (§20.3–20.5, ◆ = not yet run), mobile roadmap, security review addendum, crypto-parity spec.
 
-### P6 — Widget on the installed v2.4 (carry-over)
-- [ ] Reproduce on a signed build with the App Group entitlement; establish whether the shared container is written; fix if it is a code problem, document if it is a macOS consent prompt.
+### P6 — Widget ✅ (**unplanned depth**)
+Root cause: the App Group must be **team-prefixed** (`R7S39UR27F.group.com.halo.mac`). On macOS 15+ an unprefixed group no profile authorises silently drops cross-process writes while `containerURL` and in-process reads still look fine. Measured both directions, sandboxed and unsandboxed. `audit-entitlements.sh --probe` proves sharing with signed probes using the real entitlement files (negative-tested against the old config); `AppGroupContractTests` is the always-on guard. **Also shipped on its own as PR #47 against `release/v2.4`**, because v2.4.0-beta.1 carries the blank widget.
 
-### P7 — Validation (end of run)
-- [ ] Full desktop suite on the PR head, Kit + Kotlin suites, both audits, a signed build verified with `codesign --deep --strict`.
-- [ ] PR to `release/v2.5` with an honest verified / not-verified table.
+### Also done (**unplanned**)
+- **F-047 Phase 3** — local retrieval over the user's files; `search_context` assistant tool, **opt-in, default off**, excerpts labelled untrusted data and cited by file/locator, never absolute path.
+- **HaloShare TLS pinning** — the desktop client trusted any certificate from an https peer; official LocalSend announces https by default. Pinned, fail-closed.
 
-## 3. Ground rules for this run
-- Every new destructive path keeps the project's rules: `trashItem` only, confirmation before delete, `ShellReader` for subprocesses.
-- Secrets never in logs, Sentry, UserDefaults — Keychain only.
-- Anything that needs a live Firebase project, a phone or a Developer ID is **stated as unverified**, never implied.
-- Testing is done at the end (P7); each phase is only required to **build** when it lands.
+### P7 — Validation
+See the PR description for the verified / not-verified table.
 
-## 4. Explicitly not in v2.5
-F-047 (S3 spike), F-049 device features, live-Firebase validation, assisted provisioning, notarisation, repo housekeeping that needs an owner decision.
+## 3. Ground rules held throughout
+- Destructive paths keep the project's rules (`trashItem`, confirmation, `ShellReader`).
+- Secrets never in logs, Sentry or UserDefaults.
+- Anything needing a live Firebase project, a phone or a Developer ID is **stated as unverified**.
+- Tests were run as each piece landed and not only at the end, because the first crypto change would otherwise have made every later failure ambiguous. Where a test guards a security property it was **mutation-checked**: the property was deliberately broken and the test confirmed red.
+
+## 4. Not in v2.5
+F-047 local generation (MLX; spike S3), F-049 device features, live-Firebase validation, assisted provisioning, notarisation, and repo housekeeping that needs an owner decision (`main` sync, stale PRs #1/#6/#7 — #7 is superseded by this branch — duplicate "F-051").
