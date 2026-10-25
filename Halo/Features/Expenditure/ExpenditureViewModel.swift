@@ -115,13 +115,24 @@ final class ExpenditureViewModel: ObservableObject {
         let f = ISO8601DateFormatter()
         var rows = ["id,date,direction,amount,currency,merchant,category,account,sender,transfer,duplicate"]
         for t in result.transactions {
-            let fields = [t.id, f.string(from: t.date), t.direction.rawValue,
-                          String(format: "%.2f", t.amount), t.currency,
-                          t.merchant ?? "", t.category, t.accountHint ?? "", t.sender,
-                          t.isTransfer ? "1" : "0", t.isDuplicate ? "1" : "0"]
+            // Text fields go through `csvText` (formula guard); numbers and dates are ours and safe.
+            let fields = [Self.csvText(t.id), f.string(from: t.date), t.direction.rawValue,
+                          String(format: "%.2f", t.amount), Self.csvText(t.currency),
+                          Self.csvText(t.merchant ?? ""), Self.csvText(t.category), Self.csvText(t.accountHint ?? ""),
+                          Self.csvText(t.sender), t.isTransfer ? "1" : "0", t.isDuplicate ? "1" : "0"]
             rows.append(fields.map { "\"\($0.replacingOccurrences(of: "\"", with: "\"\""))\"" }.joined(separator: ","))
         }
         return rows.joined(separator: "\n")
+    }
+
+    /// Defence against CSV/formula injection: a cell an Excel/Numbers/Sheets user opens that begins
+    /// with `=`, `+`, `-`, `@`, a tab or a CR is evaluated as a formula. Today's parsers make that
+    /// hard to reach (merchant is regex-anchored, sender is a DLT header), but the *category* is
+    /// user-editable and the parsers will change — so guard at the boundary that matters.
+    /// The OWASP-recommended fix: prefix a single quote, which spreadsheets display as nothing.
+    static func csvText(_ s: String) -> String {
+        guard let first = s.unicodeScalars.first else { return s }
+        return ["=", "+", "-", "@", "\t", "\r"].contains(String(first)) ? "'" + s : s
     }
 
     /// `₹1,23,456.78` grouping (en-IN).

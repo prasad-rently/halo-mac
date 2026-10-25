@@ -704,3 +704,73 @@ struct RTDBRestStreamingTests {
         #expect(StubURLProtocol.hangupCount(t.id) >= 2)
     }
 }
+
+
+// MARK: - Exposure check and CSV guard
+
+@Suite("RTDB open-rules detection")
+struct RTDBPublicAccessTests {
+
+    @Test("An unauthenticated read that is refused means the rules are locked — and no credential is sent")
+    func locked() async throws {
+        let t = Tenant()
+        t.install { _ in .json(["error": "Permission denied"], status: 401) }
+        #expect(await t.client().checkPublicAccess(t.config) == .locked)
+        let req = try #require(t.dbRequests.first)
+        #expect(req.url.path == "/.json")
+        #expect(req.query("shallow") == "true")               // keys only, never values
+        #expect(req.query("auth") == nil)                      // no token to the URL being probed
+        #expect(req.headers["Authorization"] == nil)
+        #expect(req.method == "GET")                           // read-only probe
+        #expect(t.requests.allSatisfy { $0.url.host == t.dbHost })   // and nothing sent to Google's identity hosts
+    }
+
+    @Test("A 403 also counts as locked")
+    func forbidden() async {
+        let t = Tenant(); t.install { _ in .json(nil, status: 403) }
+        #expect(await t.client().checkPublicAccess(t.config) == .locked)
+    }
+
+    @Test("An unauthenticated read that SUCCEEDS means the database is open to the internet")
+    func open() async {
+        let t = Tenant(); t.install { _ in .json(["sms": true, "devices": true]) }
+        #expect(await t.client().checkPublicAccess(t.config) == .open)
+    }
+
+    @Test("Anything else is 'unknown' — never a false alarm and never a false all-clear")
+    func unknown() async {
+        let t = Tenant(); t.install { _ in .json(nil, status: 500) }
+        #expect(await t.client().checkPublicAccess(t.config) == .unknown)
+        let t2 = Tenant(); t2.install { _ in .json(nil, status: 404) }
+        #expect(await t2.client().checkPublicAccess(t2.config) == .unknown)
+        var bad = t.config; bad.databaseURL = "http://insecure.firebaseio.com"
+        #expect(await t.client().checkPublicAccess(bad) == .unknown)       // https only, even for a probe
+    }
+
+    @Test("The warning names what is exposed and what is still protected, and where the fix is")
+    @MainActor func warningText() {
+        let w = SMSSyncClient.openRulesWarning
+        #expect(w.contains("open to the whole internet"))
+        #expect(w.contains("end-to-end encrypted"))
+        #expect(w.contains("firebase-setup.md"))
+    }
+}
+
+@Suite("Expenditure CSV export")
+@MainActor
+struct ExpenditureCSVTests {
+
+    @Test("Cells that would be evaluated as formulas are neutralised")
+    func formulaGuard() {
+        for dangerous in ["=HYPERLINK(\"http://evil\",\"x\")", "+1+1", "-2+3", "@SUM(A1)", "\tcmd", "\rcmd"] {
+            #expect(ExpenditureViewModel.csvText(dangerous).hasPrefix("'"), "\(dangerous.debugDescription)")
+        }
+    }
+
+    @Test("Ordinary text, empty strings, numbers-in-text and unicode are untouched")
+    func benign() {
+        for ok in ["Swiggy", "", "Food & Dining", "HDFCBK", "9876", "₹ café 日本語", "a=b", "x-y", "user@example"] {
+            #expect(ExpenditureViewModel.csvText(ok) == ok, "\(ok.debugDescription)")
+        }
+    }
+}

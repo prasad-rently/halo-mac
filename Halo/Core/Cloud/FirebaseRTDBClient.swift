@@ -194,6 +194,41 @@ actor FirebaseRTDBClient {
         await probe.signOut()
     }
 
+    // MARK: Exposure check
+
+    enum PublicAccess: Equatable, Sendable {
+        /// An unauthenticated read was refused — the rules require sign-in. What we want.
+        case locked
+        /// An unauthenticated read **succeeded**: the database is open to the internet.
+        case open
+        /// Couldn't tell (network error, bad URL, an unexpected status).
+        case unknown
+    }
+
+    /// Does this database answer an **unauthenticated** read? A Realtime Database left in Firebase's
+    /// "test mode" does, for anyone who knows or guesses the URL. The cloud features encrypt the
+    /// payloads end to end, so message text stays unreadable — but device names, line labels,
+    /// timestamps and message counts are plaintext metadata, and open rules also let a stranger
+    /// *write*, so this is worth surfacing during "Test connection" rather than discovering later.
+    ///
+    /// Read-only and token-free by construction (`shallow=true` returns keys only, never values),
+    /// so it neither sends credentials to the URL being probed nor transfers any data.
+    func checkPublicAccess(_ config: FirebaseConfig) async -> PublicAccess {
+        guard let base = Self.normalizedDatabaseURL(config.databaseURL),
+              var c = URLComponents(string: base.absoluteString + "/.json") else { return .unknown }
+        c.queryItems = [URLQueryItem(name: "shallow", value: "true")]
+        guard let url = c.url else { return .unknown }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10
+        guard let (_, response) = try? await session.data(for: request),
+              let http = response as? HTTPURLResponse else { return .unknown }
+        switch http.statusCode {
+        case 200:        return .open
+        case 401, 403:   return .locked
+        default:         return .unknown
+        }
+    }
+
     // MARK: RTDB operations
 
     /// `PUT` (idempotent overwrite) at a path relative to the DB root.

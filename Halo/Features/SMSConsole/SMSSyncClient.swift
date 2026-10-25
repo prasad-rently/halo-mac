@@ -25,6 +25,8 @@ final class SMSSyncClient: ObservableObject {
     enum TestResult: Equatable {
         case testing
         case success(String)
+        /// Connected, but something the user should fix (e.g. rules left open).
+        case warning(String)
         case failure(String)
     }
 
@@ -93,11 +95,18 @@ final class SMSSyncClient: ObservableObject {
         testResult = .testing
         do {
             try await rtdb.testConnection(config, email: auth.email, password: auth.password)
-            testResult = .success("Connection OK — signed in and your database is reachable.")
+            if await rtdb.checkPublicAccess(config) == .open {
+                testResult = .warning(Self.openRulesWarning)
+            } else {
+                testResult = .success("Connection OK — signed in and your database is reachable.")
+            }
         } catch {
             testResult = .failure(error.localizedDescription)
         }
     }
+
+    /// Shown when an unauthenticated read of the database succeeded.
+    static let openRulesWarning = "Connection works — but your Realtime Database is open to the whole internet (its rules are in test mode). Your message text is still end-to-end encrypted, but device names, labels and timestamps are readable by anyone, and a stranger could write to it. Publish the owner-only rules from docs/specs/firebase-setup.md §7.2."
 
     /// Clear a stale test result (e.g. when the user edits a field).
     func clearTestResult() { testResult = nil }

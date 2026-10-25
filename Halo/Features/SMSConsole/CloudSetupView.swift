@@ -112,6 +112,8 @@ struct CloudSetupView: View {
             banner("Testing connection…", .haloAmber, "arrow.triangle.2.circlepath")
         case .success(let msg):
             banner(msg, .haloGreen, "checkmark.circle.fill")
+        case .warning(let msg):
+            banner(msg, .haloAmber, "exclamationmark.triangle.fill")
         case .failure(let msg):
             banner(msg, .haloRed, "xmark.octagon.fill")
         case .none:
