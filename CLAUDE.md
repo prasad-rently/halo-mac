@@ -18,7 +18,7 @@ This file is the primary context source for Claude (and any AI agent) working on
 | Tagline | Your Mac. Elevated. |
 | Bundle ID | `com.halo.mac` |
 | Widget bundle ID | `com.halo.mac.widget` |
-| App Group | `group.com.halo.mac` |
+| App Group | `R7S39UR27F.group.com.halo.mac` (**team-prefixed — see gotcha 27**) |
 | Min macOS | 13.0 (Ventura) |
 | Language | Swift 5.9 / SwiftUI |
 | Architecture | MVVM + Actors + Swift Concurrency |
@@ -205,7 +205,7 @@ be captured in a nonisolated closure."
 - Two timers:
   - `metricsTimer` — fires every **2 s** → `refreshMetrics()` → writes data to App Group container
   - `widgetReloadTimer` — fires every **60 s** → `WidgetCenter.shared.reloadAllTimelines()`
-- `writeWidgetData()` saves `HaloWidgetData` to `UserDefaults(suiteName: "group.com.halo.mac")` — do **NOT** call `reloadAllTimelines()` here (budget will be exhausted)
+- `writeWidgetData()` saves `HaloWidgetData` to `UserDefaults(suiteName: "R7S39UR27F.group.com.halo.mac")` — do **NOT** call `reloadAllTimelines()` here (budget will be exhausted)
 - `calculateHealthScore()` — subtracts from 100 based on CPU/RAM/disk/battery thresholds
 - Clipboard cap: 500 items in memory; top 5 text/code/URL snippets forwarded to widget
 
@@ -214,7 +214,7 @@ be captured in a nonisolated closure."
 ## Widget Pipeline (critical — frequently asked about)
 
 ```
-AppState (every 2 s)  →  writeWidgetData()  →  UserDefaults(group.com.halo.mac)
+AppState (every 2 s)  →  writeWidgetData()  →  UserDefaults(R7S39UR27F.group.com.halo.mac)
 AppState (every 60 s) →  reloadAllTimelines()
                               └─► HaloProvider.getTimeline()
                                     └─► HaloWidgetData.load()  [reads fresh container]
@@ -228,7 +228,7 @@ AppState (every 60 s) →  reloadAllTimelines()
 ```bash
 python3 -c "
 import plistlib, json
-with open('$HOME/Library/Group Containers/group.com.halo.mac/Library/Preferences/group.com.halo.mac.plist','rb') as f:
+with open('$HOME/Library/Group Containers/R7S39UR27F.group.com.halo.mac/Library/Preferences/R7S39UR27F.group.com.halo.mac.plist','rb') as f:
     d = plistlib.load(f)
 print(json.dumps(json.loads(d['haloWidgetData']), indent=2))
 "
@@ -300,6 +300,7 @@ pluginkit -a ~/Applications/Halo.app/Contents/PlugIns/HaloWidget.appex
 
 # 4. Verify
 codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
+./scripts/audit-entitlements.sh --probe   # proves the widget can actually see the app's data (gotcha 27)
 ```
 
 ---
@@ -626,7 +627,7 @@ process, once to record the CPU snapshot — doubling the syscall count of every
 | `Halo.entitlements` | **ON** (with `~/Library` exceptions) | App Store / release |
 | `HaloWidget.entitlements` | **ON** | Widget extension always |
 
-All three entitlement files include `com.apple.security.application-groups = [group.com.halo.mac]`,
+All three entitlement files include `com.apple.security.application-groups = [R7S39UR27F.group.com.halo.mac]`,
 and **all three must keep it** — `scripts/audit-entitlements.sh` enforces this. See gotcha 27.
 
 ---
@@ -1181,37 +1182,50 @@ entitlement files, so this module works fully in a sandboxed build.
 25. **`SMARTStatus = "Not Supported"` is the healthy state for USB/Thunderbolt enclosures, not a warning.** Verified on this Mac: an external USB SSD reports `"Not Supported"` and publishes no SMART dictionary at all, because bridge chipsets don't pass the health log through. Mapping an unrecognised status to `.warning` puts an amber badge on a perfectly good drive — `.other` must classify as `.unknown` ("can't tell"), the same discipline F-019's security checks use for values Halo cannot verify. The status check must also sit *after* the wear/spare/error checks so it can't mask a signal that was successfully read.
 26. **Card badge vs system notification are different bars.** `SMARTDiskInfo.healthLevel` drives the Drive Health card (a surface the user chose to open, so it can surface anything notable); `SMARTDiskInfo.alertLevel` is what `AlertManager.evaluateSMART` acts on and is deliberately stricter. A non-zero `MEDIA_ERRORS` count colours the badge but does **not** notify — one unrecovered read over a drive's lifetime isn't evidence of failure, and with `.diskSmartWarning`'s 24 h cooldown it would otherwise nag daily forever with no action the user can take. Pass `alertLevel`, never `healthLevel`, to `evaluateSMART`.
 
-27. **Every App-Group writer needs the entitlement, and losing it fails silently.**
-    `HaloWidget.appex` is sandboxed (WidgetKit requires it) and can read **only**
-    `~/Library/Group Containers/group.com.halo.mac/…`. If the main app does not
-    declare `com.apple.security.application-groups`, its
-    `UserDefaults(suiteName: "group.com.halo.mac")` does **not** fail and does
-    **not** return nil — it silently resolves to
-    `~/Library/Preferences/group.com.halo.mac.plist`, a different file the widget
-    cannot reach. `HaloWidgetData.load()` then returns its zero placeholder, so
-    the widget renders **plausible** values (0 % CPU, 8 GB RAM, no clipboard
-    items) and looks stuck rather than broken.
+27. **The App Group must be TEAM-PREFIXED, declared by every writer, and proven across processes.**
+    `HaloWidget.appex` is sandboxed (WidgetKit requires it) and can read **only** the group
+    container. Three separate things have to be right, and each fails *silently* — the widget
+    renders **plausible** zeros (0 % CPU, 8 GB RAM, no clipboard items) and looks stuck rather
+    than broken:
 
-    This shipped. `7f91bbb` (2026-05-07) removed the key from
-    `Halo-Debug.entitlements` to stop a per-launch TCC prompt, on the stated
-    basis that *"release builds (`Halo.entitlements`) retain the App Group"* —
-    but every shipped DMG, **v2.0 through the v2.3 beta**, is built from the
-    **Debug** configuration and signed with that file. The widget was dead in
-    every release for four months, and this document asserted the opposite the
-    whole time.
+    1. **Every writer declares the group.** Without `com.apple.security.application-groups`
+       the main app's `UserDefaults(suiteName:)` neither fails nor returns nil — it resolves to
+       `~/Library/Preferences/<group>.plist`, a different file the widget cannot reach. This
+       shipped: `7f91bbb` (2026-05-07) removed the key from `Halo-Debug.entitlements`, on the
+       basis that *"release builds retain it"* — but every shipped DMG is built from the **Debug**
+       configuration, so the widget was dead for four months.
+    2. **The ID must be `<TEAMID>.group.…`, not iOS-style `group.…`.** Measured 2026-10-25 on
+       macOS 27.0.1 with probes signed exactly like the DMG (Apple Development certificate, no
+       provisioning profile): with `group.com.halo.mac` an unsandboxed writer's value is read
+       back as `nil` by a second process **and by a sandboxed reader**; with
+       `R7S39UR27F.group.com.halo.mac` it shares correctly in both directions. On macOS 15+ an
+       unprefixed group no profile authorises is access-controlled and writes are dropped without
+       an error. `containerURL(forSecurityApplicationGroupIdentifier:)` still returns a path and
+       `UserDefaults(suiteName:)` still reads back what it wrote *inside that process*, so every
+       cheap check passes. **An earlier version of this note claimed "verified 2026-09-12" that
+       the unprefixed form works. It did not — v2.3-beta.2 and v2.4.0-beta.1 shipped a blank
+       widget on the strength of it.** Do not "simplify" the ID back to `group.…`.
+    3. **The constant and every entitlement must agree.** `HaloWidgetData.suiteName`
+       (`Shared/HaloSharedData.swift`) is compiled into both targets and must equal the string in
+       all four entitlement files (`Halo`, `Halo-Debug`, `HaloWidget`, `HaloHelper`). The recipe
+       signs with the raw `.entitlements` files, so `$(TeamIdentifierPrefix)` is **not** expanded —
+       the team ID is a literal in all five places (forks: change them together).
 
-    The `?? UserDefaults.standard` fallback in `HaloSharedData` does not rescue
-    it: `UserDefaults(suiteName:)` succeeds in both processes, so the fallback
-    never fires — they simply land in different files.
+    The `?? UserDefaults.standard` fallback in `HaloSharedData` cannot rescue any of this:
+    `UserDefaults(suiteName:)` succeeds in every process.
 
-    Verified 2026-09-12 with a signed probe: an **unsandboxed** app carrying this
-    entitlement, signed with a plain Apple Development certificate and **no
-    provisioning profile**, does get the group container. The original concern
-    was a development re-signing loop, not a limitation of the signing setup.
+    **Guards:** `scripts/audit-entitlements.sh` (static: derives the group from the code, requires
+    the team prefix, plist-aware so a commented-out key doesn't count) and
+    `scripts/audit-entitlements.sh --probe` (behavioural: signs two probe bundles with the REAL
+    entitlement files — one unsandboxed as the app, one sandboxed as the widget — and requires each
+    to read what the other wrote). Run `--probe` before any release. `HaloTests`
+    `AppGroupContractTests` is the always-on version.
 
-    `scripts/audit-entitlements.sh` fails the moment any of the three targets
-    drops the group — including when the key is merely commented out, which a
-    `grep` would happily pass.
+28. **Never put a restricted entitlement in `Halo-Debug.entitlements`.** Every DMG is signed with a
+    development certificate and **no provisioning profile**. `keychain-access-groups` (and anything
+    `com.apple.developer.*`) is restricted: measured, the same build carrying it is **SIGKILLed by
+    macOS at launch** (exit 137), while without it the app runs. `AppGroupContractTests` fails if one
+    appears.
 
 ---
 

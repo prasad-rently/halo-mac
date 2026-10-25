@@ -88,7 +88,7 @@ BUILT="$SYMROOT/Debug/Halo.app"
 # can each carry one of the same name.
 #
 # The App Group is deliberately left alone too, so dev and release share
-# group.com.halo.mac. HaloSharedData.suiteName is a compile-time constant in a
+# R7S39UR27F.group.com.halo.mac. HaloSharedData.suiteName is a compile-time constant in a
 # file built into both targets; pointing the entitlement at a different group
 # without changing that constant is exactly the silent failure in CLAUDE.md
 # gotcha 27 — the widget renders plausible zeros rather than erroring.

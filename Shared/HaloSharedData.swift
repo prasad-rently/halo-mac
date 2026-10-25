@@ -1,9 +1,13 @@
 import Foundation
 
 // Written by the main app every 2s; read by the widget timeline provider.
-// Both targets must be in the "group.com.halo.mac" App Group for production.
-// In debug builds (no provisioning profile) the suite falls back to
-// UserDefaults.standard so macOS never prompts for App Group access.
+// Both targets must be in the App Group named by `suiteName`, and that name MUST carry the
+// Apple team prefix (`<TEAMID>.group.…`). On macOS 15+ an unprefixed `group.…` ID that no
+// provisioning profile authorises is access-controlled: writes from one process are silently
+// dropped for every other, so the widget reads its zero placeholder while everything appears
+// to work. Measured on macOS 27.0.1; see the comment in Halo-Debug.entitlements.
+// `UserDefaults(suiteName:)` returns non-nil in every case, so the `?? .standard` fallback
+// below can never rescue a wrong name — `scripts/audit-entitlements.sh` is what guards it.
 struct HaloWidgetData: Codable {
     var cpuUsage: Double        // 0.0–1.0
     var ramUsage: Double        // 0.0–1.0
@@ -13,7 +17,7 @@ struct HaloWidgetData: Codable {
     var networkDownMBps: Double
     var clipboardPreviews: [String]  // up to 5 recent text snippets
 
-    static let suiteName = "group.com.halo.mac"
+    static let suiteName = "R7S39UR27F.group.com.halo.mac"
     static let defaultsKey = "haloWidgetData"
 
     /// Resolves to the App Group suite when available, standard defaults otherwise.
