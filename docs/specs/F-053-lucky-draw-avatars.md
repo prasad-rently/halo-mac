@@ -60,10 +60,10 @@ moves, and an avatar can never influence selection** (AC-3).
 
 | # | Decision | Why |
 |---|---|---|
-| D1 | `DrawEntry.avatar: EntryAvatar?` — **optional, default nil**. nil ⇒ derived **monogram** (initials on the segment's gradient). | Existing rosters, the CSV import path and tests keep working unchanged; no stored data for the common case. |
+| D1 | `DrawEntry.avatar: EntryAvatar?` — **optional, default nil**. nil ⇒ derived **monogram** (initials on the segment's gradient) in the list, popup and strip; **on the wheel it is governed by D7** — *Automatic* keeps today's name-only wedge for an entry with no avatar (see §14, which records the reconciliation built on PR #54). | Existing rosters, the CSV import path and tests keep working unchanged; no stored data for the common case. |
 | D2 | Five kinds: **monogram** (derived), **emoji** (any Unicode emoji grapheme, incl. ZWJ sequences), **animated** (bundled pack item), **caricature** (bundled pack item), **photo** (user file, copied in). | Matches the request; each kind has a distinct storage/rendering cost, so they are separate cases rather than one "image" blob. |
 | D3 | **Photos are copied in, never referenced by path.** Centre-cropped to a square — on the face when Vision finds one (`VNDetectFaceRectanglesRequest`, on-device) — downsampled to ≤256 px, stored as JPEG (q 0.8) at `Application Support/Halo/luckydraw/avatars/<rosterID>/<entryID>.jpg`. | The original may move, be on a volume that unmounts, or be outside the sandbox; a path in a JSON file is also an injection surface (§6 NFR-S2). |
-| D4 | **Wheel shows avatars only up to a threshold** (initial value 40 entries — to be tuned in spike S3). Beyond it the wheel keeps colour wedges only; the **popup still shows the avatar**. | Same degradation philosophy as F-051 §8.13 (labels and the spotlight drop out as the entry count grows). Avatars cost more per segment than text. |
+| D4 | **Wheel shows avatars only up to a threshold** (initial value 40 entries — to be tuned in spike S3). Beyond it the wheel stops drawing avatars (wedges/labels exactly as F-051 draws them today — FR-W6); the **popup still shows the avatar**. | Same degradation philosophy as F-051 §8.13 (labels and the spotlight drop out as the entry count grows). Avatars cost more per segment than text. |
 | D5 | **Animated emoji animate in the winner popup (and optionally the segment under the pointer); everywhere else they show a static poster frame.** | One animation playing is cheap; 40 playing at once on a spinning `Canvas` is not. |
 | D6 | **Animation format: pre-rendered APNG/GIF frame sequences decoded by ImageIO — no new package dependency** (provisional, spike S1). Lottie is the other candidate. | The project's only third-party dependency is Sentry; `lottie-ios` is a sizeable addition for one feature. ImageIO is system code. Minimum macOS is 13, so animated WebP decode (14+) is not safe to rely on. |
 | D7 | Per-roster **Display mode**: *Auto* (avatar where the entry has one, else label), *Avatar + name*, *Avatar only*, *Name only* (today's behaviour). Default *Auto*. | Lets the user opt out per roster, and *Name only* is the F-051 regression baseline. |
@@ -95,7 +95,7 @@ moves, and an avatar can never influence selection** (AC-3).
 
 ### 5.2 Bulk
 - **FR-B1** **Import photos from a folder**: files matched to entries by label — case-, diacritic- and whitespace-insensitive, extension ignored. Shows a result sheet: *matched N · unmatched files M · entries without a photo K*; nothing is applied until confirmed.
-- **FR-B2** **CSV avatar column**: the existing roster import (`RosterImport`, first column = name) accepts an optional second column holding either an emoji or a filename relative to the CSV. Unknown second-column text is ignored, never an error.
+- **FR-B2** **CSV avatar column**: the existing roster import (`RosterImport`, first column = name) accepts an optional second column holding either an emoji or a filename relative to the CSV. Unknown second-column text is ignored, never an error. **Scope limits:** it applies to **multi-row** CSVs only — `RosterImport.labels(fromCSV:)` deliberately treats a single-row file as a comma-separated name list, so `Anna,😀` on one row stays two names; a relative filename is resolved inside the CSV's own folder and anything that escapes it (`../`, absolute) is ignored; and in a **sandboxed** build a CSV the user picks does not grant access to the files beside it, so filename cells work there only via the folder importer (FR-B1) or when the user grants the folder.
 
 ### 5.3 Wheel (`SpinnerWheelView`)
 - **FR-W1** With avatars shown (D4/D7), each segment draws a **circular avatar with a ring** at ~72 % of the radius, rotating with the wheel and **kept upright** (the same flip logic F-051 uses so labels are never upside-down).
@@ -103,7 +103,7 @@ moves, and an avatar can never influence selection** (AC-3).
 - **FR-W3** During fast spin, avatars fade with the same speed curve labels use (`labelAlpha`) — a blur of faces carries no information and costs fill-rate.
 - **FR-W4** The **near-miss spotlight** (F-051 §8.7) also lifts the avatar: scale 1.0 → 1.15 and the ring brightens.
 - **FR-W5** Static poster frames only for animated avatars on the wheel (D5), except optionally the pointer segment.
-- **FR-W6** Above the D4 threshold the wheel falls back to wedges + hub count, exactly as F-051 does today.
+- **FR-W6** Above the D4 threshold **avatars are omitted from the wheel**; labels, wedges and the hub follow F-051 unchanged. Note the existing limit is **not** what F-051 §8.13 says: the code drops labels above `SpinnerWheelView.labelLimit = 26` entries, while §8.13 states 120 — a pre-existing spec/code mismatch this feature must not paper over. Consequence to design for: between 27 and the D4 threshold (40) the wheel shows avatars **without** labels, so the avatar (or monogram) is the only identifier on the segment — so AC-4 (the segment under the pointer is the entry on the card) must be checked in that band, where the winner card is the only place the name appears.
 - **FR-W7** The hub (centre) may show the *last winner's* avatar between spins (optional; default on).
 
 ### 5.4 Winner popup & sequence (`DrawResultOverlay`, `DrawSequenceOverlay`)
@@ -135,8 +135,8 @@ moves, and an avatar can never influence selection** (AC-3).
 
 **Performance & resources**
 - **NFR-P1** 60 fps while spinning at the D4 threshold with every segment carrying a photo (measured, not asserted — spike S3 sets the real threshold).
-- **NFR-P2** Decode off the main thread (an `actor AvatarStore`); `Canvas` receives **pre-resolved** images at the on-screen size (via `Canvas`'s `symbols`), never decodes in the draw closure.
-- **NFR-P3** Memory: render-size cache (≤ 96 px, ~37 KB each) with an LRU cap of 64 MB — not 500 × 256 px × RGBA (~65 MB uncapped).
+- **NFR-P2** Decode off the main thread (an off-main `AvatarStore` — a class with GCD work as built, §14); `Canvas` receives **pre-resolved** images at the on-screen size (via `Canvas`'s `symbols`), never decodes in the draw closure.
+- **NFR-P3** Memory: render-size cache (≤ 96 px, ~37 KB each) with an LRU cap of 64 MB — not 500 × 256 px × RGBA (256 × 256 × 4 B = 256 KB each, **~131 MB** uncapped).
 - **NFR-P4** Disk: ≤ ~60 KB per photo, so a 500-entry roster is ≲ 30 MB worst case. Settings shows the total and a *Clear all photos* button.
 - **NFR-P5** Opening a roster with 500 entries must not block on image decoding: monogram first, avatars fade in as they load.
 
@@ -165,7 +165,7 @@ enum AvatarDisplayMode: String, Codable { case auto, avatarAndName, avatarOnly, 
 
 | Component | Role |
 |---|---|
-| `AvatarStore` (`actor`) | Import → validate → crop (Vision) → downsample → write; resolve `EntryAvatar` → `CGImage` at a requested size; orphan sweep; storage accounting. |
+| `AvatarStore` (`actor` as first drafted; **built as a stateless class** — §14, CLAUDE.md "stateless generators") | Import → validate → crop (Vision) → downsample → write; resolve `EntryAvatar` → `CGImage` at a requested size; orphan sweep; storage accounting. |
 | `AvatarImageCache` | `NSCache`-backed, keyed `(avatarID, pixelSize)`, cost-limited; posts "image ready" so the view fades it in. |
 | `AvatarPackCatalog` | Reads bundled `Resources/avatar-packs/<pack>/manifest.json` (name, items, **licence, attribution, source URL**). Same bundle-first pattern as `signatures.json`. |
 | `AnimatedAvatar` | Decodes an APNG/GIF via ImageIO into `[CGImage]` + per-frame delays; drives a `TimelineView`. |
