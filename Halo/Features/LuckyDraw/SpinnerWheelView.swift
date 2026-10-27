@@ -17,10 +17,22 @@ struct SpinnerWheelView: View {
     let restAngle: Double
     let highlightID: UUID?
     let reducedMotion: Bool
+    /// F-053. The defaults reproduce the F-051 wheel exactly, so every existing caller is unchanged.
+    var rosterID: UUID? = nil
+    var avatarMode: AvatarDisplayMode = .nameOnly
+
+    /// Redraws when a photo finishes decoding (the wheel is paused at rest, so nothing else would).
+    @ObservedObject private var avatarCache = AvatarImageCache.shared
 
     /// Labels stop being readable long before the segments do. Past this count the
     /// rim is still a legible ring of colour; the roster list is the label surface.
     private let labelLimit = 26
+    /// Avatars cost more per segment than text. Past this count the wheel keeps plain wedges and
+    /// the winner popup still shows the avatar. **Provisional** — F-053 spike S3 sets the real
+    /// figure from a frame-rate trace; nothing here has been measured yet.
+    static let avatarLimit = 40
+    /// Smallest avatar worth drawing; below this a face is a smudge.
+    private let minAvatarDiameter: CGFloat = 20
 
     var body: some View {
         TimelineView(.animation(paused: spinStart == nil)) { timeline in
@@ -126,6 +138,8 @@ struct SpinnerWheelView: View {
         // Labels fade as the wheel picks up speed — at cruise they are a smear
         // anyway, and holding them at full opacity just muddies the ring.
         let labelAlpha = 1 - 0.75 * min(speed * 1.6, 1)
+        let avatarDiameter = avatarMode == .nameOnly || count > Self.avatarLimit || side <= 260
+            ? 0 : avatarDiameter(count: count, radius: radius, side: side)
 
         for (index, entry) in entries.enumerated() {
             let start = angle + Double(index) * sweep - 90
@@ -173,17 +187,88 @@ struct SpinnerWheelView: View {
             }
             context.opacity = 1
 
-            guard showLabels else { continue }
             let alpha = lit ? 1 : labelAlpha
+            let withAvatar = avatarDiameter >= minAvatarDiameter && avatarMode.showsAvatar(for: entry)
+            if withAvatar && alpha > 0.05 {
+                drawAvatar(&context, entry: entry, index: index, count: count, centre: centre, radius: r,
+                           midAngle: start + sweep / 2, diameter: avatarDiameter, alpha: alpha, lit: lit)
+            }
+
+            // Avatar only: the picture is the label. Otherwise the name sits inboard of the avatar.
+            guard showLabels, !(withAvatar && avatarMode == .avatarOnly) else { continue }
             guard alpha > 0.05 else { continue }
             drawLabel(&context, entry: entry, centre: centre, radius: r, side: side,
-                      midAngle: start + sweep / 2, sweep: sweep, alpha: alpha, lit: lit)
+                      midAngle: start + sweep / 2, sweep: sweep, alpha: alpha, lit: lit,
+                      extraInset: withAvatar ? avatarDiameter * 1.25 + side * 0.012 : 0)
         }
+    }
+
+    // MARK: - Avatars (F-053)
+
+    /// Diameter that fits the arc where the avatar sits, capped so it never swallows the wedge.
+    private func avatarDiameter(count: Int, radius: CGFloat, side: CGFloat) -> CGFloat {
+        let arc = (360.0 / Double(count)) * .pi / 180 * Double(radius) * 0.80
+        return min(CGFloat(arc) * 0.82, radius * 0.34, side * 0.14)
+    }
+
+    /// Avatars stay **upright** as the wheel turns (a rotated face reads worse than a rotated name);
+    /// only their position follows the wedge.
+    private func drawAvatar(_ context: inout GraphicsContext, entry: DrawEntry, index: Int, count: Int,
+                            centre: CGPoint, radius: CGFloat, midAngle: Double,
+                            diameter: CGFloat, alpha: Double, lit: Bool) {
+        let place = radius * 0.80
+        let rad = midAngle * .pi / 180
+        let c = CGPoint(x: centre.x + cos(rad) * place, y: centre.y + sin(rad) * place)
+        let d = lit ? diameter * 1.15 : diameter
+        let rect = CGRect(x: c.x - d / 2, y: c.y - d / 2, width: d, height: d)
+        let circle = Path(ellipseIn: rect)
+        let ringWidth = max(1.5, d * 0.07)
+
+        var layer = context
+        layer.opacity = alpha
+        layer.fill(circle, with: .color(Color.haloBackground))
+
+        var inner = layer
+        inner.clip(to: circle)
+        switch entry.avatar {
+        case .photo(let file)?:
+            if let rosterID, let image = avatarCache.photo(fileName: file, rosterID: rosterID, points: d) {
+                inner.draw(inner.resolve(Image(decorative: image, scale: 1)), in: rect)
+            } else {
+                drawMonogram(&inner, entry: entry, rect: rect, index: index, count: count)
+            }
+        case .emoji(let e)?:
+            inner.fill(circle, with: .color(Color.haloSurface2))
+            inner.draw(inner.resolve(Text(e).font(.system(size: d * 0.56))), at: c, anchor: .center)
+        default:
+            drawMonogram(&inner, entry: entry, rect: rect, index: index, count: count)
+        }
+
+        var ring = context
+        ring.opacity = alpha
+        ring.stroke(Path(ellipseIn: rect.insetBy(dx: ringWidth / 2, dy: ringWidth / 2)),
+                    with: .color(lit ? Color.haloCyan : SegmentPalette.rim(for: index, of: count)),
+                    lineWidth: ringWidth)
+        ring.stroke(Path(ellipseIn: rect.insetBy(dx: ringWidth, dy: ringWidth)),
+                    with: .color(Color.haloBackground.opacity(0.55)), lineWidth: 1)
+    }
+
+    private func drawMonogram(_ context: inout GraphicsContext, entry: DrawEntry, rect: CGRect,
+                              index: Int, count: Int) {
+        context.fill(Path(ellipseIn: rect), with: .linearGradient(
+            Gradient(colors: [SegmentPalette.fill(for: index, of: count), SegmentPalette.core(for: index, of: count)]),
+            startPoint: CGPoint(x: rect.minX, y: rect.minY), endPoint: CGPoint(x: rect.maxX, y: rect.maxY)))
+        let text = context.resolve(
+            Text(Monogram.initials(for: entry.label))
+                .font(.system(size: rect.width * 0.4, weight: .bold, design: .rounded))
+                .foregroundColor(SegmentPalette.label))
+        context.draw(text, at: CGPoint(x: rect.midX, y: rect.midY), anchor: .center)
     }
 
     private func drawLabel(_ context: inout GraphicsContext, entry: DrawEntry,
                            centre: CGPoint, radius: CGFloat, side: CGFloat,
-                           midAngle: Double, sweep: Double, alpha: Double, lit: Bool) {
+                           midAngle: Double, sweep: Double, alpha: Double, lit: Bool,
+                           extraInset: CGFloat = 0) {
         // Cap the size by the arc height as well as the wheel, so a 40-segment wheel
         // doesn't stack overlapping text around the rim.
         let arcHeight = (sweep * .pi / 180) * radius
@@ -203,7 +288,7 @@ struct SpinnerWheelView: View {
         // name is ever inverted.
         let normalised = DrawEngine.normalised(midAngle)
         let flipped = normalised > 90 && normalised < 270
-        let inset = side * 0.035
+        let inset = side * 0.035 + extraInset
 
         var layer = context
         layer.opacity = alpha

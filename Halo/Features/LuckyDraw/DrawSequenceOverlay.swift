@@ -9,6 +9,9 @@ import SwiftUI
 /// accumulated result the user actually wants to copy or read out.
 struct DrawSequenceOverlay: View {
     let winners: [DrawEntry]
+    /// F-053: a strip of avatars beside each name, per the roster's display mode.
+    var rosterID: UUID? = nil
+    var avatarMode: AvatarDisplayMode = .nameOnly
     /// Set when the run was ended with Stop before it reached its planned length.
     let plannedCount: Int?
     let reducedMotion: Bool
@@ -38,6 +41,11 @@ struct DrawSequenceOverlay: View {
                             .font(.system(size: 11, weight: .bold, design: .rounded))
                             .foregroundColor(.haloText3)
                             .frame(width: 18, alignment: .trailing)
+                        if avatarMode.showsAvatar(for: entry) {
+                            AvatarView(avatar: entry.avatar, label: entry.label, rosterID: rosterID,
+                                       diameter: 30, ringColor: .haloAmber, ringStyle: AvatarView.winnerRing,
+                                       ringFraction: 0.08)
+                        }
                         Text(entry.label)
                             .font(.system(size: 17, weight: .bold, design: .rounded))
                             .foregroundColor(.haloText)
