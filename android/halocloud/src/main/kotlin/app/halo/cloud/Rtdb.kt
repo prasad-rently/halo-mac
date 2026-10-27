@@ -257,7 +257,7 @@ class FirebaseRtdbClient(
             val text = (if (status in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
             return status to text
         } catch (e: IOException) {
-            throw RtdbException(RtdbException.Kind.AUTH_FAILED, "Network error: ${e.message}")
+            throw RtdbException(RtdbException.Kind.NETWORK, "Network error: ${e.message}")      // not AUTH_FAILED: the credential was never judged
         } finally { conn.disconnect() }
     }
 

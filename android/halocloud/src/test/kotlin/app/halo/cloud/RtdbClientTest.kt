@@ -116,6 +116,12 @@ class RtdbClientTest {
         try { bad.signIn(); fail() } catch (e: RtdbException) { assertEquals(RtdbException.Kind.AUTH_FAILED, e.kind); assertEquals("Wrong email or password for this Firebase project.", e.message) }
     }
 
+    @Test fun `an unreachable auth server is a network error, not a rejected password`() {
+        val dead = AuthEndpoints("http://127.0.0.1:1/idt", "http://127.0.0.1:1/sec")      // nothing listens on port 1
+        val c = FirebaseRtdbClient(config, CloudAuthCredential("me@x.io", "hunter2-pass"), dead, allowInsecureDatabase = true)
+        try { c.signIn(); fail() } catch (e: RtdbException) { assertEquals(RtdbException.Kind.NETWORK, e.kind); assertFalse(e.message!!.contains("hunter2")) }
+    }
+
     @Test fun `put get delete and shallow keys round-trip, with awkward keys`() {
         val c = client(); c.signIn()
         c.put("sms/uid-9/dev A/messages/42_1700", JsonObject(mapOf("body" to JsonPrimitive("héllo / ünïcode"))))

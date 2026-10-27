@@ -69,7 +69,27 @@ data class SyncReport(
     val failed: Int = 0,
     val removedFromCloud: Int = 0,
     val error: String? = null,
-) { val ok: Boolean get() = error == null && failed == 0 }
+    /** The run stopped on trouble that can clear by itself (network, a busy database) — worth a backed-off retry. */
+    val retryable: Boolean = false,
+) {
+    val ok: Boolean get() = error == null && failed == 0
+
+    companion object {
+        /**
+         * An exception that escaped a sync pass. A missing permission or a wrong password will not fix itself, so
+         * retrying those only burns sign-in attempts; a dropped connection will, and a live SMS that hits one must
+         * not wait for the 15-minute safety-net pass.
+         */
+        fun fromFailure(e: Exception): SyncReport {
+            val transient = when (e) {
+                is RtdbException -> e.kind == RtdbException.Kind.NETWORK || e.kind == RtdbException.Kind.OPERATION_FAILED
+                is java.io.IOException -> true
+                else -> false
+            }
+            return SyncReport(error = e.message ?: "Sync failed.", retryable = transient)
+        }
+    }
+}
 
 class SmsSyncEngine(
     private val rtdb: Rtdb,

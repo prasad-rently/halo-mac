@@ -33,7 +33,7 @@ object SmsSyncRunner {
         if (!prefs.smsEnabled) return SyncReport(error = "SMS sync is off.")
         _running.value = true
         try {
-            val session = try { CloudRuntime.session(ctx) } catch (e: Exception) { return finish(prefs, SyncReport(error = e.message ?: "Couldn't sign in.")) }
+            val session = try { CloudRuntime.session(ctx) } catch (e: Exception) { return finish(prefs, SyncReport.fromFailure(e)) }
                 ?: return finish(prefs, SyncReport(error = "This phone isn't paired yet."))
             val engine = SmsSyncEngine(
                 rtdb = session.rtdb, crypto = session.crypto, deviceId = session.deviceId, deviceName = session.deviceName,
@@ -41,11 +41,11 @@ object SmsSyncRunner {
                 filter = { SenderFilter(prefs.allow, prefs.deny) }, backfillDays = { prefs.backfillDays },
                 pairingEpoch = session.profile.epoch,
             )
-            var report = try { engine.sync() } catch (e: Exception) { SyncReport(error = e.message ?: "Sync failed.") }
+            var report = try { engine.sync() } catch (e: Exception) { SyncReport.fromFailure(e) }
             if (report.error == null && (forceReconcile || System.currentTimeMillis() - prefs.lastReconcileAt > RECONCILE_EVERY_MS)) {
-                val r = try { engine.reconcile() } catch (e: Exception) { SyncReport(error = e.message) }
+                val r = try { engine.reconcile() } catch (e: Exception) { SyncReport.fromFailure(e) }
                 if (r.error == null) prefs.lastReconcileAt = System.currentTimeMillis()
-                report = report.copy(removedFromCloud = r.removedFromCloud, failed = report.failed + r.failed, error = report.error ?: r.error)
+                report = report.copy(removedFromCloud = r.removedFromCloud, failed = report.failed + r.failed, error = report.error ?: r.error, retryable = report.retryable || r.retryable)
             }
             return finish(prefs, report)
         } finally { _running.value = false }
@@ -54,10 +54,14 @@ object SmsSyncRunner {
     /** "Sync older history" — widen the window, then run. */
     fun extend(ctx: Context, days: Int): SyncReport {
         val prefs = CloudPrefs(ctx)
-        val session = CloudRuntime.session(ctx) ?: return SyncReport(error = "This phone isn't paired yet.")
-        prefs.backfillDays = days
-        SmsSyncEngine(session.rtdb, session.crypto, session.deviceId, session.deviceName, AndroidSmsSource(ctx, prefs), PrefsSyncState(ctx), pairingEpoch = session.profile.epoch).extendBackfill(days)
-        return run(ctx)
+        // Everything here can throw (sign-in over a bad network, READ_SMS revoked since the screen opened), and the
+        // caller is a bare viewModelScope.launch — an escaped exception would take the whole app down.
+        return try {
+            val session = CloudRuntime.session(ctx) ?: return SyncReport(error = "This phone isn't paired yet.")
+            prefs.backfillDays = days
+            SmsSyncEngine(session.rtdb, session.crypto, session.deviceId, session.deviceName, AndroidSmsSource(ctx, prefs), PrefsSyncState(ctx), pairingEpoch = session.profile.epoch).extendBackfill(days)
+            run(ctx)
+        } catch (e: Exception) { SyncReport.fromFailure(e) }
     }
 
     private fun finish(prefs: CloudPrefs, r: SyncReport): SyncReport {
@@ -77,8 +81,10 @@ object SmsSyncRunner {
 class SmsSyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result {
         val r = SmsSyncRunner.run(applicationContext)
-        // Retry with backoff only for transient trouble; a missing permission or an unpaired phone won't fix itself.
-        return if (r.failed > 0 && r.error == null) Result.retry() else Result.success()
+        // Retry with backoff only for transient trouble (failed uploads, a dropped connection); a missing
+        // permission or an unpaired phone won't fix itself. A pass that died on an exception used to return
+        // success here, so a live SMS that met a flaky network waited for the 15-minute safety-net pass.
+        return if ((r.failed > 0 && r.error == null) || r.retryable) Result.retry() else Result.success()
     }
 }
 

@@ -141,6 +141,15 @@ class SmsSyncEngineTest {
         assertEquals(151, resent)
     }
 
+    @Test fun `a dropped connection is retryable, a missing permission or a bad password is not`() {
+        assertTrue(SyncReport.fromFailure(RtdbException(RtdbException.Kind.NETWORK, "Network error: timeout")).retryable)
+        assertTrue(SyncReport.fromFailure(java.net.SocketTimeoutException("t")).retryable)
+        assertFalse(SyncReport.fromFailure(RtdbException(RtdbException.Kind.AUTH_FAILED, "Wrong email or password")).retryable)
+        assertFalse(SyncReport.fromFailure(SecurityException("READ_SMS not granted")).retryable)
+        assertEquals("Wrong email or password", SyncReport.fromFailure(RtdbException(RtdbException.Kind.AUTH_FAILED, "Wrong email or password")).error)
+        assertFalse(SyncReport.fromFailure(IllegalStateException("x")).ok)
+    }
+
     @Test fun `backfill is bounded to 90 days`() {
         val (db, _, engine) = harness(listOf(1 to rec(1, "A", "old", now - 120 * day), 1 to rec(2, "A", "new", now - 10 * day)))
         assertEquals(1, engine.sync().uploaded)
