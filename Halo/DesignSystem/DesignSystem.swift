@@ -372,3 +372,25 @@ struct HaloCheckbox: View {
         .onTapGesture { isChecked.toggle() }
     }
 }
+
+// MARK: - Bounded empty state
+
+extension View {
+    /// Roots a detail-pane empty state ("Connect your …", "No … yet") in a `ScrollView`.
+    ///
+    /// **Use this, never a bare `.frame(maxWidth: .infinity, maxHeight: .infinity)`, as the
+    /// root of a module's detail view.** Every other detail view roots itself in a
+    /// `ScrollView`; a root that is a stack with an unboundedly flexible child gives
+    /// `NavigationSplitView` a size demand it mis-lays-out the *sidebar* column around —
+    /// the header and storage indicator vanish and the module list jumps and stops
+    /// scrolling. It cost three separate fixes before the cause was recognised: AI Assistant
+    /// (`f787e9c`), Lethe (`54c7884`), then Messages and Expenditure. The `minHeight` is
+    /// deliberate — a floor without the unbounded height demand that is the actual fault.
+    func boundedEmptyState() -> some View {
+        ScrollView {
+            self
+                .frame(maxWidth: .infinity, minHeight: 460)
+                .padding(.top, 100)
+        }
+    }
+}

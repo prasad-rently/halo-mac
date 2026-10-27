@@ -1279,6 +1279,15 @@ The user's **own** Firebase ("BYOB"), configured at runtime (no bundled plist). 
     Xcode fails on a malformed `-I…/include/v5/records` index-store path (an explicit-module quirk,
     not a code error). Add it to the build recipe's flags.
 
+31. **A module's detail root must never be an unbounded stack — the "sidebar scroll lock".** Selecting a
+    module whose detail view is a bare `VStack { … }.frame(maxWidth: .infinity, maxHeight: .infinity)`
+    (an empty state: "Connect your …", "No … yet") makes `NavigationSplitView` mis-lay-out the **sidebar**
+    column: its header and storage indicator vanish, the list shifts up under the traffic lights, and it
+    stops scrolling. Nothing in `SidebarView` is at fault, which is why fixes aimed there never worked.
+    It has now happened **four times** (AI Assistant `f787e9c`, Lethe `54c7884`, Messages and Expenditure
+    2026-10-27). Root every empty state with `.boundedEmptyState()` (`DesignSystem.swift`) — a `ScrollView`
+    with `minHeight`, not an infinite max-height.
+
 ---
 
 ## Reorderable Sidebar Modules
