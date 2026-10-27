@@ -1463,3 +1463,17 @@ struct AvatarSymlinkTests {
         #expect(FileManager.default.fileExists(atPath: victim.file.path), "the target must survive")
     }
 }
+
+@Suite("Avatar emoji — bounded")
+struct AvatarEmojiBoundTests {
+    @Test("One grapheme is not enough: a pile of combining marks on an emoji is refused")
+    func zalgoEmoji() throws {
+        let pile = "🙂" + String(repeating: "\u{0301}", count: 500)
+        #expect(pile.count == 1, "premise: Swift sees this as a single Character")
+        #expect(!EmojiValidation.isSingleEmoji(pile))
+        #expect(EmojiValidation.isSingleEmoji("👩🏽‍❤️‍💋‍👨🏿"), "the longest real sequences still pass")
+        #expect(EmojiValidation.isSingleEmoji("🏴󠁧󠁢󠁥󠁮󠁧󠁿"))
+        let data = Data("{\"id\":\"\(UUID())\",\"label\":\"A\",\"avatar\":{\"kind\":\"emoji\",\"value\":\"\(pile)\"}}".utf8)
+        #expect(try JSONDecoder().decode(DrawEntry.self, from: data).avatar == nil)
+    }
+}

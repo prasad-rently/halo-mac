@@ -130,11 +130,19 @@ enum AvatarFileName {
 }
 
 enum EmojiValidation {
+    static let maxScalars = 16
+
     /// Exactly one user-perceived character that is an emoji: a pictograph, a ZWJ family or
     /// profession, a flag, a keycap, a skin-toned hand. Rejects plain letters and digits
     /// (which carry the Emoji property as keycap bases), text such as "ab", and two emoji.
     static func isSingleEmoji(_ s: String) -> Bool {
-        guard s.count == 1, let first = s.unicodeScalars.first else { return false }
+        // `count == 1` counts grapheme clusters, and a cluster can be unboundedly long: an emoji
+        // followed by hundreds of combining marks is still "one character" to Swift. The longest real
+        // sequences (a ZWJ family or couple with two skin tones, a subdivision flag) are about ten
+        // scalars, so cap well above that — otherwise a hand-edited roster could hand the wheel's
+        // `Canvas` a multi-kilobyte "emoji" to lay out every frame.
+        guard s.count == 1, s.unicodeScalars.count <= maxScalars,
+              let first = s.unicodeScalars.first else { return false }
         let scalars = s.unicodeScalars
         return first.properties.isEmojiPresentation
             || (first.properties.isEmoji && scalars.count > 1)
