@@ -89,3 +89,17 @@ object SmsWire {
         "lastSeen" to JsonPrimitive(nowMs),
     ))
 }
+
+/**
+ * Which SIM line a provider row belongs to. The `sub_id` column is not always populated: some devices and
+ * Android versions leave it -1 even on a single-SIM phone. A row that names no SIM we can see must not be
+ * dropped — with one SIM there is only one place it can have come from.
+ */
+object SimAttribution {
+    fun owns(lineSub: Int, rowSub: Int, activeSubs: Set<Int>): Boolean = when {
+        rowSub == lineSub -> true
+        activeSubs.isEmpty() -> lineSub == -1               // no SIM list at all: everything is the one synthetic line
+        activeSubs.size == 1 -> rowSub < 0 && lineSub == activeSubs.single()
+        else -> false                                        // several SIMs and no sub_id: not guessable, so not claimed
+    }
+}

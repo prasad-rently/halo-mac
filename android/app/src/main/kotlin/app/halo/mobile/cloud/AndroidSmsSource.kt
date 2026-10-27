@@ -7,6 +7,7 @@ import android.os.Build
 import android.provider.Telephony
 import android.telephony.SubscriptionManager
 import androidx.core.content.ContextCompat
+import app.halo.cloud.SimAttribution
 import app.halo.cloud.SimLine
 import app.halo.cloud.SmsRecord
 import app.halo.cloud.SmsSource
@@ -60,10 +61,10 @@ class AndroidSmsSource(private val ctx: Context, private val prefs: CloudPrefs) 
             val sub = c.getColumnIndex("sub_id")
             while (c.moveToNext()) {
                 val rowSub = if (sub >= 0 && !c.isNull(sub)) c.getInt(sub) else -1
-                // The synthetic "-1" line also owns rows whose SIM isn't one we can name.
-                val belongs = rowSub == subscriptionId || (subscriptionId == -1 && rowSub !in known)
-                if (!belongs) continue
-                out.add(record(c, rowSub))
+                if (!SimAttribution.owns(subscriptionId, rowSub, known)) continue
+                // Stamp the line's id, not the raw column: the desktop files a message under the line it names,
+                // and a row we attributed by fallback (sub_id unset) must name a line that exists.
+                out.add(record(c, subscriptionId))
             }
         }
         return out
