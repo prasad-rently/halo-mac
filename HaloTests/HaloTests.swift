@@ -6277,6 +6277,9 @@ struct CleanupViewModelTests {
                     if failing.contains(url.lastPathComponent) {
                         throw NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "denied"])
                     }
+                    // Like the real FileManager.trashItem: an item already in the Trash "succeeds"
+                    // in place (verified on macOS) — nothing moves.
+                    if url.deletingLastPathComponent().standardizedFileURL == trash.standardizedFileURL { return }
                     try FileManager.default.moveItem(at: url, to: trash.appendingPathComponent(url.lastPathComponent))
                     // Simulates an app regenerating its cache the moment it is trashed.
                     if recreating.contains(url.lastPathComponent) {
@@ -6396,6 +6399,33 @@ struct CleanupViewModelTests {
         await vm.cleanSingleItem(a, for: .userCaches)
         #expect(names(vm, .userCaches) == ["a.bin"], "the rescan began after the trash, so its result is current")
         #expect(names(vm, .systemCaches) == ["a.bin"])
+    }
+
+    @Test("Cleaning the Trash category does not claim to have moved anything, and keeps the rows")
+    func cleaningTrashItemsIsHonest() async throws {
+        let f = try Fixture()
+        try Data(repeating: 1, count: 4096).write(to: f.trash.appendingPathComponent("t.bin"))
+        let vm = f.vm()
+        await vm.scanAll()
+        #expect(names(vm, .trash) == ["t.bin"])
+        await vm.cleanAll(for: .trash)
+        #expect(names(vm, .trash) == ["t.bin"], "an item already in the Trash is still there")
+        #expect(FileManager.default.fileExists(atPath: f.trash.appendingPathComponent("t.bin").path))
+        #expect(vm.cleanError != nil)
+        #expect((vm.lastCleanResult?.deleted ?? 0) == 0)
+    }
+
+    @Test("A failed trash of a dangling symlink is an error, not 'already gone'")
+    func danglingSymlinkFailureIsReported() async throws {
+        let f = try Fixture()
+        let link = f.root.appendingPathComponent("dangling")
+        try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: "/nonexistent-\(UUID().uuidString)")
+        let coordinator = ScanCoordinator(roots: { _ in [] }, trashDirectories: { [] },
+                                          trash: { _ in throw NSError(domain: NSPOSIXErrorDomain, code: Int(EPERM)) })
+        let item = ScannedItem(id: UUID(), url: link, size: 0, creationDate: nil, modifiedDate: nil, kind: .cache)
+        let result = await coordinator.executeCleanup(items: [item])
+        #expect(result.failures.count == 1)
+        #expect(result.alreadyGone.isEmpty)
     }
 
     @Test("Two overlapping scans leave one consistent result")

@@ -154,6 +154,12 @@ enum CleanupKind: String, CaseIterable, Identifiable {
 enum CleanupPath {
     static func key(_ url: URL) -> String { url.standardizedFileURL.path }
 
+    /// True when something is at `url` — a dangling symlink counts. `fileExists` follows links,
+    /// so it reports a broken one as "gone" and a failed trash of it would be swallowed.
+    static func existsOnDisk(_ url: URL) -> Bool {
+        (try? FileManager.default.attributesOfItem(atPath: url.path)) != nil
+    }
+
     /// True when `key` is `removed` itself or lies underneath it.
     static func isCovered(_ key: String, by removed: String) -> Bool {
         key == removed || key.hasPrefix(removed.hasSuffix("/") ? removed : removed + "/")

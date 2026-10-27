@@ -144,7 +144,7 @@ final class CleanupViewModel: ObservableObject {
     /// is already gone.
     func pruneMissing() {
         let fm = FileManager.default
-        let missing = categories.flatMap(\.items).map(\.url).filter { !fm.fileExists(atPath: $0.path) }
+        let missing = categories.flatMap(\.items).map(\.url).filter { !CleanupPath.existsOnDisk($0) }
         reconcile(removed: missing)
     }
 
