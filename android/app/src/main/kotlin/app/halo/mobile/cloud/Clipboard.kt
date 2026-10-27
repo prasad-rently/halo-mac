@@ -53,7 +53,7 @@ class ClipboardHistory(ctx: Context) {
  */
 object ClipboardController {
     private val io = Executors.newSingleThreadExecutor { r -> Thread(r, "halo-clip").apply { isDaemon = true } }
-    private var engine: ClipboardSyncEngine? = null
+    @Volatile private var engine: ClipboardSyncEngine? = null     // read off-lock by publishText/copyToClipboard
     private var stream: AutoCloseable? = null
     private var listener: ClipboardManager.OnPrimaryClipChangedListener? = null
     private val _status = MutableStateFlow("")
@@ -68,6 +68,9 @@ object ClipboardController {
             try {
                 val session = CloudRuntime.session(app) ?: run { _status.value = "Not paired."; return@execute }
                 synchronized(this) {
+                    // Sign-in above can take seconds. If the user switched sync off (stop()) or disconnected in the
+                    // meantime, opening the stream now would leave a live subscription nobody can turn off.
+                    if (!CloudPrefs(app).clipboardEnabled) return@execute
                     stream?.close()
                     val e = ClipboardSyncEngine(session.rtdb, session.crypto, session.deviceId, session.deviceName, { prefs.clipboardFilter })
                     engine = e
