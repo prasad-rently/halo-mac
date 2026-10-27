@@ -70,6 +70,19 @@ class SmsSyncEngineTest {
         assertEquals("Unknown", testCrypto().decrypt((db.dump("sms/uid-1/dev-A/lines/2") as JsonObject)["ownNumberEnc"]!!.jsonPrimitive.content))
     }
 
+    @Test fun `a registry node is visible to a live observer only when complete`() {
+        // The desktop fires its child_added handler once, on first sight of a child. Written field by field,
+        // the first sight is a node with no label or number — and the desktop never looks again.
+        val (db, _, engine) = harness(listOf(1 to rec(1, "A", "x", now - day)))
+        val seenLines = ArrayList<JsonObject>(); val seenDevices = ArrayList<JsonObject>()
+        db.observeChildAdded("sms/uid-1/dev-A/lines") { _, v -> (v as? JsonObject)?.let(seenLines::add) }
+        db.observeChildAdded("devices/uid-1") { _, v -> (v as? JsonObject)?.let(seenDevices::add) }
+        engine.sync()
+        assertEquals(2, seenLines.size)
+        for (n in seenLines) for (k in listOf("subscriptionId", "label", "carrier", "ownNumberEnc")) assertTrue("line first seen without $k", k in n)
+        for (k in listOf("name", "platform", "lastSeen")) assertTrue("device first seen without $k", k in seenDevices.single())
+    }
+
     @Test fun `a second sync uploads nothing new and does not move the mark backwards`() {
         val (db, _, engine) = harness(listOf(1 to rec(1, "A", "one", now - 2 * day), 1 to rec(2, "A", "two", now - day)))
         assertEquals(2, engine.sync().uploaded)

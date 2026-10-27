@@ -82,12 +82,16 @@ class SmsSyncEngine(
         val lines = try { source.lines() } catch (e: SecurityException) { return SyncReport(error = "Phone permission not granted.") }
 
         // FR-0: device + line registries. Written before the messages so the desktop can label them on arrival.
-        rtdb.patch("devices/$uid/$deviceId", SmsWire.deviceNode(deviceName, now))
+        // Each node goes up as ONE put — never field by field (see SmsWire.lineNode): the desktop reads a new
+        // child once, so a half-written registry entry would be shown with no label or number until it restarts.
+        rtdb.put("devices/$uid/$deviceId", SmsWire.deviceNode(deviceName, now))
         val enabled = HashMap<Int, Boolean>()
         for (l in lines) {
-            rtdb.patch("${root(uid)}/lines/${l.subscriptionId}", SmsWire.lineNode(l, crypto))
-            // The desktop owns the per-line toggle (D29): read it back rather than trusting a local copy.
-            val flag = (rtdb.get("${root(uid)}/lines/${l.subscriptionId}/syncEnabled") as? JsonPrimitive)?.booleanOrNull
+            val linePath = "${root(uid)}/lines/${l.subscriptionId}"
+            // The desktop owns the per-line toggle (D29): read it back rather than trusting a local copy, and
+            // carry it through the whole-node write so a sync never resets it.
+            val flag = (rtdb.get("$linePath/syncEnabled") as? JsonPrimitive)?.booleanOrNull
+            rtdb.put(linePath, SmsWire.lineNode(l, crypto, flag))
             enabled[l.subscriptionId] = flag ?: true
         }
 

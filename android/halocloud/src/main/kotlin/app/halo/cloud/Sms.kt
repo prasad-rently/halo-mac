@@ -1,5 +1,6 @@
 package app.halo.cloud
 
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -65,13 +66,22 @@ object SmsWire {
         return JsonObject(m)
     }
 
-    /** `syncEnabled` is deliberately absent: the desktop (or this app) owns it, and a sync must not reset it. */
-    fun lineNode(l: SimLine, crypto: CryptoService): JsonObject = JsonObject(mapOf(
-        "subscriptionId" to JsonPrimitive(l.subscriptionId),
-        "label" to JsonPrimitive(l.label),
-        "carrier" to JsonPrimitive(l.carrier),
-        "ownNumberEnc" to JsonPrimitive(crypto.encrypt(l.ownNumber.ifBlank { "Unknown" })),
-    ))
+    /**
+     * The registry node for one SIM line, written in ONE request. The desktop attaches a child_added observer
+     * and reads a child exactly once, when it first appears — so a node written field by field is seen
+     * half-built (no label, no number) and never refreshed. `syncEnabled` belongs to the desktop (D29): the
+     * caller passes back the value it just read so this whole-node write cannot reset it.
+     */
+    fun lineNode(l: SimLine, crypto: CryptoService, syncEnabled: Boolean? = null): JsonObject {
+        val m = linkedMapOf<String, JsonElement>(
+            "subscriptionId" to JsonPrimitive(l.subscriptionId),
+            "label" to JsonPrimitive(l.label),
+            "carrier" to JsonPrimitive(l.carrier),
+            "ownNumberEnc" to JsonPrimitive(crypto.encrypt(l.ownNumber.ifBlank { "Unknown" })),
+        )
+        syncEnabled?.let { m["syncEnabled"] = JsonPrimitive(it) }
+        return JsonObject(m)
+    }
 
     fun deviceNode(name: String, nowMs: Long): JsonObject = JsonObject(mapOf(
         "name" to JsonPrimitive(name),

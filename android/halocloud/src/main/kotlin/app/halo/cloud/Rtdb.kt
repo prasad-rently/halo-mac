@@ -39,7 +39,11 @@ interface Rtdb {
     val uid: String
     fun get(path: String): JsonElement?
     fun put(path: String, value: JsonElement)
-    /** Merge `value`'s children into the node at `path` (RTDB `PATCH`) — other children are untouched. */
+    /**
+     * Merge `value`'s children into the node at `path`, leaving other children untouched. NOT atomic: it is one
+     * request per child, so a live observer can see the node half-written. Write a whole node with [put] when a
+     * reader that fires once per new child (the desktop's `child_added`) must see it complete.
+     */
     fun patch(path: String, value: JsonObject)
     fun delete(path: String)
     /** The child keys of a node without their values (`?shallow=true`) — cheap even for a huge node. */
