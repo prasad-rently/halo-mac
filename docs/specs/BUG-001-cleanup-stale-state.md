@@ -28,13 +28,15 @@ Two defects and one requirement:
 |---|---|---|
 | **R1** | **Two categories scan the same folder.** `.systemCaches` lists `["~/Library/Caches", "/private/var/folders"]` and `.userCaches` lists `["~/Library/Caches"]`. Every file under `~/Library/Caches` is therefore scanned twice and appears in **both** categories. | `Halo/Core/Models/Models.swift:103-106` |
 | **R2** | **Cross-category identity doesn't exist.** Each scan mints a fresh `UUID()` per `ScannedItem`, so the same file in System Caches and User Caches is two unrelated rows. | `FileSystemScanner.swift:140-141` (`ScannedItem(id: UUID(), …)`) |
-| **R3** | **A delete only edits the category it was issued from.** `cleanSingleItem` removes `item.id` from `categories[idx]` only; `cleanAll` removes from, and rescans, only `kind`. Nothing reconciles the *other* category, so its row for a now-trashed file stays — and clicking it fails. | `CleanupView.swift:82-94` (single), `:60-80` (all) |
+| **R3** | **A delete only edits the category it was issued from.** `cleanSingleItem` removes `item.id` from `categories[idx]` only; `cleanAll` removes from, and rescans, only `kind`. Nothing reconciles the *other* category, so its row for a now-trashed file stays. Clicking that row's trash button calls `trashItem` on a path that no longer exists; **the failure is swallowed (R10), so the row is simply removed and a "freed" result is reported for bytes that were never freed** — it does not show an error. | `CleanupView.swift:82-94` (single), `:60-80` (all) |
 | **R4** | **`cleanAll` drops every row when anything succeeded.** `categories[idx].items.removeAll { _ in deleted > 0 }` removes *all* items if even one was deleted, including ones that failed. (The follow-up `scanCategory` rescan masks it for that category only.) | `CleanupView.swift:69` |
 | **R5** | **There is no rescan.** `scanAll()` runs only from `.task` when the view appears; nothing in the UI calls it again, and the view model never learns of external changes. | `CleanupView.swift:23`, `:43-57` |
 | **R6** | **The total double-counts.** `CleanupViewModel.totalBytes` sums `allBytes` over *every* category, so the shared `~/Library/Caches` bytes are added twice — the headline "reclaimable" figure is inflated by R1. | `CleanupView.swift:40` |
 | **R7** | **The Trash category goes stale after any delete.** `trashItem` *moves* the file into `~/.Trash`, which is itself a Cleanup category (`.trash`), but nothing refreshes it — so "freed" items never appear in Trash, and the user can't tell the space is not yet recovered. | Same call sites; `.trash` scanned only by `scanAll` |
 | **R8** | **A scan in flight can overwrite newer state.** `scanAll` rebuilds `categories` and writes results as tasks finish; with a rescan button added naively, an older scan completing late would clobber a newer one (and a clean-then-rescan race could resurrect a deleted row). | `CleanupView.swift:43-57` |
 | **R9** | Related but separate: `.systemCaches` also lists `/private/var/folders`; whether those files are *deletable* by the user (and whether they are the right thing to call "System Caches") has not been verified on this machine. `/Library/Caches` — the actual system-wide cache directory — is **not** in the list. | `Models.swift:104` |
+
+| **R10** | **`trashItem` failures never reach the UI.** `FileSystemScanner.deleteItems` catches every per-item error, `print`s it (including the file path) and carries on; it returns only `(deleted, freed)`. `ScanCoordinator.deleteSingleItem` therefore **never throws** for a failed trash, so the `catch` in `cleanSingleItem` is dead code, and `executeCleanup`'s `firstError` can only ever be set by cancellation. Consequence: a failed trash (already gone, permission denied, in use) is indistinguishable from success — the row disappears and `lastCleanResult` counts it. | `FileSystemScanner.swift:236-252` (`deleteItems`), `ScanCoordinator.swift:128-151` |
 
 **Why it presents as "User Caches → System Caches":** R1 puts the same files in both; R3 updates only one. The same mechanism would affect any other pair of overlapping roots.
 
@@ -64,8 +66,9 @@ Two defects and one requirement:
 ### FR-5 No ghost rows
 - Before presenting a clean **confirmation sheet**, drop any item whose file no longer exists, so the sheet never lists something that will fail.
 - A `trashItem` failure of the kind *"no such file"* (already gone) is treated as **already removed** — dropped from the list, not shown as an error.
+- **Prerequisite (R10):** this is only implementable if `FileSystemScanner.deleteItems` (and `ScanCoordinator.executeCleanup` / `deleteSingleItem` above it) report **per-item outcomes** — e.g. `[(item, .moved(resultingURL) | .alreadyGone | .failed(Error))]` — instead of swallowing errors. Remove the path-bearing `print` there (use no path in logs).
 
-### FR-6 Honest results (fixes R4)
+### FR-6 Honest results (fixes R4, R10)
 - `cleanAll` removes **only the items that were actually moved**; failures stay listed with the first error. The result banner reads *"Moved N items (X) to Trash — space is freed when you empty the Trash"* (not "freed X").
 
 ### Non-goals
@@ -79,7 +82,7 @@ Two defects and one requirement:
 - `ScannedItem` gets a stable `id` derived from its standardized path (or the path itself as the key) — this also removes the `UUID()` churn that makes SwiftUI rebuild every row on each rescan.
 - `CleanupViewModel` becomes a thin view over `CleanupStore` so the Browsers pane, F-054's pane and Smart Scan all reconcile through the same owner.
 - Keep the **`trashItem`-only** rule and the review sheet untouched; this fix changes *what the lists say afterwards*, not *how deletion works*.
-- Smart Scan (`ScanCoordinator.runFullScan`) scans `.systemCaches` — after FR-2 its total *drops* (it was counting `~/Library/Caches` under "System Caches"). Release notes must say so; it is a correction, not a regression.
+- Smart Scan (`ScanCoordinator.runFullScan`) scans exactly `[.systemCaches, .logFiles, .trash, .xcodeData]` — **not** `.userCaches`. `~/Library/Caches` is currently reachable by Smart Scan *only* through `.systemCaches`, so after FR-2 Smart Scan stops seeing the user's cache folder altogether (typically the largest cache source), not merely "double-counting less". Unless `.userCaches` is added to that list (**OQ-4**), the Smart Scan total drops for a reason that is a coverage loss, not a correction. Either way the release notes must say so.
 
 ---
 
@@ -94,7 +97,7 @@ Two defects and one requirement:
 | AC-5 | After a trash, the **Trash** category lists the moved item | Same |
 | AC-6 | `totalBytes` never counts a path twice | `CleanupTotalsTests` |
 | AC-7 | Rescan updates all categories; a **superseded scan never overwrites** a newer one; a clean during a scan never resurrects a deleted row | `ScanSupersessionTests` (controllable fake scanner) |
-| AC-8 | `cleanAll` with one failing item removes the others and **keeps the failed one** listed with its error | `CleanupCleanAllTests` |
+| AC-8 | `cleanAll` with one failing item removes the others and **keeps the failed one** listed with its error; `cleanSingleItem` on a failing item keeps the row and surfaces `cleanError` (today's code does neither — R10) | `CleanupCleanAllTests` (needs a failing-item seam, e.g. a read-only parent dir or an injectable trasher) |
 | AC-9 | Rescan control + ⌘R present, disabled while busy; "Last scanned" updates | Manual + view-model test |
 | AC-10 | Activating Halo after >60 s triggers a rescan; <60 s does not | View-model test with an injected clock |
 | AC-11 | Confirmation sheet never lists a missing file | `CleanupConfirmTests` |
@@ -109,6 +112,7 @@ Two defects and one requirement:
 | ~~OQ-1~~ | ~~What should **System Caches** be once it stops listing `~/Library/Caches`?~~ | **Resolved 2026-10-27: minimal fix, then measure.** Remove the `~/Library/Caches` overlap now and keep `/private/var/folders`. Before adding `/Library/Caches` (or merging the category into *Temp Files*), check on a real Mac what is readable and deletable (SIP, root-owned files) and record the result here. |
 | OQ-2 | Rescan scope: one button for everything (proposed) vs per-category rescan too. | One header button; a per-category rescan is a one-line addition if wanted. |
 | OQ-3 | Keep a visible "moved to Trash, not yet freed" total in the header, so the user sees pending space? | Proposed: yes — it directly answers "I deleted it, why is my disk still full?". |
+| OQ-4 | Smart Scan coverage after FR-2 (see §3): add `.userCaches` to `runFullScan`'s category list so `~/Library/Caches` stays covered? | Proposed: yes — one-line change; add a test that Smart Scan's categories still cover `~/Library/Caches` exactly once. |
 
 ---
 
