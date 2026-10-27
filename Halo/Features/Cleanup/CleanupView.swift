@@ -22,6 +22,11 @@ struct CleanupView: View {
         .background(Color.haloSurface)
         .task { await viewModel.scanAll() }
         .task { await browserViewModel.loadAll() }
+        // Changes made outside Halo (Finder, `rm`, another app) can't be seen without a file
+        // watcher; coming back to the app after a minute rescans, which is the cheap answer.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            if viewModel.rescanIfStale() { Task { await browserViewModel.loadAll() } }
+        }
     }
 }
 
@@ -34,63 +39,145 @@ final class CleanupViewModel: ObservableObject {
     @Published var isCleaning = false
     @Published var cleanError: String? = nil
     @Published var lastCleanResult: (deleted: Int, freed: Int64)? = nil
+    @Published private(set) var lastScanned: Date? = nil
 
-    private let coordinator = ScanCoordinator()
+    private let coordinator: ScanCoordinator
+    /// The categories this model manages — everything, except in tests.
+    private let kinds: [CleanupKind]
+    private var scanTask: Task<Void, Never>?
+    /// Bumped by every full scan; a scan whose generation is no longer current discards its
+    /// results, so a slow old scan can never overwrite a newer one (BUG-001 R8).
+    private var scanGeneration = 0
+    /// Paths removed since the current full scan began. A scan that read a folder just before
+    /// the user trashed something in it would otherwise bring that row back.
+    private var removedSinceScanStart: [String] = []
 
-    var totalBytes: Int64 { categories.reduce(0) { $0 + $1.allBytes } }
+    init(coordinator: ScanCoordinator = ScanCoordinator(), kinds: [CleanupKind] = CleanupKind.allCases) {
+        self.coordinator = coordinator
+        self.kinds = kinds
+    }
+
+    /// Distinct paths — a file listed by two categories is counted once (BUG-001 R6).
+    var totalBytes: Int64 { CleanupReconciler.distinctBytes(categories) }
     var totalFormatted: String { ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file) }
 
+    // MARK: Scanning
+
+    /// Rescan every category. Safe to call while a scan is running: the newer call wins.
     func scanAll() async {
+        scanGeneration += 1
+        let generation = scanGeneration
+        removedSinceScanStart = []
         isScanning = true
-        categories = CleanupKind.allCases.map { CleanupCategory(kind: $0) }
+        categories = kinds.map { CleanupCategory(kind: $0) }
         await withTaskGroup(of: CleanupCategory.self) { group in
-            for kind in CleanupKind.allCases {
+            for kind in kinds {
                 group.addTask { await self.coordinator.scanCategory(kind) }
             }
             for await cat in group {
-                if let idx = categories.firstIndex(where: { $0.kind == cat.kind }) {
-                    categories[idx] = cat
-                }
+                guard generation == scanGeneration else { continue }   // superseded
+                apply(scanned: cat)
             }
         }
+        guard generation == scanGeneration else { return }   // the newer scan owns the flags
         isScanning = false
+        lastScanned = Date()
     }
+
+    /// Fire-and-forget rescan for the toolbar button and ⌘R; cancels a scan still in flight.
+    func rescan() {
+        scanTask?.cancel()
+        scanTask = Task { await scanAll() }
+    }
+
+    /// Rescans only when the last scan is older than `maxAge`. Returns whether it started one.
+    @discardableResult
+    func rescanIfStale(maxAge: TimeInterval = 60, now: Date = Date()) -> Bool {
+        guard !isScanning, !isCleaning,
+              CleanupFreshness.isStale(lastScanned: lastScanned, now: now, maxAge: maxAge) else { return false }
+        rescan()
+        return true
+    }
+
+    /// Replace one category's list with fresh scan results, minus anything removed since the
+    /// scan started.
+    func apply(scanned cat: CleanupCategory) {
+        guard let idx = categories.firstIndex(where: { $0.kind == cat.kind }) else { return }
+        var fresh = cat
+        if !removedSinceScanStart.isEmpty {
+            fresh.items.removeAll { item in
+                let k = CleanupPath.key(item.url)
+                return removedSinceScanStart.contains { CleanupPath.isCovered(k, by: $0) }
+            }
+        }
+        categories[idx] = fresh
+    }
+
+    /// Re-scan just these categories (after a delete), so sizes are exact without a full rescan.
+    private func rescan(kinds: Set<CleanupKind>) async {
+        for kind in kinds where kind != .browsers {
+            let cat = await coordinator.scanCategory(kind)
+            apply(scanned: cat)
+        }
+    }
+
+    // MARK: Reconcile
+
+    /// Make every category forget `urls` (and anything under them) at once, before any rescan
+    /// returns — the "real time" requirement. Returns the kinds whose lists changed.
+    @discardableResult
+    func reconcile(removed urls: [URL]) -> [CleanupKind] {
+        let keys = urls.map(CleanupPath.key)
+        removedSinceScanStart.append(contentsOf: keys)
+        return CleanupReconciler.apply(removedKeys: keys, to: &categories)
+    }
+
+    /// Drop rows whose file has disappeared, so a confirmation sheet never lists something that
+    /// is already gone.
+    func pruneMissing() {
+        let fm = FileManager.default
+        let missing = categories.flatMap(\.items).map(\.url).filter { !fm.fileExists(atPath: $0.path) }
+        reconcile(removed: missing)
+    }
+
+    // MARK: Cleaning
 
     /// Clean every item in the given category at once.
     func cleanAll(for kind: CleanupKind) async {
+        pruneMissing()
         guard let idx = categories.firstIndex(where: { $0.kind == kind }) else { return }
-        isCleaning = true
-        cleanError = nil
-        let (deleted, freed, error) = await coordinator.executeCleanup(
-            items: categories[idx].items
-        )
-        if let error { cleanError = error }
-        lastCleanResult = (deleted, freed)
-        categories[idx].items.removeAll { _ in deleted > 0 }   // remove all on success
-        // Re-scan the category so sizes stay accurate
-        let refreshed = await coordinator.scanCategory(kind)
-        categories[idx] = refreshed
-        isCleaning = false
-
-        // F-037: Celebrate when > 1 GB freed
-        if freed > 1_073_741_824 {
-            CelebrationManager.shared.trigger(.spaceRecovered)
-        }
+        await clean(items: categories[idx].items, from: kind)
     }
 
     /// Clean a single item — called from the per-row trash button.
     func cleanSingleItem(_ item: ScannedItem, for kind: CleanupKind) async {
-        guard let idx = categories.firstIndex(where: { $0.kind == kind }) else { return }
+        await clean(items: [item], from: kind)
+    }
+
+    private func clean(items: [ScannedItem], from kind: CleanupKind) async {
+        guard !items.isEmpty else { return }
         isCleaning = true
         cleanError = nil
-        do {
-            try await coordinator.deleteSingleItem(item)
-            categories[idx].items.removeAll { $0.id == item.id }
-            lastCleanResult = (1, item.size)
-        } catch {
-            cleanError = error.localizedDescription
+        let result = await coordinator.executeCleanup(items: items)
+
+        // Only what actually left the disk leaves the lists — in EVERY category.
+        var affected = Set(reconcile(removed: result.gone))
+        affected.insert(kind)
+        affected.insert(.trash)          // trashed items now live there
+
+        if let first = result.failures.first {
+            let more = result.failures.count > 1 ? " (and \(result.failures.count - 1) more)" : ""
+            cleanError = "Could not trash \"\(first.name)\": \(first.message)\(more)"
         }
+        lastCleanResult = (result.removed.count, result.freed)
+
+        await rescan(kinds: affected)    // exact sizes; failures stay listed
         isCleaning = false
+
+        // F-037: Celebrate when > 1 GB freed
+        if result.freed > 1_073_741_824 {
+            CelebrationManager.shared.trigger(.spaceRecovered)
+        }
     }
 
     func category(for kind: CleanupKind) -> CleanupCategory? {
@@ -115,6 +202,11 @@ struct CleanupSidebar: View {
     }
     private var isScanningAny: Bool { viewModel.isScanning || browserViewModel.isLoading }
 
+    private func rescan() {
+        viewModel.rescan()
+        Task { await browserViewModel.loadAll() }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Header + Total
@@ -127,6 +219,16 @@ struct CleanupSidebar: View {
                     if isScanningAny {
                         ProgressView().scaleEffect(0.6).tint(.haloAccent)
                     }
+                    Button { rescan() } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.haloText2)
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut("r", modifiers: .command)
+                    .disabled(isScanningAny || viewModel.isCleaning)
+                    .help("Rescan all categories (⌘R)")
+                    .accessibilityIdentifier("cleanup.rescan.button")
                 }
 
                 VStack(spacing: 3) {
@@ -137,6 +239,11 @@ struct CleanupSidebar: View {
                     Text("total removable")
                         .font(HaloFont.body(11))
                         .foregroundColor(.haloText2)
+                    if let scanned = viewModel.lastScanned, !isScanningAny {
+                        Text("Last scanned \(scanned.formatted(date: .omitted, time: .shortened))")
+                            .font(HaloFont.body(10))
+                            .foregroundColor(.haloText3)
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
@@ -257,6 +364,7 @@ struct CleanupFileList: View {
                 if let cat = currentCategory, !cat.items.isEmpty {
                     // Clean All button — trashes every item in this category
                     Button {
+                        viewModel.pruneMissing()      // never offer to trash what is already gone
                         showCleanAllConfirm = true
                     } label: {
                         HStack(spacing: 6) {
@@ -316,6 +424,23 @@ struct CleanupFileList: View {
                 .padding(.vertical, 10)
                 .background(Color.haloAmber.opacity(0.08))
                 .overlay(Rectangle().fill(Color.haloAmber).frame(height: 1), alignment: .bottom)
+            }
+
+            // Result banner — the Trash does not free space until it is emptied, so say so.
+            if viewModel.cleanError == nil, let r = viewModel.lastCleanResult, r.deleted > 0 {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill").foregroundColor(.haloGreen)
+                    Text("Moved \(r.deleted) item\(r.deleted == 1 ? "" : "s") (\(ByteCountFormatter.string(fromByteCount: r.freed, countStyle: .file))) to the Trash — space is freed when you empty the Trash.")
+                        .font(HaloFont.body(12)).foregroundColor(.haloText).lineLimit(2)
+                    Spacer()
+                    Button { viewModel.lastCleanResult = nil } label: {
+                        Image(systemName: "xmark").font(.system(size: 11)).foregroundColor(.haloText2)
+                    }.buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 10)
+                .background(Color.haloGreen.opacity(0.08))
+                .overlay(Rectangle().fill(Color.haloGreen).frame(height: 1), alignment: .bottom)
+                .accessibilityIdentifier("cleanup.result.banner")
             }
 
             Divider().background(Color.haloBorder)

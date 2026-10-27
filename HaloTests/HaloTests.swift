@@ -6137,3 +6137,244 @@ struct LetheLiveInteropTests {
         var description: String { "timed out waiting on the other client" }
     }
 }
+
+// MARK: - Cleanup state (BUG-001)
+//
+// Two categories scanned ~/Library/Caches, each list held its own per-scan UUIDs, and a delete only
+// edited the list it came from — so a file trashed under User Caches stayed listed under System
+// Caches. These tests pin the three properties that make that impossible again.
+
+@Suite("Cleanup roots (BUG-001)")
+struct CleanupRootsTests {
+
+    @Test("No two categories scan the same or nested folders")
+    func noOverlappingRoots() {
+        let roots = CleanupKind.allCases.map { (kind: $0, paths: $0.targetPaths) }
+        let overlaps = CleanupPath.overlappingRoots(roots)
+        #expect(overlaps.isEmpty,
+                "Overlapping scan roots make one file appear in two lists: \(overlaps.map { "\($0.a.rawValue)/\($0.b.rawValue) @ \($0.path)" })")
+    }
+
+    @Test("System Caches no longer includes ~/Library/Caches")
+    func systemCachesDoesNotScanUserCaches() {
+        let userCaches = "\(NSHomeDirectory())/Library/Caches"
+        #expect(!CleanupKind.systemCaches.targetPaths.contains(userCaches))
+        #expect(CleanupKind.userCaches.targetPaths.contains(userCaches))
+    }
+
+    @Test("The overlap detector sees equal and nested roots, and not look-alike siblings")
+    func detectorSanity() {
+        let equal = CleanupPath.overlappingRoots([(.systemCaches, ["/a/b"]), (.userCaches, ["/a/b"])])
+        let nested = CleanupPath.overlappingRoots([(.systemCaches, ["/a"]), (.userCaches, ["/a/b/c"])])
+        let siblings = CleanupPath.overlappingRoots([(.systemCaches, ["/a/b"]), (.userCaches, ["/a/bc"])])
+        #expect(equal.count == 1)
+        #expect(nested.count == 1)
+        #expect(siblings.isEmpty, "/a/b must not be treated as an ancestor of /a/bc")
+    }
+}
+
+@Suite("Cleanup reconcile (BUG-001)")
+struct CleanupReconcileTests {
+
+    private func item(_ path: String, size: Int64 = 4096) -> ScannedItem {
+        ScannedItem(id: UUID(), url: URL(fileURLWithPath: path), size: size,
+                    creationDate: nil, modifiedDate: nil, kind: .cache)
+    }
+
+    @Test("Removing a path removes it from every category, and anything under it")
+    func removesAcrossCategoriesAndDescendants() {
+        var cats = [CleanupCategory(kind: .systemCaches), CleanupCategory(kind: .userCaches)]
+        cats[0].items = [item("/x/Caches/a.bin"), item("/x/Caches/dir/b.bin"), item("/x/Caches/keep.bin")]
+        cats[1].items = [item("/x/Caches/a.bin"), item("/x/Caches/dir/b.bin")]
+        let changed = CleanupReconciler.apply(removedKeys: ["/x/Caches/a.bin", "/x/Caches/dir"], to: &cats)
+        #expect(Set(changed) == [.systemCaches, .userCaches])
+        #expect(cats[0].items.map(\.name) == ["keep.bin"])
+        #expect(cats[1].items.isEmpty)
+    }
+
+    @Test("A look-alike sibling is not removed")
+    func prefixIsNotAncestor() {
+        var cats = [CleanupCategory(kind: .userCaches)]
+        cats[0].items = [item("/x/Caches/dir/a.bin"), item("/x/Caches/dir2/a.bin")]
+        CleanupReconciler.apply(removedKeys: ["/x/Caches/dir"], to: &cats)
+        #expect(cats[0].items.map(\.url.path) == ["/x/Caches/dir2/a.bin"])
+    }
+
+    @Test("The total counts a path listed by two categories once")
+    func totalsAreDistinct() {
+        var cats = [CleanupCategory(kind: .systemCaches), CleanupCategory(kind: .userCaches)]
+        cats[0].items = [item("/x/a.bin", size: 100), item("/x/b.bin", size: 50)]
+        cats[1].items = [item("/x/a.bin", size: 100)]
+        #expect(CleanupReconciler.distinctBytes(cats) == 150)
+    }
+
+    @Test("Staleness: never scanned, just scanned, and long ago")
+    func freshness() {
+        let now = Date()
+        #expect(CleanupFreshness.isStale(lastScanned: nil, now: now))
+        #expect(!CleanupFreshness.isStale(lastScanned: now.addingTimeInterval(-30), now: now, maxAge: 60))
+        #expect(CleanupFreshness.isStale(lastScanned: now.addingTimeInterval(-61), now: now, maxAge: 60))
+    }
+}
+
+/// Drives the real view model + coordinator over a temp tree. Two categories deliberately share
+/// one root — the very overlap that caused BUG-001 — so the cross-category behaviour is tested
+/// whatever the production roots are. Nothing touches the real Trash: "trashing" moves into a
+/// temp folder.
+@MainActor
+@Suite("Cleanup view model (BUG-001)")
+struct CleanupViewModelTests {
+
+    final class Fixture {
+        let root: URL, trash: URL, shared: URL
+        init() throws {
+            let base = FileManager.default.temporaryDirectory
+                .appendingPathComponent("halo-cleanup-\(UUID().uuidString)")
+            root = base.appendingPathComponent("caches")
+            trash = base.appendingPathComponent("trash")
+            shared = base
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+        }
+        @discardableResult func file(_ name: String, bytes: Int = 4096) throws -> URL {
+            let url = root.appendingPathComponent(name)
+            try Data(repeating: 7, count: bytes).write(to: url)
+            return url
+        }
+        @MainActor func vm(failing: Set<String> = []) -> CleanupViewModel {
+            let root = self.root, trash = self.trash
+            let coordinator = ScanCoordinator(
+                roots: { kind in (kind == .systemCaches || kind == .userCaches) ? [root.path] : [] },
+                trashDirectories: { [trash] },
+                trash: { url in
+                    if failing.contains(url.lastPathComponent) {
+                        throw NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "denied"])
+                    }
+                    try FileManager.default.moveItem(at: url, to: trash.appendingPathComponent(url.lastPathComponent))
+                })
+            return CleanupViewModel(coordinator: coordinator, kinds: [.systemCaches, .userCaches, .trash])
+        }
+        deinit { try? FileManager.default.removeItem(at: shared) }
+    }
+
+    private func names(_ vm: CleanupViewModel, _ kind: CleanupKind) -> [String] {
+        (vm.category(for: kind)?.items.map(\.name) ?? []).sorted()
+    }
+
+    @Test("Trashing under User Caches also clears it from System Caches — the reported bug")
+    func deleteInOneCategoryClearsTheOther() async throws {
+        let f = try Fixture()
+        try f.file("a.bin"); try f.file("b.bin")
+        let vm = f.vm()
+        await vm.scanAll()
+        #expect(names(vm, .systemCaches) == ["a.bin", "b.bin"])
+        #expect(names(vm, .userCaches) == ["a.bin", "b.bin"])
+
+        let a = try #require(vm.category(for: .userCaches)?.items.first { $0.name == "a.bin" })
+        await vm.cleanSingleItem(a, for: .userCaches)
+
+        #expect(names(vm, .userCaches) == ["b.bin"])
+        #expect(names(vm, .systemCaches) == ["b.bin"], "a ghost row for a.bin survived in the other category")
+        #expect(vm.cleanError == nil)
+    }
+
+    @Test("A trashed item appears in the Trash category without a manual rescan")
+    func trashCategoryRefreshes() async throws {
+        let f = try Fixture()
+        try f.file("a.bin")
+        let vm = f.vm()
+        await vm.scanAll()
+        #expect(names(vm, .trash).isEmpty)
+        await vm.cleanAll(for: .userCaches)
+        #expect(names(vm, .trash) == ["a.bin"])
+        #expect(vm.lastCleanResult?.deleted == 1)
+    }
+
+    @Test("Clean all with one failing item removes the others and keeps the failure listed")
+    func partialFailureKeepsTheFailedRow() async throws {
+        let f = try Fixture()
+        try f.file("ok1.bin"); try f.file("bad.bin"); try f.file("ok2.bin")
+        let vm = f.vm(failing: ["bad.bin"])
+        await vm.scanAll()
+        await vm.cleanAll(for: .userCaches)
+        #expect(names(vm, .userCaches) == ["bad.bin"])
+        #expect(names(vm, .systemCaches) == ["bad.bin"])
+        #expect(vm.cleanError?.contains("bad.bin") == true)
+        #expect(vm.lastCleanResult?.deleted == 2)
+    }
+
+    @Test("A file already deleted outside Halo is dropped quietly, not reported as an error")
+    func alreadyGoneIsNotAnError() async throws {
+        let f = try Fixture()
+        let a = try f.file("a.bin"); try f.file("b.bin")
+        let vm = f.vm()
+        await vm.scanAll()
+        let item = try #require(vm.category(for: .userCaches)?.items.first { $0.name == "a.bin" })
+        try FileManager.default.removeItem(at: a)               // gone behind Halo's back
+        await vm.cleanSingleItem(item, for: .userCaches)
+        #expect(vm.cleanError == nil)
+        #expect(names(vm, .userCaches) == ["b.bin"])
+        #expect(names(vm, .systemCaches) == ["b.bin"])
+    }
+
+    @Test("pruneMissing drops rows whose file vanished, from every category")
+    func pruneMissingClearsGhosts() async throws {
+        let f = try Fixture()
+        let a = try f.file("a.bin"); try f.file("b.bin")
+        let vm = f.vm()
+        await vm.scanAll()
+        try FileManager.default.removeItem(at: a)
+        vm.pruneMissing()
+        #expect(names(vm, .userCaches) == ["b.bin"])
+        #expect(names(vm, .systemCaches) == ["b.bin"])
+    }
+
+    @Test("A rescan sees files that appeared since, and forgets ones that vanished")
+    func rescanPicksUpOutsideChanges() async throws {
+        let f = try Fixture()
+        let a = try f.file("a.bin")
+        let vm = f.vm()
+        await vm.scanAll()
+        try f.file("new.bin")
+        try FileManager.default.removeItem(at: a)
+        await vm.scanAll()
+        #expect(names(vm, .userCaches) == ["new.bin"])
+        #expect(vm.lastScanned != nil)
+        #expect(!vm.isScanning)
+    }
+
+    @Test("A stale scan result cannot bring back a row removed after that scan began")
+    func staleScanDoesNotResurrectRemovedRows() async throws {
+        let f = try Fixture()
+        let a = try f.file("a.bin"); try f.file("b.bin")
+        let vm = f.vm()
+        await vm.scanAll()
+        let staleList = try #require(vm.category(for: .userCaches))          // read before the delete
+        vm.reconcile(removed: [a])                                           // user trashes a.bin
+        vm.apply(scanned: staleList)                                         // the slow scan lands late
+        #expect(names(vm, .userCaches) == ["b.bin"])
+    }
+
+    @Test("Two overlapping scans leave one consistent result")
+    func overlappingScansSettle() async throws {
+        let f = try Fixture()
+        try f.file("a.bin"); try f.file("b.bin")
+        let vm = f.vm()
+        async let first: Void = vm.scanAll()
+        async let second: Void = vm.scanAll()
+        _ = await (first, second)
+        #expect(!vm.isScanning)
+        #expect(names(vm, .userCaches) == ["a.bin", "b.bin"])
+        #expect(vm.totalBytes == 2 * 4096, "the shared files must be counted once, not once per category")
+    }
+
+    @Test("rescanIfStale starts a scan only when due and idle")
+    func rescanIfStaleGate() async throws {
+        let f = try Fixture()
+        try f.file("a.bin")
+        let vm = f.vm()
+        #expect(vm.rescanIfStale())                       // never scanned → due
+        try await Task.sleep(nanoseconds: 400_000_000)
+        #expect(!vm.rescanIfStale(maxAge: 60))            // just scanned → not due
+    }
+}
