@@ -88,17 +88,36 @@ final class AvatarStore: @unchecked Sendable {
 
     /// The file for `fileName` inside `rosterID`'s folder — or nil if the name isn't a name Halo
     /// would have generated, or resolves anywhere else.
-    func url(for fileName: String, rosterID: UUID) -> URL? {
+    ///
+    /// `allowLinkedFile: false` (the default, used for every read) also refuses a file that is itself
+    /// a symlink, so a planted link can't turn "show this avatar" into "read that other file".
+    func url(for fileName: String, rosterID: UUID, allowLinkedFile: Bool = false) -> URL? {
         guard AvatarFileName.isValid(fileName) else { return nil }
         let dir = directory(for: rosterID)
         let candidate = dir.appendingPathComponent(fileName)
-        return Self.isInside(candidate, dir) ? candidate : nil
+        guard Self.isInside(candidate, dir), resolvesInsideRoot(candidate) else { return nil }
+        if !allowLinkedFile, Self.isSymbolicLink(candidate) { return nil }
+        return candidate
     }
 
     static func isInside(_ url: URL, _ directory: URL) -> Bool {
         let d = directory.standardizedFileURL.path
         let p = url.standardizedFileURL.path
         return p.hasPrefix(d.hasSuffix("/") ? d : d + "/")
+    }
+
+    /// `isInside` is a *textual* check; a symlinked roster folder (`root/<id>` -> `~/Documents`) passes
+    /// it while pointing anywhere. This one resolves the symlinks in the item's **parent** chain and
+    /// requires the real parent to sit in the real root. The item itself is deliberately not resolved:
+    /// removing a symlink removes the link, never its target.
+    private func resolvesInsideRoot(_ url: URL) -> Bool {
+        let root = rootURL.resolvingSymlinksInPath().standardizedFileURL.path
+        let parent = url.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL.path
+        return parent == root || parent.hasPrefix(root.hasSuffix("/") ? root : root + "/")
+    }
+
+    private static func isSymbolicLink(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true
     }
 
     // MARK: Import
@@ -224,12 +243,16 @@ final class AvatarStore: @unchecked Sendable {
     // and every call below checks containment first. Nothing else in Halo may use it.
 
     private func removeInsideRoot(_ url: URL) {
-        guard Self.isInside(url, rootURL) else { return }
+        // Textual containment AND real containment: a symlinked roster folder must not let a
+        // `<UUID>.jpg` that lives elsewhere be removed through it. A symlink *itself* is removed as a
+        // link (FileManager unlinks it), never followed.
+        guard Self.isInside(url, rootURL), resolvesInsideRoot(url) else { return }
         try? FileManager.default.removeItem(at: url)
     }
 
     func delete(fileName: String, rosterID: UUID) {
-        guard let url = url(for: fileName, rosterID: rosterID) else { return }
+        // `allowLinkedFile`: a planted link under a photo's name may be removed (as a link).
+        guard let url = url(for: fileName, rosterID: rosterID, allowLinkedFile: true) else { return }
         removeInsideRoot(url)
     }
 
@@ -254,7 +277,7 @@ final class AvatarStore: @unchecked Sendable {
         for dir in rosterDirs {
             guard let rosterID = UUID(uuidString: dir.lastPathComponent) else { continue }
             guard let keep = referenced[rosterID] else {
-                removed += (try? fm.contentsOfDirectory(atPath: dir.path).count) ?? 0
+                if !Self.isSymbolicLink(dir) { removed += (try? fm.contentsOfDirectory(atPath: dir.path).count) ?? 0 }
                 removeInsideRoot(dir)
                 continue
             }

@@ -171,7 +171,11 @@ try FileManager.default.trashItem(at: url, resultingItemURL: nil)
 > `AvatarStore` (`Halo/Core/LuckyDraw/AvatarStore.swift`) removes Halo's *own* downsampled photo copies
 > under `Application Support/Halo/luckydraw/avatars/` with `removeItem` — trashing up to 500 of them
 > would only litter the user's Trash. Every removal goes through `removeInsideRoot`, which refuses any
-> URL outside that folder. **Nothing else in Halo may use `removeItem`.** (The other approved-but-not-yet-built
+> URL outside that folder — by path *and* after resolving symlinks in its parent chain, so a symlinked roster
+> folder can't redirect a delete elsewhere. **Do not copy this pattern for user content: only Halo's own
+> derived data qualifies.** (Several other modules already `removeItem` their own caches and scratch files —
+> `MemoryTrendTracker`, `RAGVectorStore`, `LocalShareServer`; this exception is the one that deletes files
+> *named by a roster file*, hence the extra containment.) (The other approved-but-not-yet-built
 > exception is F-054's "remove the exact items just trashed" — add it here, with its scope, when it is implemented.)
 > The only other `unlink` in the app is `DriveSpeedTester`'s scratch file (gotcha 19).
 

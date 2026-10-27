@@ -1401,3 +1401,65 @@ struct DrawFairnessWithAvatarsTests {
         #expect(DrawRoster(name: "r", entries: [e, DrawEntry(label: "B")]).eligible.count == 2)
     }
 }
+
+// MARK: - F-053 independent review regressions
+
+@Suite("Avatar store — symlink containment")
+struct AvatarSymlinkTests {
+
+    /// A real stored photo (made by a throwaway store elsewhere) that lives *outside* the avatars root.
+    private func outsidePhoto() throws -> (dir: URL, name: String, file: URL) {
+        let other = AvatarStore(rootURL: AvatarFixtures.tempRoot(), detectFaces: false)
+        let r = UUID()
+        let name = try other.importPhoto(data: AvatarFixtures.png(width: 300, height: 300), rosterID: r)
+        let file = try #require(other.url(for: name, rosterID: r))
+        return (file.deletingLastPathComponent(), name, file)
+    }
+
+    @Test("A roster folder that is a symlink out of the root is never read, swept, deleted or written through")
+    func symlinkedRosterFolder() throws {
+        let root = AvatarFixtures.tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let store = AvatarStore(rootURL: root, detectFaces: false)
+        let victim = try outsidePhoto(); defer { try? FileManager.default.removeItem(at: victim.dir) }
+        let roster = UUID()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: store.directory(for: roster), withDestinationURL: victim.dir)
+
+        #expect(store.url(for: victim.name, rosterID: roster) == nil, "resolved a path through a symlinked roster folder")
+        #expect(store.loadImage(fileName: victim.name, rosterID: roster, maxPixel: 64) == nil)
+
+        store.delete(fileName: victim.name, rosterID: roster)
+        #expect(FileManager.default.fileExists(atPath: victim.file.path), "delete followed the symlink")
+
+        store.sweepOrphans(referenced: [roster: []])
+        #expect(FileManager.default.fileExists(atPath: victim.file.path), "the orphan sweep followed the symlink")
+
+        let target = UUID()
+        try FileManager.default.createSymbolicLink(at: store.directory(for: target), withDestinationURL: victim.dir)
+        let before = try FileManager.default.contentsOfDirectory(atPath: victim.dir.path).count
+        #expect(store.copyPhoto(fileName: victim.name, from: roster, to: target) == nil)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: victim.dir.path).count == before, "a copy was written outside the root")
+
+        store.sweepOrphans(referenced: [:])                                  // unknown roster: the folder goes ...
+        store.deleteAll(rosterID: roster)
+        store.deleteEverything()
+        #expect(FileManager.default.fileExists(atPath: victim.file.path), "... but only the link, never what it points at")
+    }
+
+    @Test("A photo file that is a symlink is never read through; the sweep removes the link, not its target")
+    func symlinkedPhotoFile() throws {
+        let root = AvatarFixtures.tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let store = AvatarStore(rootURL: root, detectFaces: false)
+        let victim = try outsidePhoto(); defer { try? FileManager.default.removeItem(at: victim.dir) }
+        let roster = UUID()
+        let dir = store.directory(for: roster)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let link = dir.appendingPathComponent(victim.name)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: victim.file)
+
+        #expect(store.loadImage(fileName: victim.name, rosterID: roster, maxPixel: 64) == nil, "read an arbitrary file through a link")
+        store.sweepOrphans(referenced: [roster: []])
+        #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: link.path)) == nil, "the link should be swept")
+        #expect(FileManager.default.fileExists(atPath: victim.file.path), "the target must survive")
+    }
+}
