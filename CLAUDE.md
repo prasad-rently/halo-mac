@@ -167,6 +167,14 @@ actor BrowserCleanerScanner { ... }
 try FileManager.default.trashItem(at: url, resultingItemURL: nil)
 ```
 
+> **Sanctioned exception — Lucky Draw avatar copies (F-053, owner-approved 2026-10-27).**
+> `AvatarStore` (`Halo/Core/LuckyDraw/AvatarStore.swift`) removes Halo's *own* downsampled photo copies
+> under `Application Support/Halo/luckydraw/avatars/` with `removeItem` — trashing up to 500 of them
+> would only litter the user's Trash. Every removal goes through `removeInsideRoot`, which refuses any
+> URL outside that folder. **Nothing else in Halo may use `removeItem`.** (The other approved-but-not-yet-built
+> exception is F-054's "remove the exact items just trashed" — add it here, with its scope, when it is implemented.)
+> The only other `unlink` in the app is `DriveSpeedTester`'s scratch file (gotcha 19).
+
 ### All deletions require confirmation
 Show a review sheet before any destructive action. Users must explicitly confirm.
 
@@ -1064,6 +1072,38 @@ ancestor, so real collisions still print.
   export prefixes `= + - @` cells with `'` so a name cannot become a spreadsheet formula.
 - **Plain HTTP is a stated trade-off (MD1)**, not an oversight: it matches what desktop serves. Android allows cleartext app-wide for LAN peers.
 - Opt-in live tests: `HaloShareInteropTests` (desktop ⇄ Swift CLI, `HALO_SHARE_CLI`), `LetheLiveInteropTests` (`HALO_LETHE_LIVE_DIR`), Kotlin `CrossImplementationTest` (`HALO_SHARE_CLI`).
+
+## Lucky Draw Avatars (F-053)
+
+`Halo/Core/LuckyDraw/Avatar{Models,Store}.swift` + `Halo/Features/LuckyDraw/Avatar{View,PickerView}.swift` · spec: `docs/specs/F-053-lucky-draw-avatars.md`
+
+Each `DrawEntry` has an optional `avatar: EntryAvatar?` — `.emoji`, `.photo(fileName:)`, and the reserved
+`.animated` / `.character` (no art ships yet, so they render as a monogram and the picker doesn't offer them).
+`nil` = a derived monogram. Per-roster `AvatarDisplayMode` (`.auto` default: avatar only where one was chosen,
+so an existing roster looks exactly as before).
+
+- **An avatar never influences a draw.** `DrawEngine`/`SpinnerAnimator` don't read these types;
+  `DrawFairnessWithAvatarsTests` pins it.
+- **Photos are copied in** (centre- or face-cropped to a 256-px JPEG, in `luckydraw/avatars/<rosterID>/<UUID>.jpg`),
+  never referenced by path. The stored file name is **untrusted input**: `AvatarFileName.isValid` (UUID + `.jpg`) at
+  decode *and* at every resolve, plus an `isInside` check — a hand-edited roster file can't point outside the folder.
+  Decode is bounded *before* it happens: 50 MB file cap, then pixel dimensions from the header (100 MP cap).
+  Nothing here touches the network; photos are not in the CSV, the report or Sentry.
+- **Unknown or invalid avatars decode to "no avatar", never an error** — a thrown error in `LuckyDrawStore.loadFromDisk`
+  moves the whole roster file to the corrupt backup (the `soundEnabled` lesson, `DrawRoster.init(from:)`).
+- **Vision (face crop) can stall.** In a test host, concurrent `VNImageRequestHandler` calls blocked forever. `AvatarStore`
+  runs it on its own GCD thread with a 4 s timeout and falls back to the centre crop; tests turn it off with `detectFaces: false`
+  (one test exercises it). **Blocking imports run on GCD, not the cooperative pool** (gotcha 20's starvation) — `importPhotoAsync`.
+- **The orphan sweep deletes files**, so it runs only after a *successful* roster read (`loadedCleanly`) — an unreadable file
+  must not make every photo look unreferenced. `LuckyDrawStoreAvatarTests.sweepIsSafe` guards it.
+- `AvatarImageCache` is a lock-based class, not `@MainActor`: the wheel's `Canvas` renderer isn't main-actor isolated, and a
+  not-yet-decoded photo must never block it. It returns another decoded size of the same photo while the right one loads.
+- Wheel: avatars stay **upright**, drawn only up to `SpinnerWheelView.avatarLimit` (40, **provisional — never measured**;
+  F-053 spike S3). Not verified at 60 fps on any machine.
+- Remove paths cascade (`removeEntry`, `clearEntries`, `deleteSelected`, "Clear all photos"). `removeEntry` reads the
+  avatar from the roster, not from the caller's possibly-stale copy (a test caught that leak).
+
+---
 
 ## Lethe — Anonymous Ephemeral Chat (F-052)
 
