@@ -88,27 +88,24 @@ struct AIAssistantView: View {
     // not the sidebar's own List/ScrollView code, which is why every fix aimed
     // at SidebarView itself had no effect).
     private var keySetup: some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                Image(systemName: "key.fill").font(.system(size: 34)).foregroundColor(.haloPurple)
-                Text("Connect your \(vm.selectedProvider.displayName) API key")
-                    .font(HaloFont.display(16)).foregroundColor(.haloText)
-                    .accessibilityIdentifier("ai.keySetup.title")
-                Text("BYO key — stored only in your Mac's Keychain and sent only to \(vm.selectedProvider.displayName). Each provider has its own key.")
-                    .font(HaloFont.body(12)).foregroundColor(.haloText2)
-                    .multilineTextAlignment(.center).frame(maxWidth: 420).fixedSize(horizontal: false, vertical: true)
-                SecureField(keyPlaceholder, text: $keyDraft)
-                    .textFieldStyle(.plain).font(HaloFont.body(12)).foregroundColor(.haloText)
-                    .padding(9).frame(width: 320).background(Color.haloSurface2).cornerRadius(8)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.haloBorder, lineWidth: 1))
-                    .focused($isKeyFieldFocused)
-                HaloPrimaryButton("Save key", icon: "checkmark") {
-                    vm.saveKey(keyDraft); keyDraft = ""
-                }.disabled(keyDraft.isEmpty)
-            }
-            .frame(maxWidth: .infinity, minHeight: 460)
-            .padding(.top, 100)
+        VStack(spacing: 14) {
+            Image(systemName: "key.fill").font(.system(size: 34)).foregroundColor(.haloPurple)
+            Text("Connect your \(vm.selectedProvider.displayName) API key")
+                .font(HaloFont.display(16)).foregroundColor(.haloText)
+                .accessibilityIdentifier("ai.keySetup.title")
+            Text("BYO key — stored only in your Mac's Keychain and sent only to \(vm.selectedProvider.displayName). Each provider has its own key.")
+                .font(HaloFont.body(12)).foregroundColor(.haloText2)
+                .multilineTextAlignment(.center).frame(maxWidth: 420).fixedSize(horizontal: false, vertical: true)
+            SecureField(keyPlaceholder, text: $keyDraft)
+                .textFieldStyle(.plain).font(HaloFont.body(12)).foregroundColor(.haloText)
+                .padding(9).frame(width: 320).background(Color.haloSurface2).cornerRadius(8)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.haloBorder, lineWidth: 1))
+                .focused($isKeyFieldFocused)
+            HaloPrimaryButton("Save key", icon: "checkmark") {
+                vm.saveKey(keyDraft); keyDraft = ""
+            }.disabled(keyDraft.isEmpty)
         }
+        .boundedEmptyState()   // ScrollView + minHeight(460) + top 100, as before
     }
 
     // MARK: Chat
