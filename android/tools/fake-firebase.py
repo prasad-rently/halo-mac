@@ -120,5 +120,7 @@ class H(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 9199
-    print("fake firebase on 0.0.0.0:%d  login %s / %s  uid %s" % (port, EMAIL, PASSWORD, UID), flush=True)
-    ThreadingHTTPServer(("0.0.0.0", port), H).serve_forever()
+    # Loopback only: the emulator's 10.0.2.2 is an alias for the host's 127.0.0.1, so nothing needs the LAN, and
+    # /_dump is unauthenticated with a fixed test password — not something to leave open on a shared network.
+    print("fake firebase on 127.0.0.1:%d  login %s / %s  uid %s" % (port, EMAIL, PASSWORD, UID), flush=True)
+    ThreadingHTTPServer(("127.0.0.1", port), H).serve_forever()

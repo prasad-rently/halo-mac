@@ -106,7 +106,7 @@ fun PairingPanel(vm: CloudViewModel, why: String) {
                 }
                 (p as? PairUi.Failed)?.let { Spacer(Modifier.height(8.dp)); Text(it.why, color = Halo.Red, fontSize = 12.sp, modifier = Modifier.testTag("pair.error")) }
                 Spacer(Modifier.height(8.dp))
-                Text("On your Mac: Messages → Connect Firebase → Show pairing code. The code contains your sign-in, not your passphrase.", color = Halo.Text3, fontSize = 11.sp)
+                Text("On your Mac: Messages → the gear → Pair a phone → Show pairing code. The code contains your sign-in, not your passphrase.", color = Halo.Text3, fontSize = 11.sp)
             }
         }
     }
