@@ -1,7 +1,7 @@
 # Halo — Feature Specifications & Execution Plans
 
 Detailed requirements and phased execution plans for the upcoming feature set
-(NFeat-122 → NFeat-129 / F-044 → F-052). Each document is **self-contained**:
+(NFeat-122 → NFeat-131 / F-044 → F-054). Each document is **self-contained**:
 it opens with a Requirements Specification and closes with an Execution Plan.
 
 > **Status:** planning artifacts. No code is written from these yet — they exist
@@ -26,6 +26,9 @@ it opens with a Requirements Specification and closes with an Execution Plan.
 | [F-050-haloshare-mobile.md](F-050-haloshare-mobile.md) | F-050 | 127 | HaloShare Mobile ↔ Desktop | Desktop + Mobile |
 | [F-051-lucky-draw-spinner.md](F-051-lucky-draw-spinner.md) | F-051 | 128 | Lucky Draw Spinner Wheel | Desktop (mobile ✅ Port) |
 | [F-052-lethe-ephemeral-chat.md](F-052-lethe-ephemeral-chat.md) | F-052 | 129 | Lethe — Anonymous Ephemeral Chat | Desktop (mobile client already exists) |
+| [F-053-lucky-draw-avatars.md](F-053-lucky-draw-avatars.md) | F-053 | 130 | Lucky Draw Avatars (requirements only) | Desktop (mobile ✅ Port, P2) |
+| [F-054-build-artifact-cleaner.md](F-054-build-artifact-cleaner.md) | F-054 | 131 | Build Artifact Cleaner (requirements only) | Desktop (mobile ❌ Won't do) |
+| [BUG-001-cleanup-stale-state.md](BUG-001-cleanup-stale-state.md) | BUG-001 | — | Cleanup: no rescan + stale cross-category items (analysis + requirements) | Desktop |
 
 ## Document structure (each feature)
 

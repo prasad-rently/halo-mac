@@ -131,6 +131,8 @@ feasibility study (§6). iOS / Android assessed separately.
 | **Time Machine Backup Health (F-022)** | ❌ | ❌ | Time Machine is a macOS-only concept — no iOS/Android equivalent exists to read. Reimagined separately as the iOS-exclusive "iCloud Backup Health" idea (§5), which is a different, much coarser feature, not a port. | — | Assessed ✓ (§9) |
 | **Lucky Draw Spinner Wheel (F-051)** | ✅ | ✅ | Pure computation + Canvas drawing — no OS API, permission or entitlement involved. `CoreHaptics` / `VibrationEffect` make the ratchet pointer *better* than on macOS | P2 | Assessed ✓ (§9) |
 | **Lethe — anonymous ephemeral chat (F-052)** | ✅ | ✅ | **Already built.** The Lethe Flutter app ships on both platforms against the same relay; desktop is the new client, not the other way round | P2 | Assessed |
+| **Lucky Draw Avatars (F-053)** | ✅ | ✅ | Emoji, monogram, bundled packs and ring rendering are the same kind of work as F-051 itself. Photos are *easier* on a phone: `PHPickerViewController` / the Android Photo Picker need **no permission**. Face-centred crop = Vision (iOS) / ML Kit Face Detection (Android). Rides on the F-051 mobile port | P2 | Assessed ✓ (§9) |
+| **Build Artifact Cleaner (F-054)** | ❌ | ❌ | No developer build trees on a phone; both mobile sandboxes forbid enumerating or deleting outside the app's own container — the same blocker as Browser Cleaner (F-024) | — | Won't do |
 
 ---
 
@@ -227,6 +229,7 @@ Copy this block into a study when assessing a feature for mobile.
 
 | Date | Change |
 |------|--------|
+| 2026-10 | Requirements written (no code) for **F-053 Lucky Draw Avatars** and **F-054 Build Artifact Cleaner**; **BUG-001** (Cleanup stale state) analysed. F-053 assessed ✅/✅ Port → P2 (§9) — the one mobile action is to **freeze the `EntryAvatar` JSON contract** (`docs/specs/F-053-lucky-draw-avatars.md` §7) so the mobile Lucky Draw port reads the same roster files. F-054 assessed ❌/❌ Won't do (§9). Rows added to §3. |
 | 2026-09 | F-051 Lucky Draw Spinner Wheel specced **and shipped** on desktop. Feasibility study added (§9): ✅/✅ **Port** → P2 — the first desktop feature assessed with *zero* mobile blockers, because it touches no OS capability at all. Row added to §3. |
 | 2026-08 | F-017 Network Traffic Monitor shipped on desktop. Feasibility study added (§9): verdict ❌/❌ Won't do — same OS-sandbox blocker as top-processes/ports. Row added to §3. |
 | 2026-08 | F-024 Browser Cleaner assessed (§9): ❌/❌ Won't do — app sandbox on both platforms blocks any cross-app data access, which is the feature's entire premise. |
@@ -468,3 +471,26 @@ promote to `Planned` (spec) when scheduled.
 - **Effort:** ~4 d per platform once the F-049 shell exists (less than desktop's ~6 d — the engine and animation math are ported, not re-derived; only the rendering layer and layout are new). **Dependencies:** F-049 (mobile app shell).
 - **Verdict:** **Port** (both platforms) → **Priority P2**.
 - **Recommendation:** build it, but after the P0/P1 wave. It carries the highest delight-per-engineering-day of anything in the Tier 1 list and has zero platform risk to burn down — which also means it will still be exactly this easy in six months, so it should not displace the cross-device features whose value depends on both halves existing. When it is built, port `DrawEngine` and `SpinnerAnimator` semantics *exactly* (including the decay exponent and the 45 °/s spotlight threshold) so the draw feels like the same object on every device; the animation constants are the product, not implementation detail.
+
+### Feasibility — Lucky Draw Avatars (from desktop F-053)
+- **Desktop capability:** each Lucky Draw entry can carry an avatar — emoji, animated emoji, a bundled caricature, or a local photo — drawn as a ringed circle on the wheel's segments, as a large hero in the winner popup, in the multi-draw strip and in the roster/log. No avatar ⇒ a derived initials monogram. Photos are copied in, centre-cropped (on the face when found), downsampled to ≤256 px and stored locally; avatars never influence the draw.
+- **iOS mechanism:** the same SwiftUI `Canvas` rendering as macOS. Photo import via `PHPickerViewController` (**no permission prompt**); face-centred crop via the Vision framework (`VNDetectFaceRectanglesRequest`, on-device); animated avatars via ImageIO frame sequences (or `CAAnimation`). Verdict ✅
+- **Android mechanism:** Compose `Canvas` / `drawImage`; the system Photo Picker (**no permission**); face-centred crop via ML Kit Face Detection with the bundled model (works offline; the Play-services variant is optional); animated avatars via `AnimatedImageDrawable`/frame sequence. Verdict ✅
+- **OS blockers:** none. Memory is the only real constraint — a phone should cap decoded avatar size lower than desktop and drop avatars from the wheel at a lower entry count (re-tune the desktop 40-entry threshold on device).
+- **Permissions required:** none (both pickers are permission-free). Camera capture, if ever added, would need a camera permission and a rationale screen — deliberately excluded from desktop v1 too.
+- **Store-policy risk:** low. Photos of third parties stay on-device and are never uploaded; the privacy-label answer is "no data collected". Any future roster *sharing* feature would change this and needs its own review.
+- **Scope on mobile:** full. **Contract to freeze now:** the `EntryAvatar` JSON shape (§7 of the spec) and the avatar-pack `manifest.json` (licence + attribution fields), so desktop and mobile rosters interoperate. Bundled art must be licensed for redistribution on **both** stores — the desktop licence check (spec R1) must cover that, not just macOS.
+- **Effort:** ~1.5 d per platform on top of the F-051 mobile port. **Dependencies:** F-051 mobile port (itself P2, after the F-049 shell).
+- **Verdict:** **Port** (both platforms) → **Priority P2**.
+- **Recommendation:** do not start until the F-051 mobile port exists; do freeze the JSON contract and the licence requirement now because they are cheap today and expensive to retrofit.
+
+### Feasibility — Build Artifact Cleaner (from desktop F-054)
+- **Desktop capability:** scans the user's project folders for regenerable build output (`node_modules`, Rust `target/`, Gradle/Flutter/Xcode `build/`, DerivedData …), ranks it by size, attributes it to a project and toolchain, applies marker-pair and git-aware safety gates, and removes the selection via a review sheet and the Trash.
+- **iOS mechanism:** none. An iOS app can read and delete only inside its own container plus user-picked documents; there are no developer projects on the device and no API to enumerate other apps' data. Verdict ❌
+- **Android mechanism:** none useful. Scoped storage blocks enumerating other apps' directories; a phone has no Cargo/Gradle/Node project trees to clean (Termux-style setups exist but are a vanishing niche and need `MANAGE_EXTERNAL_STORAGE`, which Play rejects for this purpose). Verdict ❌
+- **OS blockers:** app sandbox on both platforms — the feature's entire premise (reach into arbitrary project folders) is what the sandbox forbids; the same blocker that made Browser Cleaner (F-024) ❌/❌.
+- **Permissions required:** n/a. **Store-policy risk:** n/a — it cannot be built compliantly.
+- **Scope on mobile:** none. If a phone-side "free up space" feature is wanted, it is a *different* feature — Android `StorageManager` cache-pressure signals, iOS's own storage breakdown — not a port.
+- **Effort:** n/a. **Dependencies:** n/a.
+- **Verdict:** **Blocked** (both platforms) → **Won't do**.
+- **Recommendation:** do not build; recorded so the question is not re-opened without a new OS capability.
