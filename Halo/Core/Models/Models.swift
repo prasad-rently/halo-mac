@@ -101,7 +101,10 @@ enum CleanupKind: String, CaseIterable, Identifiable {
         let home = NSHomeDirectory()
         switch self {
         case .systemCaches:
-            return ["\(home)/Library/Caches", "/private/var/folders"]
+            // BUG-001: this used to list "~/Library/Caches" too — the same folder User Caches
+            // scans — so every cache file appeared in BOTH categories, and deleting it from one
+            // left a ghost row in the other. One owner per path; `CleanupRootsTests` enforces it.
+            return ["/private/var/folders"]
         case .userCaches:
             return ["\(home)/Library/Caches"]
         case .logFiles:
@@ -141,6 +144,77 @@ enum CleanupKind: String, CaseIterable, Identifiable {
         case .downloads: return nil
         default: return nil
         }
+    }
+}
+
+// MARK: - Cleanup state helpers (BUG-001)
+
+/// The one definition of "same path" the Cleanup module uses to compare items across
+/// categories. Item ids are per-scan `UUID`s, so they can never match across categories.
+enum CleanupPath {
+    static func key(_ url: URL) -> String { url.standardizedFileURL.path }
+
+    /// True when `key` is `removed` itself or lies underneath it.
+    static func isCovered(_ key: String, by removed: String) -> Bool {
+        key == removed || key.hasPrefix(removed.hasSuffix("/") ? removed : removed + "/")
+    }
+
+    /// Pairs of categories whose scan roots are equal or nested — which makes one file show up in
+    /// two lists. Must be empty; `CleanupRootsTests` asserts it.
+    static func overlappingRoots(_ roots: [(kind: CleanupKind, paths: [String])])
+        -> [(a: CleanupKind, b: CleanupKind, path: String)] {
+        var out: [(CleanupKind, CleanupKind, String)] = []
+        for i in roots.indices {
+            for j in roots.indices where j > i {
+                for pa in roots[i].paths {
+                    for pb in roots[j].paths {
+                        let ka = URL(fileURLWithPath: pa).standardizedFileURL.path
+                        let kb = URL(fileURLWithPath: pb).standardizedFileURL.path
+                        if isCovered(ka, by: kb) || isCovered(kb, by: ka) {
+                            out.append((roots[i].kind, roots[j].kind, pa))
+                        }
+                    }
+                }
+            }
+        }
+        return out
+    }
+}
+
+enum CleanupReconciler {
+    /// Removes, from every category, each item that is one of `removedKeys` or lies under one.
+    /// Returns the kinds whose lists changed.
+    @discardableResult
+    static func apply(removedKeys: [String], to categories: inout [CleanupCategory]) -> [CleanupKind] {
+        guard !removedKeys.isEmpty else { return [] }
+        var changed: [CleanupKind] = []
+        for i in categories.indices {
+            let before = categories[i].items.count
+            categories[i].items.removeAll { item in
+                let k = CleanupPath.key(item.url)
+                return removedKeys.contains { CleanupPath.isCovered(k, by: $0) }
+            }
+            if categories[i].items.count != before { changed.append(categories[i].kind) }
+        }
+        return changed
+    }
+
+    /// Total bytes over **distinct paths**, so a file that two categories both list is counted once.
+    static func distinctBytes(_ categories: [CleanupCategory]) -> Int64 {
+        var seen = Set<String>()
+        var sum: Int64 = 0
+        for cat in categories {
+            for item in cat.items where seen.insert(CleanupPath.key(item.url)).inserted { sum += item.size }
+        }
+        return sum
+    }
+}
+
+enum CleanupFreshness {
+    /// True when a rescan is due: never scanned, or the last scan is older than `maxAge`.
+    static func isStale(lastScanned: Date?, now: Date = Date(), maxAge: TimeInterval = 60) -> Bool {
+        guard let last = lastScanned else { return true }
+        return now.timeIntervalSince(last) > maxAge
     }
 }
 

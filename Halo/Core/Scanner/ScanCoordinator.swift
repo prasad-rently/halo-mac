@@ -3,9 +3,43 @@ import Foundation
 // MARK: - Scan Coordinator
 // Runs all cleanup scan tasks in parallel and aggregates results
 
+/// Outcome of trashing a batch — per item, so callers can update their lists truthfully.
+struct CleanupResult: Sendable {
+    struct Failure: Sendable { let name: String; let message: String }
+    /// Items that were moved to the Trash by this call.
+    var removed: [URL] = []
+    /// Items that were already gone before we got to them — also removed from the lists, but
+    /// not counted as freed and never an error.
+    var alreadyGone: [URL] = []
+    var freed: Int64 = 0
+    var failures: [Failure] = []
+
+    /// Everything that should leave the on-screen lists.
+    var gone: [URL] { removed + alreadyGone }
+}
+
 actor ScanCoordinator {
 
     private let scanner = FileSystemScanner()
+    /// Where each category scans. Injectable so tests can point two categories at one temp folder.
+    private let roots: @Sendable (CleanupKind) -> [String]
+    private let trashDirectories: @Sendable () -> [URL]
+    /// How one item is trashed. The default is `FileManager.trashItem` — the project's
+    /// mandatory rule; tests substitute a closure that moves into a temp "trash".
+    private let trash: @Sendable (URL) throws -> Void
+
+    init(roots: @escaping @Sendable (CleanupKind) -> [String] = { $0.targetPaths },
+         trashDirectories: @escaping @Sendable () -> [URL] = {
+             FileManager.default.urls(for: .trashDirectory, in: .userDomainMask)
+         },
+         trash: @escaping @Sendable (URL) throws -> Void = { url in
+             var resulting: NSURL?
+             try FileManager.default.trashItem(at: url, resultingItemURL: &resulting)
+         }) {
+        self.roots = roots
+        self.trashDirectories = trashDirectories
+        self.trash = trash
+    }
 
     // MARK: - Full Smart Scan
 
@@ -54,7 +88,7 @@ actor ScanCoordinator {
 
         var items: [ScannedItem] = []
 
-        for pathString in kind.targetPaths {
+        for pathString in roots(kind) {
             let url = URL(fileURLWithPath: pathString)
             guard FileManager.default.fileExists(atPath: pathString) else { continue }
 
@@ -84,7 +118,7 @@ actor ScanCoordinator {
         let fm = FileManager.default
 
         // Use the proper FileManager API — covers all mounted volumes' trash dirs
-        let trashURLs = fm.urls(for: .trashDirectory, in: .userDomainMask)
+        let trashURLs = trashDirectories()
 
         for trashURL in trashURLs {
             guard fm.fileExists(atPath: trashURL.path) else { continue }
@@ -122,32 +156,33 @@ actor ScanCoordinator {
         return items.sorted { $0.size > $1.size }
     }
 
-    // MARK: - Execute Cleanup (batch)
+    // MARK: - Execute Cleanup
 
-    /// Trashes all given items. Returns (deleted, freed, firstError).
-    func executeCleanup(items: [ScannedItem]) async -> (deleted: Int, freed: Int64, error: String?) {
-        var totalDeleted = 0
-        var totalFreed: Int64 = 0
-        var firstError: String? = nil
-
+    /// Trashes the given items one by one and reports what actually happened to each.
+    ///
+    /// Before BUG-001 this went through `FileSystemScanner.deleteItems`, which swallows every
+    /// error — so a failed trash was indistinguishable from a successful one, `error` was never
+    /// set, and the caller then dropped every row. Now each outcome is explicit.
+    func executeCleanup(items: [ScannedItem]) async -> CleanupResult {
+        var result = CleanupResult()
         for item in items {
+            if Task.isCancelled { break }
             do {
-                let result = try await scanner.deleteItems([item])
-                totalDeleted += result.deleted
-                totalFreed += result.freed
+                try trash(item.url)
+                result.removed.append(item.url)
+                result.freed += item.size
             } catch {
-                if firstError == nil {
-                    firstError = "Could not trash \"\(item.name)\": \(error.localizedDescription)"
+                let ns = error as NSError
+                let alreadyGone = ns.domain == NSCocoaErrorDomain && ns.code == NSFileNoSuchFileError
+                    || !FileManager.default.fileExists(atPath: item.url.path)
+                if alreadyGone {
+                    result.alreadyGone.append(item.url)
+                } else {
+                    result.failures.append(.init(name: item.name, message: error.localizedDescription))
                 }
             }
         }
-        return (totalDeleted, totalFreed, firstError)
-    }
-
-    // MARK: - Execute Cleanup (single item)
-
-    func deleteSingleItem(_ item: ScannedItem) async throws {
-        _ = try await scanner.deleteItems([item])
+        return result
     }
 
     // MARK: - DerivedData: enumerate project build folders as single deletable units
