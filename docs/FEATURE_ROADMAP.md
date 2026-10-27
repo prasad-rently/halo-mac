@@ -3649,13 +3649,13 @@ Give every Lucky Draw entry an optional **avatar** — emoji, animated emoji, a 
 The winner is chosen before the wheel moves, and **an avatar can never influence selection** (AC-3: same seed ⇒ same winner with or without avatars; mutation-checked).
 
 ### Honest constraints recorded in the spec
-Apple emoji are static — "animated" needs a bundled pack with a verified licence; "caricature from my photo" needs an ML model and is **out of scope** (spike only); animated avatars play only in the popup, posters elsewhere.
+Apple emoji are static — "animated" needs a bundled pack (commissioned/self-drawn, per the owner's decision); "caricature from my photo" needs an ML model and is **out of scope** (spike only); animated avatars play only in the popup, posters elsewhere.
 
 ### Mobile parity (governance)
 ✅ Port / ✅ Port, **P2**, rides on the F-051 mobile port. The `EntryAvatar` JSON shape is the contract to freeze now. Study: [`HALO_MOBILE_ROADMAP.md`](HALO_MOBILE_ROADMAP.md) §3 / §9.
 
 ### Open questions
-Default display mode · pack themes · hub shows last winner · **`removeItem` exception for avatar files** · **art licence** (see spec §12).
+Default display mode · pack themes · hub shows last winner (see spec §12). *Resolved 2026-10-27:* `removeItem` on avatar copies allowed; art is **commissioned/self-drawn** (owner supplies it — F-053's headline visuals depend on that art existing).
 
 ---
 
@@ -3674,13 +3674,13 @@ A **Build Artifacts** pane in the Cleanup sidebar that finds regenerable build o
 - The existing `.xcodeData` category is folded in so DerivedData is listed once (a second listing would recreate BUG-001).
 
 ### Important consequence stated up front
-`trashItem` frees **no disk space until the Trash is emptied**. The pane says so, links to the Trash category, and the spec proposes (needs an owner decision) a separate, explicit "also remove those exact items permanently" action — never *Empty Trash*.
+`trashItem` frees **no disk space until the Trash is emptied**. The pane says so, links to the Trash category, and — **owner-approved 2026-10-27** — offers a separate, explicit "also remove those exact items permanently" action, limited to the URLs `trashItem` just returned, never *Empty Trash*.
 
 ### Mobile parity (governance)
 ❌ iOS / ❌ Android — **Won't do** (no developer build trees on a phone; sandbox forbids the access). Study: [`HALO_MOBILE_ROADMAP.md`](HALO_MOBILE_ROADMAP.md) §3 / §9.
 
 ### Open questions
-Free-space exception · what "exclusive builds folders" meant · Smart Scan inclusion · default roots (see spec §12).
+Smart Scan inclusion · default scan roots (see spec §12). *Resolved 2026-10-27:* free-space exception (approved, narrow) and scope (all regenerable build output).
 
 ---
 
