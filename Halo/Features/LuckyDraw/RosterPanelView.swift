@@ -21,6 +21,7 @@ struct RosterPanelView: View {
     @State private var editingText = ""
     @State private var confirmReset = false
     @State private var confirmClear = false
+    @State private var confirmClearPhotos = false
     @State private var limitNotice: String?
     @State private var selectedEntryID: UUID?
     @State private var pendingImport: RosterImport.Plan?
@@ -144,6 +145,9 @@ struct RosterPanelView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Choose an avatar")
+                // The avatar itself is hidden from VoiceOver (decorative), so without this the button
+                // that opens the picker has no name at all.
+                .accessibilityLabel("Choose avatar for \(entry.label)")
                 .popover(isPresented: Binding(get: { pickerEntryID == entry.id },
                                               set: { if !$0 { pickerEntryID = nil } })) {
                     AvatarPickerView(store: store, entry: entry, rosterID: roster?.id) { pickerEntryID = nil }
@@ -357,10 +361,21 @@ struct RosterPanelView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 14) {
                     Button("Import photos from a folder…") { chooseFolderForPhotos() }
-                    Button("Clear all photos") { store.clearAllPhotos(); AvatarImageCache.shared.forget(rosterID: roster?.id ?? UUID()) }
+                    Button("Clear all photos") { confirmClearPhotos = true }
                         .foregroundColor(.haloText3)
                 }
                 .buttonStyle(.plain).font(.system(size: 11)).foregroundColor(.haloAccent)
+                .confirmationDialog("Delete every stored photo?",
+                                    isPresented: $confirmClearPhotos, titleVisibility: .visible) {
+                    Button("Delete all photos", role: .destructive) {
+                        // Every roster's photos, not just this one's — drop every cached decode too.
+                        store.clearAllPhotos()
+                        for r in store.rosters { AvatarImageCache.shared.forget(rosterID: r.id) }
+                    }
+                    Button("Cancel", role: .cancel) { }
+                } message: {
+                    Text("This removes the photo avatars of every roster on this Mac, not just this one. Those entries go back to initials. It cannot be undone.")
+                }
                 Text("Photos stay on this Mac, as small copies, and are deleted with the roster.")
                     .font(.system(size: 10)).foregroundColor(.haloText3)
             }
