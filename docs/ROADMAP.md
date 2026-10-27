@@ -290,7 +290,7 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 
 ---
 
-### Requested 2026-10-27 — requirements written, nothing built
+### Requested 2026-10-27 — requirements written (F-053 partly built on unmerged PR #54; the rest not started)
 
 | ID | Item | Summary |
 |----|------|---------|

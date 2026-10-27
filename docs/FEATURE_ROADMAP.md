@@ -134,9 +134,9 @@ Theme: **land the cloud line.** F-044/F-045/F-048 were built in July on `feature
 
 ---
 
-## v2.6 candidates — requirements raised 2026-10-27 (nothing built)
+## v2.6 candidates — requirements raised 2026-10-27 (F-053 partly built on PR #54; BUG-001 and F-054 not started)
 
-Three owner requests were analysed and specified; **no development has started**. Order is dictated by one dependency: F-054 must be built on the state model BUG-001 introduces.
+Three owner requests were analysed and specified. **No development has started on BUG-001 or F-054** (BUG-001 has an open fix PR, #53, at the time of writing); **F-053's emoji / photo / monogram kinds are built on the unmerged PR #54** — see its card. Order is dictated by one dependency: F-054 must be built on the state model BUG-001 introduces.
 
 | Order | Item | One line | Spec |
 |---|---|---|---|
@@ -2293,7 +2293,7 @@ New **"iCloud"** tab in the **Files** module, alongside SpaceLens, Exact Duplica
 
 ---
 
-*Last updated: 2026-10-27 (F-053, F-054, BUG-001 requirements added — no code) · previously 2026-10-24 · `release/v2.4` @ 6ee0a21 · the Pipeline Status table above is authoritative; per-card statuses were reconciled with it and with the code on that date. Features without a card here: F-035 and F-040 (merged into F-026 / F-027).*
+*Last updated: 2026-10-27 (F-053, F-054, BUG-001 requirements added; F-053 status reconciled with PR #54) · previously 2026-10-24 · `release/v2.4` @ 6ee0a21 · the Pipeline Status table above is authoritative; per-card statuses were reconciled with it and with the code on that date. Features without a card here: F-035 and F-040 (merged into F-026 / F-027).*
 
 ---
 

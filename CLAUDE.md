@@ -825,7 +825,7 @@ a branch that has not merged yet.
 | `8181`–`8200` | F-051 Lucky Draw Spinner Wheel | claimed |
 | `8201`–`8216` | F-052 Lethe ephemeral chat | claimed |
 | `8217`–`8224` | F-051 Lucky Draw follow-up pass (import, sound, draw-N) | claimed |
-| `8225`–`8244` | F-053 Lucky Draw Avatars (planned — spec only, `docs/specs/F-053-lucky-draw-avatars.md`) | claimed |
+| `8225`–`8244` | F-053 Lucky Draw Avatars (spec `docs/specs/F-053-lucky-draw-avatars.md`; PR #54 added its files with `add_source_files.rb` → random ids, so this block is unused unless ids are hand-assigned) | claimed |
 | `8245`–`8264` | F-054 Build Artifact Cleaner (planned — spec only, `docs/specs/F-054-build-artifact-cleaner.md`) | claimed |
 | `8265`+ | — | **free — take the next block from here** |
 
