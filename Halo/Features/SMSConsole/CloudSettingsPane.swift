@@ -20,8 +20,10 @@ struct CloudSettingsPane: View {
     @State private var confirmPass = ""
 
     @State private var pending: PendingAction?
-    /// The pairing code holds the Firebase sign-in, so it is hidden until asked for and re-hidden on leaving.
-    @State private var showPairing = false
+    /// The pairing code holds the Firebase sign-in, so it is not even built until asked for (no Keychain read on
+    /// every render), and is dropped again on Hide or on leaving the pane.
+    @State private var pairingCode: String?
+    @State private var pairingUnavailable = false
     @State private var busy = false
 
     /// A destructive action awaiting confirmation.
@@ -151,7 +153,7 @@ struct CloudSettingsPane: View {
     // MARK: Phone pairing (F-049 US-1)
 
     /// The payload the phone scans or pastes. nil until a config, credential and salt are all stored.
-    private var pairingCode: String? {
+    private func makePairingCode() -> String? {
         let store = CloudConfigStore.shared
         guard let config = store.firebaseConfig, let auth = store.authCredential, let salt = store.salt else { return nil }
         let payload = CloudPairingPayload(firebaseConfig: config, auth: auth, salt: salt,
@@ -172,32 +174,39 @@ struct CloudSettingsPane: View {
 
     private var pairingSection: some View {
         section("Pair a phone", "Show a code your Halo phone app scans or pastes. It carries your Firebase sign-in so the phone can connect — never your encryption passphrase, which you type on the phone.") {
-            if showPairing, let code = pairingCode {
+            if let code = pairingCode {
                 HStack(alignment: .top, spacing: 16) {
                     if let img = qrImage(for: code) {
-                        Image(nsImage: img).interpolation(.none).resizable().frame(width: 180, height: 180)
-                            .background(Color.white).cornerRadius(6)
+                        // CIQRCodeGenerator draws no quiet zone; a camera needs a light border or the dark
+                        // window behind the image eats the code's edge. Larger, too: this payload is a dense code.
+                        Image(nsImage: img).interpolation(.none).resizable().frame(width: 240, height: 240)
+                            .padding(14).background(Color.white).cornerRadius(8)
                     }
                     VStack(alignment: .leading, spacing: 8) {
                         Text(code).font(.system(size: 9, design: .monospaced)).foregroundColor(.haloText2)
                             .lineLimit(6).textSelection(.enabled)
                         HaloGhostButton("Copy code", icon: "doc.on.doc") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(code, forType: .string)
+                            // Concealed: the code carries the Firebase password, so it must not enter Halo's
+                            // clipboard history or be synced to the cloud as an ordinary copy.
+                            ClipboardPrivacy.writeConcealed(code)
                         }
                         Text("Anyone who sees this can sign in to your database (though not read your messages without the passphrase). Hide it when you're done.")
                             .font(HaloFont.body(10)).foregroundColor(.haloAmber)
                     }
                 }
-                HaloGhostButton("Hide", icon: "eye.slash") { showPairing = false }
-            } else if pairingCode == nil {
-                Text("Connect your Firebase first — there is nothing to pair yet.")
-                    .font(HaloFont.body(10)).foregroundColor(.haloText3)
+                HaloGhostButton("Hide", icon: "eye.slash") { pairingCode = nil }
             } else {
-                HaloGhostButton("Show pairing code", icon: "qrcode") { showPairing = true }
+                if pairingUnavailable {
+                    Text("Connect your Firebase first — there is nothing to pair yet.")
+                        .font(HaloFont.body(10)).foregroundColor(.haloText3)
+                }
+                HaloGhostButton("Show pairing code", icon: "qrcode") {
+                    pairingCode = makePairingCode()
+                    pairingUnavailable = pairingCode == nil
+                }
             }
         }
-        .onDisappear { showPairing = false }
+        .onDisappear { pairingCode = nil; pairingUnavailable = false }
     }
 
     // MARK: Re-key (D24)
@@ -268,7 +277,8 @@ struct CloudSettingsPane: View {
         case .wipeAll:            run { await client.wipeAll() }
         case .wipeDevice(let d):  run { await client.wipeDevice(d.id) }
         case .wipeLine(let l):    run { await client.wipeLine(l) }
-        case .rekey(let pass):    run { await client.rekey(newPassphrase: pass); newPass = ""; confirmPass = "" }
+        case .rekey(let pass):    run { await client.rekey(newPassphrase: pass); newPass = ""; confirmPass = ""
+                                        pairingCode = nil }   // it carried the OLD salt — never leave a stale code on screen
         case .disconnect:         run { await client.disconnect(); dismiss() }
         }
     }

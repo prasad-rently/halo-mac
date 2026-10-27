@@ -967,6 +967,15 @@ struct ClipboardPrivacyTests {
         #expect(rec.items.count == 1)
     }
 
+    @Test("writeConcealed leaves the text pasteable but keeps it out of history (the pairing code holds a password)")
+    func writeConcealedIsSkipped() {
+        let (pb, monitor, rec) = fixture(); defer { pb.releaseGlobally() }
+        ClipboardPrivacy.writeConcealed("eyJwYWlyaW5nIjoiY29kZSJ9", to: pb)
+        monitor.poll()
+        #expect(pb.string(forType: .string) == "eyJwYWlyaW5nIjoiY29kZSJ9")
+        #expect(rec.items.isEmpty, "a concealed write was recorded")
+    }
+
     @Test("The rule itself is a pure function of the type list")
     func pureRule() {
         #expect(ClipboardPrivacy.shouldIgnore(types: ["public.utf8-plain-text", "org.nspasteboard.ConcealedType"]))
