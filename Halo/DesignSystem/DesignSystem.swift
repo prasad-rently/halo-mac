@@ -378,14 +378,18 @@ struct HaloCheckbox: View {
 extension View {
     /// Roots a detail-pane empty state ("Connect your …", "No … yet") in a `ScrollView`.
     ///
-    /// **Use this, never a bare `.frame(maxWidth: .infinity, maxHeight: .infinity)`, as the
-    /// root of a module's detail view.** Every other detail view roots itself in a
-    /// `ScrollView`; a root that is a stack with an unboundedly flexible child gives
-    /// `NavigationSplitView` a size demand it mis-lays-out the *sidebar* column around —
-    /// the header and storage indicator vanish and the module list jumps and stops
-    /// scrolling. It cost three separate fixes before the cause was recognised: AI Assistant
-    /// (`f787e9c`), Lethe (`54c7884`), then Messages and Expenditure. The `minHeight` is
-    /// deliberate — a floor without the unbounded height demand that is the actual fault.
+    /// **Use this for a module's full-pane empty state instead of a bare
+    /// `.frame(maxWidth: .infinity, maxHeight: .infinity)` root.** In four modules (AI
+    /// Assistant `f787e9c`, Lethe `54c7884`, then Messages and Expenditure) that root made
+    /// the *sidebar* column mis-lay-out — header and storage indicator vanished, the module
+    /// list jumped and stopped scrolling — and rooting the state in a `ScrollView` cured it.
+    /// The `minHeight` is deliberate: a floor without an unbounded height demand.
+    ///
+    /// Caveat: the *mechanism* is empirical, not proven. Several shipped views use the same
+    /// unbounded frame without the symptom (e.g. `ClipboardEmptyState`, `AppDetailEmptyState`,
+    /// Cleanup/BrowserCleaner scanning states), and not every other detail view is
+    /// ScrollView-rooted. Treat this as the known remedy when the symptom appears, not as
+    /// proof that every unbounded frame is a bug.
     func boundedEmptyState() -> some View {
         ScrollView {
             self
