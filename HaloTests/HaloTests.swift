@@ -6428,6 +6428,18 @@ struct CleanupViewModelTests {
         #expect(result.alreadyGone.isEmpty)
     }
 
+    @Test("After the Browsers pane trashes cache files, the file lists catch up")
+    func refreshAfterBrowserClean() async throws {
+        let f = try Fixture()
+        let a = try f.file("a.bin"); try f.file("b.bin")
+        let vm = f.vm()
+        await vm.scanAll()
+        try FileManager.default.removeItem(at: a)          // what the browser clear did to ~/Library/Caches/...
+        await vm.refreshAfterExternalDeletion()
+        #expect(names(vm, .userCaches) == ["b.bin"])
+        #expect(names(vm, .systemCaches) == ["b.bin"])
+    }
+
     @Test("Two overlapping scans leave one consistent result")
     func overlappingScansSettle() async throws {
         let f = try Fixture()

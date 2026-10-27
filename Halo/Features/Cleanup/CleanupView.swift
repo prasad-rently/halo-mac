@@ -24,6 +24,9 @@ struct CleanupView: View {
         .task { await browserViewModel.loadAll() }
         // Changes made outside Halo (Finder, `rm`, another app) can't be seen without a file
         // watcher; coming back to the app after a minute rescans, which is the cheap answer.
+        .onChange(of: browserViewModel.isClearing) { clearing in
+            if !clearing { Task { await viewModel.refreshAfterExternalDeletion() } }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             if viewModel.rescanIfStale() { Task { await browserViewModel.loadAll() } }
         }
@@ -126,6 +129,13 @@ final class CleanupViewModel: ObservableObject {
             let cat = await coordinator.scanCategory(kind)
             apply(scanned: cat, startedAt: startedAt)
         }
+    }
+
+    /// The Browsers pane trashes files under `~/Library/Caches` (Chrome's HTTP cache, Arc's, …)
+    /// without going through this model, so without this its rows linger in User Caches and the
+    /// moved files are missing from the Trash list — the very ghost-row bug BUG-001 is about.
+    func refreshAfterExternalDeletion() async {
+        await rescan(kinds: Set(kinds).intersection([.userCaches, .systemCaches, .trash]))
     }
 
     // MARK: Reconcile
