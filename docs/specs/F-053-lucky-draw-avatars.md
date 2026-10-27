@@ -1,6 +1,6 @@
 # F-053 — Lucky Draw Avatars (NFeat-130)
 
-> **Status:** 🗓 Planned — requirements only; **owner decisions on art source and file deletion recorded 2026-10-27**. **No code is written from this document yet.**
+> **Status:** 🔧 **Partly built on PR #54 (2026-10-27, not merged)** — emoji, photos and monogram avatars on the wheel, popup, winners strip, roster chips and log. **Not built:** animated emoji, caricatures (no art yet), hero travel, avatar-storage readout. Owner decisions on art source and file deletion recorded 2026-10-27.
 > **Extends:** F-051 Lucky Draw Spinner Wheel · **Raised:** 2026-10-27 · **Effort estimate:** ~8–10 d desktop (incl. 1.5 d of spikes)
 > **Reserved pbxproj ID block:** `8225`–`8244` (claimed in `CLAUDE.md`)
 
@@ -255,4 +255,17 @@ Manual (cannot be asserted): hero transition feel, animated playback, ring contr
 
 ## 14. Implementation Record
 
-*Not started.*
+**PR #54, branch `feat/f053-lucky-draw-avatars`** — written 2026-10-27, **not merged**.
+
+**Built (P1–P4, for the kinds that need no art):**
+`EntryAvatar` (emoji / photo, plus the reserved animated / character cases) with tolerant `Codable`; `AvatarDisplayMode` per roster; `AvatarStore` (copy-in, Vision face crop with a timeout, 256-px JPEG, bounded decode, path containment, orphan sweep, copy, delete); `AvatarImageCache`; `AvatarView`; the picker popover (Emoji / Photo); roster chips and log rows with avatars; avatars on the wheel (upright, faded with speed, spotlight lift, capped at 40 entries); the winner popup's gold-ringed avatar; the winners-strip avatars; folder import by name with a confirm sheet; "Clear all photos"; cascade deletes. 742 tests pass on a fresh clone; the three data-safety guards were mutation-checked.
+
+**Differences from this spec, and why:**
+- **Monogram vs Automatic.** D1 says nil renders as a monogram everywhere; D7 says Automatic shows an avatar only where one exists. They conflict on the wheel, so: the wheel's *Automatic* mode keeps today's name-only look for entries without an avatar (a pixel-identity test pins it), while chips, popup and strip *do* show the monogram. *Avatar + name* / *Avatar only* show monograms on the wheel too.
+- **Vision timeout.** A face crop that never returns would leave the picker on "Importing…" forever, and concurrent Vision calls did stall in a test host — so detection runs on its own thread with a 4 s timeout and falls back to the centre crop.
+- **`AvatarStore` is a class, not an actor** (stateless; CLAUDE.md's rule), with blocking work on GCD, not Swift's cooperative pool.
+- **`AvatarImageCache` returns another decoded size** while the right one loads, so a larger avatar never flashes initials.
+
+**Not built:** animated emoji and bundled characters (art pending, §12 R1); "give everyone a character" (FR-A5); hero travel from the segment to the popup (FR-P2); the hub's last-winner avatar (FR-W7); avatar playback in the popup; the Settings storage readout (NFR-P4's button exists, the byte count does not); CSV avatar column (FR-B2); VoiceOver extras (FR-R2) beyond hiding decorative avatars.
+
+**Not verified:** no one has used it in the running app (picker, drop, folder sheet, popup animation, Reduced Motion); **60 fps was never measured** — the 40-entry limit (D4) is still a guess pending spike S3; the sandboxed release build was not tried (the user-selected-files entitlement is present); Vision on a real face is untested (test images are synthetic).

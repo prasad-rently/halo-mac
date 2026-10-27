@@ -69,7 +69,7 @@
 | [F-050](#f-050--haloshare-mobile--desktop-nfeat-127) | HaloShare Mobile ↔ Desktop (NFeat-127) | 🔧 Merged to v2.4 — tests and builds pass; not yet run on a device or against official LocalSend | ~6 d so far | HaloShare (LocalSend) |
 | [F-051](#f-051--lucky-draw-spinner-wheel-nfeat-128) | Lucky Draw Spinner Wheel (NFeat-128) | ✅ Done | ~6 d | CelebrationOverlay (F-037) |
 | [F-052](#f-052--lethe-anonymous-ephemeral-chat-nfeat-129) | Lethe — Anonymous Ephemeral Chat (NFeat-129) | 🔧 Merged to v2.4 — ship gate (Mac ↔ real phone) not yet run | ~8 d | Keychain, `AlertManager` |
-| [F-053](#f-053--lucky-draw-avatars-nfeat-130) | Lucky Draw Avatars (NFeat-130) | 🗓 Planned — requirements written 2026-10-27, no code | ~8–10 d | F-051 |
+| [F-053](#f-053--lucky-draw-avatars-nfeat-130) | Lucky Draw Avatars (NFeat-130) | 🔧 Emoji / photo / monogram built on PR #54 (not merged, not clicked through, 60 fps unmeasured); animated + caricature await art | ~8–10 d | F-051 |
 | [F-054](#f-054--build-artifact-cleaner-nfeat-131) | Build Artifact Cleaner (NFeat-131) | 🗓 Planned — requirements written 2026-10-27, no code | ~7–9 d | BUG-001 |
 | [BUG-001](#bug-001--cleanup-no-rescan-and-stale-cross-category-items) | Cleanup: no rescan + stale cross-category items | 📋 Queued — root cause analysed from code, not yet reproduced | ~2.5–3 d | none (blocks F-054) |
 
@@ -3633,7 +3633,7 @@ The spec's own ship gate (AC-1: Mac ↔ real phone against the production relay)
 
 ## F-053 — Lucky Draw Avatars (NFeat-130)
 
-**Status:** 🗓 Planned (requirements written 2026-10-27; **no code**) · **Effort:** ~8–10 d incl. 1.5 d spikes · **Depends on:** F-051
+**Status:** 🔧 Partly built on PR #54 (2026-10-27; not merged) — emoji, photos and monogram; **animated emoji and caricatures wait for the commissioned art** · **Effort:** ~8–10 d incl. 1.5 d spikes · **Depends on:** F-051
 **Full spec:** [`docs/specs/F-053-lucky-draw-avatars.md`](specs/F-053-lucky-draw-avatars.md)
 
 ### Intent
