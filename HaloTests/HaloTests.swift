@@ -6208,6 +6208,33 @@ struct CleanupReconcileTests {
         #expect(CleanupReconciler.distinctBytes(cats) == 150)
     }
 
+    @Test("Reconciling tens of thousands of removed paths stays fast")
+    func reconcileScales() {
+        func item(_ i: Int) -> ScannedItem {
+            ScannedItem(id: UUID(), url: URL(fileURLWithPath: "/x/Caches/app\(i % 50)/f\(i).bin"), size: 1,
+                        creationDate: nil, modifiedDate: nil, kind: .cache)
+        }
+        var cats = [CleanupCategory(kind: .systemCaches), CleanupCategory(kind: .userCaches)]
+        let items = (0..<20_000).map(item)
+        cats[0].items = items; cats[1].items = items
+        let keys = items.map { CleanupPath.key($0.url) }
+        let start = Date()
+        CleanupReconciler.apply(removedKeys: keys, to: &cats)
+        let elapsed = Date().timeIntervalSince(start)
+        #expect(cats[0].items.isEmpty && cats[1].items.isEmpty)
+        #expect(elapsed < 3, "Clean All of a big cache folder must not freeze the main thread (\(elapsed)s)")
+    }
+
+    @Test("A removed folder covers its descendants and the root covers everything; look-alikes survive")
+    func isRemovedWalksAncestors() {
+        let removed: Set<String> = ["/x/dir", "/y"]
+        #expect(CleanupReconciler.isRemoved("/x/dir", in: removed))
+        #expect(CleanupReconciler.isRemoved("/x/dir/a/b.bin", in: removed))
+        #expect(!CleanupReconciler.isRemoved("/x/dir2/a.bin", in: removed))
+        #expect(!CleanupReconciler.isRemoved("/x", in: removed))
+        #expect(CleanupReconciler.isRemoved("/anything/at/all", in: ["/"]))
+    }
+
     @Test("Staleness: never scanned, just scanned, and long ago")
     func freshness() {
         let now = Date()
