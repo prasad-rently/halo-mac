@@ -122,9 +122,9 @@ feasibility study (§6). iOS / Android assessed separately.
 | Launch at login | ❌ | 🟡 | Android BOOT_COMPLETED partial; iOS none | P3 | Assessed |
 | **AI assistant — cloud (F-046)** | ✅ | ✅ | Cloud providers portable; fewer agent tools on mobile | P1 | Assessed ✓ (§9) |
 | **AI — on-device (F-047)** | 🟡 | 🟡 | MLX is Mac-only → mobile uses Core ML / MLC-LLM / llama.cpp | P2 | Assessed |
-| **SMS console (F-044)** | 🟡 | ✅ | Android sync source; iOS viewer only | P0 | Desktop merged (v2.5); Kotlin crypto/pairing port done (`android/halocloud`); device sync not started |
+| **SMS console (F-044)** | 🟡 | ✅ | Android sync source; iOS viewer only | P0 | Desktop merged (v2.5); **Android sync built** (`android/halocloud` + `android/app`) — emulator-verified against a local stand-in, not yet against live Firebase / a physical phone |
 | **Expenditure (F-048)** | ✅ | ✅ | Parse device SMS (Android) / cloud (iOS) | P1 | Desktop v1 merged (v2.5); mobile not started |
-| **Clipboard sync (F-045)** | 🟡 | 🟡 | F-045 (AccessibilityService Android) | P1 | Desktop merged (v2.5); mobile not started |
+| **Clipboard sync (F-045)** | 🟡 | 🟡 | F-045 (AccessibilityService Android) | P1 | Desktop merged (v2.5); **Android built** (share-sheet + manual send verified on emulator; automatic background capture unverified on a real phone); iOS not started |
 | **Browser Cleaner (F-024)** | ❌ | ❌ | Sandbox blocks reading/deleting another app's (browser's) data entirely | — | Won't do |
 | **Permission Auditor (F-016)** | ❌ | 🟡 | iOS exposes zero introspection into other apps' TCC/permission grants — no viable path; Android `PackageManager` can enumerate other installed apps' declared + granted permissions, gated by `QUERY_ALL_PACKAGES` visibility and Play policy | P3 | Assessed ✓ (§9) |
 | **Security Posture Dashboard (F-019)** | ❌ | 🟡 | Both OSes block reading passcode/encryption/Find-My status from 3rd-party apps → reimagine as an advisory checklist + Settings deep-links only, no automated pass/fail scoring | P3 | Assessed ✓ (§9) |

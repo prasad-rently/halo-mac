@@ -132,6 +132,23 @@ class CryptoService(private val key: ByteArray) {
         fun generateSalt(count: Int = MINIMUM_SALT_BYTES): ByteArray = randomBytes(count)
     }
 
+    /**
+     * A keyed hash for grouping without exposing the value (the SMS `threadKey`): HMAC-SHA256 under a
+     * sub-key derived from the data key, hex-encoded. A plain SHA-256 of a phone number would be
+     * reversible by trying every number; keying it with the secret makes it useless without the key.
+     */
+    fun keyedHash(context: String, data: String): String {
+        val outer = Mac.getInstance("HmacSHA256")
+        outer.init(SecretKeySpec(key, "HmacSHA256"))
+        val subKey = outer.doFinal(context.toByteArray(Charsets.UTF_8))
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(subKey, "HmacSHA256"))
+        return mac.doFinal(data.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    }
+
+    /** The raw key, for a caller that must persist it (device keystore) instead of the passphrase. */
+    fun exportKey(): ByteArray = key.copyOf()
+
     /** Seal a UTF-8 string -> `"v1:" + base64(nonce12 || ct || tag16)`. */
     fun encrypt(plaintext: String): String {
         try {

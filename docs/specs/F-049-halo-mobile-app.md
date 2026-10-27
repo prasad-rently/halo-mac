@@ -1,6 +1,6 @@
 # F-049 — Halo Mobile App (Product Line)
 
-> **Status:** 🗓 Planned · **Platform:** iOS + Android
+> **Status:** 🔧 Android SMS + clipboard + pairing built (emulator-verified, see `F-049-F-050-mobile-requirements.md` §9.3); iOS cloud features not started · **Platform:** iOS + Android
 > **Depends on:** [00-foundations](00-foundations.md); pairs with F-044, F-045, F-050
 > **Reference:** `docs/MOBILE_PLATFORM_FEATURES.md`
 

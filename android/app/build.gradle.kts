@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 android {
@@ -12,8 +13,8 @@ android {
         applicationId = "app.halo.mobile"
         minSdk = 26                 // Android 8.0 (requirements §5)
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     buildTypes {
@@ -37,8 +38,14 @@ kotlin { jvmToolchain(17) }
 
 dependencies {
     implementation(project(":haloshare"))
+    implementation(project(":halocloud"))
 
     implementation("androidx.core:core-ktx:1.17.0")
+    // Background SMS sync: survives process death, honours the network constraint, backs off on failure (F-044 D8).
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
+    // QR pairing without Google Play Services (the phone must pair on a de-Googled device too). Brings its own
+    // camera-permission request; the pairing code can also be pasted, so the camera is never required.
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
@@ -52,3 +59,7 @@ dependencies {
 
 // Version note: the newest Compose (1.12) requires AGP 9.1+ and compileSdk 37. This build is on
 // AGP 8.13 / API 36, so Compose is pinned to the BOM from that era. Move AGP and Compose together.
+
+dependencies {
+    testImplementation("junit:junit:4.13.2")
+}

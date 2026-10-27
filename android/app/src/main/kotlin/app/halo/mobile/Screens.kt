@@ -33,6 +33,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -73,7 +75,7 @@ import java.text.DateFormat
 import java.util.Date
 
 @Composable
-fun HaloApp(vm: AppViewModel) {
+fun HaloApp(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val offer by vm.pendingOffer.collectAsStateWithLifecycle()
     val inbox by vm.inbox.collectAsStateWithLifecycle()
@@ -91,16 +93,20 @@ fun HaloApp(vm: AppViewModel) {
                     indicatorColor = Halo.Accent.copy(alpha = 0.16f), unselectedIconColor = Halo.Text3, unselectedTextColor = Halo.Text3)
                 NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, colors = colors, label = { Text("Share") },
                     icon = { Icon(Icons.Filled.Share, null) }, modifier = Modifier.testTag("tab.share"))
-                NavigationBarItem(selected = tab == 1, onClick = { tab = 1; vm.refreshInbox() }, colors = colors,
-                    label = { Text(if (inbox.isEmpty()) "Inbox" else "Inbox (${inbox.size})") },
+                NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, colors = colors, label = { Text("SMS") },
+                    icon = { Icon(Icons.Filled.Phone, null) }, modifier = Modifier.testTag("tab.sms"))
+                NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, colors = colors, label = { Text("Clipboard") },
+                    icon = { Icon(Icons.Filled.Send, null) }, modifier = Modifier.testTag("tab.clipboard"))
+                NavigationBarItem(selected = tab == 3, onClick = { tab = 3; vm.refreshInbox() }, colors = colors,
+                    label = { Text(if (inbox.isEmpty()) "Files" else "Files (${inbox.size})") },
                     icon = { Icon(Icons.Filled.Email, null) }, modifier = Modifier.testTag("tab.inbox"))
-                NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, colors = colors, label = { Text("Settings") },
+                NavigationBarItem(selected = tab == 4, onClick = { tab = 4 }, colors = colors, label = { Text("Settings") },
                     icon = { Icon(Icons.Filled.Settings, null) }, modifier = Modifier.testTag("tab.settings"))
             }
         },
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
-            when (tab) { 0 -> ShareScreen(vm); 1 -> InboxScreen(vm); else -> SettingsScreen(vm) }
+            when (tab) { 0 -> ShareScreen(vm); 1 -> SmsScreen(cloud); 2 -> ClipboardScreen(cloud); 3 -> InboxScreen(vm); else -> SettingsScreen(vm, cloud) }
         }
     }
 
@@ -227,18 +233,6 @@ fun ShareScreen(vm: AppViewModel) {
             }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("share.cloudFeatures")) {
-            SectionLabel("Coming with the Halo cloud foundation")
-            HaloCard {
-                BlockedRow("SMS sync", "Reads your messages and syncs them to your Mac")
-                Spacer(Modifier.height(10.dp))
-                BlockedRow("Clipboard sync", "Phone ↔ Mac")
-                Spacer(Modifier.height(10.dp))
-                BlockedRow("Pair with your Mac", "Scan a QR to connect your Firebase")
-                Spacer(Modifier.height(10.dp))
-                Text("These need the shared cloud layer (F-044) that hasn't been built yet. HaloShare doesn't — it works today.", color = Halo.Text3, fontSize = 11.sp)
-            }
-        }
     }
 }
 
@@ -260,18 +254,6 @@ private fun PeerRow(peer: Peer, selected: Boolean, onClick: () -> Unit) {
             Text("${peer.info.deviceModel ?: peer.info.deviceType ?: "device"} · ${peer.host}", color = Halo.Text3, fontSize = 11.sp)
         }
         if (selected) Icon(Icons.Filled.CheckCircle, null, tint = Halo.Accent)
-    }
-}
-
-@Composable
-private fun BlockedRow(title: String, subtitle: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title, color = Halo.Text2, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            Text(subtitle, color = Halo.Text3, fontSize = 11.sp)
-        }
-        Text("Not yet", color = Halo.Amber, fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.background(Halo.Amber.copy(alpha = 0.14f), RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 3.dp))
     }
 }
 
@@ -305,13 +287,14 @@ fun InboxScreen(vm: AppViewModel) {
 // ── Settings ───────────────────────────────────────────────────────────────────────────────────
 
 @Composable
-fun SettingsScreen(vm: AppViewModel) {
+fun SettingsScreen(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel) {
     val identity by vm.identity.collectAsStateWithLifecycle()
     val listen by vm.listen.collectAsStateWithLifecycle()
     var alias by remember(identity.alias) { mutableStateOf(identity.alias) }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Text("Settings", color = Halo.Text, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+        CloudSettingsCard(cloud)
 
         HaloCard {
             SectionLabel("This device")

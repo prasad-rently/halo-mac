@@ -1,4 +1,6 @@
 import SwiftUI
+import CoreImage.CIFilterBuiltins
+import AppKit
 
 // MARK: - CloudSettingsPane  (F-044 — D24 re-key, D28 wipe, D29 per-line toggle, D30 notifications)
 //
@@ -18,6 +20,8 @@ struct CloudSettingsPane: View {
     @State private var confirmPass = ""
 
     @State private var pending: PendingAction?
+    /// The pairing code holds the Firebase sign-in, so it is hidden until asked for and re-hidden on leaving.
+    @State private var showPairing = false
     @State private var busy = false
 
     /// A destructive action awaiting confirmation.
@@ -50,6 +54,7 @@ struct CloudSettingsPane: View {
                 notificationsSection
                 linesSection
                 devicesSection
+                pairingSection
                 rekeySection
                 dangerSection
             }
@@ -141,6 +146,58 @@ struct CloudSettingsPane: View {
                 }
             }
         }
+    }
+
+    // MARK: Phone pairing (F-049 US-1)
+
+    /// The payload the phone scans or pastes. nil until a config, credential and salt are all stored.
+    private var pairingCode: String? {
+        let store = CloudConfigStore.shared
+        guard let config = store.firebaseConfig, let auth = store.authCredential, let salt = store.salt else { return nil }
+        let payload = CloudPairingPayload(firebaseConfig: config, auth: auth, salt: salt,
+                                          iterations: store.kdfIterations ?? CryptoService.legacyIterations)
+        return try? payload.encoded()
+    }
+
+    private func qrImage(for text: String) -> NSImage? {
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(text.utf8)
+        filter.correctionLevel = "M"
+        guard let out = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 6, y: 6)) else { return nil }
+        let rep = NSCIImageRep(ciImage: out)
+        let image = NSImage(size: rep.size)
+        image.addRepresentation(rep)
+        return image
+    }
+
+    private var pairingSection: some View {
+        section("Pair a phone", "Show a code your Halo phone app scans or pastes. It carries your Firebase sign-in so the phone can connect — never your encryption passphrase, which you type on the phone.") {
+            if showPairing, let code = pairingCode {
+                HStack(alignment: .top, spacing: 16) {
+                    if let img = qrImage(for: code) {
+                        Image(nsImage: img).interpolation(.none).resizable().frame(width: 180, height: 180)
+                            .background(Color.white).cornerRadius(6)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(code).font(.system(size: 9, design: .monospaced)).foregroundColor(.haloText2)
+                            .lineLimit(6).textSelection(.enabled)
+                        HaloGhostButton("Copy code", icon: "doc.on.doc") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(code, forType: .string)
+                        }
+                        Text("Anyone who sees this can sign in to your database (though not read your messages without the passphrase). Hide it when you're done.")
+                            .font(HaloFont.body(10)).foregroundColor(.haloAmber)
+                    }
+                }
+                HaloGhostButton("Hide", icon: "eye.slash") { showPairing = false }
+            } else if pairingCode == nil {
+                Text("Connect your Firebase first — there is nothing to pair yet.")
+                    .font(HaloFont.body(10)).foregroundColor(.haloText3)
+            } else {
+                HaloGhostButton("Show pairing code", icon: "qrcode") { showPairing = true }
+            }
+        }
+        .onDisappear { showPairing = false }
     }
 
     // MARK: Re-key (D24)

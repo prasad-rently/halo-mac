@@ -140,7 +140,7 @@ None of these are started. Starting them against an unfrozen contract would prod
 | Share extension / Sharesheet | ❌ deferred | ❌ deferred |
 | Background receive | ❌ deferred (iOS cannot, by design) | ❌ deferred — **MR-OS-2 unmet on Android**: no foreground service yet, so it receives only while visible |
 | Official-LocalSend interop | ❌ not testable here | ❌ not testable here |
-| Cloud features (SMS, clipboard, pairing) | 🚫 blocked (§6) | 🚫 blocked (§6) |
+| Cloud features (SMS, clipboard, pairing) | 🚫 not started | ✅ built — `android/halocloud` + `android/app`; verified on the Android Emulator against a local stand-in, **not** against live Firebase or a physical phone (§9.3) |
 
 ### 9.1 iOS verification record (2026-10-23, iOS Simulator, iPhone 17)
 
@@ -172,3 +172,21 @@ Driven through the real app with `adb` against the Swift CLI peer on the Mac (`a
 Same usability defect as iOS, found the same way: the keyboard covered the Send card and couldn't be dismissed. Fixed (Add/Go clear focus; tap outside dismisses) and re-verified.
 
 **Not verified on Android:** the system file picker (the debug "Send 5 MB test" button exercises the same path from a `File`, *not* the `content://` resolver path), the /24 scan against a real LAN peer, a physical device, the official LocalSend app, Doze/background behaviour. Build notes: Compose is pinned to the BOM matching AGP 8.13 / API 36 (the newest Compose needs AGP 9.1 + compileSdk 37); cleartext HTTP is enabled app-wide in `network_security_config.xml` (MD1).
+
+### 9.3 Android cloud features — verification record (2026-10-28, Android Emulator API 36.1, local stand-in for Firebase)
+
+Built on `feat/f049-android-sms-clipboard`. The server was `android/tools/fake-firebase.py` (the exact REST calls Halo makes; unauthenticated reads refused) and the "Mac" was `android/tools/cloud-peek.mjs`, which decrypts with Node's own crypto.
+
+| Flow | Result |
+|---|---|
+| Pairing code made by Node (checksum + schema 2) pasted into the app | Accepted; Keystore-sealed profile saved after sign-in + `meta` round-trip |
+| First sync, two messages already in the inbox | Both in the cloud; Node decrypted address and body; **no plaintext anywhere in the stored node**; real SIM line (number + carrier) registered |
+| New message arriving live (`adb emu sms send`) | In the cloud within seconds with no UI action (broadcast → WorkManager) |
+| Per-SIM toggle switched off by the "Mac" | A message arriving meanwhile was **not** uploaded; switched on again, it was uploaded afterwards — nothing lost |
+| Clipboard Mac → phone | Appeared in the phone's history live; the live clipboard was not touched |
+| Clipboard phone → Mac (share-sheet "Send to Mac") | Decrypted by Node |
+| Accessibility service enabled | Binds, no crash; background clipboard capture **not** exercised |
+
+Unit/integration tests (`./gradlew :halocloud:test`): crypto vectors, the REST client over real HTTP (sign-in, refresh, 401 retry, streaming, https-only, password never sent to the database host), the SMS engine (wire fields, high-water mark, failure-stops-at-the-bad-row, per-line toggle, filters, delete-mirroring and its empty-inbox guard, thread keys) and the clipboard engine (echo suppression, dedup, 500 cap, opt-in secret filter parity, purge).
+
+**Not verified:** a live Firebase project; a physical phone (OEM background-clipboard policy, Doze, real carrier SIM numbers); delete-mirroring on a device; the camera QR scanner (the pasted code was used); the Mac app's console actually rendering what the phone uploaded (the field names were read from `SMSSyncClient.swift`, not exercised against it); the Mac's new "Pair a phone" screen was compiled but not driven.
