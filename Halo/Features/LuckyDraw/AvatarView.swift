@@ -19,7 +19,7 @@ final class AvatarImageCache: ObservableObject, @unchecked Sendable {
     /// Set by `LuckyDrawStore.shared`. Nil ⇒ photos are never resolved (monogram fallback).
     var store: AvatarStore? {
         get { lock.lock(); defer { lock.unlock() }; return _store }
-        set { lock.lock(); _store = newValue; images.removeAll(); order.removeAll(); lock.unlock() }
+        set { lock.lock(); _store = newValue; images.removeAll(); order.removeAll(); failed.removeAll(); lock.unlock() }
     }
 
     @Published private(set) var revision = 0
@@ -29,7 +29,18 @@ final class AvatarImageCache: ObservableObject, @unchecked Sendable {
     private var images: [String: CGImage] = [:]
     private var order: [String] = []
     private var inFlight = Set<String>()
+    /// Keys whose load came back empty (file missing or unreadable). Without this a missing photo was
+    /// re-read from disk on every frame the wheel drew: 60 dispatches a second per entry.
+    private var failed = Set<String>()
+    private var bumpScheduled = false
     private let capacity = 600
+    private var _loadAttempts = 0
+
+    /// How many disk loads this cache has started. Exposed so a test can prove a missing photo is
+    /// not re-read on every frame.
+    var loadAttempts: Int { lock.lock(); defer { lock.unlock() }; return _loadAttempts }
+    /// How many decoded images it currently holds.
+    var decodedCount: Int { lock.lock(); defer { lock.unlock() }; return images.count }
 
     static func bucket(forPoints points: CGFloat) -> Int {
         let px = points * 2
@@ -48,7 +59,8 @@ final class AvatarImageCache: ObservableObject, @unchecked Sendable {
         if let hit = images[key] { lock.unlock(); return hit }
         let standIn = [256, 128, 64].lazy.filter { $0 != px }.compactMap { self.images[base + String($0)] }.first
         let store = _store
-        let shouldLoad = store != nil && inFlight.insert(key).inserted
+        let shouldLoad = store != nil && !failed.contains(key) && inFlight.insert(key).inserted
+        if shouldLoad { _loadAttempts += 1 }
         lock.unlock()
         guard shouldLoad, let store else { return standIn }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -61,13 +73,26 @@ final class AvatarImageCache: ObservableObject, @unchecked Sendable {
     private func finish(key: String, image: CGImage?) {
         lock.lock()
         inFlight.remove(key)
+        var scheduleBump = false
         if let image {
             images[key] = image
             order.append(key)
             while order.count > capacity { images.removeValue(forKey: order.removeFirst()) }
+            // Every avatar on screen observes `revision`, so one bump per photo is O(n^2) redraws while a
+            // 500-entry roster fills in. Batch: the first photo to land arms a short timer; the rest
+            // ride along on the same bump.
+            if !bumpScheduled { bumpScheduled = true; scheduleBump = true }
+        } else {
+            failed.insert(key)
         }
         lock.unlock()
-        if image != nil { DispatchQueue.main.async { self.revision &+= 1 } }
+        if scheduleBump {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                guard let self else { return }
+                self.lock.lock(); self.bumpScheduled = false; self.lock.unlock()
+                self.revision &+= 1
+            }
+        }
     }
 
     /// Forget everything cached for a roster (its photos were deleted).
@@ -75,6 +100,7 @@ final class AvatarImageCache: ObservableObject, @unchecked Sendable {
         lock.lock()
         let prefix = rosterID.uuidString + "/"
         for key in images.keys where key.hasPrefix(prefix) { images.removeValue(forKey: key) }
+        failed = failed.filter { !$0.hasPrefix(prefix) }
         order.removeAll { $0.hasPrefix(prefix) }
         lock.unlock()
         DispatchQueue.main.async { self.revision &+= 1 }

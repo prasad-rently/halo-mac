@@ -1477,3 +1477,44 @@ struct AvatarEmojiBoundTests {
         #expect(try JSONDecoder().decode(DrawEntry.self, from: data).avatar == nil)
     }
 }
+
+@Suite("Avatar image cache")
+struct AvatarImageCacheTests {
+
+    private func wait(timeout: TimeInterval = 5, _ cond: () -> Bool) async {
+        let end = Date().addingTimeInterval(timeout)
+        while !cond(), Date() < end { try? await Task.sleep(nanoseconds: 10_000_000) }
+    }
+
+    @Test("A photo that can't be loaded is asked for once, not re-read on every frame of the wheel")
+    func missingPhotoIsNotRetriedEveryFrame() async {
+        let store = AvatarStore(rootURL: AvatarFixtures.tempRoot(), detectFaces: false)
+        let cache = AvatarImageCache(); cache.store = store
+        let roster = UUID(), name = "\(UUID().uuidString).jpg"      // valid name, no file
+        _ = cache.photo(fileName: name, rosterID: roster, points: 40)
+        await wait { cache.loadAttempts >= 1 }
+        try? await Task.sleep(nanoseconds: 150_000_000)             // let it finish
+        for _ in 0..<200 { _ = cache.photo(fileName: name, rosterID: roster, points: 40) }   // 200 "frames"
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(cache.loadAttempts == 1, "re-attempted a known-missing photo \(cache.loadAttempts) times")
+        cache.forget(rosterID: roster)                              // forgetting a roster lets it try again
+        _ = cache.photo(fileName: name, rosterID: roster, points: 40)
+        await wait { cache.loadAttempts >= 2 }
+        #expect(cache.loadAttempts == 2)
+    }
+
+    @Test("Photos landing together bump the redraw counter in a batch, not once each")
+    @MainActor func revisionBumpsAreCoalesced() async throws {
+        let root = AvatarFixtures.tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let store = AvatarStore(rootURL: root, detectFaces: false)
+        let roster = UUID()
+        let names = try (0..<40).map { _ in try store.importPhoto(data: AvatarFixtures.png(width: 120, height: 120), rosterID: roster) }
+        let cache = AvatarImageCache(); cache.store = store
+        for n in names { _ = cache.photo(fileName: n, rosterID: roster, points: 24) }
+        await wait { cache.decodedCount == names.count }
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        #expect(cache.decodedCount == names.count)
+        #expect(cache.revision >= 1)
+        #expect(cache.revision < names.count / 2, "every one of \(names.count) photos redrew every avatar on screen (revision \(cache.revision))")
+    }
+}
