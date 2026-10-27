@@ -116,7 +116,7 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
                 _warning.value = if (client.checkPublicAccess() == FirebaseRtdbClient.PublicAccess.OPEN)
                     "Your Realtime Database is open to the internet (test-mode rules). Message text stays encrypted, but device names and timestamps are readable by anyone. Publish the owner-only rules from docs/specs/firebase-setup.md." else null
 
-                val profile = CloudProfile(payload.firebaseConfig, payload.auth, payload.saltBase64, payload.iterations, Base64.getEncoder().encodeToString(key))
+                val profile = CloudProfile(payload.firebaseConfig, payload.auth, payload.saltBase64, payload.iterations, Base64.getEncoder().encodeToString(key), epoch = java.util.UUID.randomUUID().toString())
                 store.save(profile); CloudRuntime.reset()
                 _profile.value = profile; _pair.value = PairUi.Idle
             } catch (e: Exception) {
@@ -171,7 +171,7 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             val session = try { CloudRuntime.session(ctx) } catch (e: Exception) { null } ?: return@launch
             try {
-                SmsSyncEngine(session.rtdb, session.crypto, session.deviceId, session.deviceName, AndroidSmsSource(ctx, prefs), PrefsSyncState(ctx)).setLineEnabled(sub, on)
+                SmsSyncEngine(session.rtdb, session.crypto, session.deviceId, session.deviceName, AndroidSmsSource(ctx, prefs), PrefsSyncState(ctx), pairingEpoch = session.profile.epoch).setLineEnabled(sub, on)
                 _lines.value = _lines.value.map { if (it.line.subscriptionId == sub) it.copy(enabled = on) else it }
             } catch (e: Exception) { _notice.value = "Couldn't change that line: ${e.message}" }
         }

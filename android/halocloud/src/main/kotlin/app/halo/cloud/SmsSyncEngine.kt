@@ -26,13 +26,22 @@ interface SyncState {
     fun highWater(subscriptionId: Int): Long?
     fun setHighWater(subscriptionId: Int, dateMs: Long)
     fun clear()
+    /**
+     * Which pairing the marks were earned under, or null if none recorded. A mark only means "everything up
+     * to here is in the cloud" for the cloud (and key) it was written against — see [SmsSyncEngine].
+     */
+    fun pairingEpoch(): String?
+    fun setPairingEpoch(epoch: String)
 }
 
 class MemorySyncState : SyncState {
     private val m = HashMap<Int, Long>()
+    private var epoch: String? = null
     override fun highWater(subscriptionId: Int) = m[subscriptionId]
     override fun setHighWater(subscriptionId: Int, dateMs: Long) { m[subscriptionId] = dateMs }
-    override fun clear() = m.clear()
+    override fun clear() { m.clear(); epoch = null }
+    override fun pairingEpoch() = epoch
+    override fun setPairingEpoch(epoch: String) { this.epoch = epoch }
 }
 
 /** Which senders to sync (FR-6). Deny wins; a non-empty allow list means "only these". */
@@ -72,12 +81,24 @@ class SmsSyncEngine(
     private val filter: () -> SenderFilter = { SenderFilter() },
     private val backfillDays: () -> Int = { DEFAULT_BACKFILL_DAYS },
     private val clock: () -> Long = System::currentTimeMillis,
+    /**
+     * Identifies this pairing. A fresh pairing (new key after the Mac's re-key, new project, wipe-and-pair) means
+     * everything the old marks vouched for is NOT in the new cloud under the new key, so the marks are dropped and
+     * the inbox is re-sent from the backfill horizon (D24: "devices re-sync from their inboxes under the new key").
+     * Re-sending is safe — every upload is an idempotent overwrite keyed `smsId_date`.
+     */
+    private val pairingEpoch: String = "",
 ) {
     private fun root(uid: String) = "sms/$uid/$deviceId"
+
+    private fun adoptPairing() {
+        if (state.pairingEpoch() != pairingEpoch) { state.clear(); state.setPairingEpoch(pairingEpoch) }
+    }
 
     /** Register the device + SIM lines, then upload everything new on every enabled line. */
     fun sync(): SyncReport {
         val uid = rtdb.uid
+        adoptPairing()
         val now = clock()
         val lines = try { source.lines() } catch (e: SecurityException) { return SyncReport(error = "Phone permission not granted.") }
 
@@ -137,6 +158,7 @@ class SmsSyncEngine(
 
     /** "Sync older history": move every line's mark back so the next [sync] re-sends `days` of history (idempotent). */
     fun extendBackfill(days: Int) {
+        adoptPairing()
         val horizon = clock() - days * DAY_MS
         for (l in source.lines()) {
             val cur = state.highWater(l.subscriptionId)

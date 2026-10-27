@@ -22,6 +22,8 @@ data class CloudProfile(
     val saltBase64: String,
     val iterations: Int,
     val keyBase64: String,
+    /** Random per pairing. The sync marks are only valid under the pairing that earned them (see SmsSyncEngine). */
+    val epoch: String = "",
 )
 
 private val json = Json { ignoreUnknownKeys = true }
@@ -76,5 +78,8 @@ class PrefsSyncState(ctx: Context) : SyncState {
     private val p = ctx.getSharedPreferences("halo.cloud.syncstate", Context.MODE_PRIVATE)
     override fun highWater(subscriptionId: Int): Long? = if (p.contains("hw.$subscriptionId")) p.getLong("hw.$subscriptionId", 0) else null
     override fun setHighWater(subscriptionId: Int, dateMs: Long) { p.edit().putLong("hw.$subscriptionId", dateMs).apply() }
-    override fun clear() { p.edit().clear().apply() }
+    // commit(), not apply(): a cleared mark set and the epoch that replaces it must reach disk together.
+    override fun clear() { p.edit().clear().commit() }
+    override fun pairingEpoch(): String? = p.getString("epoch", null)
+    override fun setPairingEpoch(epoch: String) { p.edit().putString("epoch", epoch).commit() }
 }

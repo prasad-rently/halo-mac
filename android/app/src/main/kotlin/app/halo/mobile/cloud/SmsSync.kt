@@ -39,6 +39,7 @@ object SmsSyncRunner {
                 rtdb = session.rtdb, crypto = session.crypto, deviceId = session.deviceId, deviceName = session.deviceName,
                 source = AndroidSmsSource(ctx, prefs), state = PrefsSyncState(ctx),
                 filter = { SenderFilter(prefs.allow, prefs.deny) }, backfillDays = { prefs.backfillDays },
+                pairingEpoch = session.profile.epoch,
             )
             var report = try { engine.sync() } catch (e: Exception) { SyncReport(error = e.message ?: "Sync failed.") }
             if (report.error == null && (forceReconcile || System.currentTimeMillis() - prefs.lastReconcileAt > RECONCILE_EVERY_MS)) {
@@ -55,7 +56,7 @@ object SmsSyncRunner {
         val prefs = CloudPrefs(ctx)
         val session = CloudRuntime.session(ctx) ?: return SyncReport(error = "This phone isn't paired yet.")
         prefs.backfillDays = days
-        SmsSyncEngine(session.rtdb, session.crypto, session.deviceId, session.deviceName, AndroidSmsSource(ctx, prefs), PrefsSyncState(ctx)).extendBackfill(days)
+        SmsSyncEngine(session.rtdb, session.crypto, session.deviceId, session.deviceName, AndroidSmsSource(ctx, prefs), PrefsSyncState(ctx), pairingEpoch = session.profile.epoch).extendBackfill(days)
         return run(ctx)
     }
 

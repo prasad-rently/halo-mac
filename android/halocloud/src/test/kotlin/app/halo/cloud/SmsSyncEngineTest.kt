@@ -92,6 +92,28 @@ class SmsSyncEngineTest {
         assertEquals(1, db.writes.count { it.contains("/messages/") })
     }
 
+    @Test fun `a fresh pairing re-sends history the old marks vouched for (re-key, D24)`() {
+        // After the Mac re-keys it wipes the cloud; this phone, re-paired under the new key, must put its
+        // inbox back — but its marks say "all of this is already in the cloud".
+        val db = FakeRtdb(); val src = FakeSource(listOf(sim1), mutableListOf(1 to rec(1, "A", "one", now - 2 * day), 1 to rec(2, "A", "two", now - day)))
+        val state = MemorySyncState()
+        fun engine(epoch: String) = SmsSyncEngine(db, testCrypto(), "dev-A", "Pixel 8", src, state, { SenderFilter() }, { 90 }, { now }, pairingEpoch = epoch)
+        assertEquals(2, engine("pairing-1").sync().uploaded)
+        db.delete("sms/uid-1")                                              // the Mac's wipe
+        assertEquals("same pairing: the marks hold, nothing re-sent", 1, engine("pairing-1").sync().uploaded)   // only the tie at the mark
+        db.delete("sms/uid-1")
+        assertEquals("new pairing: everything back", 2, engine("pairing-2").sync().uploaded)
+    }
+
+    @Test fun `widening the window survives the first sync of a pairing`() {
+        val db = FakeRtdb(); val src = FakeSource(listOf(sim1), mutableListOf(1 to rec(1, "A", "old", now - 120 * day), 1 to rec(2, "A", "new", now - 10 * day)))
+        val state = MemorySyncState()
+        val engine = SmsSyncEngine(db, testCrypto(), "dev-A", "Pixel 8", src, state, { SenderFilter() }, { 90 }, { now }, pairingEpoch = "p")
+        engine.extendBackfill(180)                                          // before any sync has run under this pairing
+        engine.sync()
+        assertTrue(db.dump("sms/uid-1/dev-A/messages/1_${now - 120 * day}") != null)
+    }
+
     @Test fun `backfill is bounded to 90 days`() {
         val (db, _, engine) = harness(listOf(1 to rec(1, "A", "old", now - 120 * day), 1 to rec(2, "A", "new", now - 10 * day)))
         assertEquals(1, engine.sync().uploaded)
