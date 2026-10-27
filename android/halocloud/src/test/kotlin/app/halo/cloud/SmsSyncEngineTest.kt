@@ -114,6 +114,33 @@ class SmsSyncEngineTest {
         assertTrue(db.dump("sms/uid-1/dev-A/messages/1_${now - 120 * day}") != null)
     }
 
+    @Test fun `a backfill killed part-way resumes near where it died, not from the start`() {
+        // An Error is not caught by the engine, so it models the process (or the worker's 10-minute limit) dying.
+        class Killed : Error()
+        val total = 400
+        val rows = (1..total).map { 1 to rec(it.toLong(), "A", "m$it", now - 80 * day + it * 1000L) }.toMutableList()
+        val inner = FakeRtdb()
+        val dying = object : Rtdb by inner {
+            var puts = 0
+            override fun put(path: String, value: kotlinx.serialization.json.JsonElement) {
+                if (path.contains("/messages/") && ++puts == 275) throw Killed()
+                inner.put(path, value)
+            }
+        }
+        val state = MemorySyncState(); val src = FakeSource(listOf(sim1), rows)
+        fun engine(db: Rtdb) = SmsSyncEngine(db, testCrypto(), "dev-A", "Pixel 8", src, state, { SenderFilter() }, { 90 }, { now }, pairingEpoch = "p")
+        try { engine(dying).sync(); org.junit.Assert.fail("should have been killed") } catch (e: Killed) { }
+        assertEquals(274, (inner.dump("sms/uid-1/dev-A/messages") as JsonObject).size)
+
+        inner.writes.clear()
+        assertTrue(engine(inner).sync().ok)
+        val resent = inner.writes.count { it.contains("/messages/") }
+        assertEquals(total, (inner.dump("sms/uid-1/dev-A/messages") as JsonObject).size)
+        // Checkpoints land every 50 uploads: the last one before the kill was row 250, so the retry covers
+        // rows 250..400 (the row at the mark is re-sent too — ties are idempotent). With no checkpoint it is all 400.
+        assertEquals(151, resent)
+    }
+
     @Test fun `backfill is bounded to 90 days`() {
         val (db, _, engine) = harness(listOf(1 to rec(1, "A", "old", now - 120 * day), 1 to rec(2, "A", "new", now - 10 * day)))
         assertEquals(1, engine.sync().uploaded)

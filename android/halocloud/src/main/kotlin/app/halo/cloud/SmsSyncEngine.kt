@@ -124,11 +124,16 @@ class SmsSyncEngine(
             val rows = try { source.inbox(l.subscriptionId, state.highWater(l.subscriptionId) ?: horizon) }
                        catch (e: SecurityException) { return SyncReport(uploaded, filtered, disabled, failed, error = "SMS permission not granted.") }
             var mark = state.highWater(l.subscriptionId)
+            var sinceCheckpoint = 0
             for (r in rows) {
                 if (!f.permits(r.address)) { filtered++; mark = maxOf(mark ?: 0, r.dateMs); continue }
                 try {
                     rtdb.put("${root(uid)}/messages/${SmsWire.messageId(r)}", SmsWire.messageNode(r, crypto, deviceId, now))
                     uploaded++; mark = maxOf(mark ?: 0, r.dateMs)
+                    // Checkpoint as we go: a long backfill can outlive its worker (WorkManager's 10-minute limit,
+                    // or the process), and a mark saved only at the end would restart that backfill from nothing
+                    // every time — it could never finish. Rows are oldest-first, so the mark is always safe.
+                    if (++sinceCheckpoint >= CHECKPOINT_EVERY) { state.setHighWater(l.subscriptionId, mark); sinceCheckpoint = 0 }
                 } catch (e: Exception) {
                     // Stop this line at the first failure so the mark never jumps over an un-uploaded row.
                     failed++; break
@@ -173,6 +178,7 @@ class SmsSyncEngine(
 
     companion object {
         const val DEFAULT_BACKFILL_DAYS = 90
+        const val CHECKPOINT_EVERY = 50
         private const val DAY_MS = 86_400_000L
     }
 }
