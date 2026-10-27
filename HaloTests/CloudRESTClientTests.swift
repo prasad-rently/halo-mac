@@ -752,7 +752,7 @@ struct RTDBPublicAccessTests {
         let w = SMSSyncClient.openRulesWarning
         #expect(w.contains("open to the whole internet"))
         #expect(w.contains("end-to-end encrypted"))
-        #expect(w.contains("firebase-setup.md"))
+        #expect(w.contains("firebase-rules.json"))
     }
 }
 
