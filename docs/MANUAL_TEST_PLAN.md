@@ -1060,7 +1060,7 @@ The cases marked **◆** are the ones unit tests and offscreen renders cannot re
 ## 20.3 Cloud line — SMS console, clipboard sync, expenditure (F-044 / F-045 / F-048)
 
 **Files:** `Core/Cloud/*`, `Features/SMSConsole/*`, `Features/ClipboardSync/*`, `Features/Expenditure/*` · **Plan:** `docs/V2_5_PLAN.md`
-**Needs:** a Firebase project of your own (Email/Password enabled, Realtime Database, the owner-only rules in `docs/specs/firebase-rules.json` (publish them in Realtime Database → Rules; the earlier §7.2 in the F-044 spec omitted `clipboard/`, so clipboard sync would be denied)). TC-CLOUD-03…10 need it; a phone running the Halo mobile app is needed only for the SMS-source cases. **Nothing in this section has been run against a live project** — every case marked ◆ is *not yet run*.
+**Needs:** a Firebase project of your own (Email/Password enabled, Realtime Database, the owner-only rules from `docs/specs/firebase-rules.json`, published under Realtime Database → Rules — they must include `clipboard/`, or clipboard sync is denied). TC-CLOUD-03…10 need it; a phone running the Halo mobile app is needed only for the SMS-source cases. **Nothing in this section has been run against a live project** — every case marked ◆ is *not yet run*.
 
 | ID | Priority | Title | Steps | Expected |
 |----|----------|-------|-------|----------|
