@@ -48,9 +48,13 @@ final class CleanupViewModel: ObservableObject {
     /// Bumped by every full scan; a scan whose generation is no longer current discards its
     /// results, so a slow old scan can never overwrite a newer one (BUG-001 R8).
     private var scanGeneration = 0
-    /// Paths removed since the current full scan began. A scan that read a folder just before
-    /// the user trashed something in it would otherwise bring that row back.
-    private var removedSinceScanStart: [String] = []
+    /// Paths this model has removed, each stamped with a serial. A scan that read a folder just
+    /// before the user trashed something in it would otherwise bring that row back — but only
+    /// removals made AFTER a scan began may be filtered out of its result. A scan that began
+    /// later saw the folder as it is now, so a file that reappeared (a cache an app regenerated,
+    /// an item put back from the Trash) is real and must stay listed.
+    private var removalSerial = 0
+    private var removals: [String: Int] = [:]
 
     init(coordinator: ScanCoordinator = ScanCoordinator(), kinds: [CleanupKind] = CleanupKind.allCases) {
         self.coordinator = coordinator
@@ -67,7 +71,8 @@ final class CleanupViewModel: ObservableObject {
     func scanAll() async {
         scanGeneration += 1
         let generation = scanGeneration
-        removedSinceScanStart = []
+        removals = [:]
+        let startedAt = removalSerial
         isScanning = true
         categories = kinds.map { CleanupCategory(kind: $0) }
         await withTaskGroup(of: CleanupCategory.self) { group in
@@ -76,7 +81,7 @@ final class CleanupViewModel: ObservableObject {
             }
             for await cat in group {
                 guard generation == scanGeneration else { continue }   // superseded
-                apply(scanned: cat)
+                apply(scanned: cat, startedAt: startedAt)
             }
         }
         guard generation == scanGeneration else { return }   // the newer scan owns the flags
@@ -99,15 +104,16 @@ final class CleanupViewModel: ObservableObject {
         return true
     }
 
-    /// Replace one category's list with fresh scan results, minus anything removed since the
-    /// scan started.
-    func apply(scanned cat: CleanupCategory) {
+    /// Replace one category's list with fresh scan results, minus anything removed after the
+    /// scan began (`startedAt` is `removalSerial` when it did). The default, 0, means "began
+    /// before every removal" — the conservative reading for a result of unknown age.
+    func apply(scanned cat: CleanupCategory, startedAt: Int = 0) {
         guard let idx = categories.firstIndex(where: { $0.kind == cat.kind }) else { return }
         var fresh = cat
-        if !removedSinceScanStart.isEmpty {
-            fresh.items.removeAll { item in
-                let k = CleanupPath.key(item.url)
-                return removedSinceScanStart.contains { CleanupPath.isCovered(k, by: $0) }
+        if !removals.isEmpty {
+            let newer = Set(removals.filter { $0.value > startedAt }.keys)
+            if !newer.isEmpty {
+                fresh.items.removeAll { CleanupReconciler.isRemoved(CleanupPath.key($0.url), in: newer) }
             }
         }
         categories[idx] = fresh
@@ -116,8 +122,9 @@ final class CleanupViewModel: ObservableObject {
     /// Re-scan just these categories (after a delete), so sizes are exact without a full rescan.
     private func rescan(kinds: Set<CleanupKind>) async {
         for kind in kinds where kind != .browsers {
+            let startedAt = removalSerial
             let cat = await coordinator.scanCategory(kind)
-            apply(scanned: cat)
+            apply(scanned: cat, startedAt: startedAt)
         }
     }
 
@@ -128,7 +135,8 @@ final class CleanupViewModel: ObservableObject {
     @discardableResult
     func reconcile(removed urls: [URL]) -> [CleanupKind] {
         let keys = urls.map(CleanupPath.key)
-        removedSinceScanStart.append(contentsOf: keys)
+        removalSerial += 1
+        for k in keys { removals[k] = removalSerial }
         return CleanupReconciler.apply(removedKeys: keys, to: &categories)
     }
 

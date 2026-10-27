@@ -6268,7 +6268,7 @@ struct CleanupViewModelTests {
             try Data(repeating: 7, count: bytes).write(to: url)
             return url
         }
-        @MainActor func vm(failing: Set<String> = []) -> CleanupViewModel {
+        @MainActor func vm(failing: Set<String> = [], recreating: Set<String> = []) -> CleanupViewModel {
             let root = self.root, trash = self.trash
             let coordinator = ScanCoordinator(
                 roots: { kind in (kind == .systemCaches || kind == .userCaches) ? [root.path] : [] },
@@ -6278,6 +6278,10 @@ struct CleanupViewModelTests {
                         throw NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "denied"])
                     }
                     try FileManager.default.moveItem(at: url, to: trash.appendingPathComponent(url.lastPathComponent))
+                    // Simulates an app regenerating its cache the moment it is trashed.
+                    if recreating.contains(url.lastPathComponent) {
+                        try Data(repeating: 9, count: 4096).write(to: url)
+                    }
                 })
             return CleanupViewModel(coordinator: coordinator, kinds: [.systemCaches, .userCaches, .trash])
         }
@@ -6380,6 +6384,18 @@ struct CleanupViewModelTests {
         vm.reconcile(removed: [a])                                           // user trashes a.bin
         vm.apply(scanned: staleList)                                         // the slow scan lands late
         #expect(names(vm, .userCaches) == ["b.bin"])
+    }
+
+    @Test("A file recreated at a trashed path shows up again after the post-clean rescan")
+    func recreatedFileIsNotHiddenForever() async throws {
+        let f = try Fixture()
+        try f.file("a.bin")
+        let vm = f.vm(recreating: ["a.bin"])
+        await vm.scanAll()
+        let a = try #require(vm.category(for: .userCaches)?.items.first)
+        await vm.cleanSingleItem(a, for: .userCaches)
+        #expect(names(vm, .userCaches) == ["a.bin"], "the rescan began after the trash, so its result is current")
+        #expect(names(vm, .systemCaches) == ["a.bin"])
     }
 
     @Test("Two overlapping scans leave one consistent result")
