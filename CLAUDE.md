@@ -167,6 +167,12 @@ actor BrowserCleanerScanner { ... }
 try FileManager.default.trashItem(at: url, resultingItemURL: nil)
 ```
 
+> **Approved exceptions, not yet implemented (2026-10-27):** two narrow permanent-deletion exceptions
+> were approved for planned features — F-054 (permanently remove only the exact items it just trashed,
+> never *Empty Trash*) and F-053 (Halo's own avatar copies under `Application Support/Halo/luckydraw/avatars/`).
+> **Until those features exist the rule above is absolute.** Add each exception here, with its scope,
+> in the same change that implements it.
+
 ### All deletions require confirmation
 Show a review sheet before any destructive action. Users must explicitly confirm.
 

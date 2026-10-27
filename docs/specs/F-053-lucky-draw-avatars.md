@@ -1,6 +1,6 @@
 # F-053 — Lucky Draw Avatars (NFeat-130)
 
-> **Status:** 🗓 Planned — requirements only. **No code is written from this document yet.**
+> **Status:** 🗓 Planned — requirements only; **owner decisions on art source and file deletion recorded 2026-10-27**. **No code is written from this document yet.**
 > **Extends:** F-051 Lucky Draw Spinner Wheel · **Raised:** 2026-10-27 · **Effort estimate:** ~8–10 d desktop (incl. 1.5 d of spikes)
 > **Reserved pbxproj ID block:** `8225`–`8244` (claimed in `CLAUDE.md`)
 
@@ -68,7 +68,7 @@ moves, and an avatar can never influence selection** (AC-3).
 | D6 | **Animation format: pre-rendered APNG/GIF frame sequences decoded by ImageIO — no new package dependency** (provisional, spike S1). Lottie is the other candidate. | The project's only third-party dependency is Sentry; `lottie-ios` is a sizeable addition for one feature. ImageIO is system code. Minimum macOS is 13, so animated WebP decode (14+) is not safe to rely on. |
 | D7 | Per-roster **Display mode**: *Auto* (avatar where the entry has one, else label), *Avatar + name*, *Avatar only*, *Name only* (today's behaviour). Default *Auto*. | Lets the user opt out per roster, and *Name only* is the F-051 regression baseline. |
 | D8 | The **winner popup** reuses `DrawResultOverlay` + `ConicHalo`: avatar in a large ring (gold conic gradient for the winner), the name's per-character reveal unchanged, confetti unchanged. | The animation beats are already tuned (F-051 §8); this adds a hero element, not a second reveal system. |
-| D9 | Asset **licences are verified before anything is bundled**; every bundled pack ships with an in-app Credits entry. | §12 R1 — this is the only part of the feature that can force a rework. |
+| D9 | **Art source decided 2026-10-27: commissioned or self-drawn** — the owner supplies about 40 characters and a few animated emoji, so there are no third-party licence terms to inherit. Until the art exists the feature ships with emoji, monogram and photos only (§13 P0). Every pack still carries a `manifest.json` with author and licence, and an in-app Credits entry. | Removes the licence risk (§12 R1) for the bundled art; the pipeline (manifest, catalogue, Credits) is unchanged and would also accept an open-licence pack later. |
 
 ---
 
@@ -130,7 +130,7 @@ moves, and an avatar can never influence selection** (AC-3).
 - **NFR-S1** Photos never leave the Mac: no network call in the avatar path; not in `UserDefaults`; not in the CSV; not in Sentry breadcrumbs or the PDF report.
 - **NFR-S2** The stored `fileName` is **untrusted input** (a roster JSON can be hand-edited or arrive from a future share feature). It must be a UUID-shaped name resolved *inside* the avatars directory; any value containing `/`, `..` or not matching the pattern is treated as "no avatar". A test feeds `../../etc/passwd`.
 - **NFR-S3** Decoding is bounded: pixel dimensions are read from the header **before** decoding and the import is refused above 100 MP (decompression-bomb guard); ImageIO decodes straight to a thumbnail (`kCGImageSourceThumbnailMaxPixelSize`) so a 60 MP photo is never fully decoded.
-- **NFR-S4** Deleting an entry, clearing entries, deleting a roster, or "Clear all photos" removes the files; an orphan sweep at load removes avatar files no entry references. **Needs an owner decision (OQ-4):** these are Halo's own copies, so permanent removal is the honest behaviour (trashing 500 avatar files would only litter the user's Trash), but it is a `removeItem`, and CLAUDE.md's only sanctioned exception today is `DriveSpeedTester`'s scratch file. Until decided, the implementation must not call `removeItem` on avatar files.
+- **NFR-S4** Deleting an entry, clearing entries, deleting a roster, or "Clear all photos" removes the files; an orphan sweep at load removes avatar files no entry references. **Owner-approved exception (2026-10-27, was OQ-4):** these are Halo's own copies, so permanent removal is the honest behaviour (trashing 500 avatar files would only litter the user's Trash). It is a `removeItem`, so it must be confined to the avatars directory (path check before every call), commented in source, and added to CLAUDE.md's "File deletion" rule beside `DriveSpeedTester`'s scratch file **at implementation time**.
 - **NFR-S5** A participant's photo is third-party personal data: the picker shows a one-line note ("Stored only on this Mac; deleted with the roster").
 
 **Performance & resources**
@@ -226,14 +226,14 @@ Manual (cannot be asserted): hero transition feel, animated playback, ring contr
 
 | # | Item | Notes / proposed default |
 |---|---|---|
-| **R1** | **Licensing of animated-emoji and caricature art.** Candidates (unverified — *recalled, must be checked against each repo's LICENSE before use*): Google Noto animated emoji (Lottie/GIF; recalled as CC BY 4.0), Microsoft Fluent Emoji (recalled as MIT, mostly static), OpenMoji (recalled as CC BY-SA 4.0 — **share-alike** could constrain how Halo redistributes), generative sets such as DiceBear (licences differ per style). | Spike S2. Cleanest outcome for characters: a **commissioned or self-drawn set** (no third-party terms). Nothing is bundled until the Credits requirement (AC-12) is satisfiable. |
+| **R1** | **Art supply** *(re-framed 2026-10-27)*. Licensing is settled by D9 (commissioned / self-drawn). The remaining risk is **schedule**: the feature's headline visuals depend on art that does not exist yet, and its **format** (APNG/GIF frame sequence, ring-safe transparent background, size) must be fixed *before* the artist starts. | Spike S2 becomes an **art brief**: format, canvas size, frame count/rate, safe area inside the ring, naming, `manifest.json` fields, and a 3-item pilot to validate the pipeline. Earlier candidate sources (Noto animated emoji, Fluent Emoji, OpenMoji, DiceBear — all licences *recalled, never verified*) are a fallback only and **must be checked against each repo's LICENSE before any use**. Nothing is bundled until AC-12 is satisfiable. |
 | R2 | Animated format (APNG/GIF via ImageIO vs Lottie). GIF is 256-colour, 1-bit alpha; APNG is better but heavier to author. | Spike S1 — render 3 candidate emoji in each, compare file size, fringing on the ring, CPU. Default: APNG. |
 | R3 | "Photo → caricature" on device. Possible only via an ML model or Apple's Image Playground (availability by OS version and Apple-Intelligence eligibility **not verified**). | Out of scope for v1. Optional spike S4; if it works it is an *Characters → From my photo* button, still local. |
 | R4 | **Wheel fill-rate with images.** Per-segment image draws inside one `Canvas` may drop below 60 fps on older Macs. | Spike S3 measures; D4 threshold is data-driven; fall-back is poster-only/low-res during spin. |
 | R5 | Photos of identifiable people are sensitive — a user may later expect export/share. | v1: none (N2/N3). If roster export is ever added it needs an explicit "include photos?" decision. |
 | OQ-1 | Default *Display mode* — *Auto* (proposed) vs *Avatar + name*? | Owner call. |
 | OQ-2 | Are *Characters* one pack or several themes (animals, professions, retro)? | Start with one pack of ~40; themes are content, not code. |
-| **OQ-4** | **`removeItem` on Halo's own avatar copies** (NFR-S4) vs `trashItem`. Proposed: allow a second sanctioned exception limited to files under `Application Support/Halo/luckydraw/avatars/`, commented in source and listed in CLAUDE.md beside the Drive Speed one. | Owner call — it touches a mandatory project rule. |
+| ~~OQ-4~~ | ~~`removeItem` on Halo's own avatar copies (NFR-S4) vs `trashItem`.~~ | **Resolved 2026-10-27: allowed.** A sanctioned exception limited to files under `Application Support/Halo/luckydraw/avatars/`, commented in source and added to CLAUDE.md beside the Drive Speed one when this is built. |
 | OQ-3 | Hub shows last winner's avatar (FR-W7) — keep? | Proposed: yes, default on. |
 
 ---
@@ -242,14 +242,14 @@ Manual (cannot be asserted): hero transition feel, animated playback, ring contr
 
 | Phase | Work | Est. | Exit |
 |---|---|---|---|
-| **P0 — Spikes** | S1 animated format · S2 licence + pack source · S3 wheel image fill-rate · (S4 caricature-from-photo, optional) | 1.5 d | Decisions D4/D6 confirmed or replaced; a pack with a clean licence identified |
+| **P0 — Spikes & art brief** | S1 animated format · S2 **art brief + 3-item pilot for the commissioned set** · S3 wheel image fill-rate · (S4 caricature-from-photo, optional) | 1.5 d | Decisions D4/D6 confirmed or replaced; art brief handed over |
 | **P1 — Model + store** | `EntryAvatar`, tolerant Codable, `AvatarStore`, cache, pack catalog, monogram, folder matcher — UI-free | 2 d | AC-1, 2, 3, 5, 6, 7, 10 green |
 | **P2 — Picker + roster UI** | `AvatarView`, picker (emoji/animated/characters/photo), roster rows, drag-drop, bulk sheets | 2 d | AC-2 on screen |
 | **P3 — Wheel** | Canvas symbols, placement, fade-with-speed, spotlight lift, threshold | 1.5 d | AC-4, AC-9 |
 | **P4 — Popup, sequence, log** | Hero transition, gold ring, animated playback, winners strip, log avatars, Reduced Motion | 1.5 d | AC-8 |
 | **P5 — Polish & docs** | Credits screen, storage settings, a11y pass, `MANUAL_TEST_PLAN.md`, F-051 spec cross-link, mobile contract | 1 d | AC-11, AC-12 |
 
-**Dependencies:** none beyond F-051 (merged). Touches `SpinnerWheelView.swift`, `DrawResultOverlay.swift`, `DrawSequenceOverlay.swift`, `DrawModels.swift`, `RosterPanelView.swift`, `RosterImport.swift`. New files use block `8225`–`8244`; add them with `scripts/add_source_files.rb` — never hand-edit `project.pbxproj`.
+**Dependencies:** F-051 (merged); **the commissioned character and animated-emoji art** (owner-supplied) — P1–P3 can proceed without it using emoji/monogram/photo, but P4's headline visuals and AC-12 cannot close until it exists. Touches `SpinnerWheelView.swift`, `DrawResultOverlay.swift`, `DrawSequenceOverlay.swift`, `DrawModels.swift`, `RosterPanelView.swift`, `RosterImport.swift`. New files use block `8225`–`8244`; add them with `scripts/add_source_files.rb` — never hand-edit `project.pbxproj`.
 
 ---
 

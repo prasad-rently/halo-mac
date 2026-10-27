@@ -144,15 +144,17 @@ Three owner requests were analysed and specified; **no development has started**
 | 2 | **F-054** Build Artifact Cleaner | Find regenerable build folders (`node_modules`, `target/`, `build/`, DerivedData …) across all projects; marker-pair + git-aware safety gates; review sheet; new Cleanup pane | [`specs/F-054-build-artifact-cleaner.md`](specs/F-054-build-artifact-cleaner.md) |
 | 3 | **F-053** Lucky Draw Avatars | Emoji / animated emoji / bundled caricatures / local photos in a ring on the wheel segments, the winner popup, multi-draw strip and log | [`specs/F-053-lucky-draw-avatars.md`](specs/F-053-lucky-draw-avatars.md) |
 
-**Decisions needed from the owner before building** (each is an open question in its spec):
+**Owner decisions — all five answered 2026-10-27** (recorded in each spec):
 
-| # | Decision | Where |
-|---|---|---|
-| 1 | **Does "delete" have to free space?** `trashItem` (the project's mandatory rule) frees nothing until the Trash is emptied. Allow a narrowly-scoped second exception — permanently remove *only the exact items just trashed* — or stay Trash-only and say so? | F-054 OQ-1 |
-| 2 | **Confirm what "exclusive builds folders" means:** all regenerable build output (assumed) or Xcode builds only? | F-054 OQ-2 |
-| 3 | **`removeItem` on Halo's own avatar copies** — a second sanctioned exception beside `DriveSpeedTester`'s scratch file? | F-053 OQ-4 |
-| 4 | **Animated-emoji / caricature art source and licence** — nothing is bundled until a spike confirms redistribution terms | F-053 R1 |
-| 5 | What should **System Caches** be once it stops duplicating User Caches? | BUG-001 OQ-1 |
+| # | Decision | Answer | Where |
+|---|---|---|---|
+| 1 | Does "delete" have to free space? | **Yes — a narrow second exception:** F-054 gets a separate, labelled action that permanently removes *only the exact items just trashed* (never Empty Trash). Default stays *Move to Trash*. | F-054 D4b |
+| 2 | What does "exclusive builds folders" mean? | **All regenerable build output**, not Xcode-only | F-054 §0 |
+| 3 | `removeItem` on Halo's own avatar copies | **Allowed**, confined to `Application Support/Halo/luckydraw/avatars/` | F-053 NFR-S4 |
+| 4 | Art source for animated emoji / caricatures | **Commissioned or self-drawn** (owner supplies ~40 characters + a few animated emoji). Until it exists F-053 ships emoji + monogram + photos | F-053 D9, R1 |
+| 5 | What System Caches contains | **Minimal fix, then measure** — drop the `~/Library/Caches` overlap, keep `/private/var/folders`, check `/Library/Caches` on a real Mac before adding it | BUG-001 OQ-1 |
+
+> The two permanent-deletion exceptions (1 and 3) are **approved but not yet in `CLAUDE.md`'s rule text or in code** — they are written into the rule when the features are built, so the mandatory `trashItem` rule is not weakened ahead of an implementation that scopes it.
 
 **Not decided here:** release assignment (v2.5 is already merged; v2.6 is a label for "after v2.5", not a frozen scope).
 

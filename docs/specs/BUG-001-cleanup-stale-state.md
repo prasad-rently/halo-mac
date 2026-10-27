@@ -1,6 +1,6 @@
 # BUG-001 — Cleanup: no rescan, and deleted items linger in other categories
 
-> **Status:** 📋 Queued — analysis and requirements only. **No fix is written yet.**
+> **Status:** 📋 Queued — analysis and requirements only; System Caches scope decided 2026-10-27. **No fix is written yet.**
 > **Raised:** 2026-10-27 · **Severity:** Medium (wrong numbers + a visible "ghost item" that errors when clicked; no data loss) · **Effort estimate:** ~2.5–3 d
 > **Blocks:** [F-054 Build Artifact Cleaner](F-054-build-artifact-cleaner.md) — that pane must sit on the corrected state model.
 > **Not a feature** (no new `F-xxx`, so the mobile-parity rule does not apply); recorded here and in `FEATURE_ROADMAP.md`'s bug queue.
@@ -106,7 +106,7 @@ Two defects and one requirement:
 
 | # | Item | Proposed |
 |---|---|---|
-| **OQ-1** | What should **System Caches** be once it stops listing `~/Library/Caches`? Keep `/private/var/folders` only, or add `/Library/Caches` (+ the per-user `C` subfolders)? Both need a readability/deletability check on a real machine (SIP, root-owned files) before claiming the category is useful. | Minimal fix now (remove the overlap); measure, then decide whether the category is worth keeping or should be merged into *Temp Files*. |
+| ~~OQ-1~~ | ~~What should **System Caches** be once it stops listing `~/Library/Caches`?~~ | **Resolved 2026-10-27: minimal fix, then measure.** Remove the `~/Library/Caches` overlap now and keep `/private/var/folders`. Before adding `/Library/Caches` (or merging the category into *Temp Files*), check on a real Mac what is readable and deletable (SIP, root-owned files) and record the result here. |
 | OQ-2 | Rescan scope: one button for everything (proposed) vs per-category rescan too. | One header button; a per-category rescan is a one-line addition if wanted. |
 | OQ-3 | Keep a visible "moved to Trash, not yet freed" total in the header, so the user sees pending space? | Proposed: yes — it directly answers "I deleted it, why is my disk still full?". |
 
