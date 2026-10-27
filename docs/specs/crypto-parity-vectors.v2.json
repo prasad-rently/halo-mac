@@ -1,0 +1,259 @@
+{
+  "algorithm" : {
+    "aad" : "halo.cloud.v1",
+    "cipher" : "AES-256-GCM",
+    "defaultIterations" : 600000,
+    "envelope" : "\"v1:\" + base64(nonce12 || ciphertext || tag16)",
+    "kdf" : "PBKDF2-HMAC-SHA256",
+    "keyBytes" : 32,
+    "legacyEnvelope" : "base64(nonce12 || ciphertext || tag16), no AAD — read-only",
+    "legacyIterations" : 200000,
+    "minimumIterations" : 100000,
+    "minimumSaltBytes" : 16,
+    "passphraseMinimumDistinct" : 6,
+    "passphraseMinimumLength" : 12,
+    "passwordEncoding" : "UTF-8",
+    "passwordNormalization" : "NFC (precomposed)"
+  },
+  "decryptVectors" : [
+    {
+      "ciphertext" : "v1:eL0L8doKiP03GLCu/76TOCoipcRQVkh1Y46HHxnmLxU1YMJF8XE1",
+      "iterations" : 600000,
+      "name" : "ascii",
+      "passphrase" : "correct horse battery staple",
+      "plaintext" : "Hello, Halo",
+      "saltB64" : "AAECAwQFBgcICQoLDA0ODw=="
+    },
+    {
+      "ciphertext" : "v1:aDUx/YwXb1iRib8ONnrK/6K5ifReWPnjUouxSSf6svWfpkxXQ64lbp0b6hZ5xjJIc+Zxja41cZA8pCdHjBfmmamnvP6u",
+      "iterations" : 600000,
+      "name" : "bank-sms",
+      "passphrase" : "p@ssw0rd!-with-length",
+      "plaintext" : "A/C *XX3833 debited by Rs 1250.00 via UPI",
+      "saltB64" : "aGFsby1zYWx0LTEyMzQhIQ=="
+    },
+    {
+      "ciphertext" : "v1:+R+RIA4R+5dhqBXjvjaKZJnv4PRZJqfew9RM79yZWpERj2JAwbYW+eNVoTgEn3e+Yluo/9IKAomS0GI8Q9zb1alYs9M2OA==",
+      "iterations" : 600000,
+      "name" : "unicode",
+      "passphrase" : "café☕ au lait ☕ crème",
+      "plaintext" : "Unicode: café ☕ 日本語 — clipboard",
+      "saltB64" : "oKGio6SlpqeoqaqrrK2urw=="
+    },
+    {
+      "ciphertext" : "v1:VGrYEkDDEXHbR4FA3QKbHlqPCQUC5orjmzZcMcn9j6xbj4Vkeg==",
+      "iterations" : 600000,
+      "name" : "nfc-decomposed",
+      "passphrase" : "café au lait ☕ crème",
+      "plaintext" : "NFC check",
+      "saltB64" : "UFFSU1RVVldYWVpbXF1eXw=="
+    }
+  ],
+  "kdfVectors" : [
+    {
+      "derivedKeyB64" : "7xdxRO7JQgy8EJPSqLNEqSvFBtDU7JwCjdGfgyTYweY=",
+      "iterations" : 600000,
+      "name" : "ascii",
+      "passphrase" : "correct horse battery staple",
+      "saltB64" : "AAECAwQFBgcICQoLDA0ODw=="
+    },
+    {
+      "derivedKeyB64" : "VVqM1o8K0lFGa6L0SCQ7VYY3fA4lGsveLt/CyGqc1HE=",
+      "iterations" : 600000,
+      "name" : "bank-sms",
+      "passphrase" : "p@ssw0rd!-with-length",
+      "saltB64" : "aGFsby1zYWx0LTEyMzQhIQ=="
+    },
+    {
+      "derivedKeyB64" : "28gerIOs7UnxHUsAiXlPyNlVJnLfyRZ8IC1ktKQ5kwQ=",
+      "iterations" : 600000,
+      "name" : "unicode",
+      "passphrase" : "café☕ au lait ☕ crème",
+      "saltB64" : "oKGio6SlpqeoqaqrrK2urw=="
+    },
+    {
+      "derivedKeyB64" : "nrepdyR28fEuY52yyRRnfuQyAJqaQdnn+g8abPq5MWM=",
+      "iterations" : 600000,
+      "name" : "nfc-decomposed",
+      "passphrase" : "café au lait ☕ crème",
+      "saltB64" : "UFFSU1RVVldYWVpbXF1eXw=="
+    },
+    {
+      "derivedKeyB64" : "Rf6p159YPFaNedmcNclcNPlgOl+9T43Tat9kU3JLecg=",
+      "iterations" : 200000,
+      "name" : "ascii/legacy-200k",
+      "passphrase" : "correct horse battery staple",
+      "saltB64" : "AAECAwQFBgcICQoLDA0ODw=="
+    },
+    {
+      "derivedKeyB64" : "eXRWgkUQv+ooPtPeFF6+2MSfu8dNbNVeKUMVWy2hdtw=",
+      "iterations" : 200000,
+      "name" : "bank-sms/legacy-200k",
+      "passphrase" : "p@ssw0rd!-with-length",
+      "saltB64" : "aGFsby1zYWx0LTEyMzQhIQ=="
+    },
+    {
+      "derivedKeyB64" : "0qaYg4+ukPOgf7giKQr5RCOxE+PPaLWtPsPulUIjP2k=",
+      "iterations" : 200000,
+      "name" : "unicode/legacy-200k",
+      "passphrase" : "café☕ au lait ☕ crème",
+      "saltB64" : "oKGio6SlpqeoqaqrrK2urw=="
+    },
+    {
+      "derivedKeyB64" : "1l5+5zCUC9rVieYYEUWVjQwSCa2l1NCeQ2ObSNAhhsM=",
+      "iterations" : 200000,
+      "name" : "nfc-decomposed/legacy-200k",
+      "passphrase" : "café au lait ☕ crème",
+      "saltB64" : "UFFSU1RVVldYWVpbXF1eXw=="
+    }
+  ],
+  "legacyDecryptVectors" : [
+    {
+      "ciphertext" : "POVBKBxgAQ7h9MeeejwA3PpK/M86QmDTiCIzvxY0dnj8zoNlfkNN",
+      "iterations" : 200000,
+      "name" : "ascii",
+      "passphrase" : "correct horse battery staple",
+      "plaintext" : "Hello, Halo",
+      "saltB64" : "AAECAwQFBgcICQoLDA0ODw=="
+    },
+    {
+      "ciphertext" : "0wxC7ek7gLxHZSFkjujNnz/2mo1N7sio+ChyVRbj9zf/1gmeAp6cy0KBGdncl6mUphPqLhbLyW6FjSVtVHidGOYMP7Lq",
+      "iterations" : 200000,
+      "name" : "bank-sms",
+      "passphrase" : "p@ssw0rd!-with-length",
+      "plaintext" : "A/C *XX3833 debited by Rs 1250.00 via UPI",
+      "saltB64" : "aGFsby1zYWx0LTEyMzQhIQ=="
+    },
+    {
+      "ciphertext" : "yaTa85k3xKjrfICE31aobyX3/WO68PMXCzNDxFdcSp6rd5b0O2DWpqGI2rJ+xU2Txt5mLmuxUKXq9vjmsa1EoyZEtHEXDw==",
+      "iterations" : 200000,
+      "name" : "unicode",
+      "passphrase" : "café☕ au lait ☕ crème",
+      "plaintext" : "Unicode: café ☕ 日本語 — clipboard",
+      "saltB64" : "oKGio6SlpqeoqaqrrK2urw=="
+    },
+    {
+      "ciphertext" : "H0Aacz1qRDf2HtybFeF9g4CkqMieU4xjmZ++dc8jkucE7lUYLQ==",
+      "iterations" : 200000,
+      "name" : "nfc-decomposed",
+      "passphrase" : "café au lait ☕ crème",
+      "plaintext" : "NFC check",
+      "saltB64" : "UFFSU1RVVldYWVpbXF1eXw=="
+    }
+  ],
+  "pairingVectors" : [
+    {
+      "iterations" : 600000,
+      "name" : "schema-2",
+      "payloadB64" : "eyJhdXRoIjp7ImVtYWlsIjoiaGFsb0BleGFtcGxlLmNvbSIsInBhc3N3b3JkIjoiZXhhbXBsZS1wYXNzd29yZC0wMTIzIn0sImNoZWNrc3VtIjoiMTMyOWVjNGYzMzJlZmVjNDM4MDA5OTJiZjI1NWVlZTdhZjNiMThkMWUwNmRhYThmNGE2ZmUzMGQyNTk3MTFjYyIsImZpcmViYXNlQ29uZmlnIjp7ImFwaUtleSI6IkFJemFTeUVYQU1QTEUtbm90LWEtcmVhbC1rZXkiLCJkYXRhYmFzZVVSTCI6Imh0dHBzOi8vaGFsby1leGFtcGxlLWRlZmF1bHQtcnRkYi5maXJlYmFzZWlvLmNvbSIsImdjbVNlbmRlcklEIjoiMTIzNDU2Nzg5MCIsImdvb2dsZUFwcElEIjoiMToxMjM0NTY3ODkwOmlvczphYmNkZWYiLCJwcm9qZWN0SUQiOiJoYWxvLWV4YW1wbGUifSwiaXRlcmF0aW9ucyI6NjAwMDAwLCJzYWx0QmFzZTY0IjoiRUJFU0V4UVZGaGNZR1JvYkhCMGVIdz09Iiwic2NoZW1hIjoyfQ==",
+      "saltB64" : "EBESExQVFhcYGRobHB0eHw==",
+      "schema" : 2,
+      "valid" : true
+    },
+    {
+      "iterations" : 200000,
+      "name" : "schema-1-legacy",
+      "payloadB64" : "eyJhdXRoIjp7ImVtYWlsIjoiaGFsb0BleGFtcGxlLmNvbSIsInBhc3N3b3JkIjoiZXhhbXBsZS1wYXNzd29yZC0wMTIzIn0sImNoZWNrc3VtIjoiYWU0OGVhYWFhNzE1NTM1MzE0Y2FhZDVmYzUwODk2NzE2MTAxMjkyZGFlNmVlMTg4YmMwOWIyYjU5MWM2MWU0ZSIsImZpcmViYXNlQ29uZmlnIjp7ImFwaUtleSI6IkFJemFTeUVYQU1QTEUtbm90LWEtcmVhbC1rZXkiLCJkYXRhYmFzZVVSTCI6Imh0dHBzOi8vaGFsby1leGFtcGxlLWRlZmF1bHQtcnRkYi5maXJlYmFzZWlvLmNvbSIsImdjbVNlbmRlcklEIjoiMTIzNDU2Nzg5MCIsImdvb2dsZUFwcElEIjoiMToxMjM0NTY3ODkwOmlvczphYmNkZWYiLCJwcm9qZWN0SUQiOiJoYWxvLWV4YW1wbGUifSwic2FsdEJhc2U2NCI6IkVCRVNFeFFWRmhjWUdSb2JIQjBlSHc9PSIsInNjaGVtYSI6MX0=",
+      "saltB64" : "EBESExQVFhcYGRobHB0eHw==",
+      "schema" : 1,
+      "valid" : true
+    },
+    {
+      "iterations" : 100000,
+      "name" : "schema-2-iterations-downgraded",
+      "payloadB64" : "eyJhdXRoIjp7ImVtYWlsIjoiaGFsb0BleGFtcGxlLmNvbSIsInBhc3N3b3JkIjoiZXhhbXBsZS1wYXNzd29yZC0wMTIzIn0sImNoZWNrc3VtIjoiMTMyOWVjNGYzMzJlZmVjNDM4MDA5OTJiZjI1NWVlZTdhZjNiMThkMWUwNmRhYThmNGE2ZmUzMGQyNTk3MTFjYyIsImZpcmViYXNlQ29uZmlnIjp7ImFwaUtleSI6IkFJemFTeUVYQU1QTEUtbm90LWEtcmVhbC1rZXkiLCJkYXRhYmFzZVVSTCI6Imh0dHBzOi8vaGFsby1leGFtcGxlLWRlZmF1bHQtcnRkYi5maXJlYmFzZWlvLmNvbSIsImdjbVNlbmRlcklEIjoiMTIzNDU2Nzg5MCIsImdvb2dsZUFwcElEIjoiMToxMjM0NTY3ODkwOmlvczphYmNkZWYiLCJwcm9qZWN0SUQiOiJoYWxvLWV4YW1wbGUifSwiaXRlcmF0aW9ucyI6MTAwMDAwLCJzYWx0QmFzZTY0IjoiRUJFU0V4UVZGaGNZR1JvYkhCMGVIdz09Iiwic2NoZW1hIjoyfQ==",
+      "saltB64" : "EBESExQVFhcYGRobHB0eHw==",
+      "schema" : 2,
+      "valid" : false
+    }
+  ],
+  "passphraseVectors" : [
+    {
+      "passphrase" : "correct horse battery staple",
+      "verdict" : "ok"
+    },
+    {
+      "passphrase" : "abcdefghijkl",
+      "verdict" : "ok"
+    },
+    {
+      "passphrase" : "abcdefghijk",
+      "verdict" : "tooShort:11"
+    },
+    {
+      "passphrase" : "short",
+      "verdict" : "tooShort:5"
+    },
+    {
+      "passphrase" : "",
+      "verdict" : "tooShort:0"
+    },
+    {
+      "passphrase" : "aaaaaaaaaaaaaaaa",
+      "verdict" : "tooRepetitive"
+    },
+    {
+      "passphrase" : "abcabcabcabc",
+      "verdict" : "tooRepetitive"
+    },
+    {
+      "passphrase" : "abcdeabcdeab",
+      "verdict" : "tooRepetitive"
+    },
+    {
+      "passphrase" : "abcdefabcdef",
+      "verdict" : "ok"
+    },
+    {
+      "passphrase" : "éééééé",
+      "verdict" : "tooShort:6"
+    },
+    {
+      "passphrase" : "café☕café☕café☕",
+      "verdict" : "tooRepetitive"
+    }
+  ],
+  "rejectVectors" : [
+    {
+      "ciphertext" : "E8YIySWY7Zxj1Xb9rfDSNRWNtOGBBOm9MEVBHs3o9TRKckLIk/yI",
+      "expect" : "decryptionFailed",
+      "iterations" : 600000,
+      "name" : "ascii/prefix-stripped",
+      "passphrase" : "correct horse battery staple",
+      "saltB64" : "AAECAwQFBgcICQoLDA0ODw=="
+    },
+    {
+      "ciphertext" : "1ql+lqf9IdDezHo5mDHhtvTiYE01MEWLohS1u9//YPXBBtaRnrtoc4Z0clFjD+iWR8HkreA8P7w2+nVr+MHhFy+ucFdb",
+      "expect" : "decryptionFailed",
+      "iterations" : 600000,
+      "name" : "bank-sms/prefix-stripped",
+      "passphrase" : "p@ssw0rd!-with-length",
+      "saltB64" : "aGFsby1zYWx0LTEyMzQhIQ=="
+    },
+    {
+      "ciphertext" : "3l/2uoSZVNG5NR3K/21c2qlD3dQQ39k7ZHpXnngeuXnuGk/80/lrnd0nnDcqcMXClqiqbnuVc2quyJSIZA1VPoBHDm2/6Q==",
+      "expect" : "decryptionFailed",
+      "iterations" : 600000,
+      "name" : "unicode/prefix-stripped",
+      "passphrase" : "café☕ au lait ☕ crème",
+      "saltB64" : "oKGio6SlpqeoqaqrrK2urw=="
+    },
+    {
+      "ciphertext" : "bRxguyMPIKf+15DdpNMrpyL3a4ye4K6+TS81Frgq0hqqb3WxLA==",
+      "expect" : "decryptionFailed",
+      "iterations" : 600000,
+      "name" : "nfc-decomposed/prefix-stripped",
+      "passphrase" : "café au lait ☕ crème",
+      "saltB64" : "UFFSU1RVVldYWVpbXF1eXw=="
+    },
+    {
+      "ciphertext" : "v1:wkYBJbO/YL9mlokGpn7+D62y3o6n7n7hJncndtIHF3ijDLmfUQGO",
+      "expect" : "decryptionFailed",
+      "iterations" : 600000,
+      "name" : "ascii/v0-body-with-v1-prefix",
+      "passphrase" : "correct horse battery staple",
+      "saltB64" : "AAECAwQFBgcICQoLDA0ODw=="
+    }
+  ],
+  "version" : 2
+}

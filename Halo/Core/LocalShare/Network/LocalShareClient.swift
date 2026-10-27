@@ -11,7 +11,17 @@ final class LocalShareClient: NSObject, @unchecked Sendable {
     }()
 
     private var progressHandlers: [Int: (Int64, Int64) -> Void] = [:]
+    /// "host:port" -> the certificate fingerprint an `https` peer announced. The session-level
+    /// trust callback carries only the host and port, so each request to an https device registers
+    /// its pin here first; an https host with no pin is refused (see `TLSManager.shouldTrustServer`).
+    private var pins: [String: String] = [:]
     private let lock = NSLock()
+
+    /// Remember what certificate to demand from `device`. No-op for plain-http peers.
+    func pin(_ device: ShareDevice) {
+        guard device.protocol_ == .https else { return }
+        lock.lock(); pins["\(device.ipAddress):\(device.port)"] = device.fingerprint; lock.unlock()
+    }
 
     // MARK: - Prepare Upload
 
@@ -31,6 +41,7 @@ final class LocalShareClient: NSObject, @unchecked Sendable {
         }
 
         let requestBody = PrepareUploadRequest(info: info, files: fileDTOs)
+        pin(device)
         let url = buildURL(device: device, path: "/api/localsend/v2/prepare-upload")
 
         var request = URLRequest(url: url)
@@ -58,6 +69,7 @@ final class LocalShareClient: NSObject, @unchecked Sendable {
     func uploadFile(_ file: ShareFile, sessionId: String, to device: ShareDevice, progress: @escaping (Int64, Int64) -> Void) async throws {
         guard let sourceURL = file.sourceURL else { return }
         guard let token = file.token else { return }
+        pin(device)
 
         var urlComponents = URLComponents()
         urlComponents.scheme = device.protocol_.rawValue
@@ -134,6 +146,7 @@ final class LocalShareClient: NSObject, @unchecked Sendable {
     // MARK: - Cancel Session
 
     func cancelSession(_ sessionId: String, on device: ShareDevice) async {
+        pin(device)
         var urlComponents = URLComponents()
         urlComponents.scheme = device.protocol_.rawValue
         urlComponents.host = device.ipAddress
@@ -177,6 +190,7 @@ final class LocalShareClient: NSObject, @unchecked Sendable {
 
     func register(with device: ShareDevice) async {
         let info = TLSManager.shared.deviceInfoDTO()
+        pin(device)
         let url = buildURL(device: device, path: "/api/localsend/v2/register")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -208,8 +222,11 @@ extension LocalShareClient: URLSessionTaskDelegate {
     }
 
     func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-        // Trust all self-signed certs for local network transfers
-        let (disposition, credential) = TLSManager.shared.shouldTrustServer(challenge: challenge)
+        // Self-signed certificates are normal on a LAN, but "self-signed" is not "anyone's": the
+        // presented certificate must hash to the fingerprint the peer announced.
+        let space = challenge.protectionSpace
+        lock.lock(); let expected = pins["\(space.host):\(space.port)"]; lock.unlock()
+        let (disposition, credential) = TLSManager.shared.shouldTrustServer(challenge: challenge, expectedFingerprint: expected)
         completionHandler(disposition, credential)
     }
 }

@@ -14,7 +14,10 @@
     <key>com.apple.security.files.downloads.read-write</key>
     <true/>
 
-    <!-- Network client — for signature DB updates -->
+    <!-- Network client — signature DB updates, and the cloud features' REST calls to the
+         user's own Firebase (F-044). Those use Identity Toolkit + RTDB REST directly, so
+         no keychain-access-groups entitlement is needed (it is restricted: it needs a
+         provisioning profile, and a development-signed build carrying it is killed at launch). -->
     <key>com.apple.security.network.client</key>
     <true/>
 
@@ -33,7 +36,7 @@
 
     <key>com.apple.security.application-groups</key>
     <array>
-        <string>group.com.halo.mac</string>
+        <string>R7S39UR27F.group.com.halo.mac</string>
     </array>
 
     <!-- F-025 Similar Photos: the Photos Library entitlement is deliberately

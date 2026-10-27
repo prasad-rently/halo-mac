@@ -42,8 +42,6 @@
 		000000000000000000001083 /* SpeedTestService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001082 /* SpeedTestService.swift */; };
 		000000000000000000001085 /* DiskHealthMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001084 /* DiskHealthMonitor.swift */; };
 		000000000000000000001087 /* ProcessMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001086 /* ProcessMonitor.swift */; };
-		000000000000000000008044 /* SMARTDiskMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008043 /* SMARTDiskMonitor.swift */; };
-		000000000000000000008046 /* DriveHealthSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008045 /* DriveHealthSection.swift */; };
 		000000000000000000001089 /* CPUCoresSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001088 /* CPUCoresSection.swift */; };
 		000000000000000000001091 /* SensorsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001090 /* SensorsSection.swift */; };
 		000000000000000000001093 /* BatteryDetailSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000001092 /* BatteryDetailSection.swift */; };
@@ -71,28 +69,6 @@
 		000000000000000000004008 /* LoginItemScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004007 /* LoginItemScanner.swift */; };
 		000000000000000000004010 /* AppScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004009 /* AppScanner.swift */; };
 		000000000000000000004012 /* AlertLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004011 /* AlertLog.swift */; };
-		000000000000000000008172 /* AsyncTimeout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008171 /* AsyncTimeout.swift */; };
-		000000000000000000008164 /* ShellReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008163 /* ShellReader.swift */; };
-		000000000000000000008182 /* DrawModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008181 /* DrawModels.swift */; };
-		000000000000000000008184 /* DrawEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008183 /* DrawEngine.swift */; };
-		000000000000000000008220 /* LuckyDrawSound.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008219 /* LuckyDrawSound.swift */; };
-		000000000000000000008218 /* RosterImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008217 /* RosterImport.swift */; };
-		000000000000000000008186 /* SpinnerAnimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008185 /* SpinnerAnimator.swift */; };
-		000000000000000000008188 /* LuckyDrawStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008187 /* LuckyDrawStore.swift */; };
-		000000000000000000008190 /* LuckyDrawViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008189 /* LuckyDrawViewModel.swift */; };
-		000000000000000000008192 /* SpinnerWheelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008191 /* SpinnerWheelView.swift */; };
-		000000000000000000008194 /* RosterPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008193 /* RosterPanelView.swift */; };
-		000000000000000000008196 /* DrawResultOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008195 /* DrawResultOverlay.swift */; };
-		000000000000000000008198 /* LuckyDrawView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008197 /* LuckyDrawView.swift */; };
-		000000000000000000008222 /* DrawSequenceOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008221 /* DrawSequenceOverlay.swift */; };
-		000000000000000000008202 /* LetheModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008201 /* LetheModels.swift */; };
-		000000000000000000008204 /* LetheCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008203 /* LetheCrypto.swift */; };
-		000000000000000000008206 /* RoomKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008205 /* RoomKeyStore.swift */; };
-		000000000000000000008208 /* LetheInviteLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008207 /* LetheInviteLink.swift */; };
-		000000000000000000008210 /* LetheRelayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008209 /* LetheRelayClient.swift */; };
-		000000000000000000008212 /* LetheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008211 /* LetheManager.swift */; };
-		000000000000000000008214 /* LetheView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008213 /* LetheView.swift */; };
-		000000000000000000008216 /* LetheSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008215 /* LetheSheets.swift */; };
 		000000000000000000004014 /* ReportGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000004013 /* ReportGenerator.swift */; };
 		000000000000000000005001 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000005002 /* Sentry */; };
 		000000000000000000006002 /* ActionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000006001 /* ActionModels.swift */; };
@@ -131,31 +107,56 @@
 		000000000000000000008026 /* SnippetEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008025 /* SnippetEditorView.swift */; };
 		000000000000000000008028 /* SnippetListSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008027 /* SnippetListSection.swift */; };
 		000000000000000000008030 /* ActionShareManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008029 /* ActionShareManager.swift */; };
-		000000000000000000008094 /* NetworkTrafficMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008093 /* NetworkTrafficMonitor.swift */; };
-		000000000000000000008096 /* NetworkTrafficSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008095 /* NetworkTrafficSection.swift */; };
-		000000000000000000008098 /* tracker-domains.json in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008097 /* tracker-domains.json */; };
+		000000000000000000008032 /* SecurityPostureScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008031 /* SecurityPostureScanner.swift */; };
+		000000000000000000008044 /* SMARTDiskMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008043 /* SMARTDiskMonitor.swift */; };
+		000000000000000000008046 /* DriveHealthSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008045 /* DriveHealthSection.swift */; };
+		000000000000000000008054 /* TimeMachineMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008053 /* TimeMachineMonitor.swift */; };
+		000000000000000000008056 /* BackupHealthCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008055 /* BackupHealthCard.swift */; };
 		000000000000000000008064 /* BrowserCleanerScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008063 /* BrowserCleanerScanner.swift */; };
 		000000000000000000008066 /* BrowserCleanerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008065 /* BrowserCleanerView.swift */; };
-		000000000000000000008124 /* PerceptualDuplicateDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008123 /* PerceptualDuplicateDetector.swift */; };
-		000000000000000000008126 /* SimilarPhotosView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008125 /* SimilarPhotosView.swift */; };
-		000000000000000000008144 /* ICloudDriveScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008143 /* ICloudDriveScanner.swift */; };
-		000000000000000000008146 /* ICloudDriveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008145 /* ICloudDriveView.swift */; };
-		000000000000000000008154 /* PermissionAuditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008153 /* PermissionAuditor.swift */; };
-		000000000000000000008084 /* PrivacyExposureScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008083 /* PrivacyExposureScanner.swift */; };
-		000000000000000000008086 /* PrivacyPatternDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008085 /* PrivacyPatternDatabase.swift */; };
-		000000000000000000008088 /* privacy-patterns.json in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008087 /* privacy-patterns.json */; };
-		000000000000000000008032 /* SecurityPostureScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008031 /* SecurityPostureScanner.swift */; };
-		000000000000000000008134 /* FocusSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008133 /* FocusSessionManager.swift */; };
-		000000000000000000008136 /* FocusSessionOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008135 /* FocusSessionOverlayView.swift */; };
-		000000000000000000008104 /* AppUsageTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008103 /* AppUsageTracker.swift */; };
-		000000000000000000008106 /* AppUsageInsightsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008105 /* AppUsageInsightsSection.swift */; };
 		000000000000000000008074 /* MetricsHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008073 /* MetricsHistory.swift */; };
 		000000000000000000008076 /* WeeklyDigestGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008075 /* WeeklyDigestGenerator.swift */; };
 		000000000000000000008078 /* HealthTrendCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008077 /* HealthTrendCard.swift */; };
+		000000000000000000008084 /* PrivacyExposureScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008083 /* PrivacyExposureScanner.swift */; };
+		000000000000000000008086 /* PrivacyPatternDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008085 /* PrivacyPatternDatabase.swift */; };
+		000000000000000000008088 /* privacy-patterns.json in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008087 /* privacy-patterns.json */; };
+		000000000000000000008094 /* NetworkTrafficMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008093 /* NetworkTrafficMonitor.swift */; };
+		000000000000000000008096 /* NetworkTrafficSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008095 /* NetworkTrafficSection.swift */; };
+		000000000000000000008098 /* tracker-domains.json in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008097 /* tracker-domains.json */; };
+		000000000000000000008104 /* AppUsageTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008103 /* AppUsageTracker.swift */; };
+		000000000000000000008106 /* AppUsageInsightsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008105 /* AppUsageInsightsSection.swift */; };
 		000000000000000000008114 /* MemoryTrendTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008113 /* MemoryTrendTracker.swift */; };
 		000000000000000000008116 /* MemoryTrendsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008115 /* MemoryTrendsSection.swift */; };
-		000000000000000000008054 /* TimeMachineMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008053 /* TimeMachineMonitor.swift */; };
-		000000000000000000008056 /* BackupHealthCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008055 /* BackupHealthCard.swift */; };
+		000000000000000000008124 /* PerceptualDuplicateDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008123 /* PerceptualDuplicateDetector.swift */; };
+		000000000000000000008126 /* SimilarPhotosView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008125 /* SimilarPhotosView.swift */; };
+		000000000000000000008134 /* FocusSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008133 /* FocusSessionManager.swift */; };
+		000000000000000000008136 /* FocusSessionOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008135 /* FocusSessionOverlayView.swift */; };
+		000000000000000000008144 /* ICloudDriveScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008143 /* ICloudDriveScanner.swift */; };
+		000000000000000000008146 /* ICloudDriveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008145 /* ICloudDriveView.swift */; };
+		000000000000000000008154 /* PermissionAuditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008153 /* PermissionAuditor.swift */; };
+		000000000000000000008164 /* ShellReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008163 /* ShellReader.swift */; };
+		000000000000000000008172 /* AsyncTimeout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008171 /* AsyncTimeout.swift */; };
+		000000000000000000008182 /* DrawModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008181 /* DrawModels.swift */; };
+		000000000000000000008184 /* DrawEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008183 /* DrawEngine.swift */; };
+		000000000000000000008186 /* SpinnerAnimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008185 /* SpinnerAnimator.swift */; };
+		000000000000000000008188 /* LuckyDrawStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008187 /* LuckyDrawStore.swift */; };
+		000000000000000000008190 /* LuckyDrawViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008189 /* LuckyDrawViewModel.swift */; };
+		000000000000000000008192 /* SpinnerWheelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008191 /* SpinnerWheelView.swift */; };
+		000000000000000000008194 /* RosterPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008193 /* RosterPanelView.swift */; };
+		000000000000000000008196 /* DrawResultOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008195 /* DrawResultOverlay.swift */; };
+		000000000000000000008198 /* LuckyDrawView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008197 /* LuckyDrawView.swift */; };
+		000000000000000000008200 /* LuckyDrawTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008199 /* LuckyDrawTests.swift */; };
+		000000000000000000008202 /* LetheModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008201 /* LetheModels.swift */; };
+		000000000000000000008204 /* LetheCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008203 /* LetheCrypto.swift */; };
+		000000000000000000008206 /* RoomKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008205 /* RoomKeyStore.swift */; };
+		000000000000000000008208 /* LetheInviteLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008207 /* LetheInviteLink.swift */; };
+		000000000000000000008210 /* LetheRelayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008209 /* LetheRelayClient.swift */; };
+		000000000000000000008212 /* LetheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008211 /* LetheManager.swift */; };
+		000000000000000000008214 /* LetheView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008213 /* LetheView.swift */; };
+		000000000000000000008216 /* LetheSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008215 /* LetheSheets.swift */; };
+		000000000000000000008218 /* RosterImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008217 /* RosterImport.swift */; };
+		000000000000000000008220 /* LuckyDrawSound.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008219 /* LuckyDrawSound.swift */; };
+		000000000000000000008222 /* DrawSequenceOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008221 /* DrawSequenceOverlay.swift */; };
 		000000000000000000009002 /* GetHealthScoreIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009001 /* GetHealthScoreIntent.swift */; };
 		000000000000000000009004 /* GetCPUUsageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009003 /* GetCPUUsageIntent.swift */; };
 		000000000000000000009006 /* GetBatteryHealthIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009005 /* GetBatteryHealthIntent.swift */; };
@@ -165,47 +166,78 @@
 		000000000000000000009014 /* GetClipboardHistoryIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009013 /* GetClipboardHistoryIntent.swift */; };
 		000000000000000000009016 /* ExportReportIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009015 /* ExportReportIntent.swift */; };
 		000000000000000000009018 /* HaloShortcutsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009017 /* HaloShortcutsProvider.swift */; };
+		00F245126B433EB57A6DBEDB /* CloudSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B94BA772014635FAA0E43E3 /* CloudSetupView.swift */; };
+		0694F5C8D69B4212BCBD5B07 /* TransactionParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B9818391AC23A293096CB28 /* TransactionParser.swift */; };
+		0CBA4BAFF23A6F3013A747F9 /* HaloTestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04C24FA6FA6BE8B3F119901F /* HaloTestFixtures.swift */; };
 		0D95339BD7D85794863633C8 /* HaloUITestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */; };
+		0FD40DC13D3BACC88E9F5526 /* SmartScanUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 544F38735C12837D57FD1DA7 /* SmartScanUITests.swift */; };
+		17FE433E5E93CEC8AAC8CD53 /* AppGroupContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B538907434F4863E07BD21FE /* AppGroupContractTests.swift */; };
 		1A276975BC00655241248D7B /* DriveSpeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C310900DF7BB88C2E7AFC1B /* DriveSpeedView.swift */; };
 		1C35066F666096D6ACA28957 /* OpenAIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78C88E9A3466E70C453D9B42 /* OpenAIProvider.swift */; };
+		211137AACE082EA316D20732 /* AIAssistantUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CDCAD725F3EDB1AA147464F /* AIAssistantUITests.swift */; };
+		2F6C005B123855570946EB6B /* ExpenditureModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5842B4E5994A0687DC32159E /* ExpenditureModels.swift */; };
+		2FA6FD6DDC013538B6817C6A /* SMSModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBEDE3049FF72B28000BC2DE /* SMSModels.swift */; };
 		318D18283567FA7F9C3FCD89 /* DriveSpeedTesterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629A9D17BDFF863DCB0206F2 /* DriveSpeedTesterTests.swift */; };
-		000000000000000000008200 /* LuckyDrawTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008199 /* LuckyDrawTests.swift */; };
+		3252209F7D11F82EA91BC467 /* RAGModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9453EDEC8C95703835479A60 /* RAGModels.swift */; };
 		392C64DDBD96198078804CA3 /* AIToolExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC90BEA4B73BCF5211738E1 /* AIToolExecutor.swift */; };
 		3A50F36FA9B03FBD00BA4A57 /* GeminiProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B3A7C9D128380339D5BBD79 /* GeminiProvider.swift */; };
+		3E2B00D4AFFC4E4F14368B69 /* PortsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA43DB5704F0BA89A52E04E3 /* PortsUITests.swift */; };
 		428DD9830BBDEBECB1200590 /* SmokeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74D974CC4B2FB109632BF14A /* SmokeUITests.swift */; };
+		46B5441596DEA5CFB12C4729 /* DashboardUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A64A6695EDCF890E4944D1A /* DashboardUITests.swift */; };
+		48D9F268088D85186495AD71 /* AlertsReportUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 256C0A5343A473D0D89FAB57 /* AlertsReportUITests.swift */; };
+		51438AC7C61E57B584FF1A48 /* SMSConsoleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECFF6EE3F66B556B438004F0 /* SMSConsoleView.swift */; };
+		51A984C0AF7FE205602EB397 /* ExpenditureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6915A2D32038A9761B33CFEA /* ExpenditureStore.swift */; };
+		52A63863961FB03CE2564588 /* ClipboardSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F328726F5D927ECE2A09867E /* ClipboardSyncService.swift */; };
 		5A7C4F83C5BA326CB63F0C5A /* AIKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4A92E8D0819BCF034A05DF2 /* AIKeyStore.swift */; };
+		66B4DA7D72433AB2318CE2CD /* ActionsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F44C9D0695A26A2333D149 /* ActionsUITests.swift */; };
+		6FA8A083A8162FB802A2617B /* Embedder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E313EE34C22081D16EE8369 /* Embedder.swift */; };
+		70835222F4CFF86A03ECAF0F /* RAGTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDBE8C12FB7CC0AD645C2295 /* RAGTests.swift */; };
 		728D4049D66F293C501E1419 /* AgentRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0878FD8BEBE06A3351E53E45 /* AgentRunner.swift */; };
+		7700C9FFC29B8E68D18D7EDF /* Chunker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 094367808CAAFC6DFD3D82F8 /* Chunker.swift */; };
+		7A1FB97CB2F8F78F2BDCBEAA /* RAGContextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED7DEBF795FF5325DE31F15D /* RAGContextView.swift */; };
+		7DABA96A91478519A8D468E0 /* ClipboardSyncSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11E954BECEE4F8045D9D0422 /* ClipboardSyncSettingsView.swift */; };
 		7FA28EC1DD42807C6EFD8148 /* SidebarReorderUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED172401B83B65197881BFC /* SidebarReorderUITests.swift */; };
 		8A4DFF3A40CA9ADDBF8405AE /* HaloTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C5BDF389221BADF1F31152C /* HaloTests.swift */; };
 		8A64A32F27E6245BD6EAEB93 /* CleanupUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8908A278C13A1F3B9E21BFE9 /* CleanupUITests.swift */; };
-		0CBA4BAFF23A6F3013A747F9 /* HaloTestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04C24FA6FA6BE8B3F119901F /* HaloTestFixtures.swift */; };
-		981EFFCB9E6F049507FD211A /* HaloUITestCase+Confirmation.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD490E2DBBC937F29595E8B2 /* HaloUITestCase+Confirmation.swift */; };
-		46B5441596DEA5CFB12C4729 /* DashboardUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A64A6695EDCF890E4944D1A /* DashboardUITests.swift */; };
-		ECA9A6AD93A5CFD402DE392B /* ProtectionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CEA7F5090B5F253E0E23587 /* ProtectionUITests.swift */; };
-		DA81E23B26EDEEB31AA3CBE8 /* PerformanceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB8CF496ED5F2B47F5909F7 /* PerformanceUITests.swift */; };
-		A99CE881593D83C11462AD71 /* ApplicationsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7048D8E34CBF35D4C92C051A /* ApplicationsUITests.swift */; };
-		B235974CEB652C09272B4499 /* FilesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB75AC7A8DBC58FFF8D8070B /* FilesUITests.swift */; };
-		91CF4EEDA9256C217C6F0CC6 /* ClipboardSnippetsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0873B3D75E60E12E6EF40F8A /* ClipboardSnippetsUITests.swift */; };
-		66B4DA7D72433AB2318CE2CD /* ActionsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F44C9D0695A26A2333D149 /* ActionsUITests.swift */; };
-		3E2B00D4AFFC4E4F14368B69 /* PortsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA43DB5704F0BA89A52E04E3 /* PortsUITests.swift */; };
-		DC0A5C9506A4B026CBD8E1B1 /* MenuBarUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 945DE4D093874E6954B85774 /* MenuBarUITests.swift */; };
-		0FD40DC13D3BACC88E9F5526 /* SmartScanUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 544F38735C12837D57FD1DA7 /* SmartScanUITests.swift */; };
-		E1840428A8042147E382FE52 /* CodeBeautifierUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 447CC440994885DF5CCA7A6A /* CodeBeautifierUITests.swift */; };
-		211137AACE082EA316D20732 /* AIAssistantUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CDCAD725F3EDB1AA147464F /* AIAssistantUITests.swift */; };
-		48D9F268088D85186495AD71 /* AlertsReportUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 256C0A5343A473D0D89FAB57 /* AlertsReportUITests.swift */; };
+		8EFF809BF270FF2C7163BADD /* SMSSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06D67EEB887057C98492942D /* SMSSyncClient.swift */; };
 		90D2886A43D44B6BA1D45C98 /* WeeklyDigestUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFC9913365F4432A9F96CD69 /* WeeklyDigestUITests.swift */; };
+		91CF4EEDA9256C217C6F0CC6 /* ClipboardSnippetsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0873B3D75E60E12E6EF40F8A /* ClipboardSnippetsUITests.swift */; };
+		92456FF8B0668EAB6E44FD84 /* GoogleOAuthPKCE.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C88335DCB2676B7AB5873FF /* GoogleOAuthPKCE.swift */; };
 		97FC4C5E35CB7030A2F01C9C /* HaloSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */; };
+		981EFFCB9E6F049507FD211A /* HaloUITestCase+Confirmation.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD490E2DBBC937F29595E8B2 /* HaloUITestCase+Confirmation.swift */; };
+		9A817E271BE3B7A75B810435 /* TLSPinningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B40E2366324FB4033E3DC65 /* TLSPinningTests.swift */; };
 		A159238AFAAA0D1EF722C664 /* ToolRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB7849370C86E175D74B077 /* ToolRegistry.swift */; };
 		A3253DC631055540204F574D /* AnthropicProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF513D5DDD7399B797BE21F2 /* AnthropicProvider.swift */; };
+		A8DDF44DE9A7DFB0EDE3CC08 /* SMSConsoleViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FA751F8E4056851F9D6502F /* SMSConsoleViewModel.swift */; };
+		A99CE881593D83C11462AD71 /* ApplicationsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7048D8E34CBF35D4C92C051A /* ApplicationsUITests.swift */; };
 		AE6FACECB50C6D438440D382 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
 		AE9EC9A5F91D3B847ACC8455 /* AIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF3FA79DA36A45E06CF7D667 /* AIModels.swift */; };
+		B077D7999DC07EC00A7DC597 /* RAGVectorStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5261AF493C8F832B7B7242B /* RAGVectorStore.swift */; };
+		B235974CEB652C09272B4499 /* FilesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB75AC7A8DBC58FFF8D8070B /* FilesUITests.swift */; };
+		B359A9774FABDB8C0EEE7C20 /* CloudRESTClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CF513D852033ACD07DD2CD0 /* CloudRESTClientTests.swift */; };
+		B6E3C305908B409F99263327 /* CloudFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88C159A5C1348117FA9F7CA8 /* CloudFoundationTests.swift */; };
+		B8A113E56E32C2E1E8AB07B8 /* ExpenditureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F450540DB55422C3FAAE03A /* ExpenditureView.swift */; };
 		BC6CC8DD60AB3F804E646D2B /* AIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D2C02D89C828E5968F14081 /* AIProvider.swift */; };
+		BD357D07AA2AF45C095CEF86 /* DocumentParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E879866CBEB7335399FCD4D /* DocumentParser.swift */; };
 		C5FB28DC66873BB366B72244 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76EB7D00744BA3399A508E64 /* ConversationStore.swift */; };
+		C7FCC24A08F234940C32D22C /* CloudSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C4927677822093E95006BE /* CloudSettingsPane.swift */; };
+		CB68399B0AA4C27AB85AA8C2 /* FirebaseRTDBClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95CB5E046AFEAF8DF5C7502C /* FirebaseRTDBClient.swift */; };
+		CBD199B637DDEE091BBEACAC /* CloudModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E654E24D942547F5E7C88B57 /* CloudModels.swift */; };
+		CD482393B681AFF599DB1BBB /* RAGService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 376EDC03F26BA1DFBCFD648B /* RAGService.swift */; };
 		D2BA4D7F84FA257B4490BEDF /* AIQuickAskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEF40F332D70A2AE5393A74C /* AIQuickAskView.swift */; };
 		D52607DADA626DF2FA479956 /* HelperClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00C37BFCA463AB410245B802 /* HelperClientTests.swift */; };
 		D6C27E0D2D06F494CFF23FBF /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
+		D849AC493D18FC2554225120 /* ExpenditureViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99F06F1B0C745181E045DD29 /* ExpenditureViewModel.swift */; };
+		DA81E23B26EDEEB31AA3CBE8 /* PerformanceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB8CF496ED5F2B47F5909F7 /* PerformanceUITests.swift */; };
+		DAD955EB87553E3597A06791 /* CloudConfigStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA43D8737B3D8C7250909178 /* CloudConfigStore.swift */; };
+		DAE8C8E0B8E4571846256A4C /* TransactionPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC277F045F73084A793F8C0D /* TransactionPipeline.swift */; };
+		DC0A5C9506A4B026CBD8E1B1 /* MenuBarUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 945DE4D093874E6954B85774 /* MenuBarUITests.swift */; };
+		E1840428A8042147E382FE52 /* CodeBeautifierUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 447CC440994885DF5CCA7A6A /* CodeBeautifierUITests.swift */; };
+		E1F0E0E5CDDD9ECDF6C8DC04 /* CryptoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC9B040050FDF481F5333FFE /* CryptoService.swift */; };
+		E687C8010A479D0624479BC5 /* ClipboardSyncModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0956087079851EA3516A8435 /* ClipboardSyncModels.swift */; };
 		E74653429899D0336A95DF5F /* AIAssistantViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32396161554FB75B93A0B169 /* AIAssistantViewModel.swift */; };
 		EABEEEF5BBF1D9D3F61FB453 /* DriveSpeedTester.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4555BA206584E6C688FD51F1 /* DriveSpeedTester.swift */; };
+		ECA9A6AD93A5CFD402DE392B /* ProtectionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CEA7F5090B5F253E0E23587 /* ProtectionUITests.swift */; };
 		ECC49D0FB93E1F7EA5B51EBD /* AIAssistantTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EA41949D8E2D368E6AFF7F6 /* AIAssistantTests.swift */; };
 		F252AFEDEE35CF5C2C183E2C /* AIAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C410A9DA24CA458075531BA7 /* AIAssistantView.swift */; };
 /* End PBXBuildFile section */
@@ -266,29 +298,6 @@
 		};
 /* End PBXCopyFilesBuildPhase section */
 
-/* Begin PBXShellScriptBuildPhase section */
-		000000000000000000003029 /* Embed HaloHelper.xpc (workaround) */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"$(CONFIGURATION_BUILD_DIR)/HaloHelper.xpc",
-			);
-			name = "Embed HaloHelper.xpc (workaround)";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/XPCServices/HaloHelper.xpc",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "set -e\nXPC_SRC=\"${CONFIGURATION_BUILD_DIR}/HaloHelper.xpc\"\nXPC_DST_DIR=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/XPCServices\"\n# The \"Embed XPC Services\" Copy Files phase (dstSubfolderSpec 16) is unreliable\n# under the current build system and can silently no-op, leaving HaloHelper.xpc\n# out of the app bundle entirely (NSXPCConnection then never finds the service).\n# This script guarantees it lands in Contents/XPCServices regardless.\nif [ -d \"$XPC_SRC\" ]; then\n  mkdir -p \"$XPC_DST_DIR\"\n  rm -rf \"$XPC_DST_DIR/HaloHelper.xpc\"\n  ditto \"$XPC_SRC\" \"$XPC_DST_DIR/HaloHelper.xpc\"\n  echo \"Embedded HaloHelper.xpc -> $XPC_DST_DIR\"\nelse\n  echo \"warning: HaloHelper.xpc not found at $XPC_SRC — maintenance tasks will be unavailable\"\nfi\n";
-		};
-/* End PBXShellScriptBuildPhase section */
-
 /* Begin PBXFileReference section */
 		000000000000000000001015 /* Halo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Halo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000001016 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/App/AppState.swift; sourceTree = "<group>"; };
@@ -326,8 +335,6 @@
 		000000000000000000001082 /* SpeedTestService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SpeedTestService.swift; sourceTree = "<group>"; };
 		000000000000000000001084 /* DiskHealthMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/DiskHealthMonitor.swift; sourceTree = "<group>"; };
 		000000000000000000001086 /* ProcessMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ProcessMonitor.swift; sourceTree = "<group>"; };
-		000000000000000000008043 /* SMARTDiskMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SMARTDiskMonitor.swift; sourceTree = "<group>"; };
-		000000000000000000008045 /* DriveHealthSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/DriveHealthSection.swift; sourceTree = "<group>"; };
 		000000000000000000001088 /* CPUCoresSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/CPUCoresSection.swift; sourceTree = "<group>"; };
 		000000000000000000001090 /* SensorsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/SensorsSection.swift; sourceTree = "<group>"; };
 		000000000000000000001092 /* BatteryDetailSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/BatteryDetailSection.swift; sourceTree = "<group>"; };
@@ -355,28 +362,6 @@
 		000000000000000000004007 /* LoginItemScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/LoginItemScanner.swift; sourceTree = "<group>"; };
 		000000000000000000004009 /* AppScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/AppScanner.swift; sourceTree = "<group>"; };
 		000000000000000000004011 /* AlertLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AlertLog.swift; sourceTree = "<group>"; };
-		000000000000000000008171 /* AsyncTimeout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AsyncTimeout.swift; sourceTree = "<group>"; };
-		000000000000000000008163 /* ShellReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/ShellReader.swift; sourceTree = "<group>"; };
-		000000000000000000008181 /* DrawModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LuckyDraw/DrawModels.swift; sourceTree = "<group>"; };
-		000000000000000000008183 /* DrawEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LuckyDraw/DrawEngine.swift; sourceTree = "<group>"; };
-		000000000000000000008219 /* LuckyDrawSound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LuckyDraw/LuckyDrawSound.swift; sourceTree = "<group>"; };
-		000000000000000000008217 /* RosterImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LuckyDraw/RosterImport.swift; sourceTree = "<group>"; };
-		000000000000000000008185 /* SpinnerAnimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LuckyDraw/SpinnerAnimator.swift; sourceTree = "<group>"; };
-		000000000000000000008187 /* LuckyDrawStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LuckyDraw/LuckyDrawStore.swift; sourceTree = "<group>"; };
-		000000000000000000008189 /* LuckyDrawViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LuckyDraw/LuckyDrawViewModel.swift; sourceTree = "<group>"; };
-		000000000000000000008191 /* SpinnerWheelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LuckyDraw/SpinnerWheelView.swift; sourceTree = "<group>"; };
-		000000000000000000008193 /* RosterPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LuckyDraw/RosterPanelView.swift; sourceTree = "<group>"; };
-		000000000000000000008195 /* DrawResultOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LuckyDraw/DrawResultOverlay.swift; sourceTree = "<group>"; };
-		000000000000000000008197 /* LuckyDrawView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LuckyDraw/LuckyDrawView.swift; sourceTree = "<group>"; };
-		000000000000000000008221 /* DrawSequenceOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LuckyDraw/DrawSequenceOverlay.swift; sourceTree = "<group>"; };
-		000000000000000000008201 /* LetheModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Lethe/Models/LetheModels.swift; sourceTree = "<group>"; };
-		000000000000000000008203 /* LetheCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Lethe/Crypto/LetheCrypto.swift; sourceTree = "<group>"; };
-		000000000000000000008205 /* RoomKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Lethe/Crypto/RoomKeyStore.swift; sourceTree = "<group>"; };
-		000000000000000000008207 /* LetheInviteLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Lethe/Crypto/LetheInviteLink.swift; sourceTree = "<group>"; };
-		000000000000000000008209 /* LetheRelayClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Lethe/Network/LetheRelayClient.swift; sourceTree = "<group>"; };
-		000000000000000000008211 /* LetheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Lethe/Manager/LetheManager.swift; sourceTree = "<group>"; };
-		000000000000000000008213 /* LetheView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Lethe/LetheView.swift; sourceTree = "<group>"; };
-		000000000000000000008215 /* LetheSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Lethe/LetheSheets.swift; sourceTree = "<group>"; };
 		000000000000000000004013 /* ReportGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/ReportGenerator.swift; sourceTree = "<group>"; };
 		000000000000000000006001 /* ActionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionModels.swift; sourceTree = "<group>"; };
 		000000000000000000006003 /* ActionLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Actions/ActionLibrary.swift; sourceTree = "<group>"; };
@@ -414,31 +399,56 @@
 		000000000000000000008025 /* SnippetEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/SnippetEditorView.swift; sourceTree = "<group>"; };
 		000000000000000000008027 /* SnippetListSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Clipboard/SnippetListSection.swift; sourceTree = "<group>"; };
 		000000000000000000008029 /* ActionShareManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Actions/ActionShareManager.swift; sourceTree = "<group>"; };
-		000000000000000000008093 /* NetworkTrafficMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/NetworkTrafficMonitor.swift; sourceTree = "<group>"; };
-		000000000000000000008095 /* NetworkTrafficSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/NetworkTrafficSection.swift; sourceTree = "<group>"; };
-		000000000000000000008097 /* tracker-domains.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Halo/Resources/tracker-domains.json; sourceTree = "<group>"; };
+		000000000000000000008031 /* SecurityPostureScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SecurityPostureScanner.swift; sourceTree = "<group>"; };
+		000000000000000000008043 /* SMARTDiskMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SMARTDiskMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000008045 /* DriveHealthSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/DriveHealthSection.swift; sourceTree = "<group>"; };
+		000000000000000000008053 /* TimeMachineMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/TimeMachineMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000008055 /* BackupHealthCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/BackupHealthCard.swift; sourceTree = "<group>"; };
 		000000000000000000008063 /* BrowserCleanerScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/BrowserCleanerScanner.swift; sourceTree = "<group>"; };
 		000000000000000000008065 /* BrowserCleanerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Cleanup/BrowserCleanerView.swift; sourceTree = "<group>"; };
-		000000000000000000008123 /* PerceptualDuplicateDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PerceptualDuplicateDetector.swift; sourceTree = "<group>"; };
-		000000000000000000008125 /* SimilarPhotosView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/SimilarPhotosView.swift; sourceTree = "<group>"; };
-		000000000000000000008143 /* ICloudDriveScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ICloudDriveScanner.swift; sourceTree = "<group>"; };
-		000000000000000000008145 /* ICloudDriveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/ICloudDriveView.swift; sourceTree = "<group>"; };
-		000000000000000000008153 /* PermissionAuditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PermissionAuditor.swift; sourceTree = "<group>"; };
-		000000000000000000008083 /* PrivacyExposureScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PrivacyExposureScanner.swift; sourceTree = "<group>"; };
-		000000000000000000008085 /* PrivacyPatternDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PrivacyPatternDatabase.swift; sourceTree = "<group>"; };
-		000000000000000000008087 /* privacy-patterns.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Halo/Resources/privacy-patterns.json; sourceTree = "<group>"; };
-		000000000000000000008031 /* SecurityPostureScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/SecurityPostureScanner.swift; sourceTree = "<group>"; };
-		000000000000000000008133 /* FocusSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/FocusSessionManager.swift; sourceTree = "<group>"; };
-		000000000000000000008135 /* FocusSessionOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/FocusSessionOverlayView.swift; sourceTree = "<group>"; };
-		000000000000000000008103 /* AppUsageTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AppUsageTracker.swift; sourceTree = "<group>"; };
-		000000000000000000008105 /* AppUsageInsightsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/AppUsageInsightsSection.swift; sourceTree = "<group>"; };
 		000000000000000000008073 /* MetricsHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/MetricsHistory.swift; sourceTree = "<group>"; };
 		000000000000000000008075 /* WeeklyDigestGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/WeeklyDigestGenerator.swift; sourceTree = "<group>"; };
 		000000000000000000008077 /* HealthTrendCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/HealthTrendCard.swift; sourceTree = "<group>"; };
+		000000000000000000008083 /* PrivacyExposureScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PrivacyExposureScanner.swift; sourceTree = "<group>"; };
+		000000000000000000008085 /* PrivacyPatternDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PrivacyPatternDatabase.swift; sourceTree = "<group>"; };
+		000000000000000000008087 /* privacy-patterns.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Halo/Resources/privacy-patterns.json"; sourceTree = "<group>"; };
+		000000000000000000008093 /* NetworkTrafficMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/NetworkTrafficMonitor.swift; sourceTree = "<group>"; };
+		000000000000000000008095 /* NetworkTrafficSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/NetworkTrafficSection.swift; sourceTree = "<group>"; };
+		000000000000000000008097 /* tracker-domains.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Halo/Resources/tracker-domains.json"; sourceTree = "<group>"; };
+		000000000000000000008103 /* AppUsageTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AppUsageTracker.swift; sourceTree = "<group>"; };
+		000000000000000000008105 /* AppUsageInsightsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/AppUsageInsightsSection.swift; sourceTree = "<group>"; };
 		000000000000000000008113 /* MemoryTrendTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/MemoryTrendTracker.swift; sourceTree = "<group>"; };
 		000000000000000000008115 /* MemoryTrendsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/MemoryTrendsSection.swift; sourceTree = "<group>"; };
-		000000000000000000008053 /* TimeMachineMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/TimeMachineMonitor.swift; sourceTree = "<group>"; };
-		000000000000000000008055 /* BackupHealthCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/BackupHealthCard.swift; sourceTree = "<group>"; };
+		000000000000000000008123 /* PerceptualDuplicateDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PerceptualDuplicateDetector.swift; sourceTree = "<group>"; };
+		000000000000000000008125 /* SimilarPhotosView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/SimilarPhotosView.swift; sourceTree = "<group>"; };
+		000000000000000000008133 /* FocusSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/FocusSessionManager.swift; sourceTree = "<group>"; };
+		000000000000000000008135 /* FocusSessionOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/FocusSessionOverlayView.swift; sourceTree = "<group>"; };
+		000000000000000000008143 /* ICloudDriveScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/ICloudDriveScanner.swift; sourceTree = "<group>"; };
+		000000000000000000008145 /* ICloudDriveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Files/ICloudDriveView.swift; sourceTree = "<group>"; };
+		000000000000000000008153 /* PermissionAuditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/PermissionAuditor.swift; sourceTree = "<group>"; };
+		000000000000000000008163 /* ShellReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/ShellReader.swift; sourceTree = "<group>"; };
+		000000000000000000008171 /* AsyncTimeout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AsyncTimeout.swift; sourceTree = "<group>"; };
+		000000000000000000008181 /* DrawModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LuckyDraw/DrawModels.swift; sourceTree = "<group>"; };
+		000000000000000000008183 /* DrawEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LuckyDraw/DrawEngine.swift; sourceTree = "<group>"; };
+		000000000000000000008185 /* SpinnerAnimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LuckyDraw/SpinnerAnimator.swift; sourceTree = "<group>"; };
+		000000000000000000008187 /* LuckyDrawStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LuckyDraw/LuckyDrawStore.swift; sourceTree = "<group>"; };
+		000000000000000000008189 /* LuckyDrawViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LuckyDraw/LuckyDrawViewModel.swift; sourceTree = "<group>"; };
+		000000000000000000008191 /* SpinnerWheelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LuckyDraw/SpinnerWheelView.swift; sourceTree = "<group>"; };
+		000000000000000000008193 /* RosterPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LuckyDraw/RosterPanelView.swift; sourceTree = "<group>"; };
+		000000000000000000008195 /* DrawResultOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LuckyDraw/DrawResultOverlay.swift; sourceTree = "<group>"; };
+		000000000000000000008197 /* LuckyDrawView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LuckyDraw/LuckyDrawView.swift; sourceTree = "<group>"; };
+		000000000000000000008199 /* LuckyDrawTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LuckyDrawTests.swift; sourceTree = "<group>"; };
+		000000000000000000008201 /* LetheModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Lethe/Models/LetheModels.swift; sourceTree = "<group>"; };
+		000000000000000000008203 /* LetheCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Lethe/Crypto/LetheCrypto.swift; sourceTree = "<group>"; };
+		000000000000000000008205 /* RoomKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Lethe/Crypto/RoomKeyStore.swift; sourceTree = "<group>"; };
+		000000000000000000008207 /* LetheInviteLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Lethe/Crypto/LetheInviteLink.swift; sourceTree = "<group>"; };
+		000000000000000000008209 /* LetheRelayClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Lethe/Network/LetheRelayClient.swift; sourceTree = "<group>"; };
+		000000000000000000008211 /* LetheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Lethe/Manager/LetheManager.swift; sourceTree = "<group>"; };
+		000000000000000000008213 /* LetheView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Lethe/LetheView.swift; sourceTree = "<group>"; };
+		000000000000000000008215 /* LetheSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Lethe/LetheSheets.swift; sourceTree = "<group>"; };
+		000000000000000000008217 /* RosterImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LuckyDraw/RosterImport.swift; sourceTree = "<group>"; };
+		000000000000000000008219 /* LuckyDrawSound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/LuckyDraw/LuckyDrawSound.swift; sourceTree = "<group>"; };
+		000000000000000000008221 /* DrawSequenceOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/LuckyDraw/DrawSequenceOverlay.swift; sourceTree = "<group>"; };
 		000000000000000000009001 /* GetHealthScoreIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetHealthScoreIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009003 /* GetCPUUsageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetCPUUsageIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009005 /* GetBatteryHealthIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetBatteryHealthIntent.swift; sourceTree = "<group>"; };
@@ -449,50 +459,81 @@
 		000000000000000000009015 /* ExportReportIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/ExportReportIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009017 /* HaloShortcutsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/HaloShortcutsProvider.swift; sourceTree = "<group>"; };
 		00C37BFCA463AB410245B802 /* HelperClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HelperClientTests.swift; sourceTree = "<group>"; };
+		04C24FA6FA6BE8B3F119901F /* HaloTestFixtures.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloTestFixtures.swift; sourceTree = "<group>"; };
+		06D67EEB887057C98492942D /* SMSSyncClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSSyncClient.swift; sourceTree = "<group>"; };
+		0873B3D75E60E12E6EF40F8A /* ClipboardSnippetsUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClipboardSnippetsUITests.swift; sourceTree = "<group>"; };
 		0878FD8BEBE06A3351E53E45 /* AgentRunner.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentRunner.swift; sourceTree = "<group>"; };
+		094367808CAAFC6DFD3D82F8 /* Chunker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Chunker.swift; sourceTree = "<group>"; };
+		0956087079851EA3516A8435 /* ClipboardSyncModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClipboardSyncModels.swift; sourceTree = "<group>"; };
+		0C88335DCB2676B7AB5873FF /* GoogleOAuthPKCE.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleOAuthPKCE.swift; sourceTree = "<group>"; };
+		0CDCAD725F3EDB1AA147464F /* AIAssistantUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAssistantUITests.swift; sourceTree = "<group>"; };
+		11E954BECEE4F8045D9D0422 /* ClipboardSyncSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClipboardSyncSettingsView.swift; sourceTree = "<group>"; };
+		1B94BA772014635FAA0E43E3 /* CloudSetupView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudSetupView.swift; sourceTree = "<group>"; };
+		1B9818391AC23A293096CB28 /* TransactionParser.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TransactionParser.swift; sourceTree = "<group>"; };
 		1EA41949D8E2D368E6AFF7F6 /* AIAssistantTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAssistantTests.swift; sourceTree = "<group>"; };
+		256C0A5343A473D0D89FAB57 /* AlertsReportUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AlertsReportUITests.swift; sourceTree = "<group>"; };
 		32396161554FB75B93A0B169 /* AIAssistantViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAssistantViewModel.swift; sourceTree = "<group>"; };
+		376EDC03F26BA1DFBCFD648B /* RAGService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RAGService.swift; sourceTree = "<group>"; };
+		38C4927677822093E95006BE /* CloudSettingsPane.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudSettingsPane.swift; sourceTree = "<group>"; };
 		3ED172401B83B65197881BFC /* SidebarReorderUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SidebarReorderUITests.swift; sourceTree = "<group>"; };
+		447CC440994885DF5CCA7A6A /* CodeBeautifierUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CodeBeautifierUITests.swift; sourceTree = "<group>"; };
 		4555BA206584E6C688FD51F1 /* DriveSpeedTester.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedTester.swift; sourceTree = "<group>"; };
 		4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloUITestCase.swift; sourceTree = "<group>"; };
+		4E313EE34C22081D16EE8369 /* Embedder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Embedder.swift; sourceTree = "<group>"; };
+		4FA751F8E4056851F9D6502F /* SMSConsoleViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSConsoleViewModel.swift; sourceTree = "<group>"; };
 		4FC90BEA4B73BCF5211738E1 /* AIToolExecutor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIToolExecutor.swift; sourceTree = "<group>"; };
+		544F38735C12837D57FD1DA7 /* SmartScanUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SmartScanUITests.swift; sourceTree = "<group>"; };
+		5842B4E5994A0687DC32159E /* ExpenditureModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExpenditureModels.swift; sourceTree = "<group>"; };
+		5B40E2366324FB4033E3DC65 /* TLSPinningTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TLSPinningTests.swift; sourceTree = "<group>"; };
+		5CEA7F5090B5F253E0E23587 /* ProtectionUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProtectionUITests.swift; sourceTree = "<group>"; };
+		5CF513D852033ACD07DD2CD0 /* CloudRESTClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudRESTClientTests.swift; sourceTree = "<group>"; };
 		629A9D17BDFF863DCB0206F2 /* DriveSpeedTesterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedTesterTests.swift; sourceTree = "<group>"; };
-		000000000000000000008199 /* LuckyDrawTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LuckyDrawTests.swift; sourceTree = "<group>"; };
 		67D626412F39854842AE0A36 /* HaloUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6915A2D32038A9761B33CFEA /* ExpenditureStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExpenditureStore.swift; sourceTree = "<group>"; };
+		6A64A6695EDCF890E4944D1A /* DashboardUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DashboardUITests.swift; sourceTree = "<group>"; };
 		6B3A7C9D128380339D5BBD79 /* GeminiProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GeminiProvider.swift; sourceTree = "<group>"; };
 		6D2C02D89C828E5968F14081 /* AIProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIProvider.swift; sourceTree = "<group>"; };
+		7048D8E34CBF35D4C92C051A /* ApplicationsUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ApplicationsUITests.swift; sourceTree = "<group>"; };
 		74D974CC4B2FB109632BF14A /* SmokeUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SmokeUITests.swift; sourceTree = "<group>"; };
 		76EB7D00744BA3399A508E64 /* ConversationStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
 		78C88E9A3466E70C453D9B42 /* OpenAIProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OpenAIProvider.swift; sourceTree = "<group>"; };
 		7C310900DF7BB88C2E7AFC1B /* DriveSpeedView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveSpeedView.swift; sourceTree = "<group>"; };
 		7C5BDF389221BADF1F31152C /* HaloTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloTests.swift; sourceTree = "<group>"; };
+		88C159A5C1348117FA9F7CA8 /* CloudFoundationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudFoundationTests.swift; sourceTree = "<group>"; };
 		8908A278C13A1F3B9E21BFE9 /* CleanupUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CleanupUITests.swift; sourceTree = "<group>"; };
-		04C24FA6FA6BE8B3F119901F /* HaloTestFixtures.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloTestFixtures.swift; sourceTree = "<group>"; };
-		FD490E2DBBC937F29595E8B2 /* HaloUITestCase+Confirmation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "HaloUITestCase+Confirmation.swift"; sourceTree = "<group>"; };
-		6A64A6695EDCF890E4944D1A /* DashboardUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DashboardUITests.swift; sourceTree = "<group>"; };
-		5CEA7F5090B5F253E0E23587 /* ProtectionUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProtectionUITests.swift; sourceTree = "<group>"; };
-		CFB8CF496ED5F2B47F5909F7 /* PerformanceUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PerformanceUITests.swift; sourceTree = "<group>"; };
-		7048D8E34CBF35D4C92C051A /* ApplicationsUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ApplicationsUITests.swift; sourceTree = "<group>"; };
-		DB75AC7A8DBC58FFF8D8070B /* FilesUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FilesUITests.swift; sourceTree = "<group>"; };
-		0873B3D75E60E12E6EF40F8A /* ClipboardSnippetsUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClipboardSnippetsUITests.swift; sourceTree = "<group>"; };
-		E1F44C9D0695A26A2333D149 /* ActionsUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ActionsUITests.swift; sourceTree = "<group>"; };
-		DA43DB5704F0BA89A52E04E3 /* PortsUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PortsUITests.swift; sourceTree = "<group>"; };
+		8E879866CBEB7335399FCD4D /* DocumentParser.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DocumentParser.swift; sourceTree = "<group>"; };
+		9453EDEC8C95703835479A60 /* RAGModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RAGModels.swift; sourceTree = "<group>"; };
 		945DE4D093874E6954B85774 /* MenuBarUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MenuBarUITests.swift; sourceTree = "<group>"; };
-		544F38735C12837D57FD1DA7 /* SmartScanUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SmartScanUITests.swift; sourceTree = "<group>"; };
-		447CC440994885DF5CCA7A6A /* CodeBeautifierUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CodeBeautifierUITests.swift; sourceTree = "<group>"; };
-		0CDCAD725F3EDB1AA147464F /* AIAssistantUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAssistantUITests.swift; sourceTree = "<group>"; };
-		256C0A5343A473D0D89FAB57 /* AlertsReportUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AlertsReportUITests.swift; sourceTree = "<group>"; };
-		FFC9913365F4432A9F96CD69 /* WeeklyDigestUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WeeklyDigestUITests.swift; sourceTree = "<group>"; };
 		94E717DB998E0BBF1AE83F94 /* HaloTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		95CB5E046AFEAF8DF5C7502C /* FirebaseRTDBClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FirebaseRTDBClient.swift; sourceTree = "<group>"; };
+		99F06F1B0C745181E045DD29 /* ExpenditureViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExpenditureViewModel.swift; sourceTree = "<group>"; };
+		9F450540DB55422C3FAAE03A /* ExpenditureView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExpenditureView.swift; sourceTree = "<group>"; };
 		B4A92E8D0819BCF034A05DF2 /* AIKeyStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIKeyStore.swift; sourceTree = "<group>"; };
+		B538907434F4863E07BD21FE /* AppGroupContractTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppGroupContractTests.swift; sourceTree = "<group>"; };
 		BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloSidebar.swift; sourceTree = "<group>"; };
 		C410A9DA24CA458075531BA7 /* AIAssistantView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAssistantView.swift; sourceTree = "<group>"; };
+		C5261AF493C8F832B7B7242B /* RAGVectorStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RAGVectorStore.swift; sourceTree = "<group>"; };
+		CC277F045F73084A793F8C0D /* TransactionPipeline.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TransactionPipeline.swift; sourceTree = "<group>"; };
 		CCB7849370C86E175D74B077 /* ToolRegistry.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ToolRegistry.swift; sourceTree = "<group>"; };
+		CFB8CF496ED5F2B47F5909F7 /* PerformanceUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PerformanceUITests.swift; sourceTree = "<group>"; };
 		D1749E8BBBF48CFF49E42B5A /* HaloTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D3824F98C3251B8B75207CE9 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
+		DA43DB5704F0BA89A52E04E3 /* PortsUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PortsUITests.swift; sourceTree = "<group>"; };
+		DB75AC7A8DBC58FFF8D8070B /* FilesUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FilesUITests.swift; sourceTree = "<group>"; };
 		DF513D5DDD7399B797BE21F2 /* AnthropicProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AnthropicProvider.swift; sourceTree = "<group>"; };
+		E1F44C9D0695A26A2333D149 /* ActionsUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ActionsUITests.swift; sourceTree = "<group>"; };
+		E654E24D942547F5E7C88B57 /* CloudModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudModels.swift; sourceTree = "<group>"; };
+		EBEDE3049FF72B28000BC2DE /* SMSModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSModels.swift; sourceTree = "<group>"; };
+		ECFF6EE3F66B556B438004F0 /* SMSConsoleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSConsoleView.swift; sourceTree = "<group>"; };
+		ED7DEBF795FF5325DE31F15D /* RAGContextView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RAGContextView.swift; sourceTree = "<group>"; };
 		EEF40F332D70A2AE5393A74C /* AIQuickAskView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIQuickAskView.swift; sourceTree = "<group>"; };
+		F328726F5D927ECE2A09867E /* ClipboardSyncService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClipboardSyncService.swift; sourceTree = "<group>"; };
+		FA43D8737B3D8C7250909178 /* CloudConfigStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudConfigStore.swift; sourceTree = "<group>"; };
+		FC9B040050FDF481F5333FFE /* CryptoService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CryptoService.swift; sourceTree = "<group>"; };
+		FD490E2DBBC937F29595E8B2 /* HaloUITestCase+Confirmation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "HaloUITestCase+Confirmation.swift"; sourceTree = "<group>"; };
+		FDBE8C12FB7CC0AD645C2295 /* RAGTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RAGTests.swift; sourceTree = "<group>"; };
 		FF3FA79DA36A45E06CF7D667 /* AIModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIModels.swift; sourceTree = "<group>"; };
+		FFC9913365F4432A9F96CD69 /* WeeklyDigestUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WeeklyDigestUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -785,6 +826,11 @@
 				7C5BDF389221BADF1F31152C /* HaloTests.swift */,
 				00C37BFCA463AB410245B802 /* HelperClientTests.swift */,
 				1EA41949D8E2D368E6AFF7F6 /* AIAssistantTests.swift */,
+				88C159A5C1348117FA9F7CA8 /* CloudFoundationTests.swift */,
+				5CF513D852033ACD07DD2CD0 /* CloudRESTClientTests.swift */,
+				B538907434F4863E07BD21FE /* AppGroupContractTests.swift */,
+				FDBE8C12FB7CC0AD645C2295 /* RAGTests.swift */,
+				5B40E2366324FB4033E3DC65 /* TLSPinningTests.swift */,
 			);
 			name = HaloTests;
 			path = HaloTests;
@@ -795,18 +841,50 @@
 			children = (
 				D2B9FF24DEEB6AD1B681E7B7 /* Files */,
 				FA2F9FDF43A7CCE26BAF24DD /* AIAssistant */,
+				E68AB33C0860C47E173F7F54 /* ClipboardSync */,
+				E4F59F2553C7EAAA56658F1F /* Expenditure */,
+				85285B7C1F866DE686A0DA8D /* SMSConsole */,
 			);
 			name = Features;
 			path = Features;
+			sourceTree = "<group>";
+		};
+		85285B7C1F866DE686A0DA8D /* SMSConsole */ = {
+			isa = PBXGroup;
+			children = (
+				38C4927677822093E95006BE /* CloudSettingsPane.swift */,
+				1B94BA772014635FAA0E43E3 /* CloudSetupView.swift */,
+				ECFF6EE3F66B556B438004F0 /* SMSConsoleView.swift */,
+				4FA751F8E4056851F9D6502F /* SMSConsoleViewModel.swift */,
+				EBEDE3049FF72B28000BC2DE /* SMSModels.swift */,
+				06D67EEB887057C98492942D /* SMSSyncClient.swift */,
+			);
+			name = SMSConsole;
+			path = SMSConsole;
 			sourceTree = "<group>";
 		};
 		8763EB3A9BDA7EE00E9F6563 /* Core */ = {
 			isa = PBXGroup;
 			children = (
 				0E2AB6F5D2E1B5E920E3EF8E /* Scanner */,
+				9C0A26C13D10D5D6D7C7B577 /* Cloud */,
+				F94FE09387A79F641A7615BE /* RAG */,
 			);
 			name = Core;
 			path = Core;
+			sourceTree = "<group>";
+		};
+		9C0A26C13D10D5D6D7C7B577 /* Cloud */ = {
+			isa = PBXGroup;
+			children = (
+				FA43D8737B3D8C7250909178 /* CloudConfigStore.swift */,
+				E654E24D942547F5E7C88B57 /* CloudModels.swift */,
+				FC9B040050FDF481F5333FFE /* CryptoService.swift */,
+				95CB5E046AFEAF8DF5C7502C /* FirebaseRTDBClient.swift */,
+				D5E8F5872BA4187406B104B6 /* Provisioning */,
+			);
+			name = Cloud;
+			path = Cloud;
 			sourceTree = "<group>";
 		};
 		D2B9FF24DEEB6AD1B681E7B7 /* Files */ = {
@@ -816,6 +894,15 @@
 			);
 			name = Files;
 			path = Files;
+			sourceTree = "<group>";
+		};
+		D5E8F5872BA4187406B104B6 /* Provisioning */ = {
+			isa = PBXGroup;
+			children = (
+				0C88335DCB2676B7AB5873FF /* GoogleOAuthPKCE.swift */,
+			);
+			name = Provisioning;
+			path = Provisioning;
 			sourceTree = "<group>";
 		};
 		DFBC888F5DBC7A3BBDFF40F0 /* Halo */ = {
@@ -828,12 +915,51 @@
 			path = Halo;
 			sourceTree = "<group>";
 		};
+		E4F59F2553C7EAAA56658F1F /* Expenditure */ = {
+			isa = PBXGroup;
+			children = (
+				5842B4E5994A0687DC32159E /* ExpenditureModels.swift */,
+				6915A2D32038A9761B33CFEA /* ExpenditureStore.swift */,
+				9F450540DB55422C3FAAE03A /* ExpenditureView.swift */,
+				99F06F1B0C745181E045DD29 /* ExpenditureViewModel.swift */,
+				1B9818391AC23A293096CB28 /* TransactionParser.swift */,
+				CC277F045F73084A793F8C0D /* TransactionPipeline.swift */,
+			);
+			name = Expenditure;
+			path = Expenditure;
+			sourceTree = "<group>";
+		};
+		E68AB33C0860C47E173F7F54 /* ClipboardSync */ = {
+			isa = PBXGroup;
+			children = (
+				0956087079851EA3516A8435 /* ClipboardSyncModels.swift */,
+				F328726F5D927ECE2A09867E /* ClipboardSyncService.swift */,
+				11E954BECEE4F8045D9D0422 /* ClipboardSyncSettingsView.swift */,
+			);
+			name = ClipboardSync;
+			path = ClipboardSync;
+			sourceTree = "<group>";
+		};
 		F3C703782CA1E12019C0141D /* OS X */ = {
 			isa = PBXGroup;
 			children = (
 				D3824F98C3251B8B75207CE9 /* Cocoa.framework */,
 			);
 			name = "OS X";
+			sourceTree = "<group>";
+		};
+		F94FE09387A79F641A7615BE /* RAG */ = {
+			isa = PBXGroup;
+			children = (
+				094367808CAAFC6DFD3D82F8 /* Chunker.swift */,
+				8E879866CBEB7335399FCD4D /* DocumentParser.swift */,
+				4E313EE34C22081D16EE8369 /* Embedder.swift */,
+				9453EDEC8C95703835479A60 /* RAGModels.swift */,
+				376EDC03F26BA1DFBCFD648B /* RAGService.swift */,
+				C5261AF493C8F832B7B7242B /* RAGVectorStore.swift */,
+			);
+			name = RAG;
+			path = RAG;
 			sourceTree = "<group>";
 		};
 		FA2F9FDF43A7CCE26BAF24DD /* AIAssistant */ = {
@@ -852,6 +978,7 @@
 				6B3A7C9D128380339D5BBD79 /* GeminiProvider.swift */,
 				76EB7D00744BA3399A508E64 /* ConversationStore.swift */,
 				EEF40F332D70A2AE5393A74C /* AIQuickAskView.swift */,
+				ED7DEBF795FF5325DE31F15D /* RAGContextView.swift */,
 			);
 			name = AIAssistant;
 			path = AIAssistant;
@@ -1036,6 +1163,29 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		000000000000000000003029 /* Embed HaloHelper.xpc (workaround) */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(CONFIGURATION_BUILD_DIR)/HaloHelper.xpc",
+			);
+			name = "Embed HaloHelper.xpc (workaround)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/XPCServices/HaloHelper.xpc",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nXPC_SRC=\"${CONFIGURATION_BUILD_DIR}/HaloHelper.xpc\"\nXPC_DST_DIR=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/XPCServices\"\n# The \"Embed XPC Services\" Copy Files phase (dstSubfolderSpec 16) is unreliable\n# under the current build system and can silently no-op, leaving HaloHelper.xpc\n# out of the app bundle entirely (NSXPCConnection then never finds the service).\n# This script guarantees it lands in Contents/XPCServices regardless.\nif [ -d \"$XPC_SRC\" ]; then\n  mkdir -p \"$XPC_DST_DIR\"\n  rm -rf \"$XPC_DST_DIR/HaloHelper.xpc\"\n  ditto \"$XPC_SRC\" \"$XPC_DST_DIR/HaloHelper.xpc\"\n  echo \"Embedded HaloHelper.xpc -> $XPC_DST_DIR\"\nelse\n  echo \"warning: HaloHelper.xpc not found at $XPC_SRC — maintenance tasks will be unavailable\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		000000000000000000001012 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -1196,6 +1346,33 @@
 				3A50F36FA9B03FBD00BA4A57 /* GeminiProvider.swift in Sources */,
 				C5FB28DC66873BB366B72244 /* ConversationStore.swift in Sources */,
 				D2BA4D7F84FA257B4490BEDF /* AIQuickAskView.swift in Sources */,
+				DAD955EB87553E3597A06791 /* CloudConfigStore.swift in Sources */,
+				CBD199B637DDEE091BBEACAC /* CloudModels.swift in Sources */,
+				E1F0E0E5CDDD9ECDF6C8DC04 /* CryptoService.swift in Sources */,
+				CB68399B0AA4C27AB85AA8C2 /* FirebaseRTDBClient.swift in Sources */,
+				92456FF8B0668EAB6E44FD84 /* GoogleOAuthPKCE.swift in Sources */,
+				E687C8010A479D0624479BC5 /* ClipboardSyncModels.swift in Sources */,
+				52A63863961FB03CE2564588 /* ClipboardSyncService.swift in Sources */,
+				7DABA96A91478519A8D468E0 /* ClipboardSyncSettingsView.swift in Sources */,
+				2F6C005B123855570946EB6B /* ExpenditureModels.swift in Sources */,
+				51A984C0AF7FE205602EB397 /* ExpenditureStore.swift in Sources */,
+				B8A113E56E32C2E1E8AB07B8 /* ExpenditureView.swift in Sources */,
+				D849AC493D18FC2554225120 /* ExpenditureViewModel.swift in Sources */,
+				0694F5C8D69B4212BCBD5B07 /* TransactionParser.swift in Sources */,
+				DAE8C8E0B8E4571846256A4C /* TransactionPipeline.swift in Sources */,
+				C7FCC24A08F234940C32D22C /* CloudSettingsPane.swift in Sources */,
+				00F245126B433EB57A6DBEDB /* CloudSetupView.swift in Sources */,
+				51438AC7C61E57B584FF1A48 /* SMSConsoleView.swift in Sources */,
+				A8DDF44DE9A7DFB0EDE3CC08 /* SMSConsoleViewModel.swift in Sources */,
+				2FA6FD6DDC013538B6817C6A /* SMSModels.swift in Sources */,
+				8EFF809BF270FF2C7163BADD /* SMSSyncClient.swift in Sources */,
+				7700C9FFC29B8E68D18D7EDF /* Chunker.swift in Sources */,
+				BD357D07AA2AF45C095CEF86 /* DocumentParser.swift in Sources */,
+				6FA8A083A8162FB802A2617B /* Embedder.swift in Sources */,
+				3252209F7D11F82EA91BC467 /* RAGModels.swift in Sources */,
+				CD482393B681AFF599DB1BBB /* RAGService.swift in Sources */,
+				B077D7999DC07EC00A7DC597 /* RAGVectorStore.swift in Sources */,
+				7A1FB97CB2F8F78F2BDCBEAA /* RAGContextView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1229,6 +1406,11 @@
 				8A4DFF3A40CA9ADDBF8405AE /* HaloTests.swift in Sources */,
 				D52607DADA626DF2FA479956 /* HelperClientTests.swift in Sources */,
 				ECC49D0FB93E1F7EA5B51EBD /* AIAssistantTests.swift in Sources */,
+				B6E3C305908B409F99263327 /* CloudFoundationTests.swift in Sources */,
+				B359A9774FABDB8C0EEE7C20 /* CloudRESTClientTests.swift in Sources */,
+				17FE433E5E93CEC8AAC8CD53 /* AppGroupContractTests.swift in Sources */,
+				70835222F4CFF86A03ECAF0F /* RAGTests.swift in Sources */,
+				9A817E271BE3B7A75B810435 /* TLSPinningTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

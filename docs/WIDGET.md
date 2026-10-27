@@ -38,7 +38,7 @@ Halo.app
 AppState.refreshMetrics()          — fires every 2 seconds
     └─► writeWidgetData()
           └─► HaloWidgetData(...).save()
-                └─► UserDefaults(suiteName: "group.com.halo.mac")
+                └─► UserDefaults(suiteName: "R7S39UR27F.group.com.halo.mac")
                       key: "haloWidgetData"  value: JSON-encoded Data
 
 AppState.widgetReloadTimer          — fires every 60 seconds
@@ -61,7 +61,7 @@ At 60 seconds (60/hr), we stay well within budget. The shared container still ho
 # Check if data is being written (pipe is healthy if this shows JSON)
 python3 -c "
 import plistlib, json
-with open('$HOME/Library/Group Containers/group.com.halo.mac/Library/Preferences/group.com.halo.mac.plist', 'rb') as f:
+with open('$HOME/Library/Group Containers/R7S39UR27F.group.com.halo.mac/Library/Preferences/R7S39UR27F.group.com.halo.mac.plist', 'rb') as f:
     d = plistlib.load(f)
 print(json.dumps(json.loads(d['haloWidgetData']), indent=2))
 "
@@ -85,7 +85,7 @@ struct HaloWidgetData: Codable {
     var networkDownMBps: Double
     var clipboardPreviews: [String]  // up to 5 text snippets
 
-    static let suiteName = "group.com.halo.mac"
+    static let suiteName = "R7S39UR27F.group.com.halo.mac"
     static let defaultsKey = "haloWidgetData"
 }
 ```
@@ -214,7 +214,7 @@ Do not remove this guard — the project minimum deployment target is macOS 13.0
 <true/>
 <key>com.apple.security.application-groups</key>
 <array>
-    <string>group.com.halo.mac</string>
+    <string>R7S39UR27F.group.com.halo.mac</string>
 </array>
 ```
 
@@ -263,7 +263,7 @@ pluginkit -e use -i com.halo.mac.widget
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
 | Widget not in gallery | App not in `~/Applications` or `/Applications` | `cp -R build/Halo.app ~/Applications/` then `pluginkit -a …` |
-| Widget shows placeholder data | App Group not writing | Check `Halo-Debug.entitlements` has `group.com.halo.mac`; verify plist with `python3` snippet above |
+| Widget shows placeholder data | App Group not writing | Check `Halo-Debug.entitlements` has `R7S39UR27F.group.com.halo.mac`; verify plist with `python3` snippet above |
 | Widget freezes / stops updating | `reloadAllTimelines()` budget exhausted | Ensure it's called at most once per minute |
 | TeamIdentifier mismatch on launch | dylibs signed after outer bundle | Always sign in order: dylibs → Sentry.framework → appex → app |
 | `#Preview` compile error | macOS 14 API on 13.0 target | Wrap in `@available(macOS 14.0, *)` |

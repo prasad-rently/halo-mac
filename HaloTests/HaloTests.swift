@@ -4261,6 +4261,34 @@ struct BuildLabelTests {
 /// `LocalShareServer.start()` returns as soon as `NWListener.start` is *called*, not when it is
 /// ready, so a test that sleeps a fixed 300 ms and then connects fails with "connection refused"
 /// whenever the machine is busy — and passes on a quiet one. Poll the real port instead.
+/// A TCP port the OS just confirmed is free on loopback.
+///
+/// The server tests used to hard-code ports and stop their servers with a fire-and-forget
+/// `defer { Task { await server.stop() } }`, so a listener could still be releasing a port when the
+/// next test reused it — the next bind failed, nothing listened, and the test timed out after 10 s.
+/// It passed most runs and failed under load (seen once on a release run). Asking the OS for a
+/// free port per test removes the shared resource instead of timing around it.
+func freePort() throws -> UInt16 {
+    let fd = socket(AF_INET, SOCK_STREAM, 0)
+    guard fd >= 0 else { throw NSError(domain: "HaloTests", code: 2, userInfo: [NSLocalizedDescriptionKey: "socket() failed"]) }
+    defer { close(fd) }
+    var addr = sockaddr_in()
+    addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+    addr.sin_family = sa_family_t(AF_INET)
+    addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+    addr.sin_port = 0
+    let bound = withUnsafePointer(to: &addr) {
+        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+    }
+    guard bound == 0 else { throw NSError(domain: "HaloTests", code: 3, userInfo: [NSLocalizedDescriptionKey: "bind() failed"]) }
+    var len = socklen_t(MemoryLayout<sockaddr_in>.size)
+    let named = withUnsafeMutablePointer(to: &addr) {
+        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(fd, $0, &len) }
+    }
+    guard named == 0 else { throw NSError(domain: "HaloTests", code: 4, userInfo: [NSLocalizedDescriptionKey: "getsockname() failed"]) }
+    return UInt16(bigEndian: addr.sin_port)
+}
+
 func waitUntilListening(port: UInt16, timeout: TimeInterval = 10) async throws {
     let deadline = Date().addingTimeInterval(timeout)
     var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/api/localsend/v2/info")!)
@@ -4360,14 +4388,15 @@ struct HaloShareServerBinaryTests {
 
     @Test("A binary body sent in the SAME write as the headers arrives intact")
     func headersAndBodyInOneWrite() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir()
         let payload = Data((0..<2048).map { UInt8(truncatingIfNeeded: $0 &* 37 &+ 129) })   // high bytes, not valid UTF-8
         #expect(String(data: payload, encoding: .utf8) == nil, "fixture must not be valid UTF-8")
-        let server = try await makeServer(port: 53913, dest: dest, fileSize: Int64(payload.count))
+        let server = try await makeServer(port: port, dest: dest, fileSize: Int64(payload.count))
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53913)
+        try await waitUntilListening(port: port)
 
-        let result = try rawPost(port: 53913,
+        let result = try rawPost(port: port,
                                  path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
                                  body: payload)
         #expect(result.status == 200, "server answered \(result.status): \(result.response.prefix(120))")
@@ -4377,13 +4406,14 @@ struct HaloShareServerBinaryTests {
 
     @Test("A small binary file arrives byte-for-byte")
     func smallBinary() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir()
         let payload = Data((0..<4096).map { UInt8(truncatingIfNeeded: $0 &* 31 &+ 7) })   // includes 0x80+ bytes
-        let server = try await makeServer(port: 53911, dest: dest, fileSize: Int64(payload.count))
+        let server = try await makeServer(port: port, dest: dest, fileSize: Int64(payload.count))
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53911)
+        try await waitUntilListening(port: port)
 
-        let status = try await upload(payload, port: 53911)
+        let status = try await upload(payload, port: port)
         #expect(status == 200, "server answered \(status)")
         let received = try? Data(contentsOf: dest.appendingPathComponent("blob.bin"))
         #expect(received == payload, "received \(received?.count ?? -1) bytes, sent \(payload.count)")
@@ -4391,14 +4421,15 @@ struct HaloShareServerBinaryTests {
 
     @Test("A file larger than one socket read arrives complete")
     func largeBinary() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir()
         var payload = Data(count: 512 * 1024)
         payload.withUnsafeMutableBytes { _ = SecRandomCopyBytes(kSecRandomDefault, $0.count, $0.baseAddress!) }
-        let server = try await makeServer(port: 53912, dest: dest, fileSize: Int64(payload.count))
+        let server = try await makeServer(port: port, dest: dest, fileSize: Int64(payload.count))
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53912)
+        try await waitUntilListening(port: port)
 
-        let status = try await upload(payload, port: 53912)
+        let status = try await upload(payload, port: port)
         #expect(status == 200, "server answered \(status)")
         let received = try? Data(contentsOf: dest.appendingPathComponent("blob.bin"))
         #expect(received?.count == payload.count, "received \(received?.count ?? -1) of \(payload.count) bytes")
@@ -4407,13 +4438,14 @@ struct HaloShareServerBinaryTests {
 
     @Test("Headers and body in separate writes still work (what URLSession does)")
     func headersThenBody() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir()
         let payload = Data((0..<3000).map { UInt8(truncatingIfNeeded: $0 &* 13 &+ 200) })
-        let server = try await makeServer(port: 53914, dest: dest, fileSize: Int64(payload.count))
+        let server = try await makeServer(port: port, dest: dest, fileSize: Int64(payload.count))
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53914)
+        try await waitUntilListening(port: port)
 
-        let result = try rawPost(port: 53914, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
+        let result = try rawPost(port: port, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
                                  body: payload, splitAfterHead: true)
         #expect(result.status == 200, "server answered \(result.status)")
         #expect((try? Data(contentsOf: dest.appendingPathComponent("blob.bin"))) == payload)
@@ -4421,14 +4453,15 @@ struct HaloShareServerBinaryTests {
 
     @Test("A truncated upload is rejected and leaves no partial file behind")
     func truncatedUploadLeavesNothing() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir()
         let full = Data(repeating: 0xAB, count: 5000)
-        let server = try await makeServer(port: 53915, dest: dest, fileSize: Int64(full.count))
+        let server = try await makeServer(port: port, dest: dest, fileSize: Int64(full.count))
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53915)
+        try await waitUntilListening(port: port)
 
         // Declares 5000 bytes, delivers 1200, then the peer goes away.
-        let result = try rawPost(port: 53915, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
+        let result = try rawPost(port: port, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
                                  body: Data(full.prefix(1200)), declaredLength: 5000)
         #expect(result.status != 200, "a short upload must not be acknowledged as OK")
         #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob.bin").path),
@@ -4437,6 +4470,7 @@ struct HaloShareServerBinaryTests {
 
     @Test("A hostile file name cannot write outside the destination, and nothing is overwritten")
     func hostileNameAndCollision() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let parent = try tempDir()
         let dest = parent.appendingPathComponent("inbox")
         try FileManager.default.createDirectory(at: dest, withIntermediateDirectories: true)
@@ -4445,15 +4479,15 @@ struct HaloShareServerBinaryTests {
         try Data("do not touch".utf8).write(to: victim)
 
         let server = LocalShareServer()
-        try await server.start(port: 53918, parameters: .tcp,
+        try await server.start(port: port, parameters: .tcp,
                                onPrepareUpload: { _, _ in nil }, onFileReceived: { _, _, _ in },
                                onCancel: { _ in }, onProgress: { _, _, _ in })
         defer { Task { await server.stop() } }
         let evil = ShareFile(id: "f1", fileName: "../victim.txt", size: 5, fileType: "text/plain")
         await server.registerSession(id: "s1", tokens: ["f1": "tok"], files: ["f1": evil], destDirectory: dest)
-        try await waitUntilListening(port: 53918)
+        try await waitUntilListening(port: port)
 
-        let result = try rawPost(port: 53918, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
+        let result = try rawPost(port: port, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
                                  body: Data("PWNED".utf8))
         #expect(result.status == 200)
         #expect((try? String(contentsOf: victim, encoding: .utf8)) == "do not touch", "the sender wrote outside the folder")
@@ -4467,7 +4501,7 @@ struct HaloShareServerBinaryTests {
     @Test("A matching sha256 is accepted — in either case of hex")
     func sha256Matches() async throws {
         let payload = Data((0..<4096).map { UInt8(truncatingIfNeeded: $0 &* 29 &+ 131) })
-        for (port, digest) in [(UInt16(53921), hex(payload)), (UInt16(53922), hex(payload).uppercased())] {
+        for (port, digest) in [(try freePort(), hex(payload)), (try freePort(), hex(payload).uppercased())] {
             let dest = try tempDir()
             let server = try await makeServer(port: port, dest: dest, fileSize: Int64(payload.count), sha256: digest)
             defer { Task { await server.stop() } }
@@ -4481,14 +4515,15 @@ struct HaloShareServerBinaryTests {
 
     @Test("A sha256 mismatch is 422 and the corrupt file is NOT kept")
     func sha256Mismatch() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir()
         let payload = Data((0..<4096).map { UInt8(truncatingIfNeeded: $0 &* 29 &+ 131) })
-        let server = try await makeServer(port: 53923, dest: dest, fileSize: Int64(payload.count),
+        let server = try await makeServer(port: port, dest: dest, fileSize: Int64(payload.count),
                                           sha256: String(repeating: "0", count: 64))
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53923)
+        try await waitUntilListening(port: port)
 
-        let result = try rawPost(port: 53923, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: payload)
+        let result = try rawPost(port: port, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: payload)
         #expect(result.status == 422, "server answered \(result.status)")
         #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob.bin").path),
                 "a file that failed its checksum was left on disk")
@@ -4496,29 +4531,31 @@ struct HaloShareServerBinaryTests {
 
     @Test("A mismatch is caught on a multi-read body too (3 MB), not only the part that arrived with the head")
     func sha256MismatchOnLargeBody() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir()
         var payload = Data(count: 3 << 20)
         payload.withUnsafeMutableBytes { _ = SecRandomCopyBytes(kSecRandomDefault, $0.count, $0.baseAddress!) }
         var tampered = payload; tampered[tampered.count - 1] ^= 0xFF          // last byte differs
-        let server = try await makeServer(port: 53924, dest: dest, fileSize: Int64(payload.count), sha256: hex(payload))
+        let server = try await makeServer(port: port, dest: dest, fileSize: Int64(payload.count), sha256: hex(payload))
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53924)
+        try await waitUntilListening(port: port)
 
-        let result = try rawPost(port: 53924, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: tampered)
+        let result = try rawPost(port: port, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: tampered)
         #expect(result.status == 422, "a one-byte corruption at the very end went undetected (\(result.status))")
         #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob.bin").path))
     }
 
     @Test("A mismatch must not clobber an existing file of the same name")
     func sha256MismatchLeavesExistingFileAlone() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir()
         try Data("precious".utf8).write(to: dest.appendingPathComponent("blob.bin"))
         let payload = Data(repeating: 0x42, count: 2048)
-        let server = try await makeServer(port: 53925, dest: dest, fileSize: Int64(payload.count), sha256: String(repeating: "f", count: 64))
+        let server = try await makeServer(port: port, dest: dest, fileSize: Int64(payload.count), sha256: String(repeating: "f", count: 64))
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53925)
+        try await waitUntilListening(port: port)
 
-        let result = try rawPost(port: 53925, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: payload)
+        let result = try rawPost(port: port, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: payload)
         #expect(result.status == 422)
         #expect((try? String(contentsOf: dest.appendingPathComponent("blob.bin"), encoding: .utf8)) == "precious")
         #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob (1).bin").path),
@@ -4527,12 +4564,13 @@ struct HaloShareServerBinaryTests {
 
     @Test("A wrong token is refused and writes nothing")
     func wrongToken() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir()
-        let server = try await makeServer(port: 53916, dest: dest, fileSize: 10)
+        let server = try await makeServer(port: port, dest: dest, fileSize: 10)
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53916)
+        try await waitUntilListening(port: port)
 
-        let result = try rawPost(port: 53916, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=WRONG",
+        let result = try rawPost(port: port, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=WRONG",
                                  body: Data(repeating: 1, count: 10))
         #expect(result.status == 403)
         #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob.bin").path))
@@ -4540,16 +4578,17 @@ struct HaloShareServerBinaryTests {
 
     @Test("A JSON endpoint reads its body even when it shares a write with the headers")
     func prepareUploadBodyInSameWrite() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir()
-        let server = try await makeServer(port: 53917, dest: dest, fileSize: 1)
+        let server = try await makeServer(port: port, dest: dest, fileSize: 1)
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53917)
+        try await waitUntilListening(port: port)
 
         // The server's onPrepareUpload returns nil here, i.e. "declined" → 403. Reaching
         // *that* answer (rather than 400 "Invalid body") proves the JSON was framed and
         // decoded correctly.
         let json = Data(#"{"info":{"alias":"Pixel","version":"2.1","deviceModel":"Pixel 9","deviceType":"mobile","fingerprint":"abc","port":53317,"protocol":"https","download":false},"files":{"f1":{"id":"f1","fileName":"a.txt","fileType":"text/plain","size":3}}}"#.utf8)
-        let result = try rawPost(port: 53917, path: "/api/localsend/v2/prepare-upload",
+        let result = try rawPost(port: port, path: "/api/localsend/v2/prepare-upload",
                                  body: json, contentType: "application/json")
         #expect(result.status == 403, "expected the consent callback's answer, got \(result.status)")
     }
@@ -4611,18 +4650,19 @@ struct HaloShareServerBinaryTests {
 
     @Test("A sender cannot stream more than the size the user approved")
     func oversizedUploadIsRefused() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir()
-        let server = try await hardenedServer(port: 53921, dest: dest, fileSize: 10)
+        let server = try await hardenedServer(port: port, dest: dest, fileSize: 10)
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53921)
+        try await waitUntilListening(port: port)
 
-        let result = try rawPost(port: 53921, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
+        let result = try rawPost(port: port, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
                                  body: Data(repeating: 7, count: 4096))
         #expect(result.status == 413, "answered \(result.status)")
         #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob.bin").path),
                 "bytes beyond the approved size reached the disk")
         // The approved size itself is still fine.
-        let ok = try rawPost(port: 53921, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
+        let ok = try rawPost(port: port, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok",
                              body: Data(repeating: 7, count: 10))
         #expect(ok.status == 200)
     }
@@ -4650,12 +4690,13 @@ struct HaloShareServerBinaryTests {
 
     @Test("A stalled upload is dropped after the idle timeout and leaves no partial file")
     func stalledUploadIsDropped() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir()
-        let server = try await hardenedServer(port: 53922, dest: dest, fileSize: 5000, idleTimeout: 1)
+        let server = try await hardenedServer(port: port, dest: dest, fileSize: 5000, idleTimeout: 1)
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53922)
+        try await waitUntilListening(port: port)
 
-        let (elapsed, fd) = try stalledUpload(port: 53922)
+        let (elapsed, fd) = try stalledUpload(port: port)
         close(fd)
         #expect(elapsed < 8, "the server held a silent connection for \(elapsed) s")
         try await Task.sleep(nanoseconds: 300_000_000)
@@ -4665,43 +4706,46 @@ struct HaloShareServerBinaryTests {
 
     @Test("The idle timer does not fire while the user is still deciding on a transfer")
     func slowConsentIsNotCut() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir()
         // Consent takes 3 s; the idle timeout is 1 s.
-        let server = try await hardenedServer(port: 53923, dest: dest, fileSize: 1, idleTimeout: 1, consentDelay: 3)
+        let server = try await hardenedServer(port: port, dest: dest, fileSize: 1, idleTimeout: 1, consentDelay: 3)
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53923)
+        try await waitUntilListening(port: port)
 
         let json = Data(#"{"info":{"alias":"Pixel","version":"2.1","deviceModel":"Pixel 9","deviceType":"mobile","fingerprint":"abc","port":53317,"protocol":"https","download":false},"files":{"f1":{"id":"f1","fileName":"a.txt","fileType":"text/plain","size":3}}}"#.utf8)
-        let result = try rawPost(port: 53923, path: "/api/localsend/v2/prepare-upload", body: json, contentType: "application/json")
+        let result = try rawPost(port: port, path: "/api/localsend/v2/prepare-upload", body: json, contentType: "application/json")
         #expect(result.status == 403, "the connection was cut while waiting for the user (status \(result.status))")
     }
 
     @Test("An abandoned session expires: its token stops working and the UI is told it was cancelled")
     func abandonedSessionExpires() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir(); let cancels = CancelLog()
-        let server = try await hardenedServer(port: 53925, dest: dest, fileSize: 10, sessionTimeout: 1, cancels: cancels)
+        let server = try await hardenedServer(port: port, dest: dest, fileSize: 10, sessionTimeout: 1, cancels: cancels)
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53925)
+        try await waitUntilListening(port: port)
         #expect(await server.sessionCount == 1)
 
         try await Task.sleep(nanoseconds: 2_200_000_000)
 
         #expect(await server.sessionCount == 0, "the abandoned session was never forgotten")
         #expect(cancels.all == ["s1"], "the UI was not told: \(cancels.all)")
-        let r = try rawPost(port: 53925, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: Data(repeating: 1, count: 10))
+        let r = try rawPost(port: port, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: Data(repeating: 1, count: 10))
         #expect(r.status == 404, "an expired session's token still worked (\(r.status))")
         #expect(!FileManager.default.fileExists(atPath: dest.appendingPathComponent("blob.bin").path))
     }
 
     @Test("A session is not expired while an upload is still streaming")
     func sessionSurvivesAnUploadInFlight() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir(); let cancels = CancelLog()
-        let server = try await hardenedServer(port: 53926, dest: dest, fileSize: 3000, sessionTimeout: 1, cancels: cancels)
+        let server = try await hardenedServer(port: port, dest: dest, fileSize: 3000, sessionTimeout: 1, cancels: cancels)
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53926)
+        try await waitUntilListening(port: port)
 
         // 100 bytes, then 2.5 s of silence (longer than the 1 s session timeout, shorter than the idle timeout).
-        let status = try await Task.detached { try self.slowUpload(port: 53926, total: 3000, firstPart: 100, pause: 2.5) }.value
+        let status = try await Task.detached { try self.slowUpload(port: port, total: 3000, firstPart: 100, pause: 2.5) }.value
         #expect(status == 200, "a live upload was cut by session expiry (\(status))")
         #expect((try? Data(contentsOf: dest.appendingPathComponent("blob.bin")))?.count == 3000)
         #expect(cancels.all.isEmpty)
@@ -4709,11 +4753,12 @@ struct HaloShareServerBinaryTests {
 
     @Test("A finished session is forgotten too, without reporting a cancellation")
     func finishedSessionIsForgotten() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir(); let cancels = CancelLog()
-        let server = try await hardenedServer(port: 53927, dest: dest, fileSize: 10, sessionTimeout: 1, cancels: cancels)
+        let server = try await hardenedServer(port: port, dest: dest, fileSize: 10, sessionTimeout: 1, cancels: cancels)
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53927)
-        let r = try rawPost(port: 53927, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: Data(repeating: 1, count: 10))
+        try await waitUntilListening(port: port)
+        let r = try rawPost(port: port, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f1&token=tok", body: Data(repeating: 1, count: 10))
         #expect(r.status == 200)
         try await Task.sleep(nanoseconds: 2_200_000_000)
         #expect(await server.sessionCount == 0)
@@ -4722,17 +4767,18 @@ struct HaloShareServerBinaryTests {
 
     @Test("Two files of one session uploading at once are both recorded as received")
     func concurrentUploadsAreBothRecorded() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir()
-        let server = try await hardenedServer(port: 53928, dest: dest, fileSize: 2000, extraFileSize: 10)
+        let server = try await hardenedServer(port: port, dest: dest, fileSize: 2000, extraFileSize: 10)
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53928)
+        try await waitUntilListening(port: port)
 
         // f1 stalls mid-body while f2 starts and finishes; f1 then completes. Each handler used to
         // write back the copy of the session it read before awaiting, so the later finisher erased
         // the earlier one's completion.
-        let slow = Task.detached { try self.slowUpload(port: 53928, total: 2000, firstPart: 100, pause: 1.0) }
+        let slow = Task.detached { try self.slowUpload(port: port, total: 2000, firstPart: 100, pause: 1.0) }
         try await Task.sleep(nanoseconds: 300_000_000)
-        let quick = try rawPost(port: 53928, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f2&token=tok2", body: Data(repeating: 2, count: 10))
+        let quick = try rawPost(port: port, path: "/api/localsend/v2/upload?sessionId=s1&fileId=f2&token=tok2", body: Data(repeating: 2, count: 10))
         #expect(quick.status == 200)
         #expect(try await slow.value == 200)
         #expect(await server.isSessionComplete("s1"), "one file's completion was lost")
@@ -4740,14 +4786,15 @@ struct HaloShareServerBinaryTests {
 
     @Test("Cancelling a session while a file is streaming leaves no file behind")
     func cancelMidUploadDeletesTheFile() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir()
-        let server = try await hardenedServer(port: 53929, dest: dest, fileSize: 2000)
+        let server = try await hardenedServer(port: port, dest: dest, fileSize: 2000)
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53929)
+        try await waitUntilListening(port: port)
 
         let status = try await Task.detached {
-            try self.slowUpload(port: 53929, total: 2000, firstPart: 100, pause: 0.5) {
-                _ = try? self.rawPost(port: 53929, path: "/api/localsend/v2/cancel?sessionId=s1", body: Data())
+            try self.slowUpload(port: port, total: 2000, firstPart: 100, pause: 0.5) {
+                _ = try? self.rawPost(port: port, path: "/api/localsend/v2/cancel?sessionId=s1", body: Data())
             }
         }.value
         #expect(status == 404, "answered \(status)")
@@ -4757,13 +4804,14 @@ struct HaloShareServerBinaryTests {
 
     @Test("Finished connections are forgotten, not accumulated")
     func connectionsAreReleased() async throws {
+        let port = try freePort()   // OS-assigned: never collides with another test's listener
         let dest = try tempDir()
-        let server = try await hardenedServer(port: 53924, dest: dest, fileSize: 1)
+        let server = try await hardenedServer(port: port, dest: dest, fileSize: 1)
         defer { Task { await server.stop() } }
-        try await waitUntilListening(port: 53924)
+        try await waitUntilListening(port: port)
 
         for _ in 0..<6 {
-            _ = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:53924/api/localsend/v2/info")!)
+            _ = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(port)/api/localsend/v2/info")!)
         }
         var open = await server.openConnectionCount
         for _ in 0..<30 where open > 0 {

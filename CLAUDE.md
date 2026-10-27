@@ -18,7 +18,7 @@ This file is the primary context source for Claude (and any AI agent) working on
 | Tagline | Your Mac. Elevated. |
 | Bundle ID | `com.halo.mac` |
 | Widget bundle ID | `com.halo.mac.widget` |
-| App Group | `group.com.halo.mac` |
+| App Group | `R7S39UR27F.group.com.halo.mac` (**team-prefixed — see gotcha 27**) |
 | Min macOS | 13.0 (Ventura) |
 | Language | Swift 5.9 / SwiftUI |
 | Architecture | MVVM + Actors + Swift Concurrency |
@@ -205,7 +205,7 @@ be captured in a nonisolated closure."
 - Two timers:
   - `metricsTimer` — fires every **2 s** → `refreshMetrics()` → writes data to App Group container
   - `widgetReloadTimer` — fires every **60 s** → `WidgetCenter.shared.reloadAllTimelines()`
-- `writeWidgetData()` saves `HaloWidgetData` to `UserDefaults(suiteName: "group.com.halo.mac")` — do **NOT** call `reloadAllTimelines()` here (budget will be exhausted)
+- `writeWidgetData()` saves `HaloWidgetData` to `UserDefaults(suiteName: "R7S39UR27F.group.com.halo.mac")` — do **NOT** call `reloadAllTimelines()` here (budget will be exhausted)
 - `calculateHealthScore()` — subtracts from 100 based on CPU/RAM/disk/battery thresholds
 - Clipboard cap: 500 items in memory; top 5 text/code/URL snippets forwarded to widget
 
@@ -214,7 +214,7 @@ be captured in a nonisolated closure."
 ## Widget Pipeline (critical — frequently asked about)
 
 ```
-AppState (every 2 s)  →  writeWidgetData()  →  UserDefaults(group.com.halo.mac)
+AppState (every 2 s)  →  writeWidgetData()  →  UserDefaults(R7S39UR27F.group.com.halo.mac)
 AppState (every 60 s) →  reloadAllTimelines()
                               └─► HaloProvider.getTimeline()
                                     └─► HaloWidgetData.load()  [reads fresh container]
@@ -228,7 +228,7 @@ AppState (every 60 s) →  reloadAllTimelines()
 ```bash
 python3 -c "
 import plistlib, json
-with open('$HOME/Library/Group Containers/group.com.halo.mac/Library/Preferences/group.com.halo.mac.plist','rb') as f:
+with open('$HOME/Library/Group Containers/R7S39UR27F.group.com.halo.mac/Library/Preferences/R7S39UR27F.group.com.halo.mac.plist','rb') as f:
     d = plistlib.load(f)
 print(json.dumps(json.loads(d['haloWidgetData']), indent=2))
 "
@@ -261,7 +261,8 @@ xcodebuild -project Halo.xcodeproj \
   SYMROOT=/tmp/HaloBuild/Build/Products \
   OBJROOT=/tmp/HaloBuild/Build/Intermediates.noindex \
   CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" \
-  build
+  COMPILER_INDEX_STORE_ENABLE=NO \
+  build          # COMPILER_INDEX_STORE_ENABLE=NO: required once any SPM package is present (gotcha 30)
 
 APP="/tmp/HaloBuild/Build/Products/Debug/Halo.app"
 
@@ -300,6 +301,7 @@ pluginkit -a ~/Applications/Halo.app/Contents/PlugIns/HaloWidget.appex
 
 # 4. Verify
 codesign --verify --deep --strict ~/Applications/Halo.app && echo "OK"
+./scripts/audit-entitlements.sh --probe   # proves the widget can actually see the app's data (gotcha 27)
 ```
 
 ---
@@ -626,7 +628,7 @@ process, once to record the CPU snapshot — doubling the syscall count of every
 | `Halo.entitlements` | **ON** (with `~/Library` exceptions) | App Store / release |
 | `HaloWidget.entitlements` | **ON** | Widget extension always |
 
-All three entitlement files include `com.apple.security.application-groups = [group.com.halo.mac]`,
+All three entitlement files include `com.apple.security.application-groups = [R7S39UR27F.group.com.halo.mac]`,
 and **all three must keep it** — `scripts/audit-entitlements.sh` enforces this. See gotcha 27.
 
 ---
@@ -663,6 +665,10 @@ and **all three must keep it** — `scripts/audit-entitlements.sh` enforces this
 | Performance (Memory Trends) | ✅ | MemoryTrendTracker (self-published) | ProcessMonitor.runningAppRAMSamples() | — |
 | Lucky Draw | ✅ | LuckyDrawViewModel + LuckyDrawStore | DrawEngine + SpinnerAnimator | ✅ |
 | Lethe (F-052) | ✅ | LetheManager | LetheRelayClient + LetheCrypto | ✅ |
+| Messages — SMS console (F-044) | ✅ | SMSConsoleViewModel | SMSSyncClient + FirebaseRTDBClient (REST) | ✅ (stubbed network) |
+| Expenditure (F-048) | ✅ | ExpenditureViewModel | TransactionParser + TransactionPipeline | ✅ |
+| Clipboard Sync (F-045) | ✅ | ClipboardSyncService | FirebaseRTDBClient (REST) + CryptoService | ✅ |
+| Context files / RAG (F-047 Ph.3) | ✅ | RAGContextViewModel | RAGService + RAGVectorStore | ✅ |
 
 ---
 
@@ -773,6 +779,8 @@ and **all three must keep it** — `scripts/audit-entitlements.sh` enforces this
 ---
 
 ### Reserved ID blocks — claim one before adding a file
+
+> **v2.5 note:** files added with `scripts/add_source_files.rb` (the xcodeproj gem) get **random** 24-hex ids, which cannot collide; the reserved blocks below matter only for ids you assign **by hand**. v2.5 added ~35 files this way and claimed no block. Do not hand-merge `project.pbxproj` after a conflict — its sorted blocks interleave and a wrong merge silently drops a file from Sources; take one side and re-add files with the script (the xcodeproj gem ships inside Homebrew's fastlane: `GEM_PATH=/opt/homebrew/Cellar/fastlane/*/libexec`).
 
 Object IDs in `project.pbxproj` are written zero-padded to 24 characters
 (`000000000000000000008163`); the table above abbreviates them to the last four
@@ -1135,6 +1143,39 @@ entitlement files, so this module works fully in a sandboxed build.
 
 ---
 
+## Cloud line — F-044 / F-045 / F-048 (v2.5)
+
+`Halo/Core/Cloud/` + `Halo/Features/{SMSConsole,ClipboardSync,Expenditure}/` · plan: `docs/V2_5_PLAN.md` · contract: `docs/specs/crypto-parity.md`
+
+The user's **own** Firebase ("BYOB"), configured at runtime (no bundled plist). Halo never sees the data in the clear off-device: payloads are end-to-end encrypted with a key derived from a passphrase.
+
+- **`FirebaseRTDBClient` is REST, not firebase-ios-sdk — and must stay that way** (gotcha 29). Identity Toolkit sign-in + RTDB REST (`<db>/<path>.json?auth=`) + the SSE stream for live `child_added`. Tokens live in memory only; the credential is re-presented on launch. https-only database URL (the token rides in the query string); the password only ever goes to Google's identity host. Same surface as the old SDK actor: `configure`, `signIn`, `signOut`, `testConnection`, `set/get/removeValue`, `observeChildAdded` → `RTDBObserverHandle`.
+- **`CryptoService`** — `v1:` + base64(AES-256-GCM(key, plaintext, AAD `halo.cloud.v1`)); key = PBKDF2-HMAC-SHA256(NFC passphrase, salt, **600 000** rounds). Legacy unprefixed (v0) boxes still decrypt, read-only. `deriveKey` refuses an empty passphrase, a salt under 16 bytes and under 100 000 rounds. `randomBytes` **throws** — an ignored `SecRandomCopyBytes` status once meant a zero salt. The iteration count is stored in `CloudConfigStore.kdfIterations` and carried in the pairing payload (schema 2, checksummed); a salt with no stored count derives at the legacy 200 000, never the new default, or it would derive a different key.
+- **`PassphrasePolicy`** (≥12 characters after NFC, ≥6 distinct, counted as grapheme clusters) is a floor for **choosing** a key — enforced at setup and re-key, advice-only at unlock so an existing weak key is warned about, not locked out. `deriveKey` does not enforce it.
+- **`CloudPairingPayload`** — schema 1 (no iterations) still decodes as 200 000; schema 2 covers `iterations` in the checksum so the cost can't be downgraded in transit.
+- **Parity with Android** — `docs/specs/crypto-parity-vectors.v2.json` is generated by `scripts/gen_crypto_vectors.swift`; `CryptoParityTests` (Swift) and `android/halocloud` `ParityTest` (Kotlin, `./gradlew :halocloud:test`) both read it. Changing any byte of the wire format is a coordinated change.
+- **Notifications never carry SMS text** (`SMSSyncClient.newMessageNotification`): the OS renders them, mirrors them, and `AlertManager.fireExternal` writes them to `AlertLog` (plaintext UserDefaults, printed in the PDF report). Sender only.
+- **`CloudTelemetryScrubber`** redacts `?auth=`/`key=`/`token=` values, JWTs and credential JSON from Sentry; every hook goes through `HaloApp.scrubTelemetry`, which applies it with the Lethe scrubber.
+- **`ClipboardPrivacy`** — items carrying `org.nspasteboard.ConcealedType`/`TransientType`/`AutoGeneratedType` (and a few older vendor markers) are never recorded, so never synced. Independent of the opt-in "don't sync likely secrets" content filter.
+- **Open-database warning** — "Test connection" also does an unauthenticated `shallow=true` read; a 200 means the rules are in test mode and the setup screen says so.
+- **Honest status:** unit-tested against a stubbed network; **never run against a live Firebase project or a phone.** F-048's parser has never seen real synced SMS.
+
+## Context files / local retrieval — F-047 Phase 3 (v2.5)
+
+`Halo/Core/RAG/` + `Halo/Features/AIAssistant/RAGContextView.swift`
+
+- **Everything is local**: parse → chunk → embed → store → search. No network, no subprocess, no model download.
+- `DocumentParser` (text/Markdown/CSV/code line-tracked; HTML tag-stripped — AppKit's HTML importer is main-thread/WebKit only; PDF per page; RTF/DOCX/DOC/ODT via AppKit), `Chunker` (paragraph → line → sentence → hard wrap; "p. 3" / "lines 40–58" locators; code and CSV rows never split), `TextEmbedder` (Apple's on-device `NLEmbedding` when present, else the deterministic `HashingEmbedder` — **FNV-1a, not `hashValue`**, so a persisted index stays valid), `RAGVectorStore` (brute-force cosine via vDSP; `index.json` + `vectors.bin`; a different embedder or truncated file is set aside, never compared), `RAGService` (SHA-256 "unchanged" detection, bounded: 500 files / 50k passages / 25 MB / 2M chars).
+- **The one privacy decision:** the assistant's `search_context` tool is **opt-in and off by default** (`RAGSettings.assistantMaySearch`), because a tool result goes into the conversation and so, with a cloud provider selected, excerpts of the user's files go to that provider. Registered only when enabled **and** something is indexed (`ToolRegistry.live`); the executor re-checks in case a model names it anyway. Read-only, so it auto-runs.
+- Excerpts reach the model labelled as **untrusted data** (prompt-injection hygiene), numbered `[n]`, and named by file + locator — **never an absolute path**.
+- **Known limit, measured:** with the on-device model 3 of 4 paraphrased test questions find the right file. Semantic quality is modest. Not built: MLX local generation, OCR (scanned PDFs say so), hybrid BM25 fusion.
+
+## HaloShare TLS pinning (v2.5)
+
+`LocalShareClient` pins each **https** peer's certificate (lower-case hex SHA-256 of the DER) to the fingerprint it announced — by `host:port`, **fail-closed** when no pin is known (`TLSManager.shouldTrustServer(challenge:expectedFingerprint:)`). It used to trust any certificate; the official LocalSend app announces https by default.
+
+---
+
 ## Known Gotchas
 
 1. **Widget reload budget** — never call `reloadAllTimelines()` more than once/min. Already handled by `widgetReloadTimer`.
@@ -1181,37 +1222,62 @@ entitlement files, so this module works fully in a sandboxed build.
 25. **`SMARTStatus = "Not Supported"` is the healthy state for USB/Thunderbolt enclosures, not a warning.** Verified on this Mac: an external USB SSD reports `"Not Supported"` and publishes no SMART dictionary at all, because bridge chipsets don't pass the health log through. Mapping an unrecognised status to `.warning` puts an amber badge on a perfectly good drive — `.other` must classify as `.unknown` ("can't tell"), the same discipline F-019's security checks use for values Halo cannot verify. The status check must also sit *after* the wear/spare/error checks so it can't mask a signal that was successfully read.
 26. **Card badge vs system notification are different bars.** `SMARTDiskInfo.healthLevel` drives the Drive Health card (a surface the user chose to open, so it can surface anything notable); `SMARTDiskInfo.alertLevel` is what `AlertManager.evaluateSMART` acts on and is deliberately stricter. A non-zero `MEDIA_ERRORS` count colours the badge but does **not** notify — one unrecovered read over a drive's lifetime isn't evidence of failure, and with `.diskSmartWarning`'s 24 h cooldown it would otherwise nag daily forever with no action the user can take. Pass `alertLevel`, never `healthLevel`, to `evaluateSMART`.
 
-27. **Every App-Group writer needs the entitlement, and losing it fails silently.**
-    `HaloWidget.appex` is sandboxed (WidgetKit requires it) and can read **only**
-    `~/Library/Group Containers/group.com.halo.mac/…`. If the main app does not
-    declare `com.apple.security.application-groups`, its
-    `UserDefaults(suiteName: "group.com.halo.mac")` does **not** fail and does
-    **not** return nil — it silently resolves to
-    `~/Library/Preferences/group.com.halo.mac.plist`, a different file the widget
-    cannot reach. `HaloWidgetData.load()` then returns its zero placeholder, so
-    the widget renders **plausible** values (0 % CPU, 8 GB RAM, no clipboard
-    items) and looks stuck rather than broken.
+27. **The App Group must be TEAM-PREFIXED, declared by every writer, and proven across processes.**
+    `HaloWidget.appex` is sandboxed (WidgetKit requires it) and can read **only** the group
+    container. Three separate things have to be right, and each fails *silently* — the widget
+    renders **plausible** zeros (0 % CPU, 8 GB RAM, no clipboard items) and looks stuck rather
+    than broken:
 
-    This shipped. `7f91bbb` (2026-05-07) removed the key from
-    `Halo-Debug.entitlements` to stop a per-launch TCC prompt, on the stated
-    basis that *"release builds (`Halo.entitlements`) retain the App Group"* —
-    but every shipped DMG, **v2.0 through the v2.3 beta**, is built from the
-    **Debug** configuration and signed with that file. The widget was dead in
-    every release for four months, and this document asserted the opposite the
-    whole time.
+    1. **Every writer declares the group.** Without `com.apple.security.application-groups`
+       the main app's `UserDefaults(suiteName:)` neither fails nor returns nil — it resolves to
+       `~/Library/Preferences/<group>.plist`, a different file the widget cannot reach. This
+       shipped: `7f91bbb` (2026-05-07) removed the key from `Halo-Debug.entitlements`, on the
+       basis that *"release builds retain it"* — but every shipped DMG is built from the **Debug**
+       configuration, so the widget was dead for four months.
+    2. **The ID must be `<TEAMID>.group.…`, not iOS-style `group.…`.** Measured 2026-10-25 on
+       macOS 27.0.1 with probes signed exactly like the DMG (Apple Development certificate, no
+       provisioning profile): with `group.com.halo.mac` an unsandboxed writer's value is read
+       back as `nil` by a second process **and by a sandboxed reader**; with
+       `R7S39UR27F.group.com.halo.mac` it shares correctly in both directions. On macOS 15+ an
+       unprefixed group no profile authorises is access-controlled and writes are dropped without
+       an error. `containerURL(forSecurityApplicationGroupIdentifier:)` still returns a path and
+       `UserDefaults(suiteName:)` still reads back what it wrote *inside that process*, so every
+       cheap check passes. **An earlier version of this note claimed "verified 2026-09-12" that
+       the unprefixed form works. It did not — v2.3-beta.2 and v2.4.0-beta.1 shipped a blank
+       widget on the strength of it.** Do not "simplify" the ID back to `group.…`.
+    3. **The constant and every entitlement must agree.** `HaloWidgetData.suiteName`
+       (`Shared/HaloSharedData.swift`) is compiled into both targets and must equal the string in
+       all four entitlement files (`Halo`, `Halo-Debug`, `HaloWidget`, `HaloHelper`). The recipe
+       signs with the raw `.entitlements` files, so `$(TeamIdentifierPrefix)` is **not** expanded —
+       the team ID is a literal in all five places (forks: change them together).
 
-    The `?? UserDefaults.standard` fallback in `HaloSharedData` does not rescue
-    it: `UserDefaults(suiteName:)` succeeds in both processes, so the fallback
-    never fires — they simply land in different files.
+    The `?? UserDefaults.standard` fallback in `HaloSharedData` cannot rescue any of this:
+    `UserDefaults(suiteName:)` succeeds in every process.
 
-    Verified 2026-09-12 with a signed probe: an **unsandboxed** app carrying this
-    entitlement, signed with a plain Apple Development certificate and **no
-    provisioning profile**, does get the group container. The original concern
-    was a development re-signing loop, not a limitation of the signing setup.
+    **Guards:** `scripts/audit-entitlements.sh` (static: derives the group from the code, requires
+    the team prefix, plist-aware so a commented-out key doesn't count) and
+    `scripts/audit-entitlements.sh --probe` (behavioural: signs two probe bundles with the REAL
+    entitlement files — one unsandboxed as the app, one sandboxed as the widget — and requires each
+    to read what the other wrote). Run `--probe` before any release. `HaloTests`
+    `AppGroupContractTests` is the always-on version.
 
-    `scripts/audit-entitlements.sh` fails the moment any of the three targets
-    drops the group — including when the key is merely commented out, which a
-    `grep` would happily pass.
+28. **Never put a restricted entitlement in `Halo-Debug.entitlements`.** Every DMG is signed with a
+    development certificate and **no provisioning profile**. `keychain-access-groups` (and anything
+    `com.apple.developer.*`) is restricted: measured, the same build carrying it is **SIGKILLed by
+    macOS at launch** (exit 137), while without it the app runs. `AppGroupContractTests` fails if one
+    appears.
+
+29. **firebase-ios-sdk cannot sign in from a DMG — the cloud client is REST.** FirebaseAuth persists
+    its session with `kSecUseDataProtectionKeychain = true`, which macOS only grants to an app holding
+    `keychain-access-groups` (restricted — see 28). Measured with a probe signed like the DMG:
+    `SecItemAdd` data-protection keychain → **-34018**, legacy keychain → 0. So the SDK *builds and
+    links* (the July "spike passed") yet cannot authenticate in any shipped DMG. `FirebaseRTDBClient`
+    therefore speaks Identity Toolkit + RTDB REST directly with in-memory tokens and needs no keychain
+    entitlement. Do not reintroduce the SDK without a provisioning-profile distribution story.
+
+30. **With any SPM package present, `-target Halo` builds need `COMPILER_INDEX_STORE_ENABLE=NO`** or
+    Xcode fails on a malformed `-I…/include/v5/records` index-store path (an explicit-module quirk,
+    not a code error). Add it to the build recipe's flags.
 
 ---
 

@@ -60,12 +60,12 @@
 | [F-041](#f-041--shareable-action-configurations) | Shareable Action Configurations | ✅ Done | 2 d | Actions module |
 | [F-042](#f-042--siri-shortcuts--app-intents) | Siri Shortcuts / App Intents | ✅ Done | 4 d | AppState |
 | [F-043](#f-043--drive-read--write-speed-test-nfeat-121) | Drive Read & Write Speed Test (NFeat-121) | ✅ Done | 2 d | Files module |
-| [F-044](#f-044--shared-sms-console-nfeat-122) | Shared SMS Console (NFeat-122) | 🗓 Planned | TBD | Firebase, Halo Mobile |
-| [F-045](#f-045--cross-device-clipboard-sync-nfeat-123) | Cross-Device Clipboard Sync (NFeat-123) | 🗓 Planned | TBD | Firebase, Clipboard module |
+| [F-044](#f-044--shared-sms-console-nfeat-122) | Shared SMS Console (NFeat-122) | 🔧 Desktop merged to v2.5 (REST client, E2E crypto, console) — **not yet run against a live Firebase project or a phone** | ~2 wk so far | Halo Mobile (device side) |
+| [F-045](#f-045--cross-device-clipboard-sync-nfeat-123) | Cross-Device Clipboard Sync (NFeat-123) | 🔧 Desktop merged to v2.5 — same caveat; password-manager markers honoured; phone side pending (F-049) | ~1 wk so far | F-044 core |
 | [F-046](#f-046--ai-querying--cloud-providers-nfeat-124) | AI Querying — Cloud Providers (NFeat-124) | ✅ Done | Desktop | none |
-| [F-047](#f-047--on-device-ai--custom-rag-nfeat-125) | On-Device AI & Custom RAG (NFeat-125) | 🗓 Planned | TBD | none |
-| [F-048](#f-048--personal-expenditure-tracker-nfeat-126) | Personal Expenditure Tracker (NFeat-126) | 🗓 Planned | TBD | F-044 |
-| [F-049](#f-049--halo-mobile-app-product-line) | Halo Mobile App (product line) | 🔧 App shells merged to v2.4; cloud features blocked on F-044 | TBD | F-044, F-045, F-050 |
+| [F-047](#f-047--on-device-ai--custom-rag-nfeat-125) | On-Device AI & Custom RAG (NFeat-125) | 🔧 Phase 3 only (local retrieval + opt-in assistant search) in v2.5; local generation (MLX, Phases 0–2) **not started** | ~1 wk so far | none |
+| [F-048](#f-048--personal-expenditure-tracker-nfeat-126) | Personal Expenditure Tracker (NFeat-126) | 🔧 Desktop v1 merged to v2.5 — parser unit-tested; **never run over real synced SMS** | ~1 wk so far | F-044 |
+| [F-049](#f-049--halo-mobile-app-product-line) | Halo Mobile App (product line) | 🔧 App shells in v2.4; Kotlin crypto-parity port (`android/halocloud`) in v2.5 unblocks the cloud features — **device features not started** | TBD | F-044, F-045, F-050 |
 | [F-050](#f-050--haloshare-mobile--desktop-nfeat-127) | HaloShare Mobile ↔ Desktop (NFeat-127) | 🔧 Merged to v2.4 — tests and builds pass; not yet run on a device or against official LocalSend | ~6 d so far | HaloShare (LocalSend) |
 | [F-051](#f-051--lucky-draw-spinner-wheel-nfeat-128) | Lucky Draw Spinner Wheel (NFeat-128) | ✅ Done | ~6 d | CelebrationOverlay (F-037) |
 | [F-052](#f-052--lethe-anonymous-ephemeral-chat-nfeat-129) | Lethe — Anonymous Ephemeral Chat (NFeat-129) | 🔧 Merged to v2.4 — ship gate (Mac ↔ real phone) not yet run | ~8 d | Keychain, `AlertManager` |
@@ -98,6 +98,36 @@ The repo had no written v2.4 scope; this is the reconciled picture. Release is *
 | F-003, F-007, F-013 | ⏭ Skipped by decision |
 | PRs #7, #6, #1 | Open, unrelated to v2.4 |
 
+
+---
+
+## v2.5 scope & status (branch `feat/v2.5-cloud-line`, cut from `release/v2.4` @ `92636ec`)
+
+Theme: **land the cloud line.** F-044/F-045/F-048 were built in July on `feature/f-044-cloud-foundation` (PR #7) and never merged. Full plan and evidence: [`V2_5_PLAN.md`](V2_5_PLAN.md).
+
+**In v2.5**
+
+| Item | What | Verified how |
+|---|---|---|
+| F-044 / F-045 / F-048 desktop | Merged onto the v2.4 line; **all 10 findings** of the PR #7 review fixed (zero-salt RNG, constant PKCE verifier, passphrase floor, versioned `v1:` envelope with AAD, KDF preconditions, 600 000 PBKDF2 rounds persisted with the salt, key wipe, error types, clipboard filter) | Unit tests; mutation-checked where it matters |
+| **Cloud transport is REST, not firebase-ios-sdk** | The SDK builds but **cannot sign in from a DMG**: it needs the data-protection keychain, which needs `keychain-access-groups`, a restricted entitlement — and a dev-signed build carrying it is **SIGKILLed at launch** (both measured). `FirebaseRTDBClient` now speaks Identity Toolkit + RTDB REST (incl. SSE streaming) with in-memory tokens | 54 stubbed-network tests; **not** a live Firebase round-trip |
+| Privacy fixes found while verifying | New-SMS notifications put message text on the lock screen **and** in plaintext `AlertLog`/PDF report (now sender only); cloud tokens now scrubbed from Sentry; clipboard honours password-manager markers; CSV export formula guard | Unit tests |
+| Open-database warning | "Test connection" detects a Realtime Database left in test mode (unauthenticated read succeeds) | Stubbed network |
+| **Widget fixed** | Blank since v2.3 on macOS 15+: the App Group must be team-prefixed (`R7S39UR27F.group.com.halo.mac`). `audit-entitlements.sh --probe` proves cross-process sharing. Also shipped separately as PR #47 against `release/v2.4` | Probe both directions; real app run, separate *sandboxed* reader saw live values. **Widget rendering on the desktop not eyeballed** |
+| HaloShare TLS pinning | Desktop client accepted any certificate from an https peer (official LocalSend announces https by default) — now pinned to the announced fingerprint, fail-closed | 9 tests with a real certificate; **no live handshake with the official app** |
+| F-047 Phase 3 | Local retrieval over the user's files (text/MD/CSV/code/PDF/Word/RTF/HTML), page/line citations, on-device embeddings; `search_context` assistant tool, **opt-in, default off** (cloud providers would receive excerpts) | 57 tests; on-device model finds the right file for 3 of 4 paraphrased questions — semantic quality is modest |
+| F-049 prerequisite | `android/halocloud`: Kotlin port of the crypto contract, with pairing payloads; contract in `specs/crypto-parity-vectors.v2.json` | 15 Kotlin tests + Swift tests on the same file; **Kotlin→Swift** direction also verified |
+
+**Not in v2.5**
+
+| Item | Why |
+|---|---|
+| Live validation of the cloud line | Needs the owner's Firebase project + credentials, and a phone for the SMS source |
+| F-047 local generation (MLX) | Spike S3 needs a model download and on-device benchmarking |
+| F-049 device features (SMS sync, clipboard, QR pairing) | Needs physical Android/iOS devices |
+| Assisted Firebase provisioning (S2) | Blocked on Google restricted-scope app verification |
+| Notarisation | Needs a paid Developer ID |
+| Owner decisions | `main` is ~119 commits behind; stale PRs #1/#6/#7 (#7 is now superseded by this branch); two things called "F-051"; HaloShare plain-HTTP (MD1) |
 
 ---
 

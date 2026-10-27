@@ -1057,6 +1057,55 @@ The cases marked **◆** are the ones unit tests and offscreen renders cannot re
 
 ---
 
+## 20.3 Cloud line — SMS console, clipboard sync, expenditure (F-044 / F-045 / F-048)
+
+**Files:** `Core/Cloud/*`, `Features/SMSConsole/*`, `Features/ClipboardSync/*`, `Features/Expenditure/*` · **Plan:** `docs/V2_5_PLAN.md`
+**Needs:** a Firebase project of your own (Email/Password enabled, Realtime Database, the owner-only rules from `docs/specs/firebase-setup.md` §7.2). TC-CLOUD-03…10 need it; a phone running the Halo mobile app is needed only for the SMS-source cases. **Nothing in this section has been run against a live project** — every case marked ◆ is *not yet run*.
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-CLOUD-01 | P0 | Module appears | Launch Halo | "Messages" and "Expenditure" are in the sidebar (reorderable); the Context-files button is in the AI header; no crash |
+| TC-CLOUD-02 | P0 | Signed build launches | Build per CLAUDE.md with `Halo-Debug.entitlements`, sign, launch | App runs (a restricted entitlement in that file would be **SIGKILLed** — gotcha 28) |
+| TC-CLOUD-03 ◆ | P0 | Sign-in from a DMG-signed build | Messages → Connect → enter config + email/password + passphrase → **Test connection** | Green "Connection OK". *(This is the case the Firebase SDK could never pass in a DMG — gotcha 29.)* |
+| TC-CLOUD-04 ◆ | P0 | Open-database warning | Put the RTDB in test mode (`".read": true`) → Test connection | **Amber** warning that the database is open to the internet, naming the fix. With owner-only rules: plain green tick |
+| TC-CLOUD-05 ◆ | P0 | Weak passphrase refused at creation | First-time setup with `abc` | Connect stays disabled with the strength message; `correct horse battery staple` enables it |
+| TC-CLOUD-06 ◆ | P1 | Seeded data end to end | Console gear → seed sample data | Devices → lines → threads appear; categories populated; search works |
+| TC-CLOUD-07 ◆ | P0 | Ciphertext only in Firebase | After seeding, open the RTDB console | `addressEnc`/`bodyEnc` values start with `v1:`; no SMS text anywhere |
+| TC-CLOUD-08 ◆ | P0 | New-SMS notification has no body text | Write an encrypted message into `sms/{uid}/…` from a second client | Notification reads "New SMS / From <sender>" — **no message text**; the Alert History entry and the PDF report show the same |
+| TC-CLOUD-09 ◆ | P1 | Re-key | Settings → new passphrase (≥12 chars) → confirm | Cloud SMS wiped, key rotated, new messages decrypt; a weak passphrase is refused |
+| TC-CLOUD-10 ◆ | P1 | Clipboard sync round trip | Enable sync on two devices; copy text on one | Appears in the other's history, badged as synced; never overwrites the live clipboard |
+| TC-CLOUD-11 | P0 | Password manager copy is not recorded | Copy a password from 1Password/Bitwarden/Keychain Access | **Not** in Halo's clipboard history, and (with sync on) not in `clipboard/{uid}/items` |
+| TC-CLOUD-12 ◆ | P1 | Expenditure on real SMS | Sync a month of bank SMS → Expenditure | Totals plausible; "Approximate" label; every transaction opens its source SMS; CSV export opens in Excel with no formulas evaluated |
+| TC-CLOUD-13 | P2 | Pairing payload | Run `CloudPairingPayload` / `CryptoParity` tests | Schema 1 and 2 decode; downgraded iterations fail the checksum |
+| TC-CLOUD-14 | P2 | Kotlin ↔ Swift parity (unit) | `cd android && ./gradlew :halocloud:test`; Swift `CryptoParityTests` | Both green on `crypto-parity-vectors.v2.json`; with `HALO_KOTLIN_SEALED_OUT` / `TEST_RUNNER_HALO_KOTLIN_SEALED`, Swift opens a Kotlin-sealed box |
+| TC-CLOUD-15 | P2 | No token in a report (unit) | Run `CloudTelemetryScrubberTests` | `?auth=`, JWTs and password JSON redacted; ordinary text untouched |
+
+## 20.4 Context files — local retrieval (F-047 Phase 3)
+
+**Files:** `Core/RAG/*`, `Features/AIAssistant/RAGContextView.swift`. **Needs:** nothing external — works offline with no API key. TC-RAG-08 needs a provider key.
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-RAG-01 ◆ | P0 | Open the sheet | AI Assistant → document-magnifier button | Sheet opens with or without an API key; "Off: your files stay on this Mac" shown by default |
+| TC-RAG-02 ◆ | P0 | Add files and a folder | Add files (txt/md/pdf/docx/csv); Add folder; drop a file on the sheet | Passage counts shown; a folder skips `node_modules`/`.git` and follows no symlinks; an unsupported or binary file is listed as skipped with a reason |
+| TC-RAG-03 ◆ | P0 | Try a search | Type a question whose answer is in a file | Right file first, with `name · p. N` / `name · lines a–b`, and a score |
+| TC-RAG-04 ◆ | P1 | Re-check | Edit one indexed file, delete another → Re-check | "1 updated, … 1 missing"; the missing file is flagged, **not silently dropped** |
+| TC-RAG-05 ◆ | P1 | Scanned PDF | Add a PDF with no text layer | Says it has no extractable text (no OCR) instead of indexing nothing |
+| TC-RAG-06 ◆ | P0 | Clear index leaves files alone | Clear index → confirm | Index emptied; the original files still exist |
+| TC-RAG-07 ◆ | P0 | Opt-in is off by default | Fresh install → assistant | The assistant is **not** offered `search_context`; turning the switch on shows the amber "excerpts are sent to your AI provider" notice |
+| TC-RAG-08 ◆ | P0 | Assistant cites sources | Enable the switch, ask about an indexed file | The tool runs automatically; the answer cites `[1]`…; excerpts named by file, never by absolute path |
+| TC-RAG-09 | P2 | Retrieval core (unit) | Run `ChunkerTests`, `RAGServiceTests`, `RAGVectorStoreTests`, `SearchContextToolTests` | Green; includes the opt-in guard and path-leak tests |
+| TC-RAG-10 | P2 | On-device model quality (unit) | Run `RAGServiceTests/semanticRetrieval` on a Mac with the system model | ≥3 of 4 paraphrased questions find the right file (known: not 4/4) |
+
+## 20.5 Widget data pipeline (regression for the blank widget in v2.3-beta.2 / v2.4.0-beta.1)
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-WIDG-08 | P0 | Group is shareable across processes | `./scripts/audit-entitlements.sh --probe` | Both directions **ok** (app→widget, widget→app). Run before every release |
+| TC-WIDG-09 ◆ | P0 | Widget shows live data | Install the build, add **Halo Monitor** (Edit Widgets) | CPU/RAM/network change over a minute — not 0 % / 8 GB |
+| TC-WIDG-10 | P0 | App Group contract (unit) | Run `AppGroupContractTests` | Team-prefixed; constant == every entitlement; no restricted entitlement in `Halo-Debug.entitlements` |
+| TC-WIDG-11 | P1 | HaloShare TLS pinning (unit) | Run `TLSPinningTests` | An https peer with the wrong certificate, or no pin, is refused |
+
 ## 21. Cross-Cutting / Non-Functional
 
 ### 21.1 Permissions
@@ -1161,6 +1210,7 @@ Frequency:     Always / Intermittent (<x/y>)
 | Performance | Processes, CPU, Battery, Network, Speed Test, Sensors, Login Items, Idle Apps, GPU |
 | Productivity | Clipboard, Snippets, Actions (108), Ports, Code Beautifier |
 | Connectivity | HaloShare (LocalSend P2P) |
+| Cloud & AI context | Messages (SMS console), Clipboard Sync, Expenditure, Context files (RAG), TLS pinning, widget App Group |
 | System integration | Menu Bar, Widget, Siri Intents, Hotkeys, System Controls (Mic/Cam/DDC) |
 | Automation | Smart Scan, Scheduler, Alerts, PDF Report, Weekly Digest |
 

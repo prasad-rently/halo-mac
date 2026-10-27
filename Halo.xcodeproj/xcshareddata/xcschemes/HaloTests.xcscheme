@@ -41,7 +41,7 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "C3CA09CF7C61D778EC3A4F3E"
+               BlueprintIdentifier = "E29CF9B1AC924AA4B3552E39"
                BuildableName = "HaloTests.xctest"
                BlueprintName = "HaloTests"
                ReferencedContainer = "container:Halo.xcodeproj">
