@@ -28,6 +28,9 @@ class ExpenseParseHardeningTest {
     @Test fun `balance figures are never the amount`() {
         assertEquals(1250.0, ok("VK-HDFCBK-T", "Rs.1250.00 debited from A/C XX4521. Avl Bal Rs.8420.10").amount, 0.0)
         assertEquals(1250.0, ok("VK-HDFCBK-T", "Avl Bal Rs.8420.10. Rs.1250 debited from A/C XX4521").amount, 0.0)
+        // Balance sits NEARER the verb than the real amount, so only the balance-prefix filter keeps it out.
+        assertEquals(1250.0, ok("VK-HDFCBK-T", "Debited from A/C XX4521. Avl Bal Rs.8420.10; txn amt Rs.1250").amount, 0.0)
+        assertEquals(1250.0, ok("VK-HDFCBK-T", "Debited. Available balance INR 99,000.00 after txn of INR 1,250").amount, 0.0)
     }
 
     @Test fun `a credit is Income and never a spend category`() {
