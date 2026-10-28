@@ -275,6 +275,19 @@ final class LuckyDrawViewModel: ObservableObject {
         }
     }
 
+    /// v2.6 C-4: the roster as `name,avatar_kind,avatar_value` — emoji/monogram only, never photos.
+    func exportRosterCSV() {
+        guard let roster = store.selected else { return }
+        let csv = RosterImport.rosterCSV(entries: roster.entries)
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(roster.name)-roster.csv"
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            try? csv.write(to: url, atomically: true, encoding: .utf8)
+        }
+    }
+
     func copyWinner() {
         guard let winner else { return }
         NSPasteboard.general.clearContents()
