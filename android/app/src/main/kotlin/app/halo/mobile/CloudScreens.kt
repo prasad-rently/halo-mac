@@ -193,6 +193,15 @@ fun SmsScreen(vm: CloudViewModel) {
                     color = Halo.Text2, fontSize = 13.sp, modifier = Modifier.testTag("sms.last"))
                 prefs.lastSyncError?.let { Text(it, color = Halo.Red, fontSize = 12.sp, modifier = Modifier.testTag("sms.error")) }
                 notice?.let { Text(it, color = Halo.Text2, fontSize = 12.sp, modifier = Modifier.testTag("sms.notice")) }
+                val skipped = prefs.quarantinedCount
+                if (skipped > 0) {
+                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (skipped == 1) "1 message couldn't be synced" else "$skipped messages couldn't be synced", color = Halo.Amber, fontSize = 12.sp,
+                            modifier = Modifier.weight(1f).testTag("sms.skipped"))
+                        TextButton(onClick = { vm.retrySkipped() }, enabled = !syncing, modifier = Modifier.testTag("sms.retrySkipped")) { Text("Retry skipped") }
+                    }
+                }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Button(onClick = { vm.syncNow(reconcile = true) }, enabled = !syncing, modifier = Modifier.testTag("sms.syncNow")) {

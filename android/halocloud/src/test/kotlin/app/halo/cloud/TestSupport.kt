@@ -12,6 +12,8 @@ class FakeRtdb(override val uid: String = "uid-1") : Rtdb {
     private val observers = ArrayList<Obs>()
     /** Set to make every write throw — models a dropped connection. */
     @Volatile var failWrites: ((String) -> Boolean)? = null
+    /** What a failing write throws: NETWORK by default; OPERATION_FAILED models the server refusing one particular row. */
+    @Volatile var failKind: RtdbException.Kind = RtdbException.Kind.NETWORK
     val writes = ArrayList<String>()
 
     private fun parts(p: String) = p.split('/').filter { it.isNotEmpty() }
@@ -26,7 +28,7 @@ class FakeRtdb(override val uid: String = "uid-1") : Rtdb {
     @Synchronized override fun get(path: String): JsonElement? = StreamModel.toJson(node(parts(path)))
 
     @Synchronized override fun put(path: String, value: JsonElement) {
-        if (failWrites?.invoke(path) == true) throw RtdbException(RtdbException.Kind.NETWORK, "offline")
+        if (failWrites?.invoke(path) == true) throw RtdbException(failKind, "offline")
         writes.add(path)
         val p = parts(path)
         // Which observed child is new?

@@ -64,7 +64,20 @@ object SmsSyncRunner {
         } catch (e: Exception) { SyncReport.fromFailure(e) }
     }
 
+    /** "Retry skipped" (H-14): un-park the quarantined messages and sync again. */
+    fun retrySkipped(ctx: Context): SyncReport {
+        val prefs = CloudPrefs(ctx)
+        return try {
+            val session = CloudRuntime.session(ctx) ?: return SyncReport(error = "This phone isn't paired yet.")
+            SmsSyncEngine(session.rtdb, session.crypto, session.deviceId, session.deviceName, AndroidSmsSource(ctx, prefs), PrefsSyncState(ctx), pairingEpoch = session.profile.epoch).retryQuarantined()
+            prefs.quarantinedCount = 0
+            run(ctx)
+        } catch (e: Exception) { SyncReport.fromFailure(e) }
+    }
+
     private fun finish(prefs: CloudPrefs, r: SyncReport): SyncReport {
+        // A pass that died before reading the inbox says nothing new about quarantine, so keep the last known count.
+        if (r.error == null) prefs.quarantinedCount = r.quarantined
         prefs.lastSyncAt = System.currentTimeMillis()
         prefs.lastSyncError = r.error ?: if (r.failed > 0) "${r.failed} message(s) couldn't be uploaded — will retry." else null
         prefs.lastSyncSummary = buildString {

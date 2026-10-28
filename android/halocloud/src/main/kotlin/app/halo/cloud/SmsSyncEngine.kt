@@ -32,14 +32,32 @@ interface SyncState {
      */
     fun pairingEpoch(): String?
     fun setPairingEpoch(epoch: String)
+
+    // H-14 — poison-row quarantine. A row that keeps failing for a reason other than connectivity must not
+    // hold its whole line (and its high-water mark) hostage forever. Keys are `"<subscriptionId>|<messageId>"`.
+    /** How many consecutive passes this row has failed (0 when unknown). */
+    fun failures(key: String): Int
+    fun setFailures(key: String, count: Int)
+    /** Rows given up on: skipped by every pass until [clearQuarantine]. */
+    fun quarantined(): Set<String>
+    fun quarantine(key: String)
+    /** Forget every quarantine entry and failure counter (the "Retry skipped" action). */
+    fun clearQuarantine()
 }
 
 class MemorySyncState : SyncState {
     private val m = HashMap<Int, Long>()
     private var epoch: String? = null
+    private val fails = HashMap<String, Int>()
+    private val parkedRows = LinkedHashSet<String>()
+    override fun failures(key: String) = fails[key] ?: 0
+    override fun setFailures(key: String, count: Int) { if (count <= 0) fails.remove(key) else fails[key] = count }
+    override fun quarantined(): Set<String> = parkedRows.toSet()
+    override fun quarantine(key: String) { parkedRows.add(key); fails.remove(key) }
+    override fun clearQuarantine() { parkedRows.clear(); fails.clear() }
     override fun highWater(subscriptionId: Int) = m[subscriptionId]
     override fun setHighWater(subscriptionId: Int, dateMs: Long) { m[subscriptionId] = dateMs }
-    override fun clear() { m.clear(); epoch = null }
+    override fun clear() { m.clear(); epoch = null; fails.clear(); parkedRows.clear() }
     override fun pairingEpoch() = epoch
     override fun setPairingEpoch(epoch: String) { this.epoch = epoch }
 }
@@ -71,6 +89,8 @@ data class SyncReport(
     val error: String? = null,
     /** The run stopped on trouble that can clear by itself (network, a busy database) — worth a backed-off retry. */
     val retryable: Boolean = false,
+    /** Rows currently quarantined (H-14): given up on after [SmsSyncEngine.QUARANTINE_AFTER] failed passes, until "Retry skipped". */
+    val quarantined: Int = 0,
 ) {
     val ok: Boolean get() = error == null && failed == 0
 
@@ -139,6 +159,7 @@ class SmsSyncEngine(
         val f = filter()
         val horizon = now - backfillDays() * DAY_MS
         var uploaded = 0; var filtered = 0; var disabled = 0; var failed = 0
+        val parked = state.quarantined()
         for (l in lines) {
             if (enabled[l.subscriptionId] == false) { disabled++; continue }                  // D29: a disabled line is not even read
             val rows = try { source.inbox(l.subscriptionId, state.highWater(l.subscriptionId) ?: horizon) }
@@ -147,21 +168,56 @@ class SmsSyncEngine(
             var sinceCheckpoint = 0
             for (r in rows) {
                 if (!f.permits(r.address)) { filtered++; mark = maxOf(mark ?: 0, r.dateMs); continue }
+                val key = quarantineKey(l.subscriptionId, r)
+                // H-14: a quarantined row is skipped, and the mark moves past it so it can never block its line.
+                if (key in parked) { mark = maxOf(mark ?: 0, r.dateMs); continue }
                 try {
                     rtdb.put("${root(uid)}/messages/${SmsWire.messageId(r)}", SmsWire.messageNode(r, crypto, deviceId, now))
+                    if (state.failures(key) > 0) state.setFailures(key, 0)
                     uploaded++; mark = maxOf(mark ?: 0, r.dateMs)
                     // Checkpoint as we go: a long backfill can outlive its worker (WorkManager's 10-minute limit,
                     // or the process), and a mark saved only at the end would restart that backfill from nothing
                     // every time — it could never finish. Rows are oldest-first, so the mark is always safe.
                     if (++sinceCheckpoint >= CHECKPOINT_EVERY) { state.setHighWater(l.subscriptionId, mark); sinceCheckpoint = 0 }
                 } catch (e: Exception) {
+                    // A dropped connection says nothing about THIS row, so it never counts toward quarantine.
+                    // Anything else (the server refusing it, a rule rejecting it) does: after QUARANTINE_AFTER
+                    // consecutive failed passes the row is parked and the line carries on past it (H-14).
+                    val rowFault = !(e is RtdbException && e.kind == RtdbException.Kind.NETWORK)
+                    if (rowFault) {
+                        val n = state.failures(key) + 1
+                        if (n >= QUARANTINE_AFTER) { state.quarantine(key); mark = maxOf(mark ?: 0, r.dateMs); continue }
+                        state.setFailures(key, n)
+                    }
                     // Stop this line at the first failure so the mark never jumps over an un-uploaded row.
                     failed++; break
                 }
             }
             if (mark != null) state.setHighWater(l.subscriptionId, mark)
         }
-        return SyncReport(uploaded, filtered, disabled, failed)
+        return SyncReport(uploaded, filtered, disabled, failed, quarantined = state.quarantined().size)
+    }
+
+    private fun quarantineKey(subscriptionId: Int, r: SmsRecord) = "$subscriptionId|${SmsWire.messageId(r)}"
+
+    /**
+     * "Retry skipped" (H-14): un-park every quarantined row. Their lines' marks already moved past them, so each
+     * line's mark is wound back to just before its oldest skipped row; the next [sync] re-sends from there
+     * (idempotent — every upload is an overwrite keyed `smsId_date`).
+     */
+    fun retryQuarantined() {
+        adoptPairing()
+        val oldest = HashMap<Int, Long>()
+        for (key in state.quarantined()) {
+            val sub = key.substringBefore('|').toIntOrNull() ?: continue
+            val date = key.substringAfterLast('_').toLongOrNull() ?: continue
+            oldest[sub] = minOf(oldest[sub] ?: Long.MAX_VALUE, date)
+        }
+        for ((sub, date) in oldest) {
+            val cur = state.highWater(sub)
+            if (cur == null || cur > date - 1) state.setHighWater(sub, date - 1)
+        }
+        state.clearQuarantine()
     }
 
     /**
@@ -199,6 +255,8 @@ class SmsSyncEngine(
     companion object {
         const val DEFAULT_BACKFILL_DAYS = 90
         const val CHECKPOINT_EVERY = 50
+        /** Consecutive failed passes after which a row is quarantined (H-14). */
+        const val QUARANTINE_AFTER = 5
         private const val DAY_MS = 86_400_000L
     }
 }

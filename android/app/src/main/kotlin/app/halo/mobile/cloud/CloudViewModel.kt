@@ -184,6 +184,14 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** H-14: give the messages the engine parked another go. */
+    fun retrySkipped() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val r = SmsSyncRunner.retrySkipped(ctx)
+            _notice.value = r.error ?: if (r.quarantined > 0) "${r.quarantined} message(s) still couldn't be synced." else "Retried — ${prefs.lastSyncSummary}."
+        }
+    }
+
     fun extendHistory(days: Int) {
         viewModelScope.launch(Dispatchers.IO) {
             val r = SmsSyncRunner.extend(ctx, days)
