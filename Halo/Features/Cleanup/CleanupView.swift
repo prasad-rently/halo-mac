@@ -33,6 +33,16 @@ struct CleanupView: View {
     }
 }
 
+// MARK: - Clean-All confirmation snapshot
+
+/// The set of items shown in a Clean-All confirmation dialog, frozen when it was opened.
+struct CleanAllSnapshot: Sendable {
+    let kind: CleanupKind
+    let items: [ScannedItem]
+    var bytes: Int64 { items.reduce(0) { $0 + $1.size } }
+    var formatted: String { ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
+}
+
 // MARK: - ViewModel
 
 @MainActor
@@ -160,11 +170,21 @@ final class CleanupViewModel: ObservableObject {
 
     // MARK: Cleaning
 
-    /// Clean every item in the given category at once.
-    func cleanAll(for kind: CleanupKind) async {
+    /// Capture what the user is about to be asked to confirm. The snapshot is immutable: a rescan
+    /// (activation, manual, post-clean) that lands while the dialog is open changes the live list
+    /// but never what "Move to Trash" acts on. Returns nil when there is nothing to clean.
+    func beginCleanAll(for kind: CleanupKind) -> CleanAllSnapshot? {
+        pruneMissing()      // never offer to trash what is already gone
+        guard let cat = category(for: kind), !cat.items.isEmpty else { return nil }
+        return CleanAllSnapshot(kind: kind, items: cat.items)
+    }
+
+    /// Clean exactly the items the user confirmed — the snapshot, intersected with what still
+    /// exists on disk. Items a later rescan discovered are NOT included.
+    func cleanAll(confirmed snapshot: CleanAllSnapshot) async {
         pruneMissing()
-        guard let idx = categories.firstIndex(where: { $0.kind == kind }) else { return }
-        await clean(items: categories[idx].items, from: kind)
+        let stillThere = snapshot.items.filter { CleanupPath.existsOnDisk($0.url) }
+        await clean(items: stillThere, from: snapshot.kind)
     }
 
     /// Clean a single item — called from the per-row trash button.
@@ -358,6 +378,9 @@ struct CleanupFileList: View {
     let category: CleanupKind
     @ObservedObject var viewModel: CleanupViewModel
     @State private var showCleanAllConfirm = false
+    /// Frozen when the Clean-All button is tapped; the dialog and its action both use this,
+    /// never the live list, so a rescan while the dialog is open cannot widen what is trashed.
+    @State private var pendingCleanAll: CleanAllSnapshot?
     @State private var showErrorAlert = false
 
     private var currentCategory: CleanupCategory? {
@@ -382,8 +405,8 @@ struct CleanupFileList: View {
                 if let cat = currentCategory, !cat.items.isEmpty {
                     // Clean All button — trashes every item in this category
                     Button {
-                        viewModel.pruneMissing()      // never offer to trash what is already gone
-                        showCleanAllConfirm = true
+                        pendingCleanAll = viewModel.beginCleanAll(for: category)
+                        showCleanAllConfirm = pendingCleanAll != nil
                     } label: {
                         HStack(spacing: 6) {
                             if viewModel.isCleaning {
@@ -404,17 +427,18 @@ struct CleanupFileList: View {
                     .buttonStyle(.plain)
                     .disabled(viewModel.isCleaning)
                     .accessibilityIdentifier("cleanup.cleanAll.button")
-                    .confirmationDialog(
-                        "Move all \(cat.items.count) items (\(cat.allFormatted)) to Trash?",
-                        isPresented: $showCleanAllConfirm,
-                        titleVisibility: .visible
-                    ) {
-                        Button("Move to Trash", role: .destructive) {
-                            Task { await viewModel.cleanAll(for: category) }
-                        }
-                        Button("Cancel", role: .cancel) {}
-                    }
                 }
+            }
+            .confirmationDialog(
+                pendingCleanAll.map { "Move all \($0.items.count) items (\($0.formatted)) to Trash?" } ?? "Move to Trash?",
+                isPresented: $showCleanAllConfirm,
+                titleVisibility: .visible,
+                presenting: pendingCleanAll
+            ) { snapshot in
+                Button("Move to Trash", role: .destructive) {
+                    Task { await viewModel.cleanAll(confirmed: snapshot) }
+                }
+                Button("Cancel", role: .cancel) {}
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)

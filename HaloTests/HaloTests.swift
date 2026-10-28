@@ -6319,7 +6319,7 @@ struct CleanupViewModelTests {
         let vm = f.vm()
         await vm.scanAll()
         #expect(names(vm, .trash).isEmpty)
-        await vm.cleanAll(for: .userCaches)
+        await vm.cleanAll(confirmed: try #require(vm.beginCleanAll(for: .userCaches)))
         #expect(names(vm, .trash) == ["a.bin"])
         #expect(vm.lastCleanResult?.deleted == 1)
     }
@@ -6330,7 +6330,7 @@ struct CleanupViewModelTests {
         try f.file("ok1.bin"); try f.file("bad.bin"); try f.file("ok2.bin")
         let vm = f.vm(failing: ["bad.bin"])
         await vm.scanAll()
-        await vm.cleanAll(for: .userCaches)
+        await vm.cleanAll(confirmed: try #require(vm.beginCleanAll(for: .userCaches)))
         #expect(names(vm, .userCaches) == ["bad.bin"])
         #expect(names(vm, .systemCaches) == ["bad.bin"])
         #expect(vm.cleanError?.contains("bad.bin") == true)
@@ -6408,7 +6408,7 @@ struct CleanupViewModelTests {
         let vm = f.vm()
         await vm.scanAll()
         #expect(names(vm, .trash) == ["t.bin"])
-        await vm.cleanAll(for: .trash)
+        await vm.cleanAll(confirmed: try #require(vm.beginCleanAll(for: .trash)))
         #expect(names(vm, .trash) == ["t.bin"], "an item already in the Trash is still there")
         #expect(FileManager.default.fileExists(atPath: f.trash.appendingPathComponent("t.bin").path))
         #expect(vm.cleanError != nil)
@@ -6451,6 +6451,41 @@ struct CleanupViewModelTests {
         #expect(!vm.isScanning)
         #expect(names(vm, .userCaches) == ["a.bin", "b.bin"])
         #expect(vm.totalBytes == 2 * 4096, "the shared files must be counted once, not once per category")
+    }
+
+    @Test("Clean All trashes exactly the confirmed set; a rescan while the dialog is open cannot widen it")
+    func cleanAllActsOnTheConfirmedSnapshot() async throws {
+        let f = try Fixture()
+        try f.file("c1.bin"); try f.file("c2.bin"); try f.file("c3.bin")
+        let vm = f.vm()
+        await vm.scanAll()
+        let snapshot = try #require(vm.beginCleanAll(for: .userCaches))        // user opens the dialog: N = 3
+        #expect(snapshot.items.count == 3)
+
+        try f.file("new1.bin"); try f.file("new2.bin")                           // M = 2 more appear…
+        await vm.scanAll()                                                       // …and a rescan lists them
+        #expect(names(vm, .userCaches).count == 5)
+
+        await vm.cleanAll(confirmed: snapshot)                                   // user confirms
+
+        #expect(vm.lastCleanResult?.deleted == 3)
+        #expect(names(vm, .userCaches) == ["new1.bin", "new2.bin"], "items the user never confirmed were trashed")
+        #expect(FileManager.default.fileExists(atPath: f.root.appendingPathComponent("new1.bin").path))
+        #expect(FileManager.default.fileExists(atPath: f.root.appendingPathComponent("new2.bin").path))
+        #expect(!FileManager.default.fileExists(atPath: f.root.appendingPathComponent("c1.bin").path))
+    }
+
+    @Test("A confirmed item that vanished before confirmation is skipped, not reported as an error")
+    func confirmedItemGoneIsSkipped() async throws {
+        let f = try Fixture()
+        let a = try f.file("a.bin"); try f.file("b.bin")
+        let vm = f.vm()
+        await vm.scanAll()
+        let snapshot = try #require(vm.beginCleanAll(for: .userCaches))
+        try FileManager.default.removeItem(at: a)
+        await vm.cleanAll(confirmed: snapshot)
+        #expect(vm.cleanError == nil)
+        #expect(vm.lastCleanResult?.deleted == 1)
     }
 
     /// Parks the n-th scan of each category until the test releases it, so a test can make an
