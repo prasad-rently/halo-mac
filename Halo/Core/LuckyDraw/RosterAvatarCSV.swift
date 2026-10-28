@@ -63,6 +63,9 @@ extension RosterImport {
     static func rows(fromCSV raw: String) -> [Row] {
         let lines = raw.components(separatedBy: .newlines)
             .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        // A header-only file is what exporting an EMPTY roster produces; without this it would fall
+        // through to the "comma list of names" path and import "name", "avatar_kind", "avatar_value".
+        if lines.count == 1, isAvatarHeader(splitCSVRow(lines[0])) { return [] }
         guard lines.count > 1 else { return labels(fromCSV: raw).map { Row(label: $0, avatar: nil) } }
 
         var rows: [Row] = []

@@ -169,6 +169,14 @@ struct RosterAvatarCSVTests {
         #expect(RosterImport.rows(fromCSV: "name,Sales\nAnna,Ops").map(\.label) == ["name", "Anna"])
     }
 
+    @Test("An empty roster's export (header only) re-imports as nothing, not as three entries")
+    func headerOnlyExportImportsNothing() {
+        let csv = RosterImport.rosterCSV(entries: [])
+        #expect(RosterImport.rows(fromCSV: csv).isEmpty)
+        // An ordinary one-line list is still a list.
+        #expect(RosterImport.rows(fromCSV: "Anna,Marcus").map(\.label) == ["Anna", "Marcus"])
+    }
+
     @Test("Import: a hostile CSV can only ever produce a validated single emoji")
     func hostileValuesYieldNoAvatar() {
         let uuidJPG = "\(UUID().uuidString).jpg"
@@ -323,6 +331,19 @@ struct WheelHeroGeometryTests {
         #expect(roster.lastWinnerEntry?.label == "B", "most recent")
         roster.entries.removeAll { $0.label == "B" }
         #expect(roster.lastWinnerEntry == nil, "a deleted entry is not shown")
+    }
+
+    @Test("Fairness (source pin): DrawEngine never mentions avatars, the hub or the hero")
+    func drawEngineSourceIsAvatarFree() throws {
+        // The test below feeds the engine identical inputs, so it cannot fail by construction. This one
+        // is the check that can: it goes red the moment someone threads avatar/hub/hero state into the
+        // file that picks the winner.
+        let src = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Halo/Core/LuckyDraw/DrawEngine.swift")
+        let text = try String(contentsOf: src, encoding: .utf8).lowercased()
+        for word in ["avatar", "hub", "hero", "photo", "emoji", "displaymode"] {
+            #expect(!text.contains(word), "DrawEngine.swift mentions '\(word)'")
+        }
     }
 
     @Test("Fairness: no avatar or display state can change who wins")
