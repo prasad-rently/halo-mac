@@ -542,7 +542,7 @@ struct BuildArtifactRemoverTests {
         f.dir("FakeTrash/someone-elses-folder"); f.file("FakeTrash/someone-elses-folder/doc.txt")
         let items = makeItems(f, names: ["a", "b"])
         let out = BuildArtifactRemover.trashAndEmpty(items, trash: trash.function, trashDirectories: [trash.dir],
-                                                    home: f.url("home").path, permanentAllowed: true)
+                                                    home: f.url("home").path, permanentAllowed: true, reverify: { _ in nil })
         #expect(out.moved.count == 2 && out.permanentlyRemoved.count == 2)
         #expect(out.failed.isEmpty && out.leftInTrash.isEmpty && out.refused.isEmpty)
         #expect(!f.exists("proj/a") && !f.exists("proj/b"), "originals moved")
@@ -566,7 +566,7 @@ struct BuildArtifactRemoverTests {
         let trash = FakeTrash(in: f); trash.failFor = ["b"]
         let items = makeItems(f, names: ["a", "b"])
         let out = BuildArtifactRemover.trashAndEmpty(items, trash: trash.function, trashDirectories: [trash.dir],
-                                                    home: f.url("home").path, permanentAllowed: true)
+                                                    home: f.url("home").path, permanentAllowed: true, reverify: { _ in nil })
         #expect(out.moved == [items[0].id] && out.permanentlyRemoved == [items[0].id])
         #expect(out.failed.map(\.id) == [items[1].id])
         #expect(f.exists("proj/b/artifact.bin"), "failed item stays exactly where it was")
@@ -577,7 +577,7 @@ struct BuildArtifactRemoverTests {
         let trash = FakeTrash(in: f); trash.reportNil = ["a"]
         let items = makeItems(f, names: ["a"])
         let out = BuildArtifactRemover.trashAndEmpty(items, trash: trash.function, trashDirectories: [trash.dir],
-                                                    home: f.url("home").path, permanentAllowed: true)
+                                                    home: f.url("home").path, permanentAllowed: true, reverify: { _ in nil })
         #expect(out.moved == [items[0].id] && out.permanentlyRemoved.isEmpty && out.leftInTrash.count == 1)
         #expect(f.exists("FakeTrash/a/artifact.bin"), "nothing is guessed or reconstructed — it stays in the Trash")
     }
@@ -589,7 +589,7 @@ struct BuildArtifactRemoverTests {
         trash.reportInstead = ["a": f.url("elsewhere")]
         let items = makeItems(f, names: ["a"])
         let out = BuildArtifactRemover.trashAndEmpty(items, trash: trash.function, trashDirectories: [trash.dir],
-                                                    home: f.url("home").path, permanentAllowed: true)
+                                                    home: f.url("home").path, permanentAllowed: true, reverify: { _ in nil })
         #expect(out.permanentlyRemoved.isEmpty && out.leftInTrash.count == 1)
         #expect(f.exists("elsewhere/precious.txt"), "a URL outside the Trash is never removed")
     }
@@ -613,7 +613,7 @@ struct BuildArtifactRemoverTests {
         trash.reportInstead = ["a": f.url("FakeTrash/linkresult")]
         let items = makeItems(f, names: ["a"])
         let out = BuildArtifactRemover.trashAndEmpty(items, trash: trash.function, trashDirectories: [trash.dir],
-                                                    home: f.url("home").path, permanentAllowed: true)
+                                                    home: f.url("home").path, permanentAllowed: true, reverify: { _ in nil })
         #expect(out.permanentlyRemoved.isEmpty)
         #expect(f.exists("victim/keep.txt"))
     }
@@ -629,7 +629,7 @@ struct BuildArtifactRemoverTests {
             f.file("proj/i\(i)/x"); items.append(baItem(f.url("proj/i\(i)"), cls: c.0, git: c.1))
         }
         let out = BuildArtifactRemover.trashAndEmpty(items, trash: trash.function, trashDirectories: [trash.dir],
-                                                    home: f.url("home").path, permanentAllowed: true)
+                                                    home: f.url("home").path, permanentAllowed: true, reverify: { _ in nil })
         #expect(out.refused.count == 5 && out.moved.isEmpty && trash.callCount == 0)
         #expect((0..<5).allSatisfy { f.exists("proj/i\($0)/x") })
     }
@@ -677,7 +677,7 @@ struct BuildArtifactRemoverTests {
         let unique = "f054-roundtrip-\(UUID().uuidString)"
         f.file("proj/\(unique)/artifact.bin", bytes: 64)
         let item = baItem(f.url("proj/\(unique)"))
-        let out = BuildArtifactRemover.trashAndEmpty([item], home: f.url("home").path, permanentAllowed: true)
+        let out = BuildArtifactRemover.trashAndEmpty([item], home: f.url("home").path, permanentAllowed: true, reverify: { _ in nil })
         #expect(out.moved == [item.id], "failed: \(out.failed) left: \(out.leftInTrash) refused: \(out.refused)")
         #expect(out.permanentlyRemoved == [item.id], "left in Trash: \(out.leftInTrash.map(\.message))")
         #expect(!f.exists("proj/\(unique)"))
@@ -871,5 +871,124 @@ struct BuildArtifactsViewModelTests {
         #expect(vm.sections.first?.title == "p2" || vm.sections.first?.items.reduce(0, { $0 + $1.size }) == 90)
         vm.grouping = .biggest; vm.toolchainFilter = "rust"
         #expect(vm.visibleItems.map(\.size) == [50, 10] || vm.visibleItems.map(\.size).sorted(by: >) == [50, 10])
+    }
+}
+
+// MARK: - Independent-review additions (PR #59): re-verification, TOCTOU, exclusions
+
+@Suite("F-054 review hardening")
+struct BuildArtifactReviewHardeningTests {
+
+    /// The permanent action re-asks before it deletes: a refusing verifier means nothing is touched.
+    @Test func permanentRemovalIsRefusedWhenReverificationFailsAndNothingIsTouched() {
+        let f = BAFixture(); defer { f.cleanup() }
+        let trash = FakeTrash(in: f)
+        f.file("proj/a/x"); let it = baItem(f.url("proj/a"))
+        let out = BuildArtifactRemover.trashAndEmpty([it], trash: trash.function, trashDirectories: [trash.dir],
+                                                    home: f.url("home").path, permanentAllowed: true,
+                                                    reverify: { _ in "no" })
+        #expect(out.refused.count == 1 && out.moved.isEmpty && trash.callCount == 0 && f.exists("proj/a/x"))
+    }
+
+    /// Default verifier, real git: a folder that was ignored at scan time and is then force-added is
+    /// refused; an untouched sibling repo is still removed (so the verifier is not simply "always no").
+    @Test(.enabled(if: BuildArtifactGitGateTests.git != nil))
+    func aFolderGitStartedTrackingAfterTheScanIsNeverRemovedPermanently() async throws {
+        let f = BAFixture(); defer { f.cleanup() }
+        let git = BuildArtifactGitGateTests.git!
+        func g(_ repo: String, _ a: [String]) -> Bool { ShellReader.run(git, ["-C", f.url(repo).path] + a, timeout: 20).succeeded }
+        for repo in ["ok", "late"] {
+            f.file("\(repo)/Cargo.toml"); f.file("\(repo)/target/x")
+            try "target/\n".write(to: f.url("\(repo)/.gitignore"), atomically: true, encoding: .utf8)
+            #expect(g(repo, ["init", "-q"]))
+        }
+        let scan = await baScan(f, roots: [f.root.path])
+        let byProject = Dictionary(uniqueKeysWithValues: scan.items.map { ($0.projectName, $0) })
+        let ok = try #require(byProject["ok"]), late = try #require(byProject["late"])
+        #expect(ok.permanentRemovalEligible && late.permanentRemovalEligible)
+
+        #expect(g("late", ["add", "-f", "target/x"]), "someone force-adds a file after the scan")
+
+        let trash = FakeTrash(in: f)
+        let out = BuildArtifactRemover.trashAndEmpty([ok, late], trash: trash.function, trashDirectories: [trash.dir],
+                                                    home: f.url("home").path, permanentAllowed: true)
+        #expect(out.permanentlyRemoved == [ok.id])
+        #expect(out.refused.map(\.id) == [late.id])
+        #expect(f.exists("late/target/x"), "the tracked folder must still be where it was")
+        #expect(trash.calls.map(\.path) == [ok.artifactURL.path])
+    }
+
+    /// A parent directory swapped for a symlink between scan and confirm must not redirect the removal.
+    @Test func aParentSwappedForASymlinkAfterTheScanIsNotFollowed() {
+        let f = BAFixture(); defer { f.cleanup() }
+        let trash = FakeTrash(in: f)
+        f.file("proj/a/x")
+        let it = baItem(f.url("proj/a"))
+        // proj -> elsewhere, which also has an `a` directory full of someone's files.
+        try! FileManager.default.moveItem(at: f.url("proj"), to: f.url("proj.moved"))
+        f.file("elsewhere/a/precious.txt")
+        f.link("proj", to: f.url("elsewhere"))
+        let out = BuildArtifactRemover.moveToTrash([it], trash: trash.function, home: f.url("home").path)
+        #expect(out.moved.isEmpty && out.failed.count == 1 && trash.callCount == 0)
+        #expect(f.exists("elsewhere/a/precious.txt"))
+    }
+
+    @Test func aTrashSiblingWithACommonPrefixIsNotInsideTheTrash() {
+        let f = BAFixture(); defer { f.cleanup() }
+        let trash = FakeTrash(in: f)                       // .../FakeTrash
+        f.file("FakeTrash2/x")                             // .../FakeTrash2  (shares the prefix)
+        #expect(!BuildArtifactRemover.isInsideTrash(f.url("FakeTrash2/x"), trashDirectories: [trash.dir]))
+        f.file("FakeTrash/x")
+        #expect(BuildArtifactRemover.isInsideTrash(f.url("FakeTrash/x"), trashDirectories: [trash.dir]))
+    }
+
+    @Test func sandboxDetectionDoesNotRelyOnOneSignal() {
+        #expect(BuildArtifactRemover.isSandboxed(environment: ["APP_SANDBOX_CONTAINER_ID": "com.halo.mac"], home: "/Users/x"))
+        #expect(BuildArtifactRemover.isSandboxed(environment: [:], home: "/Users/x/Library/Containers/com.halo.mac/Data"))
+        #expect(!BuildArtifactRemover.isSandboxed(environment: [:], home: "/Users/x"))
+    }
+
+    // MARK: Other version control
+
+    @Test func aProjectUnderMercurialOrSubversionIsNeverJustNotARepo() async {
+        let f = BAFixture(); defer { f.cleanup() }
+        f.file("hg/Cargo.toml"); f.dir("hg/.hg"); f.file("hg/target/x")
+        f.file("svn/Cargo.toml"); f.dir("svn/.svn"); f.file("svn/sub/Cargo.toml"); f.file("svn/sub/target/x")
+        #expect(GitGate.inspect(artifactName: "target", project: f.url("hg"), gitPath: nil) == .unavailable)
+        let r = await baScan(f, roots: [f.root.path])
+        #expect(r.items.count == 2, "found: \(r.items.map(\.artifactURL.path))")
+        #expect(r.items.allSatisfy { $0.gitStatus == .unavailable && !$0.permanentRemovalEligible && !$0.isSmartSelectable() })
+    }
+
+    // MARK: Exclusions
+
+    @Test func toolManagerInstallsAndSystemToolTreesAreNeverOffered() async {
+        let f = BAFixture(); defer { f.cleanup() }
+        f.file("ok/package.json"); f.file("ok/node_modules/x")
+        f.file(".nvm/versions/node/v20/lib/node_modules/npm/package.json")
+        f.file(".nvm/versions/node/v20/lib/node_modules/npm/node_modules/x")
+        f.file(".cargo/registry/src/crate-1/Cargo.toml"); f.file(".cargo/registry/src/crate-1/target/x")
+        let r = await baScan(f, roots: [f.root.path])
+        #expect(r.items.map(\.projectName) == ["ok"], "found: \(r.items.map(\.artifactURL.path))")
+        for p in ["/opt/homebrew/lib/node_modules", "/usr/local/lib", "/System/x", "/h/Library/x", "/h/Downloads", "/h/Downloads/proj", "/h/.Trash"] {
+            #expect(BuildArtifactRoots.isExcludedRoot(p, home: "/h"), "\(p)")
+        }
+        for p in ["/h/Documents", "/h/Github/x", "/Volumes/SSD/Projects", "/opt/projects"] {
+            #expect(!BuildArtifactRoots.isExcludedRoot(p, home: "/h"), "\(p)")
+        }
+    }
+
+    @MainActor
+    @Test func addingDownloadsAsARootIsRefusedOutLoudNotSilently() {
+        let f = BAFixture(); defer { f.cleanup() }
+        let suite = "f054-hard-\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!; defaults.removePersistentDomain(forName: suite)
+        let store = BuildArtifactRootsStore(defaults: defaults)
+        let vm = BuildArtifactsViewModel(roots: store, sandboxed: false, home: f.url("home").path,
+                                         trash: FakeTrash(in: f).function, trashDirectories: [], scan: nil)
+        let refused = vm.addRoots([f.dir("home/Downloads"), f.dir("home/Library"), f.dir("work")], sandboxed: false)
+        #expect(refused.map(\.lastPathComponent) == ["Downloads", "Library"])
+        #expect(store.userRoots == [f.url("work").standardizedFileURL.path])
+        #expect(vm.banner?.isError == true && vm.banner?.text.contains("Downloads") == true)
     }
 }

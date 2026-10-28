@@ -21,6 +21,9 @@ import Foundation
 enum BuildArtifactRemover {
 
     typealias TrashFunction = @Sendable (URL) throws -> URL?
+    /// Re-checks, at removal time, what the scan only knew at scan time. nil = still fine, otherwise
+    /// the reason to refuse.
+    typealias Reverify = @Sendable (BuildArtifactItem) -> String?
 
     struct Failure: Sendable, Equatable {
         let id: String
@@ -44,7 +47,14 @@ enum BuildArtifactRemover {
 
     /// True when the process runs inside an App Sandbox container.
     static var isSandboxed: Bool {
-        ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] != nil
+        isSandboxed(environment: ProcessInfo.processInfo.environment, home: NSHomeDirectory())
+    }
+
+    /// Two independent signals, either of which means "sandboxed": the container-id environment
+    /// variable, or a home directory that lives inside `~/Library/Containers/`. The permanent action
+    /// must never light up in a sandboxed build (S-B), so a missing variable alone is not trusted.
+    static func isSandboxed(environment: [String: String], home: String) -> Bool {
+        environment["APP_SANDBOX_CONTAINER_ID"] != nil || home.contains("/Library/Containers/")
     }
 
     /// Spike S-B (docs/specs/F-054-spikes.md): whether a SANDBOXED build may `removeItem` the URL
@@ -88,7 +98,8 @@ enum BuildArtifactRemover {
                               trash: TrashFunction = systemTrash,
                               trashDirectories: [URL] = defaultTrashDirectories(),
                               home: String = NSHomeDirectory(),
-                              permanentAllowed: Bool = permanentRemovalAvailable()) -> Outcome {
+                              permanentAllowed: Bool = permanentRemovalAvailable(),
+                              reverify: Reverify = reverifyGitIgnored) -> Outcome {
         var out = Outcome()
         for item in items {
             // S-B: unproven in a sandboxed build => nothing is touched, not even moved to Trash.
@@ -105,6 +116,11 @@ enum BuildArtifactRemover {
             }
             if let why = preflight(item, home: home) {
                 out.failed.append(.init(id: item.id, name: item.artifactURL.lastPathComponent, message: why)); continue
+            }
+            // The eligibility above is a SCAN-TIME fact and the scan may be hours old (someone may
+            // have `git add -f`-ed a file or edited .gitignore since). Irreversible => ask git again.
+            if let why = reverify(item) {
+                out.refused.append(.init(id: item.id, name: item.artifactURL.lastPathComponent, message: why)); continue
             }
             let resulting: URL?
             do { resulting = try trash(item.artifactURL) } catch {
@@ -129,6 +145,18 @@ enum BuildArtifactRemover {
     }
 
     // MARK: Pieces
+
+    /// Default `Reverify` for the permanent action: git must STILL say the folder is ignored and
+    /// holds nothing tracked, and the folder must still be a direct child of the project it was
+    /// found in. Blocking (ShellReader) — callers run off the main actor.
+    static let reverifyGitIgnored: Reverify = { item in
+        let project = URL(fileURLWithPath: item.projectPath)
+        guard item.artifactURL.deletingLastPathComponent().path == project.path else {
+            return "It is no longer where the scan found it — not removed permanently."
+        }
+        let verdict = GitGate.inspect(artifactName: item.artifactURL.lastPathComponent, project: project)
+        return verdict == .ignored ? nil : "Git no longer confirms this folder is ignored and untracked — not removed permanently."
+    }
 
     /// `~/.Trash` and each volume's `.Trashes/<uid>`. Paths only — nothing inside them is read.
     static func defaultTrashDirectories() -> [URL] {
@@ -177,6 +205,11 @@ enum BuildArtifactRemover {
     private static func preflight(_ item: BuildArtifactItem, home: String) -> String? {
         let url = item.artifactURL
         if BuildArtifactSafety.isNeverTouch(url.path, home: home) { return "This folder is protected and is never removed." }
+        // TOCTOU: scan-time paths are fully resolved, so resolving again must change nothing. If it
+        // does, a parent directory has been swapped for a symlink since — `lstat` below would follow it.
+        if !item.isXcodeGlobal, url.resolvingSymlinksInPath().path != url.path {
+            return "A parent folder is now a symlink — refusing to touch it."
+        }
         var st = stat()
         guard lstat(url.path, &st) == 0 else { return "Already gone." }
         if (st.st_mode & S_IFMT) == S_IFLNK { return "It is now a symlink — refusing to touch it." }

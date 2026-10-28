@@ -183,13 +183,15 @@ try FileManager.default.trashItem(at: url, resultingItemURL: nil)
 > build folder the user selected and then permanently removes **only the exact URL that call returned** in `resultingItemURL`
 > — so the user gets the space back now instead of after an Empty Trash. The one `removeItem` lives in
 > `permanentlyRemoveTrashed`, and is reachable only when **all** of these hold: (1) the item is **Safe-class and git-verified**
-> (`permanentRemovalEligible` — Needs-network, Caution, non-git/Unverified and Xcode-global items are refused); (2) the URL is the
+> (`permanentRemovalEligible` — Needs-network, Caution, non-git/Unverified and Xcode-global items are refused) **and git is asked again at removal
+time** (`reverifyGitIgnored`: still ignored, nothing tracked, still a direct child of its project — the scan may be hours old); (2) the URL is the
 > one `trashItem` returned in this operation — **never** reconstructed from a name, **never** found by enumerating a Trash,
 > and no "empty trash" API is ever called (the user's unrelated Trash contents are untouchable); (3) it is verified to sit strictly
 > inside a Trash directory (`~/.Trash` or a volume `.Trashes/<uid>`), after resolving symlinks in its parent chain, and is not itself
 > a symlink; (4) the build allows it — `permanentRemovalAvailable` is **false in a sandboxed build** (spike S-B could not show the
 > sandbox permits it; see `docs/specs/F-054-spikes.md`), where the button is hidden and `trashAndEmpty` refuses everything;
-> (5) the user passed the review sheet **and** a second confirmation that says the folders are unrecoverable. If `trashItem` fails,
+> (5) the review sheet requires the user to pass **a second confirmation** that says the folders are unrecoverable — enforced by the UI, not by the remover, so any new
+caller of `trashAndEmpty` must provide its own. If `trashItem` fails,
 > or returns no URL, the item is **not** removed and is reported. **Do not copy this pattern: it exists because the thing
 > deleted is regenerable build output the user just selected, and because the deletion is bound to the URL the system handed back.**
 
@@ -1142,7 +1144,8 @@ spikes: `docs/specs/F-054-spikes.md`
 - **Never offer a guess.** Detection needs a **marker pair** (artifact name + a sibling project file; symlinked markers/artifacts never count). In a git work tree
   `GitGate` requires nothing under the folder to be tracked (`git ls-files`) — and for `dist`/`.next`/`Pods`-style rules a positive `git check-ignore`. **git runs only through
   `ShellReader`**, via `GitGate.locateGit()` which never spawns the `/usr/bin/git` Command-Line-Tools shim. When git cannot answer (sandbox, no git) the item is **Unverified**,
-  Move-to-Trash-only, never smart-selected; git-required rules are dropped; the pane says so (spike S-A).
+  Move-to-Trash-only, never smart-selected; git-required rules are dropped; the pane says so (spike S-A). A project under Mercurial/Subversion/Fossil (`.hg`, `.svn`, …)
+  is treated the same way — Halo cannot ask those tools what is tracked, so it is never "not a repo".
 - **Hard stops regardless of catalogue or caller:** `BuildArtifactSafety.isNeverTouch` — Xcode `Archives`, `CoreSimulator/Devices|Volumes|Cryptex|Profiles/Runtimes`, `*.xcarchive`;
   default excluded roots (`~/Library`, `~/Downloads` (D-03), `~/.Trash`, `/System`, `/Applications`, `/Library`); symlinks never followed; the removal preflight re-checks each folder
   is still a real directory immediately before acting.

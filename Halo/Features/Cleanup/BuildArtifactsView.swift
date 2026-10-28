@@ -256,7 +256,7 @@ struct BuildArtifactsPane: View {
         panel.message = "Choose the folders that contain your projects."
         guard panel.runModal() == .OK else { return }
         let sandboxed = BuildArtifactRemover.isSandboxed
-        for u in panel.urls { viewModel.roots.addRoot(u, sandboxed: sandboxed) }
+        viewModel.addRoots(panel.urls, sandboxed: sandboxed)
         viewModel.rescan()
     }
 }

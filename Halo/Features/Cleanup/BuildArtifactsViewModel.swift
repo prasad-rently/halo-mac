@@ -289,6 +289,24 @@ final class BuildArtifactsViewModel: ObservableObject {
         selection = Set(visibleItems.filter { $0.isSmartSelectable(staleDays: roots.staleDays, now: now) }.map(\.id))
     }
 
+    /// Adds user-chosen roots, except areas this pane never scans (`~/Downloads` has its own Cleanup
+    /// category — one owner per path; `~/Library`, the Trash, system folders). Returns the refused
+    /// ones and says so in the banner — a silently ignored choice looks like "nothing found".
+    @discardableResult
+    func addRoots(_ urls: [URL], sandboxed: Bool) -> [URL] {
+        var refused: [URL] = []
+        for u in urls {
+            if BuildArtifactRoots.isExcludedRoot(u.path, home: home) { refused.append(u) }
+            else { roots.addRoot(u, sandboxed: sandboxed) }
+        }
+        if !refused.isEmpty {
+            let names = refused.map { $0.lastPathComponent }.joined(separator: ", ")
+            banner = Banner(text: "Not added: \(names). Downloads has its own Cleanup category, and Library, the Trash and system folders are never scanned for build folders.",
+                            isError: true)
+        }
+        return refused
+    }
+
     func neverOffer(_ item: BuildArtifactItem) {
         roots.ignore(item.artifactURL.path)
         roots.ignore(item.id)

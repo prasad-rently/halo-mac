@@ -192,10 +192,22 @@ enum BuildArtifactRoots {
         ["\(home)/Library/Developer/Xcode/DerivedData", "\(home)/Library/Developer/CoreSimulator/Caches"]
     }
 
+    /// True when the scanner would silently drop `path` as a root — it is, or lies inside, an
+    /// excluded area. Lets the UI say so instead of accepting a folder and then finding nothing.
+    static func isExcludedRoot(_ path: String, home: String = NSHomeDirectory()) -> Bool {
+        let p = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+        return defaultExcluded(home: home).contains {
+            CleanupPath.isCovered(p, by: URL(fileURLWithPath: $0).resolvingSymlinksInPath().path)
+        }
+    }
+
     /// Never scanned, never offered, never removable by this feature.
     static func defaultExcluded(home: String = NSHomeDirectory()) -> [String] {
         ["\(home)/Library", "\(home)/Downloads", "\(home)/.Trash",
-         "/System", "/Applications", "/Library"]
+         "/System", "/Applications", "/Library",
+         // Tool-managed trees (global npm installs bundle their own node_modules, which `npm install`
+         // does NOT recreate). Only reachable if the user picks `/` or similar as a root.
+         "/opt/homebrew", "/usr", "/bin", "/sbin"]
     }
 }
 
@@ -263,9 +275,25 @@ enum GitGate {
         }
     }
 
+    /// True when a Mercurial / Subversion / Fossil control directory sits in `dir` or an ancestor.
+    /// Halo cannot ask those tools what is tracked, so a project under one is never "not a repo" —
+    /// it is "version-controlled, cannot verify" (`.unavailable`: Trash only, never smart-selected).
+    static func isInsideOtherVCSByFilesystem(_ dir: URL, fm: FileManager = .default) -> Bool {
+        var cur = dir.standardizedFileURL
+        while true {
+            for marker in [".hg", ".svn", ".fslckout", "_FOSSIL_"]
+            where fm.fileExists(atPath: cur.appendingPathComponent(marker).path) { return true }
+            let parent = cur.deletingLastPathComponent()
+            if parent.path == cur.path { return false }
+            cur = parent
+        }
+    }
+
     /// Blocking (ShellReader) — call from an actor / detached task, never the main actor.
     static func inspect(artifactName: String, project: URL, gitPath: String? = locateGit()) -> Verdict {
-        guard isInsideWorkTreeByFilesystem(project) else { return .notRepo }
+        guard isInsideWorkTreeByFilesystem(project) else {
+            return isInsideOtherVCSByFilesystem(project) ? .unavailable : .notRepo
+        }
         guard let git = gitPath else { return .unavailable }
 
         let wt = ShellReader.run(git, ["-C", project.path, "rev-parse", "--is-inside-work-tree"], timeout: 10)
@@ -309,7 +337,11 @@ actor BuildArtifactScanner {
     /// be walking to find nothing).
     private static let neverDescend: Set<String> = [
         ".git", ".hg", ".svn", ".Trash", "node_modules", ".build", ".gradle", ".dart_tool",
-        "Pods", "__pycache__", "DerivedData", "Carthage", ".venv", "venv"
+        "Pods", "__pycache__", "DerivedData", "Carthage", ".venv", "venv",
+        // Toolchain managers: their installs carry a project file next to a bundled node_modules /
+        // target that is NOT regenerable by the usual command. Matters once "Entire home folder" is on.
+        ".nvm", ".npm", ".cargo", ".rustup", ".pub-cache", ".volta", ".fnm", ".asdf",
+        ".pyenv", ".rbenv", ".sdkman", ".pnpm-store", "Cellar"
     ]
     private static let packageSuffixes = [".app", ".framework", ".bundle", ".xcodeproj", ".xcworkspace",
                                           ".photoslibrary", ".playground", ".plugin", ".kext", ".xcarchive"]
