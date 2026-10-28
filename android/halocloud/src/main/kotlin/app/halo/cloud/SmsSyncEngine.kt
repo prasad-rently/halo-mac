@@ -1,7 +1,11 @@
 package app.halo.cloud
 
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.longOrNull
 
 // The phone-side SMS sync (F-044 FR-0…FR-6, F-049 Phase 1). Pure Kotlin over two seams — [SmsSource]
 // (the device inbox) and [Rtdb] (the user's database) — so the whole algorithm is unit-tested on the
@@ -151,8 +155,20 @@ class SmsSyncEngine(
             val linePath = "${root(uid)}/lines/${l.subscriptionId}"
             // The desktop owns the per-line toggle (D29): read it back rather than trusting a local copy, and
             // carry it through the whole-node write so a sync never resets it.
-            val flag = (rtdb.get("$linePath/syncEnabled") as? JsonPrimitive)?.booleanOrNull
-            rtdb.put(linePath, SmsWire.lineNode(l, crypto, flag))
+            val existing = rtdb.get(linePath) as? JsonObject
+            val flag = (existing?.get("syncEnabled") as? JsonPrimitive)?.booleanOrNull
+            // H-21: bump `lineVersion`/`updatedAt` only when what the Mac displays actually changed; an unchanged
+            // line keeps both (and its ciphertext) so a routine sync is a byte-identical rewrite, not a "change".
+            val prevVersion = (existing?.get("lineVersion") as? JsonPrimitive)?.intOrNull
+            val prevUpdated = (existing?.get("updatedAt") as? JsonPrimitive)?.longOrNull
+            val prevEnc = (existing?.get("ownNumberEnc") as? JsonPrimitive)?.takeIf { it.isString }?.content
+            val unchanged = existing != null &&
+                (existing["label"] as? JsonPrimitive)?.contentOrNull == l.label &&
+                (existing["carrier"] as? JsonPrimitive)?.contentOrNull == l.carrier &&
+                prevEnc != null && runCatching { crypto.decrypt(prevEnc) }.getOrNull() == l.ownNumber.ifBlank { "Unknown" }
+            val version = if (unchanged && prevVersion != null) prevVersion else (prevVersion ?: 0) + 1
+            val updatedAt = if (unchanged && prevUpdated != null) prevUpdated else now
+            rtdb.put(linePath, SmsWire.lineNode(l, crypto, flag, version, updatedAt, if (unchanged) prevEnc else null))
             enabled[l.subscriptionId] = flag ?: true
         }
 

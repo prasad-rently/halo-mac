@@ -58,6 +58,38 @@ class SmsSyncEngineTest {
         assertFalse(node.toString().contains("HDFCBK")); assertFalse(node.toString().contains("debited"))
     }
 
+    @Test fun `a SIM rename bumps lineVersion and updatedAt, an unchanged line does not (H-21b)`() {
+        val db = FakeRtdb(); var t = now
+        val src = FakeSource(listOf(sim1), mutableListOf())
+        val engine = SmsSyncEngine(db, testCrypto(), "dev-A", "Pixel 8", src, MemorySyncState(), { SenderFilter() }, { 90 }, { t })
+        fun line() = db.dump("sms/uid-1/dev-A/lines/1") as JsonObject
+        fun v(k: String) = line()[k]!!.jsonPrimitive.content.toLong()
+
+        engine.sync()
+        assertEquals(1L, v("lineVersion")); assertEquals(now, v("updatedAt"))
+        val enc = line()["ownNumberEnc"]!!.jsonPrimitive.content
+
+        t += 60_000; engine.sync()                                       // nothing changed
+        assertEquals("an unchanged line must not look changed", 1L, v("lineVersion")); assertEquals(now, v("updatedAt"))
+        assertEquals("…and its ciphertext is stable, not re-rolled every sync", enc, line()["ownNumberEnc"]!!.jsonPrimitive.content)
+
+        t += 60_000; src.lines = listOf(sim1.copy(label = "Travel SIM")); engine.sync()   // the rename
+        assertEquals(2L, v("lineVersion")); assertEquals(t, v("updatedAt"))
+        assertEquals("Travel SIM", line()["label"]!!.jsonPrimitive.content)
+
+        t += 60_000; src.lines = listOf(sim1.copy(label = "Travel SIM", ownNumber = "+911111111111")); engine.sync()   // own number changed
+        assertEquals(3L, v("lineVersion"))
+    }
+
+    @Test fun `a line written before H-21 (no version) is upgraded once and keeps its toggle`() {
+        val db = FakeRtdb(); val c = testCrypto()
+        db.put("sms/uid-1/dev-A/lines/1", SmsWire.lineNode(sim1, c, syncEnabled = true))      // the v2.5 shape
+        val engine = SmsSyncEngine(db, c, "dev-A", "Pixel 8", FakeSource(listOf(sim1), mutableListOf()), MemorySyncState(), { SenderFilter() }, { 90 }, { now })
+        engine.sync()
+        val line = db.dump("sms/uid-1/dev-A/lines/1") as JsonObject
+        assertEquals("1", line["lineVersion"]!!.jsonPrimitive.content); assertEquals("true", line["syncEnabled"]!!.jsonPrimitive.content)
+    }
+
     @Test fun `registers the device and every SIM line, with the number encrypted`() {
         val (db, _, engine) = harness(listOf(1 to rec(1, "A", "x", now - day)))
         engine.sync()
