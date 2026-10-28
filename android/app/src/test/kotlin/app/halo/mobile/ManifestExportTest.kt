@@ -33,7 +33,7 @@ class ManifestExportTest {
 
     /** What each *unprotected* exported component may answer. Justification beside each. */
     private val publicAllowList = mapOf(
-        ".MainActivity" to setOf("android.intent.action.MAIN"),                                  // the launcher
+        ".MainActivity" to setOf("android.intent.action.MAIN", "android.intent.action.SEND", "android.intent.action.SEND_MULTIPLE"), // launcher + F-055 file share target (stages only; SharedUris refuses non-content:// URIs)
         ".cloud.SendToMacActivity" to setOf("android.intent.action.SEND"),                       // text share target; re-checks the action in onCreate
     )
 
@@ -68,5 +68,15 @@ class ManifestExportTest {
         // Matches the service's own comment ("subscribes to no accessibility events") and its no-window-content promise.
         assertFalse("config must not declare accessibilityEventTypes", cfg.hasAttributeNS(ns, "accessibilityEventTypes"))
         assertEquals("false", cfg.getAttributeNS(ns, "canRetrieveWindowContent"))
+    }
+
+    @Test fun `F-055 components - the service and consent receiver are not exported, the service is dataSync, notifications permission is declared`() {
+        val svc = components().single { it.getAttributeNS(ns, "name") == ".background.HaloShareService" }
+        assertEquals("false", svc.getAttributeNS(ns, "exported")); assertEquals("dataSync", svc.getAttributeNS(ns, "foregroundServiceType"))
+        assertTrue("a service with an intent-filter could be started by name-guessing apps", children(svc, "intent-filter").isEmpty())
+        val rcv = components().single { it.getAttributeNS(ns, "name") == ".background.ConsentActionReceiver" }
+        assertEquals("false", rcv.getAttributeNS(ns, "exported")); assertTrue(children(rcv, "intent-filter").isEmpty())
+        val perms = children(manifest(), "uses-permission").map { it.getAttributeNS(ns, "name") }.toSet()
+        for (p in listOf("android.permission.FOREGROUND_SERVICE", "android.permission.FOREGROUND_SERVICE_DATA_SYNC", "android.permission.POST_NOTIFICATIONS")) assertTrue("missing $p", p in perms)
     }
 }
