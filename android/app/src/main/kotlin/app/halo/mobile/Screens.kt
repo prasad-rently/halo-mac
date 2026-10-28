@@ -100,13 +100,15 @@ fun HaloApp(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel) {
                 NavigationBarItem(selected = tab == 3, onClick = { tab = 3; vm.refreshInbox() }, colors = colors,
                     label = { Text(if (inbox.isEmpty()) "Files" else "Files (${inbox.size})") },
                     icon = { Icon(Icons.Filled.Email, null) }, modifier = Modifier.testTag("tab.inbox"))
+                NavigationBarItem(selected = tab == 5, onClick = { tab = 5 }, colors = colors, label = { Text("Spend") },
+                    icon = { Icon(Icons.Filled.CheckCircle, null) }, modifier = Modifier.testTag("tab.spend"))
                 NavigationBarItem(selected = tab == 4, onClick = { tab = 4 }, colors = colors, label = { Text("Settings") },
                     icon = { Icon(Icons.Filled.Settings, null) }, modifier = Modifier.testTag("tab.settings"))
             }
         },
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
-            when (tab) { 0 -> ShareScreen(vm); 1 -> SmsScreen(cloud); 2 -> ClipboardScreen(cloud); 3 -> InboxScreen(vm); else -> SettingsScreen(vm, cloud) }
+            when (tab) { 0 -> ShareScreen(vm); 1 -> SmsScreen(cloud); 2 -> ClipboardScreen(cloud); 3 -> InboxScreen(vm); 5 -> app.halo.mobile.expense.ExpenseScreen(); else -> SettingsScreen(vm, cloud) }
         }
     }
 
