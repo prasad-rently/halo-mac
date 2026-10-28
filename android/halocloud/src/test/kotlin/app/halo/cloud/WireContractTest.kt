@@ -1,10 +1,13 @@
 package app.halo.cloud
 
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -20,25 +23,28 @@ import java.util.Base64
  * the language boundary: the Swift suite decoded hand-written JSON and the Kotlin suite checked fields it chose
  * itself, so a renamed field could pass both.
  *
- * `docs/specs/wire-contract/phone-nodes.v1.json` is a committed fixture of every node kind the phone writes
- * (device, SIM line, SMS message, clipboard item), produced by THIS code. Two directions:
- *  - producer: the real engines are run on an in-memory database and their output must equal the fixture
- *    (same paths, same field names, same value types, same plaintext behind every `*Enc` field);
- *  - consumer: the fixture's ciphertexts must open under the documented key, and the clipboard node must parse
- *    with the phone's own reader.
- * The Swift desktop tests decode the same file (their half lives in HaloTests). Rename a field on either side
- * and one of the two suites goes red.
- *
- * Ciphertexts are randomly nonced, so they cannot be compared byte for byte; they are compared by what they open to.
- * Regenerate (after an INTENDED contract change, and tell the Swift side):
- *   HALO_WIRE_CONTRACT_WRITE=1 ./gradlew :halocloud:test --tests '*WireContractTest*'
+ * `docs/specs/wire-contract/phone-nodes.v1.json` is the shared fixture (the desktop's HaloTests decode the same file).
+ *  - producer: the REAL writers (SmsSyncEngine, ClipboardEnvelope.node, SmsWire) are run over the fixture's scenario
+ *    and each node must equal the fixture's — same field names, same value types, same plaintext behind every `*Enc`;
+ *  - consumer: every fixture ciphertext must open under the fixture's own key to its `expect`ed plaintext, and the
+ *    clipboard nodes must parse with the phone's own reader.
+ * Ciphertext is randomly nonced, so it is compared by what it opens to, never by bytes. Rename a field on either side
+ * and one of the two suites fails.
  */
 class WireContractTest {
-    private val pretty = Json { prettyPrint = true; prettyPrintIndent = "  " }
+    private val fx: JsonObject = Json.parseToJsonElement(File(System.getProperty("halo.wireContract") ?: error("halo.wireContract not set")).readText()).jsonObject
+    private val cryptoBlock = fx.getValue("crypto").jsonObject
+    private val crypto = CryptoService.create(
+        cryptoBlock.getValue("passphrase").jsonPrimitive.content,
+        Base64.getDecoder().decode(cryptoBlock.getValue("saltBase64").jsonPrimitive.content),
+        cryptoBlock.getValue("iterations").jsonPrimitive.content.toInt(),
+    )
+    private val uid = fx.getValue("uid").jsonPrimitive.content
+    private val deviceId = fx.getValue("deviceId").jsonPrimitive.content
     private val nowMs = 1_800_000_000_000L
-    private val passphrase = "correct horse battery staple"
-    private val salt = ByteArray(16) { it.toByte() }
-    private val clipId = "00000000-0000-4000-8000-0000000000C1"
+    private fun JsonObject.arr(k: String): List<JsonObject> = getValue(k).jsonArray.map { it.jsonObject }
+    private fun JsonObject.s(k: String) = getValue(k).jsonPrimitive.content
+    private fun JsonObject.l(k: String) = getValue(k).jsonPrimitive.content.toLong()
 
     private class Source(val lines: List<SimLine>, val rows: List<SmsRecord>) : SmsSource {
         override fun lines() = lines
@@ -46,90 +52,71 @@ class WireContractTest {
         override fun allMessageIds() = rows.map { SmsWire.messageId(it) }.toSet()
     }
 
-    /** Run the real engines, return every node the phone wrote, keyed by path. */
-    private fun produce(): Pair<LinkedHashMap<String, JsonObject>, FakeRtdb> {
-        val db = FakeRtdb("uid-1"); val crypto = testCrypto()
-        val rows = listOf(
-            SmsRecord(42, "VM-HDFCBK", "Rs 500.00 debited from a/c XX1234 on 15-Jan. Avl bal Rs 9,500.00 — héllo ✓", nowMs - 3_600_000, 7, 1, read = false, seen = true, serviceCenter = "+919810051914"),
-            SmsRecord(43, "+91 98765 43210", "See you at 5", nowMs - 1_800_000, 8, 2, read = true, seen = true),
-        )
-        SmsSyncEngine(db, crypto, "dev-A", "Pixel 8", Source(listOf(SimLine(1, "Airtel", "+919876543210", "Personal"), SimLine(2, "Jio", "", "Work")), rows), MemorySyncState(), { SenderFilter() }, { 90 }, { nowMs }).sync()
-        ClipboardSyncEngine(db, crypto, "dev-A", "Pixel 8", { false }, { nowMs }).publish("https://halo.app/x?y=1")
+    /** `*Enc` fields replaced by what they open to; the only comparable form of a randomly-nonced ciphertext. */
+    private fun opened(node: JsonObject, ignore: Set<String> = emptySet()): JsonObject = JsonObject(
+        node.filterKeys { it !in ignore }.mapValues { (k, v) -> if (k.endsWith("Enc")) buildJsonObject { put("opensTo", crypto.decrypt(v.jsonPrimitive.content)) } else v }.toSortedMap()
+    )
 
-        val out = LinkedHashMap<String, JsonObject>()
-        fun grab(path: String) { out[path] = db.dump(path) as JsonObject }
-        grab("devices/uid-1/dev-A")
-        grab("sms/uid-1/dev-A/lines/1"); grab("sms/uid-1/dev-A/lines/2")
-        grab("sms/uid-1/dev-A/messages/${SmsWire.messageId(rows[0])}"); grab("sms/uid-1/dev-A/messages/${SmsWire.messageId(rows[1])}")
-        val itemKey = (db.dump("clipboard/uid-1/items") as JsonObject).keys.single()
-        // The item id is random per publish; the fixture pins it so the Swift side has a stable key.
-        val item = db.dump("clipboard/uid-1/items/$itemKey") as JsonObject
-        out["clipboard/uid-1/items/$clipId"] = JsonObject(item.mapValues { (k, v) -> if (k == "itemId") JsonPrimitive(clipId) else v })
-        return out to db
-    }
+    private fun sameNode(what: String, want: JsonObject, got: JsonObject, ignoreInGot: Set<String> = emptySet()) =
+        assertEquals(what, opened(want), opened(got, ignoreInGot))
 
-    /** `*Enc` fields replaced by what they open to — the only comparable form of a randomly-nonced ciphertext. */
-    private fun opened(node: JsonObject, crypto: CryptoService): JsonObject = JsonObject(node.mapValues { (k, v) ->
-        if (k.endsWith("Enc")) buildJsonObject { put("decryptsTo", crypto.decrypt(v.jsonPrimitive.content)) } else v
-    })
-
-    private fun fixtureFile() = File(System.getProperty("halo.wireContract") ?: error("halo.wireContract not set"))
-
-    private fun render(nodes: Map<String, JsonObject>, crypto: CryptoService): String {
-        val root = buildJsonObject {
-            put("version", 1)
-            put("doc", "Nodes exactly as the Android phone writes them (produced by halocloud's real engines — see WireContractTest). Ciphertext fields are randomly nonced: compare what they decrypt to, not their bytes. The Swift HaloTests decode this same file.")
-            put("crypto", buildJsonObject {
-                put("passphrase", passphrase); put("saltB64", Base64.getEncoder().encodeToString(salt)); put("iterations", CryptoService.MINIMUM_ITERATIONS)
-            })
-            put("uid", "uid-1")
-            put("nodes", JsonObject(nodes))
-            put("decrypted", JsonObject(nodes.mapValues { (_, n) -> buildJsonObject { for ((k, v) in n) if (k.endsWith("Enc")) put(k, crypto.decrypt(v.jsonPrimitive.content)) } }.filterValues { it.isNotEmpty() }))
+    /** What the phone's SMS engine writes for the fixture's scenario. */
+    private fun runSmsEngine(): FakeRtdb {
+        val db = FakeRtdb(uid)
+        val lines = fx.arr("lines")
+        // The desktop owns `syncEnabled` (D29): the fixture's second line carries it, as if the Mac had toggled it.
+        for (l in lines) if ("syncEnabled" in l.getValue("node").jsonObject) db.put("sms/$uid/$deviceId/lines/${l.s("key")}/syncEnabled", l.getValue("node").jsonObject.getValue("syncEnabled"))
+        val simLines = lines.map { l ->
+            val n = l.getValue("node").jsonObject; val e = l.getValue("expect").jsonObject
+            SimLine(n.s("subscriptionId").toInt(), n.s("carrier"), e.s("ownNumber").let { if (it == "Unknown") "" else it }, n.s("label"))
         }
-        return pretty.encodeToString(JsonElement.serializer(), root) + "\n"
-    }
-
-    @Test fun `the phone's output equals the committed fixture, and the fixture opens under the documented key`() {
-        val crypto = testCrypto()
-        val (produced, _) = produce()
-        val f = fixtureFile()
-        if (System.getProperty("halo.wireContract.write") == "1") { f.parentFile.mkdirs(); f.writeText(render(produced, crypto)) }
-        assertTrue("fixture missing: run once with HALO_WIRE_CONTRACT_WRITE=1 — $f", f.exists())
-
-        val fixture = Json.parseToJsonElement(f.readText()).jsonObject
-        // The fixture's key parameters are part of the contract the Swift side relies on.
-        val c = fixture.getValue("crypto").jsonObject
-        assertEquals(passphrase, c.getValue("passphrase").jsonPrimitive.content)
-        assertEquals(Base64.getEncoder().encodeToString(salt), c.getValue("saltB64").jsonPrimitive.content)
-        assertEquals(CryptoService.MINIMUM_ITERATIONS, c.getValue("iterations").jsonPrimitive.content.toInt())
-
-        val nodes = fixture.getValue("nodes").jsonObject
-        assertEquals("same set of node paths", nodes.keys.sorted(), produced.keys.sorted())
-        for ((path, want) in nodes) {
-            val got = produced.getValue(path)
-            // Field names AND order-insensitive values, with encrypted fields compared by plaintext. A renamed,
-            // dropped, added or retyped field fails here with the path in the message.
-            assertEquals("node $path", sorted(opened(want.jsonObject, crypto)), sorted(opened(got, crypto)))
+        val rows = fx.arr("messages").map { m ->
+            val n = m.getValue("node").jsonObject; val e = m.getValue("expect").jsonObject
+            SmsRecord(m.s("key").substringBefore('_').toLong(), e.s("address"), e.s("body"), e.l("dateMs"), n.l("threadId"), e.s("subscriptionId").toInt(),
+                read = n.getValue("read").jsonPrimitive.booleanOrNull!!, seen = n.getValue("seen").jsonPrimitive.booleanOrNull!!, serviceCenter = (n["serviceCenter"] as? JsonPrimitive)?.content)
         }
+        SmsSyncEngine(db, crypto, deviceId, "Pixel 8", Source(simLines, rows), MemorySyncState(), { SenderFilter() }, { 90 }, { nowMs }).sync()
+        return db
     }
 
-    @Test fun `consumer direction - the fixture's clipboard node parses with the phone's own reader and decrypts`() {
-        val crypto = testCrypto()
-        val nodes = Json.parseToJsonElement(fixtureFile().readText()).jsonObject.getValue("nodes").jsonObject
-        val clip = nodes.getValue("clipboard/uid-1/items/$clipId")
-        val env = ClipboardEnvelope.from(clip)
-        assertNotNull("ClipboardEnvelope.from rejected the fixture's node", env)
-        assertEquals("https://halo.app/x?y=1", crypto.decrypt(env!!.contentEnc))
-        assertEquals("url", env.kind); assertEquals(clipId, env.itemId); assertEquals("dev-A", env.deviceId)
+    @Test fun `producer - the phone's SMS engine writes the fixture's device, line and message nodes`() {
+        val db = runSmsEngine()
+        sameNode("device", fx.getValue("device").jsonObject.getValue("node").jsonObject, db.dump("devices/$uid/$deviceId") as JsonObject)
+        for (l in fx.arr("lines")) {
+            val got = db.dump("sms/$uid/$deviceId/lines/${l.s("key")}") as JsonObject
+            // lineVersion/updatedAt are the H-21b additions the shared fixture does not carry yet (see README there).
+            sameNode("line ${l.s("key")}", l.getValue("node").jsonObject, got, ignoreInGot = H21_FIELDS)
+            assertTrue("line ${l.s("key")} must carry the H-21 change signal", H21_FIELDS.all { it in got })
+        }
+        for (m in fx.arr("messages")) sameNode("message ${m.s("key")}", m.getValue("node").jsonObject, db.dump("sms/$uid/$deviceId/messages/${m.s("key")}") as JsonObject)
     }
 
-    @Test fun `line nodes carry the H-21 change signal`() {
-        val nodes = Json.parseToJsonElement(fixtureFile().readText()).jsonObject.getValue("nodes").jsonObject
-        for (p in listOf("sms/uid-1/dev-A/lines/1", "sms/uid-1/dev-A/lines/2")) {
-            val n = nodes.getValue(p).jsonObject
-            assertTrue("$p lineVersion", "lineVersion" in n); assertTrue("$p updatedAt", "updatedAt" in n)
+    @Test fun `producer - ClipboardEnvelope writes the fixture's clipboard nodes, and the engine's own item has the same field set`() {
+        for (c in fx.arr("clipboard")) {
+            val n = c.getValue("node").jsonObject; val e = c.getValue("expect").jsonObject
+            val language = (e["language"] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content
+            val got = ClipboardEnvelope(n.s("itemId"), n.s("deviceId"), n.s("deviceName"), n.s("kind"), crypto.encrypt(e.s("text")), language, n.l("createdAt").toDouble()).node()
+            sameNode("clipboard ${c.s("key")}", n, got)
+        }
+        // And what ClipboardSyncEngine really publishes has exactly the fixture's field names (minus the optional `language`).
+        val db = FakeRtdb(uid); ClipboardSyncEngine(db, crypto, deviceId, "Pixel 8", { false }, { nowMs }).publish("hello from the phone")
+        val published = (db.dump("clipboard/$uid/items") as JsonObject).values.single() as JsonObject
+        assertEquals(fx.arr("clipboard").first().getValue("node").jsonObject.keys, published.keys)
+    }
+
+    @Test fun `consumer - every fixture ciphertext opens under the fixture's key to its expected plaintext, and clipboard nodes parse`() {
+        for (l in fx.arr("lines")) assertEquals(l.getValue("expect").jsonObject.s("ownNumber"), crypto.decrypt(l.getValue("node").jsonObject.s("ownNumberEnc")))
+        for (m in fx.arr("messages")) {
+            val n = m.getValue("node").jsonObject; val e = m.getValue("expect").jsonObject
+            assertEquals(e.s("address"), crypto.decrypt(n.s("addressEnc"))); assertEquals(e.s("body"), crypto.decrypt(n.s("bodyEnc")))
+        }
+        for (c in fx.arr("clipboard")) {
+            val n = c.getValue("node").jsonObject; val e = c.getValue("expect").jsonObject
+            val env = ClipboardEnvelope.from(n)
+            assertNotNull("ClipboardEnvelope.from rejected ${c.s("key")}", env)
+            assertEquals(e.s("text"), crypto.decrypt(env!!.contentEnc)); assertEquals(e.s("kind"), env.kind); assertEquals(e.l("createdAt"), env.createdAtMs.toLong())
         }
     }
 
-    private fun sorted(o: JsonObject): JsonObject = JsonObject(o.toSortedMap())
+    private companion object { val H21_FIELDS = setOf("lineVersion", "updatedAt") }
 }
