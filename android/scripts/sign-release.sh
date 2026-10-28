@@ -18,8 +18,9 @@
 
 set -euo pipefail
 
-ANDROID_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-REPO="$(cd "$ANDROID_DIR/.." && pwd)"
+CALLER_PWD="$PWD"      # relative --apk/--out/HALO_KEYSTORE are the CALLER's paths, not android/'s
+ANDROID_DIR="$(cd -P "$(dirname "$0")/.." && pwd -P)"
+REPO="$(cd -P "$ANDROID_DIR/.." && pwd -P)"
 cd "$ANDROID_DIR"
 
 APK="" SKIP=0 OUT="$ANDROID_DIR/app/build/outputs/apk/release-signed"
@@ -27,11 +28,14 @@ die() { echo "sign-release: $*" >&2; exit 2; }
 fail() { echo "sign-release: VERIFY FAILED — $*" >&2; exit 1; }
 step() { echo; echo "==> $*"; }
 
+need_val() { [ $# -ge 2 ] && [ -n "$2" ] || die "$1 needs a value"; }
+# Resolve a caller-relative path against the caller's cwd (not against android/).
+callerpath() { case "$1" in /*) printf '%s' "$1" ;; *) printf '%s/%s' "$CALLER_PWD" "$1" ;; esac; }
 while [ $# -gt 0 ]; do
   case "$1" in
-    --apk)        APK="${2:-}"; SKIP=1; shift 2 ;;
+    --apk)        need_val "$@"; APK="$(callerpath "$2")"; SKIP=1; shift 2 ;;
     --skip-build) SKIP=1; shift ;;
-    --out)        OUT="${2:-}"; shift 2 ;;
+    --out)        need_val "$@"; OUT="$(callerpath "$2")"; shift 2 ;;
     -h|--help)    sed -n '2,20p' "$0"; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
@@ -41,10 +45,13 @@ done
 : "${HALO_KEYSTORE:?set HALO_KEYSTORE to the owner-held keystore path}"
 : "${HALO_KEYSTORE_PASS:?set HALO_KEYSTORE_PASS}"
 : "${HALO_KEY_ALIAS:?set HALO_KEY_ALIAS}"
-[ -f "$HALO_KEYSTORE" ] || die "keystore not found: $HALO_KEYSTORE"
-KS_ABS="$(cd "$(dirname "$HALO_KEYSTORE")" && pwd)/$(basename "$HALO_KEYSTORE")"
+KS_IN="$(callerpath "$HALO_KEYSTORE")"
+[ -f "$KS_IN" ] || die "keystore not found: $HALO_KEYSTORE"
+# Physical path (symlinks resolved): a symlink to a keystore inside the repo must not evade the check.
+KS_ABS="$(cd -P "$(dirname "$KS_IN")" && pwd -P)/$(basename "$KS_IN")"
 case "$KS_ABS" in "$REPO"/*) die "the keystore is inside the repo ($KS_ABS). Keep it outside, so it can never be committed." ;; esac
-export HALO_KEY_PASS="${HALO_KEY_PASS:-$HALO_KEYSTORE_PASS}"
+# The key password defaults to the keystore password. Not exported globally: only apksigner needs it.
+KEYPASS_DEFAULTED="${HALO_KEY_PASS:-$HALO_KEYSTORE_PASS}"
 
 # --- Android build-tools: newest installed ------------------------------------------------------
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
@@ -57,7 +64,8 @@ echo "build-tools : $BT"
 # --- 1. unsigned APK ----------------------------------------------------------------------------
 if [ "$SKIP" -eq 0 ]; then
   step "gradle :app:assembleRelease (unsigned — the build has no signing config by design)"
-  ./gradlew --no-daemon :app:assembleRelease
+  # The build needs no signing secrets; do not hand them to Gradle (plugins/build scripts can read env).
+  env -u HALO_KEYSTORE_PASS -u HALO_KEY_PASS ./gradlew --no-daemon :app:assembleRelease
 fi
 [ -n "$APK" ] || APK="$ANDROID_DIR/app/build/outputs/apk/release/app-release-unsigned.apk"
 [ -f "$APK" ] || die "unsigned APK not found: $APK"
@@ -75,7 +83,7 @@ step "zipalign (4-byte, page-aligned native libs)"
 step "apksigner sign"
 SIGNED="$OUT/halo-mobile-signed.apk"
 rm -f "$SIGNED" "$SIGNED.idsig"
-"$APKSIGNER" sign \
+HALO_KEY_PASS="$KEYPASS_DEFAULTED" "$APKSIGNER" sign \
   --ks "$KS_ABS" --ks-key-alias "$HALO_KEY_ALIAS" \
   --ks-pass env:HALO_KEYSTORE_PASS --key-pass env:HALO_KEY_PASS \
   --out "$SIGNED" "$ALIGNED"
