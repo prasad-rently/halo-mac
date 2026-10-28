@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import app.halo.cloud.CryptoService
 import app.halo.cloud.FirebaseRtdbClient
 import app.halo.cloud.KeyCheck
+import app.halo.cloud.PairingConfirmation
 import app.halo.cloud.PairingPayload
 import app.halo.cloud.SimLine
 import app.halo.cloud.SmsSyncEngine
@@ -26,8 +27,13 @@ sealed interface PairUi {
     object Idle : PairUi
     data class Working(val what: String) : PairUi
     data class NeedsPassphrase(val payload: PairingPayload) : PairUi
+    /** The database held nothing encrypted, so the passphrase could not be verified: ask for it a second time. [error] is a failed confirmation. */
+    data class NeedsConfirmation(val payload: PairingPayload, val error: String? = null) : PairUi
     data class Failed(val why: String) : PairUi
 }
+
+/** Signed in and key derived, waiting for the user to retype the passphrase. Kept out of the UI state so the passphrase never sits in a StateFlow. */
+private class PendingPairing(val payload: PairingPayload, val passphrase: String, val key: ByteArray, val client: FirebaseRtdbClient)
 
 data class LineUi(val line: SimLine, val enabled: Boolean)
 
@@ -93,9 +99,15 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun cancelPairing() { _pair.value = PairUi.Idle }
+    fun cancelPairing() { pending = null; _pair.value = PairUi.Idle }
 
-    /** Derive the key, prove it against real data, prove the connection, then save. */
+    private var pending: PendingPairing? = null
+
+    /**
+     * Step 1: derive the key, sign in, and try the passphrase against real data. If the database holds
+     * nothing encrypted the check cannot vouch for it ([PairingConfirmation.required]), so stop and ask for
+     * the passphrase a second time ([confirm]) before anything is saved. Otherwise finish straight away.
+     */
     fun connect(payload: PairingPayload, passphrase: String) {
         if (passphrase.isEmpty()) { _pair.value = PairUi.Failed("Enter the encryption passphrase you set on your Mac."); return }
         viewModelScope.launch(Dispatchers.Default) {
@@ -109,26 +121,50 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
                 client.testConnection()
 
                 _pair.value = PairUi.Working("Checking the passphrase…")
-                if (KeyCheck.verify(client, crypto) == KeyCheck.Result.MISMATCH) {
+                val check = KeyCheck.verify(client, crypto)
+                if (check == KeyCheck.Result.MISMATCH) {
                     _pair.value = PairUi.Failed("That passphrase doesn't open the data on your Mac. Check it and try again.")
                     return@launch
                 }
-                _warning.value = if (client.checkPublicAccess() == FirebaseRtdbClient.PublicAccess.OPEN)
-                    "Your Realtime Database is open to the internet (test-mode rules). Message text stays encrypted, but device names and timestamps are readable by anyone. Publish the owner-only rules from docs/specs/firebase-setup.md." else null
-
-                val profile = CloudProfile(payload.firebaseConfig, payload.auth, payload.saltBase64, payload.iterations, Base64.getEncoder().encodeToString(key), epoch = java.util.UUID.randomUUID().toString())
-                store.save(profile); CloudRuntime.reset()
-                _profile.value = profile; _pair.value = PairUi.Idle
+                if (PairingConfirmation.required(check)) {
+                    pending = PendingPairing(payload, passphrase, key, client)
+                    _pair.value = PairUi.NeedsConfirmation(payload)
+                    return@launch
+                }
+                finishPairing(payload, key, client)
             } catch (e: Exception) {
                 _pair.value = PairUi.Failed(e.message ?: "Couldn't connect.")
             }
         }
     }
 
+    /** Step 2 (empty database only): the passphrase typed again must match the first entry before the profile is saved. */
+    fun confirm(again: String) {
+        val p = pending ?: run { _pair.value = PairUi.Failed("Pairing was interrupted. Start again."); return }
+        if (!PairingConfirmation.matches(p.passphrase, again)) {
+            _pair.value = PairUi.NeedsConfirmation(p.payload, "The two passphrases don't match. Type the exact passphrase you set on your Mac.")
+            return
+        }
+        viewModelScope.launch(Dispatchers.Default) {
+            try { finishPairing(p.payload, p.key, p.client) }
+            catch (e: Exception) { _pair.value = PairUi.Failed(e.message ?: "Couldn't connect.") }
+        }
+    }
+
+    private fun finishPairing(payload: PairingPayload, key: ByteArray, client: FirebaseRtdbClient) {
+        _warning.value = if (client.checkPublicAccess() == FirebaseRtdbClient.PublicAccess.OPEN)
+            "Your Realtime Database is open to the internet (test-mode rules). Message text stays encrypted, but device names and timestamps are readable by anyone. Publish the owner-only rules from docs/specs/firebase-setup.md." else null
+
+        val profile = CloudProfile(payload.firebaseConfig, payload.auth, payload.saltBase64, payload.iterations, Base64.getEncoder().encodeToString(key), epoch = java.util.UUID.randomUUID().toString())
+        store.save(profile); CloudRuntime.reset()
+        pending = null
+        _profile.value = profile; _pair.value = PairUi.Idle
+    }
+
     fun disconnect() {
         SyncScheduler.cancelAll(ctx); ClipboardController.stop()
         store.clear(); prefs.clearAll(); PrefsSyncState(ctx).clear(); ClipboardHistory.get(ctx).clear(); CloudRuntime.reset()
-        _profile.value = null; _lines.value = emptyList(); _smsEnabled.value = false; _clipEnabled.value = false; _pair.value = PairUi.Idle; _warning.value = null
+        _profile.value = null; _lines.value = emptyList(); _smsEnabled.value = false; _clipEnabled.value = false; pending = null; _pair.value = PairUi.Idle; _warning.value = null
     }
 
     var deviceName: String get() = store.deviceName; set(v) { store.deviceName = v; CloudRuntime.reset() }

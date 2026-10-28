@@ -55,6 +55,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.halo.mobile.cloud.ClipItem
 import app.halo.mobile.cloud.CloudViewModel
 import app.halo.mobile.cloud.LineUi
+import app.halo.cloud.PairingConfirmation
 import app.halo.mobile.cloud.PairUi
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
@@ -68,6 +69,7 @@ fun PairingPanel(vm: CloudViewModel, why: String) {
     val pair by vm.pair.collectAsStateWithLifecycle()
     var code by remember { mutableStateOf("") }
     var passphrase by remember { mutableStateOf("") }
+    var confirmation by remember { mutableStateOf("") }
     val ctx = LocalContext.current
     val scanner = rememberLauncherForActivityResult(ScanContract()) { r -> r.contents?.let { code = it; vm.submitCode(it) } }
 
@@ -92,6 +94,21 @@ fun PairingPanel(vm: CloudViewModel, why: String) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(onClick = { vm.connect(p.payload, passphrase) }, modifier = Modifier.testTag("pair.connect")) { Text("Connect") }
                     OutlinedButton(onClick = { passphrase = ""; vm.cancelPairing() }) { Text("Back") }
+                }
+            }
+            is PairUi.NeedsConfirmation -> {
+                Text("Paired with ${p.payload.firebaseConfig.projectID}.", color = Halo.Green, fontSize = 13.sp, modifier = Modifier.testTag("pair.accepted"))
+                Spacer(Modifier.height(8.dp))
+                Text(PairingConfirmation.NOTICE, color = Halo.Amber, fontSize = 12.sp, modifier = Modifier.testTag("pair.notice"))
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(confirmation, { confirmation = it }, singleLine = true, label = { Text("Type the passphrase again") },
+                    visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth().testTag("pair.confirm"),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+                p.error?.let { Spacer(Modifier.height(6.dp)); Text(it, color = Halo.Red, fontSize = 12.sp, modifier = Modifier.testTag("pair.error")) }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(onClick = { vm.confirm(confirmation) }, enabled = confirmation.isNotEmpty(), modifier = Modifier.testTag("pair.confirmButton")) { Text("Confirm") }
+                    OutlinedButton(onClick = { passphrase = ""; confirmation = ""; vm.cancelPairing() }) { Text("Back") }
                 }
             }
             else -> {
