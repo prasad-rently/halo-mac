@@ -6453,6 +6453,89 @@ struct CleanupViewModelTests {
         #expect(vm.totalBytes == 2 * 4096, "the shared files must be counted once, not once per category")
     }
 
+    /// Parks the n-th scan of each category until the test releases it, so a test can make an
+    /// OLDER scan finish after a NEWER one. Which scan is "n-th" is counted per category.
+    actor ScanGate {
+        private var calls: [CleanupKind: Int] = [:]
+        private var held: Set<Int>
+        private var waiters: [Int: [CheckedContinuation<Void, Never>]] = [:]
+        private(set) var parked = 0
+        init(holding generations: Set<Int>) { held = generations }
+        func arrive(_ kind: CleanupKind) async {
+            let n = calls[kind, default: 0]
+            calls[kind] = n + 1
+            guard held.contains(n) else { return }
+            parked += 1
+            await withCheckedContinuation { waiters[n, default: []].append($0) }
+        }
+        func release(_ generation: Int) {
+            held.remove(generation)
+            for w in waiters.removeValue(forKey: generation) ?? [] { w.resume() }
+        }
+    }
+
+    private func gatedVM(_ f: Fixture, gate: ScanGate) -> CleanupViewModel {
+        let root = f.root, trash = f.trash
+        let coordinator = ScanCoordinator(
+            roots: { kind in (kind == .systemCaches || kind == .userCaches) ? [root.path] : [] },
+            trashDirectories: { [trash] },
+            trash: { url in try FileManager.default.moveItem(at: url, to: trash.appendingPathComponent(url.lastPathComponent)) },
+            afterScan: { kind in await gate.arrive(kind) })
+        return CleanupViewModel(coordinator: coordinator, kinds: [.systemCaches, .userCaches, .trash])
+    }
+
+    private func waitUntilParked(_ gate: ScanGate, _ count: Int) async throws {
+        for _ in 0..<500 where await gate.parked < count { try await Task.sleep(nanoseconds: 10_000_000) }
+        #expect(await gate.parked >= count, "the scans never reached the gate")
+    }
+
+    @Test("An older scan that finishes LAST cannot overwrite the newer scan's result (R8)")
+    func olderScanFinishingLastIsDiscarded() async throws {
+        let f = try Fixture()
+        let a = try f.file("a.bin")
+        let gate = ScanGate(holding: [0])
+        let vm = gatedVM(f, gate: gate)
+
+        let older = Task { await vm.scanAll() }              // reads {a}, then parks
+        try await waitUntilParked(gate, 3)                   // one per category
+        try FileManager.default.removeItem(at: a)            // the disk moves on
+        try f.file("b.bin")
+        await vm.scanAll()                                   // newer scan: reads {b}, finishes first
+        #expect(names(vm, .userCaches) == ["b.bin"])
+        #expect(!vm.isScanning)
+
+        await gate.release(0)                                // now the older scan delivers {a}
+        await older.value
+        #expect(names(vm, .userCaches) == ["b.bin"], "the stale scan overwrote the newer result")
+        #expect(names(vm, .systemCaches) == ["b.bin"])
+        #expect(!vm.isScanning)
+    }
+
+    @Test("An older scan finishing while a newer one is still running does not clear its flags or fill its lists (R8)")
+    func olderScanDoesNotCompleteTheNewerOne() async throws {
+        let f = try Fixture()
+        try f.file("a.bin")
+        let gate = ScanGate(holding: [0, 1])
+        let vm = gatedVM(f, gate: gate)
+
+        let older = Task { await vm.scanAll() }
+        try await waitUntilParked(gate, 3)
+        let newer = Task { await vm.scanAll() }
+        try await waitUntilParked(gate, 6)
+
+        await gate.release(0)                                // older finishes; newer is still in flight
+        await older.value
+        #expect(vm.isScanning, "the older scan declared the newer scan finished")
+        #expect(vm.lastScanned == nil)
+        #expect(names(vm, .userCaches).isEmpty, "the older scan filled a list the newer scan owns")
+
+        await gate.release(1)
+        await newer.value
+        #expect(!vm.isScanning)
+        #expect(vm.lastScanned != nil)
+        #expect(names(vm, .userCaches) == ["a.bin"])
+    }
+
     @Test("rescanIfStale starts a scan only when due and idle")
     func rescanIfStaleGate() async throws {
         let f = try Fixture()

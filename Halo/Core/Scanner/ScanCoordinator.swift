@@ -27,6 +27,9 @@ actor ScanCoordinator {
     /// How one item is trashed. The default is `FileManager.trashItem` — the project's
     /// mandatory rule; tests substitute a closure that moves into a temp "trash".
     private let trash: @Sendable (URL) throws -> Void
+    /// Awaited after a category has been read from disk and before it is returned. A no-op in
+    /// production; tests use it to make one scan finish after a newer one (BUG-001 R8).
+    private let afterScan: @Sendable (CleanupKind) async -> Void
 
     init(roots: @escaping @Sendable (CleanupKind) -> [String] = { $0.targetPaths },
          trashDirectories: @escaping @Sendable () -> [URL] = {
@@ -35,7 +38,9 @@ actor ScanCoordinator {
          trash: @escaping @Sendable (URL) throws -> Void = { url in
              var resulting: NSURL?
              try FileManager.default.trashItem(at: url, resultingItemURL: &resulting)
-         }) {
+         },
+         afterScan: @escaping @Sendable (CleanupKind) async -> Void = { _ in }) {
+        self.afterScan = afterScan
         self.roots = roots
         self.trashDirectories = trashDirectories
         self.trash = trash
@@ -69,6 +74,12 @@ actor ScanCoordinator {
     // MARK: - Scan a Single Category
 
     func scanCategory(_ kind: CleanupKind) async -> CleanupCategory {
+        let category = await readCategory(kind)
+        await afterScan(kind)
+        return category
+    }
+
+    private func readCategory(_ kind: CleanupKind) async -> CleanupCategory {
         var category = CleanupCategory(kind: kind)
         category.isScanning = true
 
