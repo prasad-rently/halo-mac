@@ -259,10 +259,26 @@ actor FirebaseRTDBClient {
     @discardableResult
     func observeChildAdded(at path: String,
                            _ onChild: @escaping @Sendable (String, Any?) -> Void) throws -> RTDBObserverHandle {
+        try startObserver(at: path, includeChanges: false, onChild)
+    }
+
+    /// Like `observeChildAdded`, but a child that is **rewritten after it was first delivered** is
+    /// delivered again with its new value (H-21a). `child_added` alone reports a child exactly once,
+    /// so a value the phone changes later — a renamed SIM, a different carrier — never reached a
+    /// Mac that was already running; only a relaunch showed it. Callers must treat the callback as
+    /// "upsert this child" (it is idempotent), not "a new child appeared".
+    @discardableResult
+    func observeChildAddedOrChanged(at path: String,
+                                    _ onChild: @escaping @Sendable (String, Any?) -> Void) throws -> RTDBObserverHandle {
+        try startObserver(at: path, includeChanges: true, onChild)
+    }
+
+    private func startObserver(at path: String, includeChanges: Bool,
+                               _ onChild: @escaping @Sendable (String, Any?) -> Void) throws -> RTDBObserverHandle {
         guard config != nil, databaseBase != nil else { throw RTDBError.notConfigured }
         let handle = RTDBObserverHandle()
         observers[handle] = Task { [weak self] in
-            await self?.runStream(path: path, onChild: onChild)
+            await self?.runStream(path: path, includeChanges: includeChanges, onChild: onChild)
         }
         return handle
     }
@@ -274,8 +290,8 @@ actor FirebaseRTDBClient {
 
     // MARK: - Streaming internals
 
-    private func runStream(path: String, onChild: @Sendable (String, Any?) -> Void) async {
-        var delivered = Set<String>()
+    private func runStream(path: String, includeChanges: Bool, onChild: @Sendable (String, Any?) -> Void) async {
+        var delivery = ChildDelivery()
         var backoff: TimeInterval = 1
 
         while !Task.isCancelled {
@@ -304,12 +320,9 @@ actor FirebaseRTDBClient {
                         let payload = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
                         switch Self.apply(event: event, payload: payload, to: &model) {
                         case .changed:
-                            for key in model.keys.sorted() where !delivered.contains(key) {
-                                delivered.insert(key)
-                                onChild(key, model[key])
+                            for (key, value) in delivery.pending(in: model, includeChanges: includeChanges) {
+                                onChild(key, value)
                             }
-                            // A removed child that comes back must fire again.
-                            delivered.formIntersection(model.keys)
                         case .unchanged:
                             break
                         case .reauthenticate:
@@ -329,6 +342,40 @@ actor FirebaseRTDBClient {
             if Task.isCancelled { return }
             try? await Task.sleep(nanoseconds: UInt64(backoff * 1_000_000_000))
             backoff = min(backoff * 2, 30)
+        }
+    }
+
+    /// What a stream observer has already reported, so each event delivers only what is new — or,
+    /// with `includeChanges`, only what is new **or different** (H-21a). Pure, so the delivery rule
+    /// is tested without a socket.
+    struct ChildDelivery {
+        /// key → fingerprint of the value last delivered for it.
+        private var delivered: [String: String] = [:]
+
+        mutating func pending(in model: [String: Any], includeChanges: Bool) -> [(key: String, value: Any?)] {
+            var out: [(key: String, value: Any?)] = []
+            for key in model.keys.sorted() {
+                let value = model[key]
+                let print = Self.fingerprint(value)
+                if let last = delivered[key] {
+                    guard includeChanges, last != print else { continue }
+                }
+                delivered[key] = print
+                out.append((key, value))
+            }
+            // A removed child that comes back must fire again.
+            delivered = delivered.filter { model.keys.contains($0.key) }
+            return out
+        }
+
+        /// Order-independent canonical form: two dictionaries with the same content print the same.
+        static func fingerprint(_ value: Any?) -> String {
+            guard let value, !(value is NSNull) else { return "null" }
+            if JSONSerialization.isValidJSONObject(value),
+               let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]) {
+                return String(decoding: data, as: UTF8.self)
+            }
+            return "\(value)"
         }
     }
 

@@ -1,0 +1,182 @@
+{
+  "contract": "halo-phone-nodes",
+  "version": 1,
+  "about": [
+    "Nodes the Android app writes to the user's Realtime Database, captured from the REAL Kotlin writers (SmsSyncEngine.sync() over a fake RTDB; ClipboardEnvelope.node()) in android/halocloud — not hand-typed.",
+    "Consumed by BOTH sides: Swift (HaloTests/WireContractTests.swift) decodes every `node` the way the desktop does and must produce `expect`; the Kotlin engine test (H-20b) must reproduce every `node` and decrypt to `expect`.",
+    "Ciphertext uses a random nonce per write, so a comparator must NEVER compare `*Enc` values byte for byte: mask every field whose name ends in `Enc`, compare the rest exactly, and compare the decrypted `*Enc` values to `expect`.",
+    "Key derivation: PBKDF2-HMAC-SHA256(passphrase, base64decode(saltBase64), iterations) -> AES-256-GCM, envelope `v1:` + base64(nonce|ciphertext|tag).",
+    "Regenerate only when a wire field intentionally changes, in BOTH Swift and Kotlin in the same change."
+  ],
+  "crypto": {
+    "passphrase": "contract test passphrase 1",
+    "saltBase64": "AQIDBAUGBwgJCgsMDQ4PEA==",
+    "iterations": 100000
+  },
+  "uid": "uid-contract",
+  "deviceId": "dev-A",
+  "paths": {
+    "device": "devices/{uid}/{deviceId}",
+    "line": "sms/{uid}/{deviceId}/lines/{subscriptionId}",
+    "message": "sms/{uid}/{deviceId}/messages/{smsId}_{dateMs}",
+    "clipboard": "clipboard/{uid}/items/{itemId}"
+  },
+  "device": {
+    "node": {
+      "name": "Pixel 8",
+      "platform": "android",
+      "lastSeen": 1800000000000
+    },
+    "expect": {
+      "id": "dev-A",
+      "name": "Pixel 8",
+      "platform": "android"
+    }
+  },
+  "lines": [
+    {
+      "key": "1",
+      "node": {
+        "subscriptionId": 1,
+        "label": "Personal",
+        "carrier": "Airtel",
+        "ownNumberEnc": "v1:Uw+yHkvNUAwnm1XaagWZ218/U7XxtF/I9vv1dC7cckcfuqAAa7gZg5w="
+      },
+      "expect": {
+        "subscriptionId": 1,
+        "label": "Personal",
+        "carrier": "Airtel",
+        "ownNumber": "+919876543210",
+        "syncEnabled": true,
+        "syncEnabledPresentInNode": false
+      }
+    },
+    {
+      "key": "2",
+      "node": {
+        "subscriptionId": 2,
+        "label": "Work",
+        "carrier": "Jio",
+        "ownNumberEnc": "v1:WSqH/hWczWobrrdpxPo2Jeh89kHXQ1EgNDfK6gORIQH89J4=",
+        "syncEnabled": false
+      },
+      "expect": {
+        "subscriptionId": 2,
+        "label": "Work",
+        "carrier": "Jio",
+        "ownNumber": "Unknown",
+        "syncEnabled": false,
+        "syncEnabledPresentInNode": true
+      }
+    }
+  ],
+  "messages": [
+    {
+      "key": "4201_1799996400000",
+      "node": {
+        "addressEnc": "v1:hF510vf2inEJpxX+rhpEJ98dtTl8SLORpogvmltBSznjI+sIuA==",
+        "bodyEnc": "v1:0E70KVWyAj5s6WHbc82yCSO8YgVUwMjI7R8DFtMa3fgylBDSN5afoZzKE+1PXfOxknnm6Q6/7NLRWXsiblHyih3nkQAs/0iPAGQV/CZFa88=",
+        "threadKey": "36458d449848af0662f293c90a0c7f7135a381c694aaab5fd1225f3dd369dab5",
+        "threadId": 77,
+        "subscriptionId": 1,
+        "date": 1799996400000,
+        "type": 1,
+        "read": false,
+        "seen": true,
+        "syncedAt": 1800000000000,
+        "schema": 1,
+        "serviceCenter": "+919810051914"
+      },
+      "expect": {
+        "address": "VM-HDFCBK",
+        "body": "Rs 500.00 debited from a/c XX1234. Avl bal Rs 9,500.",
+        "dateMs": 1799996400000,
+        "subscriptionId": 1,
+        "read": false
+      }
+    },
+    {
+      "key": "4202_1799998200000",
+      "node": {
+        "addressEnc": "v1:V5Me/2T3v1v7i4StYCZmO4MxJSpQ7iCmFyxtjmgtjv3JEKE86kV1vuzwaQ==",
+        "bodyEnc": "v1:+IKcT0G8YhVu6J42OkWSvNW7/LAlgoKhXIUiULpGBiDeUg1wzIsWqgl3Piktm3xzlc67LQbRYuGfYwkJNROt+um0rg==",
+        "threadKey": "d50baa465765868b9ad41d3ec8e27345fcafb3ecf95f210364c72bdcb554f821",
+        "threadId": 78,
+        "subscriptionId": 1,
+        "date": 1799998200000,
+        "type": 1,
+        "read": true,
+        "seen": true,
+        "syncedAt": 1800000000000,
+        "schema": 1
+      },
+      "expect": {
+        "address": "+91 98765 43210",
+        "body": "See you at 7 ✅ café à la carte / ok",
+        "dateMs": 1799998200000,
+        "subscriptionId": 1,
+        "read": true
+      }
+    }
+  ],
+  "clipboard": [
+    {
+      "key": "clip-0001",
+      "node": {
+        "itemId": "clip-0001",
+        "deviceId": "dev-A",
+        "deviceName": "Pixel 8",
+        "kind": "text",
+        "contentEnc": "v1:BtEQ/dq97Xi5C5YBBI4f1EVZDXbNyYyZUvyWbPfypDQrJXZL8PwK38d7sQLcEsbbu9Ya9Q==",
+        "createdAt": 1799999999000,
+        "schema": 1
+      },
+      "expect": {
+        "kind": "text",
+        "text": "hello from the phone ✨",
+        "language": null,
+        "deviceName": "Pixel 8",
+        "createdAt": 1799999999000
+      }
+    },
+    {
+      "key": "clip-0002",
+      "node": {
+        "itemId": "clip-0002",
+        "deviceId": "dev-A",
+        "deviceName": "Pixel 8",
+        "kind": "code",
+        "contentEnc": "v1:7/RzQFXOzVo3zDQJ98eoSeCv2o6xZ++rkuIx35RF0p2TmAr+ag==",
+        "createdAt": 1799999999500,
+        "schema": 1,
+        "language": "swift"
+      },
+      "expect": {
+        "kind": "code",
+        "text": "let x = 1",
+        "language": "swift",
+        "deviceName": "Pixel 8",
+        "createdAt": 1799999999500
+      }
+    },
+    {
+      "key": "clip-0003",
+      "node": {
+        "itemId": "clip-0003",
+        "deviceId": "dev-A",
+        "deviceName": "Pixel 8",
+        "kind": "url",
+        "contentEnc": "v1:N/c794/QUMxnRUGFXpT4kqu8niBCPTtjAHf5KJ3ZrXNiofJWv/JEHG2uR/lWxtjXi7aV2zU=",
+        "createdAt": 1800000000000,
+        "schema": 1
+      },
+      "expect": {
+        "kind": "url",
+        "text": "https://example.com/a?b=c",
+        "language": null,
+        "deviceName": "Pixel 8",
+        "createdAt": 1800000000000
+      }
+    }
+  ]
+}

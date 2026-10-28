@@ -29,6 +29,8 @@ final class AvatarStore: @unchecked Sendable {
 
     enum AvatarError: Error, Equatable, LocalizedError {
         case notAnImage, fileTooLarge, tooManyPixels, decodeFailed, writeFailed
+        /// The file's size could not be read, so the 50 MB cap cannot be checked (H-10: fail closed).
+        case unreadable
 
         var errorDescription: String? {
             switch self {
@@ -37,6 +39,7 @@ final class AvatarStore: @unchecked Sendable {
             case .tooManyPixels: return "That picture is larger than 100 megapixels."
             case .decodeFailed: return "Halo couldn't decode that picture."
             case .writeFailed: return "Halo couldn't save the avatar."
+            case .unreadable: return "Halo couldn't read that file's size, so it wasn't imported."
             }
         }
     }
@@ -49,13 +52,22 @@ final class AvatarStore: @unchecked Sendable {
     let detectFaces: Bool
     /// How long an import will wait for Vision before cropping the middle of the picture instead.
     let faceTimeout: TimeInterval
+    /// How the size of a source file is read. Injectable so a test can make it fail; production
+    /// always asks the file system.
+    let fileSizeReader: @Sendable (URL) -> Int64?
 
     init(rootURL: URL, pixelLimit: Int = AvatarStore.maxPixels,
-         detectFaces: Bool = true, faceTimeout: TimeInterval = 4) {
+         detectFaces: Bool = true, faceTimeout: TimeInterval = 4,
+         fileSizeReader: @escaping @Sendable (URL) -> Int64? = AvatarStore.fileSystemSize) {
         self.rootURL = rootURL
         self.pixelLimit = pixelLimit
         self.detectFaces = detectFaces
         self.faceTimeout = faceTimeout
+        self.fileSizeReader = fileSizeReader
+    }
+
+    static func fileSystemSize(_ url: URL) -> Int64? {
+        (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
     }
 
     // MARK: Async wrappers
@@ -92,7 +104,7 @@ final class AvatarStore: @unchecked Sendable {
     /// `allowLinkedFile: false` (the default, used for every read) also refuses a file that is itself
     /// a symlink, so a planted link can't turn "show this avatar" into "read that other file".
     func url(for fileName: String, rosterID: UUID, allowLinkedFile: Bool = false) -> URL? {
-        guard AvatarFileName.isValid(fileName) else { return nil }
+        guard let fileName = AvatarFileName.normalized(fileName) else { return nil }
         let dir = directory(for: rosterID)
         let candidate = dir.appendingPathComponent(fileName)
         guard Self.isInside(candidate, dir), resolvesInsideRoot(candidate) else { return nil }
@@ -124,8 +136,11 @@ final class AvatarStore: @unchecked Sendable {
 
     /// Imports a photo from a file the user chose. Returns the generated file name.
     func importPhoto(from source: URL, rosterID: UUID) throws -> String {
-        let size = (try? source.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
+        // Fail closed (H-10): a size that cannot be read is NOT "0 bytes". Treating it as zero let a
+        // file whose attributes were unavailable skip the cap entirely.
+        guard let size = fileSizeReader(source) else { throw AvatarError.unreadable }
         guard size <= Self.maxFileBytes else { throw AvatarError.fileTooLarge }
+        try Self.checkHeader(ofFile: source, pixelLimit: pixelLimit)
         guard let src = CGImageSourceCreateWithURL(source as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary)
         else { throw AvatarError.notAnImage }
         return try importPhoto(source: src, rosterID: rosterID)
@@ -134,9 +149,39 @@ final class AvatarStore: @unchecked Sendable {
     /// Imports image bytes (pasted or dropped). Same bounds as a file.
     func importPhoto(data: Data, rosterID: UUID) throws -> String {
         guard Int64(data.count) <= Self.maxFileBytes else { throw AvatarError.fileTooLarge }
+        try Self.checkHeader(ofData: data, pixelLimit: pixelLimit)
         guard let src = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary)
         else { throw AvatarError.notAnImage }
         return try importPhoto(source: src, rosterID: rosterID)
+    }
+
+    /// PNG and TIFF declare their dimensions in a few header bytes Halo can read itself, so the pixel
+    /// limit for those two does not depend on ImageIO's say-so (H-10). Other formats fall through to
+    /// the ImageIO property check in `importPhoto(source:)`.
+    private static func checkHeader(ofData data: Data, pixelLimit: Int) throws {
+        try check(ImageHeaderProbe.probe(read: { off, n in
+            guard off >= 0, off < data.count else { return nil }
+            return data.subdata(in: off..<min(data.count, off + n))
+        }), pixelLimit: pixelLimit)
+    }
+
+    private static func checkHeader(ofFile url: URL, pixelLimit: Int) throws {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { throw AvatarError.unreadable }
+        defer { try? handle.close() }
+        try check(ImageHeaderProbe.probe(read: { off, n in
+            guard off >= 0, (try? handle.seek(toOffset: UInt64(off))) != nil else { return nil }
+            return try? handle.read(upToCount: n)
+        }), pixelLimit: pixelLimit)
+    }
+
+    private static func check(_ result: ImageHeaderProbe.Result, pixelLimit: Int) throws {
+        switch result {
+        case .notPNGOrTIFF: return
+        case .malformed: throw AvatarError.decodeFailed
+        case .size(let w, let h):
+            guard w > 0, h > 0 else { throw AvatarError.decodeFailed }
+            guard w <= pixelLimit / h else { throw AvatarError.tooManyPixels }      // w*h > limit, overflow-safe
+        }
     }
 
     private func importPhoto(source src: CGImageSource, rosterID: UUID) throws -> String {
@@ -281,9 +326,11 @@ final class AvatarStore: @unchecked Sendable {
                 removeInsideRoot(dir)
                 continue
             }
+            // Compared in one canonical case (H-10): `abc.jpg` and `ABC.jpg` are one file on APFS.
+            let keepNormalized = Set(keep.compactMap(AvatarFileName.normalized))
             for file in (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [] {
                 let name = file.lastPathComponent
-                if AvatarFileName.isValid(name), !keep.contains(name) {
+                if let canonical = AvatarFileName.normalized(name), !keepNormalized.contains(canonical) {
                     removeInsideRoot(file); removed += 1
                 }
             }
@@ -309,5 +356,74 @@ final class AvatarStore: @unchecked Sendable {
         var sum: Int64 = 0
         for case let url as URL in e { sum += Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
         return sum
+    }
+}
+
+// MARK: - ImageHeaderProbe (H-10)
+
+/// Reads the pixel dimensions of a PNG or TIFF straight from its header bytes — no decoding, no
+/// ImageIO. A decompression bomb is a tiny file that *declares* a huge size, so the declaration is
+/// exactly what has to be checked, and it has to be checked before anything inflates it.
+///
+/// `read(offset, count)` returns up to `count` bytes at `offset`, or nil when that is out of range.
+enum ImageHeaderProbe {
+    enum Result: Equatable {
+        /// Neither a PNG nor a TIFF signature — the caller falls back to ImageIO's own properties.
+        case notPNGOrTIFF
+        /// A PNG/TIFF signature, but a header that cannot be read to a width and height
+        /// (truncated, BigTIFF, absurd IFD). Fail closed.
+        case malformed
+        case size(width: Int, height: Int)
+    }
+
+    static func probe(read: (Int, Int) -> Data?) -> Result {
+        guard let head = read(0, 8), head.count == 8 else { return .notPNGOrTIFF }
+        let b = [UInt8](head)
+        if b == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] { return png(read) }
+        let little = b[0] == 0x49 && b[1] == 0x49 && b[2] == 0x2A && b[3] == 0
+        let big = b[0] == 0x4D && b[1] == 0x4D && b[2] == 0 && b[3] == 0x2A
+        if little || big { return tiff(read, littleEndian: little, head: b) }
+        return .notPNGOrTIFF
+    }
+
+    /// IHDR is always the first chunk: length(4) "IHDR"(4) width(4, BE) height(4, BE).
+    private static func png(_ read: (Int, Int) -> Data?) -> Result {
+        guard let d = read(8, 16), d.count == 16 else { return .malformed }
+        let b = [UInt8](d)
+        guard Array(b[4..<8]) == Array("IHDR".utf8) else { return .malformed }
+        let w = Int(b[8]) << 24 | Int(b[9]) << 16 | Int(b[10]) << 8 | Int(b[11])
+        let h = Int(b[12]) << 24 | Int(b[13]) << 16 | Int(b[14]) << 8 | Int(b[15])
+        return .size(width: w, height: h)
+    }
+
+    /// Walks IFD 0 for tags 256 (ImageWidth) and 257 (ImageLength).
+    private static func tiff(_ read: (Int, Int) -> Data?, littleEndian le: Bool, head: [UInt8]) -> Result {
+        func u16(_ b: [UInt8], _ o: Int) -> Int { le ? Int(b[o]) | Int(b[o + 1]) << 8 : Int(b[o]) << 8 | Int(b[o + 1]) }
+        func u32(_ b: [UInt8], _ o: Int) -> Int {
+            le ? Int(b[o]) | Int(b[o + 1]) << 8 | Int(b[o + 2]) << 16 | Int(b[o + 3]) << 24
+               : Int(b[o]) << 24 | Int(b[o + 1]) << 16 | Int(b[o + 2]) << 8 | Int(b[o + 3])
+        }
+        let ifd = u32(head, 4)
+        guard ifd >= 8, let c = read(ifd, 2), c.count == 2 else { return .malformed }
+        let count = u16([UInt8](c), 0)
+        guard count > 0, count <= 512, let entries = read(ifd + 2, count * 12), entries.count == count * 12
+        else { return .malformed }
+        let e = [UInt8](entries)
+        var width: Int?, height: Int?
+        for i in 0..<count {
+            let o = i * 12
+            let tag = u16(e, o), type = u16(e, o + 2)
+            guard tag == 256 || tag == 257 else { continue }
+            // SHORT (3) holds its value in the first two bytes of the value field, LONG (4) in all four.
+            let value: Int
+            switch type {
+            case 3: value = u16(e, o + 8)
+            case 4: value = u32(e, o + 8)
+            default: return .malformed
+            }
+            if tag == 256 { width = value } else { height = value }
+        }
+        guard let w = width, let h = height else { return .malformed }
+        return .size(width: w, height: h)
     }
 }

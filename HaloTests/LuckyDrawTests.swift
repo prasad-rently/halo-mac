@@ -1238,7 +1238,12 @@ struct LuckyDrawStoreAvatarTests {
         var file: URL { dir.appendingPathComponent("luckyDraw.json") }
         init() { try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) }
         deinit { try? FileManager.default.removeItem(at: dir) }
-        @MainActor func store() -> LuckyDrawStore { LuckyDrawStore(fileURL: file, notificationCenter: NotificationCenter(), detectFaces: false) }
+        /// The launch-time sweep runs inline (H-09): the outcome is settled when `init` returns, so no
+        /// test needs to sleep and hope a background queue has finished.
+        @MainActor func store() -> LuckyDrawStore {
+            LuckyDrawStore(fileURL: file, notificationCenter: NotificationCenter(), detectFaces: false,
+                           sweepScheduler: { $0() })
+        }
     }
 
     private func photoCount(_ store: LuckyDrawStore, _ roster: UUID) -> Int {
@@ -1342,7 +1347,6 @@ struct LuckyDrawStoreAvatarTests {
         // Corrupt the roster file: the photos must survive, because "unreadable" is not "unreferenced".
         try Data("{ not json".utf8).write(to: s.file)
         _ = s.store()
-        try await Task.sleep(nanoseconds: 400_000_000)
         let survivors = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
         #expect(survivors.count == 2, "a failed read must not trigger a sweep (found \(survivors.count) roster folders)")
     }

@@ -61,8 +61,8 @@ extension EntryAvatar: Codable {
             self = kind == .animated ? .animated(pack: pack, item: item) : .character(pack: pack, item: item)
         case .photo:
             let file = try c.decode(String.self, forKey: .file)
-            guard AvatarFileName.isValid(file) else { throw bad(.file, "Invalid photo file name") }
-            self = .photo(fileName: file)
+            guard let canonical = AvatarFileName.normalized(file) else { throw bad(.file, "Invalid photo file name") }
+            self = .photo(fileName: canonical)
         }
     }
 
@@ -123,9 +123,18 @@ enum AvatarIdentifier {
 enum AvatarFileName {
     static func make() -> String { "\(UUID().uuidString).jpg" }
 
-    static func isValid(_ s: String) -> Bool {
-        guard s.hasSuffix(".jpg") else { return false }
-        return UUID(uuidString: String(s.dropLast(4))) != nil
+    static func isValid(_ s: String) -> Bool { normalized(s) != nil }
+
+    /// The one spelling of a valid name — UPPER-case UUID, lower-case `.jpg` — or nil (H-10).
+    ///
+    /// `UUID(uuidString:)` accepts either case, and the default APFS volume is case-insensitive,
+    /// so a hand-edited roster naming `abc….jpg` really does point at the file Halo wrote as
+    /// `ABC….jpg`. Anything that *compares* names (the orphan sweep's keep-set, the image cache's
+    /// keys, an equality check on avatars) must therefore compare this form: compared raw, a
+    /// referenced photo looks unreferenced and the sweep deletes it.
+    static func normalized(_ s: String) -> String? {
+        guard s.hasSuffix(".jpg"), let id = UUID(uuidString: String(s.dropLast(4))) else { return nil }
+        return "\(id.uuidString).jpg"
     }
 }
 
