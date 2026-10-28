@@ -450,3 +450,67 @@ struct WheelHeroRenderTests {
         #expect(spinningHub.differs(spinningBase, in: hubRect) < 0.02)
     }
 }
+
+// MARK: - H-11 measurement
+
+/// A headless measurement of the wheel's DRAWING cost, not a frame-rate trace. It renders the real
+/// `SpinnerWheelView` offscreen through AppKit (CPU rasteriser, no display link, no GPU present), so
+/// it says how much more the avatars cost to draw than the plain wheel — it cannot say whether a
+/// given Mac holds 60 fps on screen. That needs Instruments on a real display (the wheel emits an
+/// os_signpost interval per frame for exactly that). Prints a table; asserts only that it ran.
+@Suite("Wheel draw-cost measurement (H-11)", .serialized)
+@MainActor
+struct WheelDrawCostMeasurement {
+
+    private func medianMs(_ entries: [DrawEntry], mode: AvatarDisplayMode, roster: UUID, side: CGFloat, iterations: Int = 15) -> Double {
+        let view = SpinnerWheelView(entries: entries, plan: nil, spinStart: nil, restAngle: 33, highlightID: nil,
+                                    reducedMotion: true, rosterID: roster, avatarMode: mode, avatarLimitOverride: 1_000)
+            .frame(width: side, height: side).background(Color.haloBackground)
+        let host = NSHostingView(rootView: view)
+        host.frame = CGRect(x: 0, y: 0, width: side, height: side)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+        host.cacheDisplay(in: host.bounds, to: rep)          // warm-up
+        var times: [Double] = []
+        for _ in 0..<iterations {
+            host.setNeedsDisplay(host.bounds)
+            let t0 = DispatchTime.now().uptimeNanoseconds
+            host.cacheDisplay(in: host.bounds, to: rep)
+            times.append(Double(DispatchTime.now().uptimeNanoseconds - t0) / 1e6)
+        }
+        return times.sorted()[times.count / 2]
+    }
+
+    @Test("Draw cost at 10/20/40/60 entries, plain vs with photo avatars")
+    func table() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("halo-h11-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root); AvatarImageCache.shared.store = nil }
+        let store = AvatarStore(rootURL: root, detectFaces: false)
+        let roster = UUID()
+        let file = try store.importPhoto(data: CompletionFixtures.png(width: 400, height: 400), rosterID: roster)
+        AvatarImageCache.shared.store = store
+        for px in [20.0, 30, 40, 60, 80] { _ = AvatarImageCache.shared.photo(fileName: file, rosterID: roster, points: px) }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+
+        var lines = ["H-11 offscreen draw cost, median ms/frame (CPU raster, NOT on-screen fps):",
+                     "  entries | side | plain  | avatars(photo) | ratio | avatar diameter pt"]
+        for side in [480.0, 720.0] {
+            for n in [10, 20, 40, 60] {
+                let es = (0..<n).map { DrawEntry(label: "Person \($0)", avatar: .photo(fileName: file)) }
+                let plain = medianMs(es, mode: .nameOnly, roster: roster, side: side)
+                let withAv = medianMs(es, mode: .avatarAndName, roster: roster, side: side)
+                let r = WheelGeometry.radius(side: side)
+                let d = WheelGeometry.wheelAvatarDiameter(mode: .avatarAndName, count: n, side: side, radius: r, limit: 1_000)
+                lines.append(String(format: "  %7d | %4.0f | %5.1f  | %14.1f | %4.2fx | %.0f", n, side, plain, withAv, withAv / max(plain, 0.001), d))
+                #expect(plain > 0 && withAv > 0)
+            }
+        }
+        let table = lines.joined(separator: "\n")
+        print(table)
+        if let dir = ProcessInfo.processInfo.environment["HALO_RENDER_DIR"] {
+            try? table.write(toFile: dir + "/h11-draw-cost.txt", atomically: true, encoding: .utf8)
+        }
+    }
+}

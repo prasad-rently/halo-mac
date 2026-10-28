@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 // MARK: - SpinnerWheelView
 
@@ -23,6 +24,9 @@ struct SpinnerWheelView: View {
     /// v2.6 C-2: the previous winner, shown in the hub between spins. Nil keeps the F-051 hub (the
     /// entry count). Display only — it is never read when a winner is chosen.
     var hubEntry: DrawEntry? = nil
+    /// Measurement only (v2.6 H-11): lets a test draw avatars past the production limit to see what
+    /// they would cost. Production callers leave it nil.
+    var avatarLimitOverride: Int? = nil
 
     /// Redraws when a photo finishes decoding (the wheel is paused at rest, so nothing else would).
     @ObservedObject private var avatarCache = AvatarImageCache.shared
@@ -62,7 +66,13 @@ struct SpinnerWheelView: View {
 
     // MARK: - Draw
 
+    /// v2.6 H-11: one interval per frame drawn, visible in Instruments' os_signpost track
+    /// (subsystem com.halo.mac, category LuckyDrawWheel). Costs nothing unless something is recording.
+    private static let signposter = OSSignposter(subsystem: "com.halo.mac", category: "LuckyDrawWheel")
+
     private func draw(in context: inout GraphicsContext, size: CGSize, now: Date) {
+        let signpostState = Self.signposter.beginInterval("wheelFrame")
+        defer { Self.signposter.endInterval("wheelFrame", signpostState) }
         let frame = currentFrame(now: now)
         let side = min(size.width, size.height)
         let centre = CGPoint(x: size.width / 2, y: size.height / 2)
@@ -141,7 +151,7 @@ struct SpinnerWheelView: View {
         let labelAlpha = 1 - 0.75 * min(speed * 1.6, 1)
         // 0 when the wheel draws no avatars at all (mode, entry limit, size).
         let avatarDiameter = WheelGeometry.wheelAvatarDiameter(mode: avatarMode, count: count, side: side,
-                                                               radius: radius, limit: Self.avatarLimit)
+                                                               radius: radius, limit: avatarLimitOverride ?? Self.avatarLimit)
 
         for (index, entry) in entries.enumerated() {
             let start = angle + Double(index) * sweep - 90
