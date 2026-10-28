@@ -48,7 +48,10 @@ extension RosterImport {
     /// history export), embedded quotes doubled.
     private static func csvQuote(_ field: String) -> String {
         let flat = field.replacingOccurrences(of: "\r", with: " ").replacingOccurrences(of: "\n", with: " ")
-        let safe = LuckyDrawStore.csvSafe(flat).replacingOccurrences(of: "\"", with: "\"\"")
+        // One leading apostrophe is added to any name that is (apostrophes then) a formula character,
+        // and import strips exactly one — so a name that genuinely starts `'=` round-trips too.
+        let guarded = formulaShaped(flat) ? "'" + flat : flat
+        let safe = guarded.replacingOccurrences(of: "\"", with: "\"\"")
         return "\"\(safe)\""
     }
 
@@ -96,9 +99,15 @@ extension RosterImport {
     /// Reverses the apostrophe `csvSafe` puts in front of `= + - @` on export, so a name survives
     /// a round trip. Only that exact shape is undone.
     private static func unSafe(_ cell: String) -> String {
-        let chars = Array(cell)
-        if chars.count >= 2, chars[0] == "'", "=+-@\t\r".contains(chars[1]) { return String(chars.dropFirst()) }
+        if cell.first == "'", formulaShaped(String(cell.dropFirst())) { return String(cell.dropFirst()) }
         return cell
+    }
+
+    /// Zero or more apostrophes followed by `= + - @ TAB CR` — the shape export guards with one more
+    /// apostrophe (a superset of `LuckyDrawStore.csvSafe`'s rule, so exports stay reversible).
+    private static func formulaShaped(_ s: String) -> Bool {
+        guard let first = s.drop(while: { $0 == "'" }).first else { return false }
+        return "=+-@\t\r".contains(first)
     }
 
     /// All cells of one CSV row, quote-aware (`""` is an escaped quote).

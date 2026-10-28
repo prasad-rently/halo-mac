@@ -211,6 +211,7 @@
 		9A817E271BE3B7A75B810435 /* TLSPinningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B40E2366324FB4033E3DC65 /* TLSPinningTests.swift */; };
 		A159238AFAAA0D1EF722C664 /* ToolRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB7849370C86E175D74B077 /* ToolRegistry.swift */; };
 		A3253DC631055540204F574D /* AnthropicProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF513D5DDD7399B797BE21F2 /* AnthropicProvider.swift */; };
+		A5E9A31517E52F4060BA9CCA /* WheelGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAC89B92BD53711BDED98D2D /* WheelGeometry.swift */; };
 		A8DDF44DE9A7DFB0EDE3CC08 /* SMSConsoleViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FA751F8E4056851F9D6502F /* SMSConsoleViewModel.swift */; };
 		A99CE881593D83C11462AD71 /* ApplicationsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7048D8E34CBF35D4C92C051A /* ApplicationsUITests.swift */; };
 		AD59BC3440D47362DFB14C04 /* AvatarStorageUsage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83E357B3BA42306F6F9876B5 /* AvatarStorageUsage.swift */; };
@@ -537,6 +538,7 @@
 		E1F44C9D0695A26A2333D149 /* ActionsUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ActionsUITests.swift; sourceTree = "<group>"; };
 		E3AE1EE8C07067A1E19BDF85 /* AvatarView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AvatarView.swift; sourceTree = "<group>"; };
 		E654E24D942547F5E7C88B57 /* CloudModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudModels.swift; sourceTree = "<group>"; };
+		EAC89B92BD53711BDED98D2D /* WheelGeometry.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WheelGeometry.swift; sourceTree = "<group>"; };
 		EBEDE3049FF72B28000BC2DE /* SMSModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSModels.swift; sourceTree = "<group>"; };
 		ECFF6EE3F66B556B438004F0 /* SMSConsoleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSConsoleView.swift; sourceTree = "<group>"; };
 		ED7DEBF795FF5325DE31F15D /* RAGContextView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RAGContextView.swift; sourceTree = "<group>"; };
@@ -810,6 +812,7 @@
 				B518CF2DF8C12353A61AFF66 /* AvatarStore.swift */,
 				83E357B3BA42306F6F9876B5 /* AvatarStorageUsage.swift */,
 				561E5CF2D95A9BF0A4C12CED /* RosterAvatarCSV.swift */,
+				EAC89B92BD53711BDED98D2D /* WheelGeometry.swift */,
 			);
 			name = LuckyDraw;
 			path = LuckyDraw;
@@ -1418,6 +1421,7 @@
 				04C7627CF17A79C7D9BBBAFE /* AvatarPickerView.swift in Sources */,
 				AD59BC3440D47362DFB14C04 /* AvatarStorageUsage.swift in Sources */,
 				217EFF7B8615B55767C1FB2A /* RosterAvatarCSV.swift in Sources */,
+				A5E9A31517E52F4060BA9CCA /* WheelGeometry.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
