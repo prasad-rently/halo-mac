@@ -30,12 +30,13 @@ cd "$REPO"
 die()  { echo "bump-version: $*" >&2; exit 2; }
 VERSION="" BUILD="" TOKEN=0 DRY=0 PBX="Halo.xcodeproj/project.pbxproj" CUSTOM=0
 
+need_val() { [ $# -ge 2 ] && [ -n "$2" ] || die "$1 needs a value"; }
 while [ $# -gt 0 ]; do
   case "$1" in
-    --build)   BUILD="${2:-}"; shift 2 ;;
+    --build)   need_val "$@"; BUILD="$2"; shift 2 ;;
     --token)   TOKEN=1; shift ;;
     --dry-run) DRY=1; shift ;;
-    --pbxproj) PBX="${2:-}"; CUSTOM=1; shift 2 ;;
+    --pbxproj) need_val "$@"; PBX="$2"; CUSTOM=1; shift 2 ;;
     -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
     -*)        die "unknown option: $1" ;;
     *)         [ -z "$VERSION" ] || die "more than one version given"; VERSION="$1"; shift ;;

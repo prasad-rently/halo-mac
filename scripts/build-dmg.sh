@@ -44,14 +44,15 @@ die() { echo "build-dmg: $*" >&2; exit 2; }
 fail() { echo "build-dmg: VERIFY FAILED — $*" >&2; exit 1; }
 step() { echo; echo "==> $*"; }
 
+need_val() { [ $# -ge 2 ] && [ -n "$2" ] || die "$1 needs a value"; }
 while [ $# -gt 0 ]; do
   case "$1" in
-    --version)       VERSION="${2:-}"; shift 2 ;;
-    --build)         BUILD="${2:-}"; shift 2 ;;
-    --configuration) CONFIG="${2:-}"; shift 2 ;;
-    --identity)      IDENTITY="${2:-}"; shift 2 ;;
-    --out)           OUT="${2:-}"; shift 2 ;;
-    --work)          WORK="${2:-}"; shift 2 ;;
+    --version)       need_val "$@"; VERSION="$2"; shift 2 ;;
+    --build)         need_val "$@"; BUILD="$2"; shift 2 ;;
+    --configuration) need_val "$@"; CONFIG="$2"; shift 2 ;;
+    --identity)      need_val "$@"; IDENTITY="$2"; shift 2 ;;
+    --out)           need_val "$@"; OUT="$2"; shift 2 ;;
+    --work)          need_val "$@"; WORK="$2"; shift 2 ;;
     --keep-work)     KEEP=1; shift ;;
     -h|--help)       sed -n '2,40p' "$0"; exit 0 ;;
     *) die "unknown argument: $1" ;;
@@ -64,8 +65,12 @@ printf '%s' "$VERSION" | grep -Eq '^[0-9]+(\.[0-9]+)*([-+][0-9A-Za-z.-]+)?$' \
 case "$CONFIG" in Debug) ENT="Halo/Halo-Debug.entitlements" ;; Release) ENT="Halo/Halo.entitlements" ;; *) die "--configuration must be Debug or Release" ;; esac
 
 if [ -z "$BUILD" ]; then
-  BUILD="$(sed -n 's/.*CURRENT_PROJECT_VERSION = \([0-9][0-9]*\);.*/\1/p' Halo.xcodeproj/project.pbxproj | sort -u | head -1)"
+  BUILD="$(sed -n 's/.*CURRENT_PROJECT_VERSION = \([^;]*\);.*/\1/p' Halo.xcodeproj/project.pbxproj | sort -u)"
   [ -n "$BUILD" ] || die "could not read CURRENT_PROJECT_VERSION from project.pbxproj; pass --build"
+  # Disagreeing values (a half-done hand edit) must not be resolved by guessing: that is how a
+  # build gets mislabelled. Run scripts/bump-version.sh, or pass --build.
+  [ "$(printf '%s\n' "$BUILD" | wc -l | tr -d ' ')" -eq 1 ] \
+    || die "project.pbxproj has differing CURRENT_PROJECT_VERSION values ($(printf '%s' "$BUILD" | tr '\n' ' ')); run scripts/bump-version.sh or pass --build"
 fi
 printf '%s' "$BUILD" | grep -Eq '^[0-9]+$' || die "--build must be an integer"
 
@@ -84,15 +89,33 @@ fi
 echo "signing identity : $IDENTITY"
 
 # --- scratch + output dirs ----------------------------------------------------------------------
-[ -n "$WORK" ] || WORK="$(mktemp -d "${TMPDIR:-/tmp}/halo-build-dmg.XXXXXX")"
-[ -n "$OUT" ]  || OUT="${TMPDIR:-/tmp}/halo-release-out/$VERSION"
-case "$WORK" in "$REPO"|"$REPO"/*) die "--work must be outside the repo" ;; esac
-case "$OUT"  in "$REPO"|"$REPO"/*) die "--out must be outside the repo" ;; esac
+# Resolve to absolute, symlink-free paths BEFORE any guard: a relative --work resolves against the
+# repo (we have cd'd there), and a symlink can point back into it. Both defeated the old textual
+# "outside the repo" check.
+abspath() { mkdir -p "$1" && (cd -P "$1" && pwd -P); }
+MARK=".halo-build-dmg-work"
+if [ -z "$WORK" ]; then
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/halo-build-dmg.XXXXXX")"
+else
+  # A user-supplied scratch dir is wiped (Build/, stage/, mnt/), so it must be empty, new, or one
+  # this script created earlier. Never an arbitrary existing directory.
+  if [ -d "$WORK" ] && [ -n "$(ls -A "$WORK" 2>/dev/null)" ] && [ ! -f "$WORK/$MARK" ]; then
+    die "--work '$WORK' exists, is not empty and was not created by this script; use a new or empty directory"
+  fi
+fi
+WORK="$(abspath "$WORK")" || die "cannot create --work"
+[ -n "$OUT" ] || OUT="${TMPDIR:-/tmp}/halo-release-out/$VERSION"
+OUT="$(abspath "$OUT")" || die "cannot create --out"
+REPO_P="$(cd -P "$REPO" && pwd -P)"
+case "$WORK" in "$REPO_P"|"$REPO_P"/*) rmdir "$WORK" 2>/dev/null || true; die "--work must be outside the repo" ;; esac
+case "$OUT"  in "$REPO_P"|"$REPO_P"/*) rmdir "$OUT" 2>/dev/null || true; die "--out must be outside the repo" ;; esac
 [ "$WORK" != "/" ] && [ "$WORK" != "$HOME" ] || die "refusing to wipe '$WORK'"
+touch "$WORK/$MARK"
 SYMROOT="$WORK/Build/Products"
 OBJROOT="$WORK/Build/Intermediates.noindex"
 STAGE="$WORK/stage"
 MNT="$WORK/mnt"
+hdiutil detach "$MNT" -quiet 2>/dev/null || true   # a stale mount from a crashed earlier run
 rm -rf "$WORK/Build" "$STAGE" "$MNT"            # the clean-SYMROOT rule
 mkdir -p "$SYMROOT" "$OBJROOT" "$STAGE" "$MNT" "$OUT"
 
