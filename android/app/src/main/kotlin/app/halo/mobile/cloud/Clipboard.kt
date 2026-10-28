@@ -182,7 +182,7 @@ class SendToMacActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val text = intent?.takeIf { it.action == Intent.ACTION_SEND }?.getStringExtra(Intent.EXTRA_TEXT)
+        val text = intent?.takeIf { it.action == Intent.ACTION_SEND }?.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()   // not getStringExtra: many apps share a Spanned, which that returns as null
         if (text.isNullOrBlank()) { finish(); return }
         val app = applicationContext
         if (!CloudPrefs(app).clipboardEnabled) {

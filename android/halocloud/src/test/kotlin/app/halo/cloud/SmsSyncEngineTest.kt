@@ -258,6 +258,20 @@ class SmsSyncEngineTest {
         assertTrue(state.quarantined().isEmpty())
     }
 
+    @Test fun `a server outage or rate limit never counts toward quarantine either (H-14)`() {
+        for (status in listOf(500, 502, 503, 429, 408, 404)) {
+            val (db, engine, state) = poisonHarness()
+            db.failStatus = status                                                 // OPERATION_FAILED, but the server's trouble, not the row's
+            repeat(SmsSyncEngine.QUARANTINE_AFTER + 3) { assertEquals("HTTP $status", 1, engine.sync().failed) }
+            assertTrue("HTTP $status must not park a healthy row", state.quarantined().isEmpty())
+            assertEquals(0, state.failures("1|2_${now - 2 * day}"))
+        }
+        val (db, engine, state) = poisonHarness()
+        db.failStatus = 400                                                        // the server rejecting this row: that does count
+        repeat(SmsSyncEngine.QUARANTINE_AFTER) { engine.sync() }
+        assertEquals(1, state.quarantined().size)
+    }
+
     @Test fun `a success resets the failure count so only consecutive failures quarantine`() {
         val (db, engine, state) = poisonHarness()
         repeat(SmsSyncEngine.QUARANTINE_AFTER - 1) { engine.sync() }

@@ -14,6 +14,8 @@ class FakeRtdb(override val uid: String = "uid-1") : Rtdb {
     @Volatile var failWrites: ((String) -> Boolean)? = null
     /** What a failing write throws: NETWORK by default; OPERATION_FAILED models the server refusing one particular row. */
     @Volatile var failKind: RtdbException.Kind = RtdbException.Kind.NETWORK
+    /** HTTP status carried by a failing write (0 = unknown). 5xx / 429 model an outage; 400 a row the server rejects. */
+    @Volatile var failStatus: Int = 0
     val writes = ArrayList<String>()
     /** Every path read with [get] (not [shallowKeys]) — lets a test prove a hot path does not pull a whole node. */
     val reads = java.util.Collections.synchronizedList(ArrayList<String>())
@@ -30,7 +32,7 @@ class FakeRtdb(override val uid: String = "uid-1") : Rtdb {
     @Synchronized override fun get(path: String): JsonElement? { reads.add(path); return StreamModel.toJson(node(parts(path))) }
 
     @Synchronized override fun put(path: String, value: JsonElement) {
-        if (failWrites?.invoke(path) == true) throw RtdbException(failKind, "offline")
+        if (failWrites?.invoke(path) == true) throw RtdbException(failKind, "offline", failStatus)
         writes.add(path)
         val p = parts(path)
         // Which observed child is new?

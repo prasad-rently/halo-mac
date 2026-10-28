@@ -28,8 +28,17 @@ import java.net.URLEncoder
 //
 // Blocking by design: callers are WorkManager workers or a dedicated thread, never the main thread.
 
-class RtdbException(val kind: Kind, message: String) : IOException(message) {
+class RtdbException(val kind: Kind, message: String, /** HTTP status when the server answered, else 0. */ val status: Int = 0) : IOException(message) {
     enum class Kind { NOT_CONFIGURED, CONFIGURE_FAILED, AUTH_FAILED, OPERATION_FAILED, NETWORK }
+
+    /**
+     * H-14: could this failure plausibly be about the one row being written (too big, rejected by a rule), as opposed
+     * to the connection, the session or the server's health? Only the former may count toward quarantining a row —
+     * an outage (5xx), a rate limit (429/408), a missing database (404) or a session problem would otherwise park
+     * healthy messages one by one while the cloud is merely unavailable.
+     */
+    val isRowFault: Boolean
+        get() = kind == Kind.OPERATION_FAILED && status != 404 && status != 408 && status != 429 && status !in 500..599
 }
 
 /** What the sync engines need from a database. Kept narrow so tests can use an in-memory fake. */
@@ -163,7 +172,7 @@ class FirebaseRtdbClient(
                 val status = conn.responseCode
                 if (status != 200) {
                     if (status == 401 || status == 403) invalidate()
-                    throw RtdbException(RtdbException.Kind.OPERATION_FAILED, "Live connection refused (HTTP $status).")
+                    throw RtdbException(RtdbException.Kind.OPERATION_FAILED, "Live connection refused (HTTP $status).", status)
                 }
                 backoffMs = 1_000
                 val model = LinkedHashMap<String, Any?>()
@@ -205,7 +214,7 @@ class FirebaseRtdbClient(
                 val status = try { conn.responseCode } catch (e: IOException) { throw RtdbException(RtdbException.Kind.NETWORK, "Network error: ${e.message}") }
                 val text = (if (status in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
                 if (status == 401 && attempt == 0) { attempt++; invalidate(); continue }   // the token raced its expiry
-                if (status !in 200..299) throw RtdbException(RtdbException.Kind.OPERATION_FAILED, messageForStatus(status, text))
+                if (status !in 200..299) throw RtdbException(RtdbException.Kind.OPERATION_FAILED, messageForStatus(status, text), status)
                 return text
             } finally { conn.disconnect() }
         }

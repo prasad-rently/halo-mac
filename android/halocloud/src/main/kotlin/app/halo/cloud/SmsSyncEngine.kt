@@ -196,10 +196,11 @@ class SmsSyncEngine(
                     // every time — it could never finish. Rows are oldest-first, so the mark is always safe.
                     if (++sinceCheckpoint >= CHECKPOINT_EVERY) { state.setHighWater(l.subscriptionId, mark); sinceCheckpoint = 0 }
                 } catch (e: Exception) {
-                    // A dropped connection says nothing about THIS row, so it never counts toward quarantine.
-                    // Anything else (the server refusing it, a rule rejecting it) does: after QUARANTINE_AFTER
-                    // consecutive failed passes the row is parked and the line carries on past it (H-14).
-                    val rowFault = !(e is RtdbException && e.kind == RtdbException.Kind.NETWORK)
+                    // A dropped connection, an outage, a rate limit or a session problem says nothing about THIS row,
+                    // so none of them counts toward quarantine ([RtdbException.isRowFault]). A failure that can be about
+                    // the row itself (the server refusing it, a rule rejecting it, a local encoding error) does: after
+                    // QUARANTINE_AFTER consecutive failed passes the row is parked and the line carries on (H-14).
+                    val rowFault = if (e is RtdbException) e.isRowFault else true
                     if (rowFault) {
                         val n = state.failures(key) + 1
                         if (n >= QUARANTINE_AFTER) { state.quarantine(key); mark = maxOf(mark ?: 0, r.dateMs); continue }
