@@ -13,7 +13,7 @@ import javax.crypto.spec.GCMParameterSpec
  * (hardware-backed where the device has it) and never leaves it. The file on disk is ciphertext; pulling
  * it off the phone yields nothing without the Keystore key. (F-049 D4: "Secure storage (Keystore/Keychain)".)
  */
-object SecretBox {
+object SecretBox : app.halo.cloud.Sealer {
     private const val ALIAS = "halo.cloud.secrets.v1"
     private const val PROVIDER = "AndroidKeyStore"
     private const val IV_BYTES = 12
@@ -29,12 +29,12 @@ object SecretBox {
     }
 
     /** `iv(12) || ciphertext || tag(16)`. */
-    fun seal(plain: ByteArray): ByteArray {
+    override fun seal(plain: ByteArray): ByteArray {
         val c = Cipher.getInstance("AES/GCM/NoPadding"); c.init(Cipher.ENCRYPT_MODE, key())
         return c.iv + c.doFinal(plain)
     }
 
-    fun open(blob: ByteArray): ByteArray {
+    override fun open(blob: ByteArray): ByteArray {
         require(blob.size > IV_BYTES) { "sealed blob too short" }
         val c = Cipher.getInstance("AES/GCM/NoPadding")
         c.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, blob, 0, IV_BYTES))

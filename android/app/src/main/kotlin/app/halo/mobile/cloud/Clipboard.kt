@@ -11,6 +11,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
 import app.halo.cloud.ClipboardSyncEngine
 import app.halo.cloud.RemoteClip
+import app.halo.cloud.SealedFile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
@@ -22,15 +23,19 @@ import java.util.concurrent.Executors
 @Serializable
 data class ClipItem(val id: String, val text: String, val kind: String, val from: String, val atMs: Long, val received: Boolean)
 
-/** The phone-side clipboard history (D9: remote copies land HERE — never in the live clipboard). Capped like the cloud. */
+/**
+ * The phone-side clipboard history (D9: remote copies land HERE — never in the live clipboard). Capped like the cloud.
+ * H-13: sealed at rest under the Keystore key, like the pairing profile — clipboard text is exactly where a
+ * password someone copied ends up. A plaintext file left by an earlier version is migrated on first read.
+ */
 class ClipboardHistory(ctx: Context) {
-    private val file = File(ctx.filesDir, "clipboard-history.json")
+    private val file = SealedFile(File(ctx.filesDir, "clipboard-history.json"), SecretBox)
     private val json = Json { ignoreUnknownKeys = true }
     private val ser = ListSerializer(ClipItem.serializer())
     private val _items = MutableStateFlow(load())
     val items: StateFlow<List<ClipItem>> = _items
 
-    private fun load(): List<ClipItem> = try { if (file.exists()) json.decodeFromString(ser, file.readText()) else emptyList() } catch (e: Exception) { emptyList() }
+    private fun load(): List<ClipItem> = try { file.read()?.let { json.decodeFromString(ser, it) } ?: emptyList() } catch (e: Exception) { emptyList() }
 
     @Synchronized fun add(item: ClipItem) {
         if (_items.value.any { it.id == item.id }) return
@@ -39,7 +44,7 @@ class ClipboardHistory(ctx: Context) {
     }
 
     @Synchronized fun clear() { _items.value = emptyList(); file.delete() }
-    private fun persist(l: List<ClipItem>) { runCatching { file.writeText(json.encodeToString(ser, l)) } }
+    private fun persist(l: List<ClipItem>) { runCatching { file.write(json.encodeToString(ser, l)) } }
 
     companion object {
         @Volatile private var instance: ClipboardHistory? = null
