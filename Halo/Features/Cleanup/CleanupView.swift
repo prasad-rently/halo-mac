@@ -69,7 +69,7 @@ final class CleanupViewModel: ObservableObject {
     private var removalSerial = 0
     private var removals: [String: Int] = [:]
 
-    init(coordinator: ScanCoordinator = ScanCoordinator(), kinds: [CleanupKind] = CleanupKind.allCases) {
+    init(coordinator: ScanCoordinator = ScanCoordinator(), kinds: [CleanupKind] = CleanupKind.cleanupPaneKinds) {
         self.coordinator = coordinator
         self.kinds = kinds
     }

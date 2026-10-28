@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "updated": "2026-10-28",
+  "toolchains": [
+    { "id": "xcode-project", "name": "Xcode project", "enabled": true,
+      "markers": ["*.xcodeproj", "*.xcworkspace"],
+      "regenHint": "Build the project in Xcode",
+      "artifacts": [ { "name": "build", "regenClass": "safe" } ] },
+    { "id": "swiftpm", "name": "Swift Package", "enabled": true,
+      "markers": ["Package.swift"],
+      "regenHint": "swift build",
+      "artifacts": [ { "name": ".build", "regenClass": "safe" } ] },
+    { "id": "node", "name": "Node", "enabled": true,
+      "markers": ["package.json"],
+      "regenHint": "npm / yarn / pnpm install (needs network)",
+      "artifacts": [ { "name": "node_modules", "regenClass": "needsNetwork" } ] },
+    { "id": "node-build", "name": "Next / Nuxt / Vite", "enabled": true,
+      "markers": ["package.json"],
+      "regenHint": "npm run build",
+      "artifacts": [
+        { "name": ".next", "regenClass": "safe", "requiresGitIgnore": true },
+        { "name": ".nuxt", "regenClass": "safe", "requiresGitIgnore": true },
+        { "name": "dist", "regenClass": "safe", "requiresGitIgnore": true }
+      ] },
+    { "id": "rust", "name": "Rust", "enabled": true,
+      "markers": ["Cargo.toml"],
+      "regenHint": "cargo build",
+      "artifacts": [ { "name": "target", "regenClass": "safe" } ] },
+    { "id": "gradle", "name": "Gradle / Android", "enabled": true,
+      "markers": ["build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"],
+      "regenHint": "./gradlew build",
+      "artifacts": [
+        { "name": "build", "regenClass": "safe" },
+        { "name": ".gradle", "regenClass": "safe" }
+      ] },
+    { "id": "flutter", "name": "Flutter / Dart", "enabled": true,
+      "markers": ["pubspec.yaml"],
+      "regenHint": "flutter pub get, then build (needs network)",
+      "artifacts": [
+        { "name": "build", "regenClass": "needsNetwork" },
+        { "name": ".dart_tool", "regenClass": "needsNetwork" }
+      ] },
+    { "id": "maven", "name": "Maven", "enabled": false,
+      "markers": ["pom.xml"],
+      "regenHint": "mvn package",
+      "artifacts": [ { "name": "target", "regenClass": "safe" } ] },
+    { "id": "cocoapods", "name": "CocoaPods", "enabled": false,
+      "markers": ["Podfile"],
+      "regenHint": "pod install (needs network)",
+      "artifacts": [ { "name": "Pods", "regenClass": "needsNetwork", "requiresGitIgnore": true } ] },
+    { "id": "carthage", "name": "Carthage", "enabled": false,
+      "markers": ["Cartfile"],
+      "regenHint": "carthage bootstrap (needs network)",
+      "artifacts": [ { "name": "Carthage", "regenClass": "needsNetwork", "requiresGitIgnore": true } ] },
+    { "id": "dotnet", "name": ".NET", "enabled": false,
+      "markers": ["*.csproj", "*.sln"],
+      "regenHint": "dotnet build",
+      "artifacts": [ { "name": "bin", "regenClass": "safe" }, { "name": "obj", "regenClass": "safe" } ] },
+    { "id": "python-cache", "name": "Python caches", "enabled": false,
+      "markers": ["*.py"],
+      "regenHint": "Recreated on the next run",
+      "artifacts": [
+        { "name": "__pycache__", "regenClass": "safe" },
+        { "name": ".pytest_cache", "regenClass": "safe" },
+        { "name": ".mypy_cache", "regenClass": "safe" }
+      ] },
+    { "id": "python-venv", "name": "Python venv", "enabled": false,
+      "markers": ["requirements.txt", "pyproject.toml", "setup.py", "Pipfile"],
+      "regenHint": "Recreate the venv and pip install (may not rebuild identically)",
+      "artifacts": [
+        { "name": ".venv", "regenClass": "caution", "insideMarker": "pyvenv.cfg" },
+        { "name": "venv", "regenClass": "caution", "insideMarker": "pyvenv.cfg" }
+      ] },
+    { "id": "unity", "name": "Unity", "enabled": false,
+      "markers": ["ProjectSettings"],
+      "regenHint": "Re-import the project (can take hours)",
+      "artifacts": [ { "name": "Library", "regenClass": "caution" } ] }
+  ]
+}
