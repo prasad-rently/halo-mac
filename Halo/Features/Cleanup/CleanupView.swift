@@ -4,17 +4,21 @@ struct CleanupView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var viewModel = CleanupViewModel()
     @StateObject private var browserViewModel = BrowserCleanerViewModel()
+    @StateObject private var buildArtifactsViewModel = BuildArtifactsViewModel()
     @State private var selectedCategory: CleanupKind = .systemCaches
 
     var body: some View {
         HStack(spacing: 0) {
             // Left Panel — Categories
-            CleanupSidebar(selectedCategory: $selectedCategory, viewModel: viewModel, browserViewModel: browserViewModel)
+            CleanupSidebar(selectedCategory: $selectedCategory, viewModel: viewModel, browserViewModel: browserViewModel,
+                           buildArtifactsViewModel: buildArtifactsViewModel)
                 .frame(width: 260)
             Divider().background(Color.haloBorder)
             // Right Panel — File List (or the Browsers pane for that one category)
             if selectedCategory == .browsers {
                 BrowserCleanerPane(viewModel: browserViewModel)
+            } else if selectedCategory == .buildArtifacts {
+                BuildArtifactsPane(viewModel: buildArtifactsViewModel, openTrash: { selectedCategory = .trash })
             } else {
                 CleanupFileList(category: selectedCategory, viewModel: viewModel)
             }
@@ -22,6 +26,15 @@ struct CleanupView: View {
         .background(Color.haloSurface)
         .task { await viewModel.scanAll() }
         .task { await browserViewModel.loadAll() }
+        .task {
+            // F-054: removal reaches every other Cleanup list at once (BUG-001 FR-I1), and the
+            // folders it moved now live in Trash, so refresh that one too.
+            buildArtifactsViewModel.onRemoved = { urls in
+                viewModel.reconcile(removed: urls)
+                Task { await viewModel.refreshAfterExternalDeletion() }
+            }
+            buildArtifactsViewModel.rescan()
+        }
         // Changes made outside Halo (Finder, `rm`, another app) can't be seen without a file
         // watcher; coming back to the app after a minute rescans, which is the cheap answer.
         .onChange(of: browserViewModel.isClearing) { clearing in
@@ -69,7 +82,7 @@ final class CleanupViewModel: ObservableObject {
     private var removalSerial = 0
     private var removals: [String: Int] = [:]
 
-    init(coordinator: ScanCoordinator = ScanCoordinator(), kinds: [CleanupKind] = CleanupKind.allCases) {
+    init(coordinator: ScanCoordinator = ScanCoordinator(), kinds: [CleanupKind] = CleanupKind.cleanupPaneKinds) {
         self.coordinator = coordinator
         self.kinds = kinds
     }
@@ -233,16 +246,20 @@ struct CleanupSidebar: View {
     @Binding var selectedCategory: CleanupKind
     @ObservedObject var viewModel: CleanupViewModel
     @ObservedObject var browserViewModel: BrowserCleanerViewModel
+    @ObservedObject var buildArtifactsViewModel: BuildArtifactsViewModel
 
-    private var combinedTotalBytes: Int64 { viewModel.totalBytes + browserViewModel.totalBytes }
+    private var combinedTotalBytes: Int64 {
+        viewModel.totalBytes + browserViewModel.totalBytes + buildArtifactsViewModel.totalBytes
+    }
     private var combinedTotalFormatted: String {
         ByteCountFormatter.string(fromByteCount: combinedTotalBytes, countStyle: .file)
     }
-    private var isScanningAny: Bool { viewModel.isScanning || browserViewModel.isLoading }
+    private var isScanningAny: Bool { viewModel.isScanning || browserViewModel.isLoading || buildArtifactsViewModel.isScanning }
 
     private func rescan() {
         viewModel.rescan()
         Task { await browserViewModel.loadAll() }
+        buildArtifactsViewModel.rescan()
     }
 
     var body: some View {
@@ -298,8 +315,13 @@ struct CleanupSidebar: View {
 
             ScrollView {
                 VStack(spacing: 2) {
-                    ForEach(CleanupKind.allCases) { kind in
-                        if kind == .browsers {
+                    ForEach(CleanupKind.cleanupPaneKinds) { kind in
+                        if kind == .buildArtifacts {
+                            BuildArtifactsCategoryRow(
+                                viewModel: buildArtifactsViewModel,
+                                isSelected: selectedCategory == kind
+                            ) { selectedCategory = kind }
+                        } else if kind == .browsers {
                             BrowserCleanupCategoryRow(
                                 browserViewModel: browserViewModel,
                                 isSelected: selectedCategory == kind

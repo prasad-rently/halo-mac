@@ -175,9 +175,25 @@ try FileManager.default.trashItem(at: url, resultingItemURL: nil)
 > folder can't redirect a delete elsewhere. **Do not copy this pattern for user content: only Halo's own
 > derived data qualifies.** (Several other modules already `removeItem` their own caches and scratch files —
 > `MemoryTrendTracker`, `RAGVectorStore`, `LocalShareServer`; this exception is the one that deletes files
-> *named by a roster file*, hence the extra containment.) (The other approved-but-not-yet-built
-> exception is F-054's "remove the exact items just trashed" — add it here, with its scope, when it is implemented.)
+> *named by a roster file*, hence the extra containment.) 
 > The only other `unlink` in the app is `DriveSpeedTester`'s scratch file (gotcha 19).
+
+> **Second sanctioned exception — F-054 "Move to Trash and empty those items" (owner-approved 2026-10-27, scoped by D-02).**
+> `BuildArtifactRemover.trashAndEmpty` (`Halo/Core/Scanner/BuildArtifactRemover.swift`) calls `trashItem` on each
+> build folder the user selected and then permanently removes **only the exact URL that call returned** in `resultingItemURL`
+> — so the user gets the space back now instead of after an Empty Trash. The one `removeItem` lives in
+> `permanentlyRemoveTrashed`, and is reachable only when **all** of these hold: (1) the item is **Safe-class and git-verified**
+> (`permanentRemovalEligible` — Needs-network, Caution, non-git/Unverified and Xcode-global items are refused) **and git is asked again at removal
+time** (`reverifyGitIgnored`: still ignored, nothing tracked, still a direct child of its project — the scan may be hours old); (2) the URL is the
+> one `trashItem` returned in this operation — **never** reconstructed from a name, **never** found by enumerating a Trash,
+> and no "empty trash" API is ever called (the user's unrelated Trash contents are untouchable); (3) it is verified to sit strictly
+> inside a Trash directory (`~/.Trash` or a volume `.Trashes/<uid>`), after resolving symlinks in its parent chain, and is not itself
+> a symlink; (4) the build allows it — `permanentRemovalAvailable` is **false in a sandboxed build** (spike S-B could not show the
+> sandbox permits it; see `docs/specs/F-054-spikes.md`), where the button is hidden and `trashAndEmpty` refuses everything;
+> (5) the review sheet requires the user to pass **a second confirmation** that says the folders are unrecoverable — enforced by the UI, not by the remover, so any new
+caller of `trashAndEmpty` must provide its own. If `trashItem` fails,
+> or returns no URL, the item is **not** removed and is reported. **Do not copy this pattern: it exists because the thing
+> deleted is regenerable build output the user just selected, and because the deletion is bound to the URL the system handed back.**
 
 ### All deletions require confirmation
 Show a review sheet before any destructive action. Users must explicitly confirm.
@@ -832,8 +848,9 @@ a branch that has not merged yet.
 | `8201`–`8216` | F-052 Lethe ephemeral chat | claimed |
 | `8217`–`8224` | F-051 Lucky Draw follow-up pass (import, sound, draw-N) | claimed |
 | `8225`–`8244` | F-053 Lucky Draw Avatars (spec `docs/specs/F-053-lucky-draw-avatars.md`; PR #54 added its files with `add_source_files.rb` → random ids, so this block is unused unless ids are hand-assigned) | claimed |
-| `8245`–`8264` | F-054 Build Artifact Cleaner (planned — spec only, `docs/specs/F-054-build-artifact-cleaner.md`) | claimed |
-| `8265`+ | — | **free — take the next block from here** |
+| `8245`–`8264` | F-054 Build Artifact Cleaner (`docs/specs/F-054-build-artifact-cleaner.md`; built with `add_source_files.rb` → random ids, so this block is unused unless ids are hand-assigned) | claimed |
+| `8265`–`8284` | F-054 v2.6 build — pane, view model, tests (added with `add_source_files.rb` → random ids; unused unless ids are hand-assigned) | claimed |
+| `8285`+ | — | **free — take the next block from here** |
 
 Auditing the whole batch for collisions:
 
@@ -1113,6 +1130,36 @@ so an existing roster looks exactly as before).
   avatar from the roster, not from the caller's possibly-stale copy (a test caught that leak).
 
 ---
+
+## Build Artifact Cleaner (F-054)
+
+`Halo/Core/Scanner/BuildArtifactScanner.swift` + `BuildArtifactRemover.swift` + `Halo/Resources/build-artifact-catalog.json` +
+`Halo/Features/Cleanup/BuildArtifactsViewModel.swift` + `BuildArtifactsView.swift` · spec: `docs/specs/F-054-build-artifact-cleaner.md` ·
+spikes: `docs/specs/F-054-spikes.md`
+
+- Cleanup **"Build Artifacts"** pane (`CleanupKind.buildArtifacts`, own actor + view model like `.browsers`; `targetPaths == []`). Finds regenerable
+  build output (`node_modules`, `target/`, `.build/`, `build/`, `.gradle/`, `.dart_tool/`, …) across the user's project roots, ranked by size, each with
+  a regeneration hint and a class: **Safe**, **Needs network**, **Caution**. The catalogue is data (`build-artifact-catalog.json`, bundle-first); MVP toolchains
+  enabled: Xcode, SwiftPM, Node (+ Next/Nuxt/Vite), Rust, Gradle/Android, Flutter; the rest ship disabled.
+- **Never offer a guess.** Detection needs a **marker pair** (artifact name + a sibling project file; symlinked markers/artifacts never count). In a git work tree
+  `GitGate` requires nothing under the folder to be tracked (`git ls-files`) — and for `dist`/`.next`/`Pods`-style rules a positive `git check-ignore`. **git runs only through
+  `ShellReader`**, via `GitGate.locateGit()` which never spawns the `/usr/bin/git` Command-Line-Tools shim. When git cannot answer (sandbox, no git) the item is **Unverified**,
+  Move-to-Trash-only, never smart-selected; git-required rules are dropped; the pane says so (spike S-A). A project under Mercurial/Subversion/Fossil (`.hg`, `.svn`, …)
+  is treated the same way — Halo cannot ask those tools what is tracked, so it is never "not a repo".
+- **Hard stops regardless of catalogue or caller:** `BuildArtifactSafety.isNeverTouch` — Xcode `Archives`, `CoreSimulator/Devices|Volumes|Cryptex|Profiles/Runtimes`, `*.xcarchive`;
+  default excluded roots (`~/Library`, `~/Downloads` (D-03), `~/.Trash`, `/System`, `/Applications`, `/Library`); symlinks never followed; the removal preflight re-checks each folder
+  is still a real directory immediately before acting.
+- **One owner per path (BUG-001).** `.xcodeData` is retired from the Cleanup sidebar (`CleanupKind.cleanupPaneKinds`) and owns no roots; DerivedData + `CoreSimulator/Caches` are
+  listed by this pane's scanner (`xcodeGlobalItems`, toolchain "Xcode (global)"), and Smart Scan's Xcode line is sourced from the same function (D-04). Items are keyed by
+  resolved path, and removals are reported through `onRemoved` → `CleanupViewModel.reconcile(removed:)` so every other list forgets them at once. `CleanupPath.overlappingRoots` +
+  `BuildArtifactRootsTests` guard the fixed roots; user roots are pruned of nesting by `BuildArtifactRootsStore.pruneNested` and `~/Downloads` is excluded even if added.
+- **Sizes are exact:** `BuildArtifactScanner.exactSize` — allocated size, no file cap, hidden files included, symlinks not followed (the `SpaceLensViewModel` helper caps at 20,000 files).
+- **Removal:** default **Move to Trash** (`trashItem`, recoverable — frees no space until the Trash is emptied, and the sheet/banner say so). The second action is the
+  sanctioned exception documented under "File deletion — mandatory rule" above; it is hidden in a sandboxed build. The review sheet acts on a **frozen snapshot**
+  (a rescan landing while it is open changes nothing it will delete); Cancel deletes nothing; partial failure removes only the rows that really moved.
+- Sandboxed build: roots must be user-granted (`NSOpenPanel` → security-scoped bookmark via `BuildArtifactRootsStore`); with none granted the pane shows *Choose folders…*, never an empty list.
+- Tests: `HaloTests/BuildArtifactTests.swift` (catalogue, fixture tree, negative cases, real-`git init` gate tests, `du` agreement on a 21,000-file tree, Trash-sentinel remover
+  tests on a stand-in Trash, roots invariant, view-model selection/review/supersession). Real deletion tests run on temp dirs only.
 
 ## Lethe — Anonymous Ephemeral Chat (F-052)
 
