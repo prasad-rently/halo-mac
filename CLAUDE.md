@@ -831,7 +831,9 @@ a branch that has not merged yet.
 | `8181`–`8200` | F-051 Lucky Draw Spinner Wheel | claimed |
 | `8201`–`8216` | F-052 Lethe ephemeral chat | claimed |
 | `8217`–`8224` | F-051 Lucky Draw follow-up pass (import, sound, draw-N) | claimed |
-| `8225`+ | — | **free — take the next block from here** |
+| `8225`–`8244` | F-053 Lucky Draw Avatars (spec `docs/specs/F-053-lucky-draw-avatars.md`; PR #54 added its files with `add_source_files.rb` → random ids, so this block is unused unless ids are hand-assigned) | claimed |
+| `8245`–`8264` | F-054 Build Artifact Cleaner (planned — spec only, `docs/specs/F-054-build-artifact-cleaner.md`) | claimed |
+| `8265`+ | — | **free — take the next block from here** |
 
 Auditing the whole batch for collisions:
 
@@ -1325,6 +1327,21 @@ The user's **own** Firebase ("BYOB"), configured at runtime (no bundled plist). 
 30. **With any SPM package present, `-target Halo` builds need `COMPILER_INDEX_STORE_ENABLE=NO`** or
     Xcode fails on a malformed `-I…/include/v5/records` index-store path (an explicit-module quirk,
     not a code error). Add it to the build recipe's flags.
+
+31. **Full-pane empty states use `.boundedEmptyState()` — the "sidebar scroll lock".** Selecting a
+    module whose detail view is a `VStack { … }.frame(maxWidth: .infinity, maxHeight: .infinity)`
+    empty state ("Connect your …", "No … yet") has made `NavigationSplitView` mis-lay-out the **sidebar**
+    column: header and storage indicator vanish, the list shifts up under the traffic lights, and it
+    stops scrolling. Nothing in `SidebarView` is at fault, which is why fixes aimed there never worked.
+    It has happened **four times** (AI Assistant `f787e9c`, Lethe `54c7884`, Messages and Expenditure
+    2026-10-27). Root such an empty state with `.boundedEmptyState()` (`DesignSystem.swift`) — a
+    `ScrollView` with `minHeight`, not an infinite max-height. **The mechanism is empirical, not
+    proven:** other shipped views use the same unbounded frame without the symptom
+    (`ClipboardEmptyState`, `AppDetailEmptyState`, Cleanup/BrowserCleaner scanning states, Files tab
+    empty states), so this is a remedy to apply when the symptom appears, not a lint rule — and
+    "every other detail view is ScrollView-rooted" is *not* true. Not yet audited on screen:
+    Messages' connected-but-no-thread-selected pane (`SMSConsoleView.messagesColumn`) and
+    `LuckyDrawView`'s root.
 
 ---
 

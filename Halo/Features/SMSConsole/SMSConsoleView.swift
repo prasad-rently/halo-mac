@@ -82,7 +82,7 @@ struct SMSConsoleView: View {
                 .multilineTextAlignment(.center).frame(maxWidth: 420).fixedSize(horizontal: false, vertical: true)
             HaloPrimaryButton("Connect Firebase", icon: "link") { showSetup = true }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .boundedEmptyState()
     }
 
     private var noMessagesState: some View {
@@ -96,7 +96,7 @@ struct SMSConsoleView: View {
                 HaloGhostButton("Setup / Seed", icon: "gearshape") { showSetup = true }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .boundedEmptyState()
     }
 
     private var searchField: some View {

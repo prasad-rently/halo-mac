@@ -106,7 +106,7 @@ final class SMSSyncClient: ObservableObject {
     }
 
     /// Shown when an unauthenticated read of the database succeeded.
-    static let openRulesWarning = "Connection works — but your Realtime Database is open to the whole internet (its rules are in test mode). Your message text is still end-to-end encrypted, but device names, labels and timestamps are readable by anyone, and a stranger could write to it. Publish the owner-only rules from docs/specs/firebase-setup.md §7.2."
+    static let openRulesWarning = "Connection works — but your Realtime Database is open to the whole internet (its rules are in test mode). Your message text is still end-to-end encrypted, but device names, labels and timestamps are readable by anyone, and a stranger could write to it. Publish the owner-only rules from docs/specs/firebase-rules.json (Firebase console → Realtime Database → Rules)."
 
     /// Clear a stale test result (e.g. when the user edits a field).
     func clearTestResult() { testResult = nil }

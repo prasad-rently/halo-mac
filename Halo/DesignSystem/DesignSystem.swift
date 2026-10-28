@@ -372,3 +372,29 @@ struct HaloCheckbox: View {
         .onTapGesture { isChecked.toggle() }
     }
 }
+
+// MARK: - Bounded empty state
+
+extension View {
+    /// Roots a detail-pane empty state ("Connect your …", "No … yet") in a `ScrollView`.
+    ///
+    /// **Use this for a module's full-pane empty state instead of a bare
+    /// `.frame(maxWidth: .infinity, maxHeight: .infinity)` root.** In four modules (AI
+    /// Assistant `f787e9c`, Lethe `54c7884`, then Messages and Expenditure) that root made
+    /// the *sidebar* column mis-lay-out — header and storage indicator vanished, the module
+    /// list jumped and stopped scrolling — and rooting the state in a `ScrollView` cured it.
+    /// The `minHeight` is deliberate: a floor without an unbounded height demand.
+    ///
+    /// Caveat: the *mechanism* is empirical, not proven. Several shipped views use the same
+    /// unbounded frame without the symptom (e.g. `ClipboardEmptyState`, `AppDetailEmptyState`,
+    /// Cleanup/BrowserCleaner scanning states), and not every other detail view is
+    /// ScrollView-rooted. Treat this as the known remedy when the symptom appears, not as
+    /// proof that every unbounded frame is a bug.
+    func boundedEmptyState() -> some View {
+        ScrollView {
+            self
+                .frame(maxWidth: .infinity, minHeight: 460)
+                .padding(.top, 100)
+        }
+    }
+}

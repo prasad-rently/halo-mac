@@ -184,7 +184,7 @@ with but keeps a manual OAuth-client step. **This is a decision to revisit (see 
    Add Firebase to a GCP project: `POST firebase.googleapis.com/v1beta1/projects/{project}:addFirebase`.
    Create the default DB instance: `POST firebasedatabase.googleapis.com/v1beta/projects/{project}/locations/{location}/instances?databaseId={id}&validateOnly=false`
    (`type: DEFAULT_DATABASE`). Deploy rules: `PUT https://{instance}.firebaseio.com/.settings/rules.json`
-   with the §7.2 rules JSON (bearer token). Pull web config: `GET firebase.googleapis.com/v1beta1/projects/{project}/webApps/{appId}/config` → feeds `FirebaseConfig`.
+   with the rules in `docs/specs/firebase-rules.json` (bearer token). Pull web config: `GET firebase.googleapis.com/v1beta1/projects/{project}/webApps/{appId}/config` → feeds `FirebaseConfig`.
 
 > **S2 net verdict:** assisted provisioning is **technically fully scriptable** once
 > a `cloud-platform` token is held (all of R1–R5 via REST), and the OAuth mechanism
