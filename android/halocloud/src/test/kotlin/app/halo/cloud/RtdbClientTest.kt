@@ -36,6 +36,7 @@ class RtdbClientTest {
     private val signIns = AtomicInteger(); private val refreshes = AtomicInteger()
     private val rejectNextData = AtomicInteger()
     private val seenOnDb = CopyOnWriteArrayList<String>()
+    private val liveStreams = CopyOnWriteArrayList<HttpExchange>()
     private var openToPublic = false
     private var now = 1_000_000L
     private var tokenSerial = 0
@@ -97,6 +98,7 @@ class RtdbClientTest {
         ex.responseHeaders.add("Content-Type", "text/event-stream"); ex.sendResponseHeaders(200, 0)
         val out = ex.responseBody
         val done = CountDownLatch(1)
+        liveStreams.add(ex)
         fun emit(event: String, data: String) { synchronized(out) { try { out.write("event: $event\ndata: $data\n\n".toByteArray()); out.flush() } catch (e: Exception) { done.countDown() } } }
         // Snapshot once and derive both the opening event and the "already sent" set from it, so a child
         // written between the two can never be missed.
@@ -202,6 +204,22 @@ class RtdbClientTest {
         assertTrue("stream did not deliver in time: $got", latch.await(10, TimeUnit.SECONDS))
         handle.close()
         assertEquals(listOf("a=1", "b=2", "c=3"), got.sorted())
+    }
+
+    @Test fun `the live stream survives a dropped connection - it reconnects and delivers what arrived meanwhile, without repeats (F-055 FR-B2)`() {
+        val c = client(); c.signIn()
+        c.put("clipboard/uid-9/items/a", JsonObject(mapOf("v" to JsonPrimitive(1))))
+        val got = CopyOnWriteArrayList<String>()
+        val first = CountDownLatch(1); val afterLoss = CountDownLatch(2)
+        val handle = c.observeChildAdded("clipboard/uid-9/items") { k, _ -> got.add(k); first.countDown(); if (k != "a") afterLoss.countDown() }
+        assertTrue("initial delivery", first.await(10, TimeUnit.SECONDS))
+        // Network loss: the server end of every live stream goes away, then two items are written while the client is "offline".
+        liveStreams.forEach { runCatching { it.close() } }
+        backing.put("clipboard/uid-9/items/b", JsonObject(mapOf("v" to JsonPrimitive(2))))
+        backing.put("clipboard/uid-9/items/c", JsonObject(mapOf("v" to JsonPrimitive(3))))
+        assertTrue("stream did not recover after the drop: $got", afterLoss.await(20, TimeUnit.SECONDS))
+        handle.close()
+        assertEquals("each child exactly once across the reconnect", listOf("a", "b", "c"), got.sorted())
     }
 
     private class SpyConn : java.net.HttpURLConnection(java.net.URL("http://127.0.0.1:1/")) {

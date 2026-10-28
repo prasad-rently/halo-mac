@@ -172,8 +172,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (_scanning.value) return
         _scanning.value = true; _notice.value = null; scanCancelled = false
         scanJob = viewModelScope.launch(Dispatchers.IO) {
+            // Multicast (F-055 FR-B4) and the /24 HTTP scan run together; whichever sees a peer first wins, duplicates merge by fingerprint.
+            val multicast = launch { app.halo.mobile.background.MulticastScope.run(getApplication(), _identity.value.deviceInfo(), onFound = { merge(it) }, isCancelled = { scanCancelled }) }
             val found = SubnetScanner(client).scan(onFound = { merge(it) }, isCancelled = { scanCancelled })
             found.forEach { merge(it) }
+            multicast.join()
             _scanning.value = false
             if (_peers.value.isEmpty()) _notice.value = "No devices found. Make sure the other device has HaloShare or LocalSend open on the same Wi-Fi — or add its address below."
         }
