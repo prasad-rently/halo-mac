@@ -61,6 +61,16 @@ class ExpenseFixtureTest {
         assertTrue("Kotlin disagrees with the Swift-recorded fixtures:\n" + bad.joinToString("\n"), bad.isEmpty())
     }
 
+    @Test fun `classifierKotlin may differ from the desktop only between two NON-transactional categories`() {
+        val diverging = root["messages"]!!.jsonArray.map { it.jsonObject }.filter { it["expect"]!!.jsonObject.s("classifierKotlin") != null }
+        assertTrue("at least the two known divergences", diverging.size >= 2)
+        for (m in diverging) {
+            val x = m["expect"]!!.jsonObject
+            assertTrue("${m.s("id")}: a divergence must never change transactional-or-not",
+                (x.s("classifier") == "transactional") == (x.s("classifierKotlin") == "transactional"))
+        }
+    }
+
     private fun runPipelines(zone: ZoneId) {
         val bad = ArrayList<String>()
         for (pe in root["pipelines"]!!.jsonArray) {
