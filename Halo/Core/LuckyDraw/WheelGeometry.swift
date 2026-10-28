@@ -91,6 +91,16 @@ enum HeroTravel {
         case crossfade
     }
 
+    /// What the wheel should draw. `recordWin` retires the winner the instant the spin ends, so the
+    /// live pool has one segment fewer — and every segment after the winner has moved — before the
+    /// hero starts. While the result popup is up the wheel keeps drawing the pool as it was at the
+    /// win (`snapshot`), so the winner's segment is still there for the hero to leave from and
+    /// `WheelHeroOrigin.index` still means what it meant. Display only: the draw already happened,
+    /// and retirement itself is untouched.
+    static func displayedEntries(live: [DrawEntry], snapshot: [DrawEntry]?, popupShowing: Bool) -> [DrawEntry] {
+        popupShowing ? (snapshot ?? live) : live
+    }
+
     static func style(reducedMotion: Bool, hasOrigin: Bool) -> Style {
         reducedMotion || !hasOrigin ? .crossfade : .travel
     }

@@ -14,8 +14,8 @@ struct DrawResultOverlay: View {
     /// v2.6 C-1: when true the avatar is drawn by `WinnerHeroAvatar` (a separate layer that flies in
     /// from the wheel); this card then only keeps an empty slot of the same size and reports its frame.
     var heroManaged = false
-    /// Extra delay before the name's per-character reveal, so it begins after the hero lands.
-    var nameDelay: Double = 0
+    /// False holds the name's per-character reveal back until the hero avatar reports it has landed.
+    var nameGate = true
     let reducedMotion: Bool
     let canPutBack: Bool
     var onSpinAgain: () -> Void
@@ -27,6 +27,8 @@ struct DrawResultOverlay: View {
     @State private var shockwave = false
 
     static let avatarDiameter: CGFloat = 132
+
+    private var revealed: Bool { appeared && nameGate }
 
     /// Past this length a 12 ms per-character stagger reads as a stutter rather than
     /// a flourish, so long names fade in whole.
@@ -125,10 +127,10 @@ struct DrawResultOverlay: View {
                     Text(String(character))
                         .font(.system(size: 27, weight: .heavy, design: .rounded))
                         .foregroundColor(.haloText)
-                        .offset(y: appeared ? 0 : 10)
-                        .opacity(appeared ? 1 : 0)
+                        .offset(y: revealed ? 0 : 10)
+                        .opacity(revealed ? 1 : 0)
                         .animation(.spring(response: 0.5, dampingFraction: 0.7)
-                            .delay(0.3 + nameDelay + Double(index) * 0.012), value: appeared)
+                            .delay((heroManaged ? 0 : 0.3) + Double(index) * 0.012), value: revealed)
                 }
             }
         }
@@ -169,6 +171,8 @@ struct WinnerHeroAvatar: View {
     let target: CGRect
     let origin: (centre: CGPoint, diameter: CGFloat)?
     let reducedMotion: Bool
+    /// Called once the flight (or fade) has finished.
+    var onLanded: () -> Void = {}
 
     @State private var landed = false
 
@@ -187,9 +191,16 @@ struct WinnerHeroAvatar: View {
             .opacity(style == .crossfade && !landed ? 0 : 1)
             .position(x: target.midX, y: target.midY)
             .onAppear {
-                withAnimation(.easeOut(duration: style == .travel ? HeroTravel.duration
-                                                                  : HeroTravel.crossfadeDuration)) {
-                    landed = true
+                let duration = style == .travel ? HeroTravel.duration : HeroTravel.crossfadeDuration
+                if #available(macOS 14.0, *) {
+                    // Completion of the animation itself, not a parallel timer.
+                    withAnimation(.easeOut(duration: duration), completionCriteria: .logicallyComplete) {
+                        landed = true
+                    } completion: { onLanded() }
+                } else {
+                    // macOS 13 has no animation-completion callback; fall back to the animation's duration.
+                    withAnimation(.easeOut(duration: duration)) { landed = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + duration) { onLanded() }
                 }
             }
     }

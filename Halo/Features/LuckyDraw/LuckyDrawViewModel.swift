@@ -22,6 +22,8 @@ final class LuckyDrawViewModel: ObservableObject {
     /// v2.6 C-1: where the winner's avatar sat on the wheel when the spin stopped, for the hero
     /// travel into the popup. Set with `winner`, cleared when the popup is dismissed. Display only.
     @Published private(set) var heroOrigin: WheelHeroOrigin?
+    /// The pool the wheel was showing at the win — see `HeroTravel.displayedEntries`.
+    @Published private(set) var winnerWheelSnapshot: [DrawEntry]?
 
     /// Set when Reduced Motion is on at the moment Spin is pressed, so the renderer
     /// and the reveal agree on which presentation they are giving.
@@ -156,6 +158,7 @@ final class LuckyDrawViewModel: ObservableObject {
         winner = won
         // Captured before the winner is retired off the wheel (a later redraw has one fewer segment).
         heroOrigin = WheelHeroOrigin(index: plan.winnerIndex, count: pool.count, angle: plan.targetAngle)
+        winnerWheelSnapshot = pool
 
         withAnimation(reducedMotion ? .easeOut(duration: 0.32)
                                     : .spring(response: 0.42, dampingFraction: 0.68)) {
@@ -231,6 +234,7 @@ final class LuckyDrawViewModel: ObservableObject {
         celebrate = false
         winner = nil
         heroOrigin = nil
+        winnerWheelSnapshot = nil
     }
 
     func cancelInFlight() {

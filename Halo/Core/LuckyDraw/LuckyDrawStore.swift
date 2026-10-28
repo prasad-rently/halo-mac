@@ -293,11 +293,19 @@ final class LuckyDrawStore: ObservableObject {
     /// v2.6 C-3: total and per-roster photo storage, for the roster panel's readout.
     func avatarStorageUsage() -> AvatarStorageUsage {
         guard let avatarStore else { return .empty }
-        let rows = rosters.compactMap { r -> AvatarRosterUsage? in
-            let b = avatarStore.bytes(forRoster: r.id)
-            return b > 0 ? AvatarRosterUsage(rosterID: r.id, name: r.name, bytes: b) : nil
-        }.sorted { $0.bytes > $1.bytes }
-        return AvatarStorageUsage(totalBytes: avatarStore.totalBytes(), rosters: rows)
+        return AvatarStorageUsage.compute(rosters: rosters.map { ($0.id, $0.name) }, store: avatarStore)
+    }
+
+    /// Same result as `avatarStorageUsage()`, but the directory walk runs on a background queue —
+    /// the roster panel calls this on every change, and must not stat every photo on the main thread.
+    func avatarStorageUsageAsync() async -> AvatarStorageUsage {
+        guard let avatarStore else { return .empty }
+        let rows = rosters.map { ($0.id, $0.name) }          // snapshot on the main actor
+        return await withCheckedContinuation { cont in
+            DispatchQueue.global(qos: .utility).async {
+                cont.resume(returning: AvatarStorageUsage.compute(rosters: rows, store: avatarStore))
+            }
+        }
     }
 
     /// v2.6 C-3: "Clear this roster's photos" — removes only `rosterID`'s photo files and sets those

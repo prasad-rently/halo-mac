@@ -1,4 +1,5 @@
 import Testing
+import Combine
 import SwiftUI
 import AppKit
 import Foundation
@@ -479,7 +480,9 @@ struct WheelHeroRenderTests {
 /// it says how much more the avatars cost to draw than the plain wheel — it cannot say whether a
 /// given Mac holds 60 fps on screen. That needs Instruments on a real display (the wheel emits an
 /// os_signpost interval per frame for exactly that). Prints a table; asserts only that it ran.
-@Suite("Wheel draw-cost measurement (H-11)", .serialized)
+@Suite("Wheel draw-cost measurement (H-11)", .serialized,
+       .enabled(if: ProcessInfo.processInfo.environment["HALO_MEASURE_DRAW_COST"] != nil,
+                "Run with HALO_MEASURE_DRAW_COST=1 — ~100 offscreen frames, not for every test run"))
 @MainActor
 struct WheelDrawCostMeasurement {
 
@@ -517,14 +520,18 @@ struct WheelDrawCostMeasurement {
 
         var lines = ["H-11 offscreen draw cost, median ms/frame (CPU raster, NOT on-screen fps):",
                      "  entries | side | plain  | avatars(photo) | ratio | avatar diameter pt"]
+        // Only (side, n) pairs where avatars really are drawn: at 480 pt the fitted diameter drops
+        // below the 20 pt minimum before 60 entries, so a 60-entry row there would compare two
+        // identical plain wheels.
         for side in [480.0, 720.0] {
-            for n in [10, 20, 40, 60] {
+            for n in (side == 480 ? [10, 20, 40] : [10, 20, 40, 60]) {
                 let es = (0..<n).map { DrawEntry(label: "Person \($0)", avatar: .photo(fileName: file)) }
                 let plain = medianMs(es, mode: .nameOnly, roster: roster, side: side)
                 let withAv = medianMs(es, mode: .avatarAndName, roster: roster, side: side)
                 let r = WheelGeometry.radius(side: side)
                 let d = WheelGeometry.wheelAvatarDiameter(mode: .avatarAndName, count: n, side: side, radius: r, limit: 1_000)
                 lines.append(String(format: "  %7d | %4.0f | %5.1f  | %14.1f | %4.2fx | %.0f", n, side, plain, withAv, withAv / max(plain, 0.001), d))
+                #expect(d >= WheelGeometry.minAvatarDiameter, "row would not draw avatars")
                 #expect(plain > 0 && withAv > 0)
             }
         }
@@ -533,5 +540,69 @@ struct WheelDrawCostMeasurement {
         if let dir = ProcessInfo.processInfo.environment["HALO_RENDER_DIR"] {
             try? table.write(toFile: dir + "/h11-draw-cost.txt", atomically: true, encoding: .utf8)
         }
+    }
+}
+
+
+// MARK: - Review fixes: hero origin vs auto-retire, storage refresh
+
+@Suite("Hero origin survives auto-retire; storage readout refresh")
+@MainActor
+struct HeroRetireAndRefreshTests {
+
+    /// Mirrors what the view model does at the end of a spin: plan over the live pool, record the
+    /// win (which retires the winner), capture the origin and the pre-retire snapshot.
+    private func finishSpin(roster: inout DrawRoster) -> (origin: WheelHeroOrigin, winner: DrawEntry, snapshot: [DrawEntry])? {
+        let pool = roster.eligible
+        var rng = DrawEngineTests.SeededGenerator(seed: 7)
+        guard let plan = DrawEngine.plan(eligibleCount: pool.count, currentAngle: 0, duration: 5,
+                                         idForIndex: { pool[$0].id }, using: &rng),
+              let won = pool.first(where: { $0.id == plan.winnerID }) else { return nil }
+        roster.recordWin(entryID: won.id, label: won.label)          // auto-retire
+        return (WheelHeroOrigin(index: plan.winnerIndex, count: pool.count, angle: plan.targetAngle), won, pool)
+    }
+
+    @Test("After the win retires the winner, the live pool no longer has the segment the hero leaves from; the snapshot does")
+    func snapshotKeepsTheWinnersSegment() throws {
+        var roster = DrawRoster(name: "R", entries: (0..<8).map { DrawEntry(label: "P\($0)", avatar: .emoji(["🦊", "🚀", "🌈", "🐙"][$0 % 4])) })
+        let r = try #require(finishSpin(roster: &roster))
+
+        let live = roster.eligible
+        #expect(live.count == r.origin.count - 1, "recordWin retired the winner")
+        #expect(!live.contains { $0.id == r.winner.id })
+        // The bug: indexing the live pool at the origin names another entry (or nothing).
+        #expect(live.indices.contains(r.origin.index) ? live[r.origin.index].id != r.winner.id : true)
+
+        let shown = HeroTravel.displayedEntries(live: live, snapshot: r.snapshot, popupShowing: true)
+        #expect(shown.count == r.origin.count)
+        #expect(shown[r.origin.index].id == r.winner.id, "the segment at the origin is the winner's")
+        #expect(shown[r.origin.index].avatar == r.winner.avatar)
+    }
+
+    @Test("Outside the popup, or with no snapshot, the wheel shows the live pool")
+    func liveOtherwise() {
+        let live = [DrawEntry(label: "A")], snap = [DrawEntry(label: "A"), DrawEntry(label: "B")]
+        #expect(HeroTravel.displayedEntries(live: live, snapshot: snap, popupShowing: false) == live)
+        #expect(HeroTravel.displayedEntries(live: live, snapshot: nil, popupShowing: true) == live)
+    }
+
+    @Test("The async usage scan agrees with the sync one, and sees a replaced photo of the same count")
+    func asyncUsageTracksChanges() async throws {
+        let s = CompletionFixtures.Scratch(); let store = s.store()
+        let e = store.selected!.entries[0]
+        try await CompletionFixtures.addPhoto(store, to: e)
+        let first = await store.avatarStorageUsageAsync()
+        #expect(first == store.avatarStorageUsage())
+        #expect(first.totalBytes > 0)
+
+        var fired = 0
+        let sub = store.objectWillChange.sink { fired += 1 }
+        // Replace the photo with a different (much larger-noise) picture: same photo COUNT.
+        try await store.setPhoto(data: CompletionFixtures.png(width: 64, height: 64), for: store.selected!.entries[0])
+        #expect(fired > 0, "a same-count change must still publish, so the readout refreshes")
+        let second = await store.avatarStorageUsageAsync()
+        #expect(second == store.avatarStorageUsage())
+        #expect(store.photoAvatarCount == 1)
+        sub.cancel()
     }
 }

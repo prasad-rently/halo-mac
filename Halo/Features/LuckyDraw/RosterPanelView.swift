@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import UniformTypeIdentifiers
 
 // MARK: - RosterPanelView
@@ -29,6 +30,7 @@ struct RosterPanelView: View {
     @State private var pickerEntryID: UUID?
     @State private var pendingPhotoMatch: AvatarFolderMatcher.Result?
     @State private var storageUsage = AvatarStorageUsage.empty
+    @State private var usageTask: Task<Void, Never>?
     @State private var confirmClearRosterPhotos = false
 
     private var roster: DrawRoster? { store.selected }
@@ -387,7 +389,11 @@ struct RosterPanelView: View {
                 photoStorageReadout
             }
             .onAppear { refreshUsage() }
-            .onChange(of: store.photoAvatarCount) { _ in refreshUsage() }
+            // ANY store change (a photo replaced keeps the count; a roster renamed or deleted changes
+            // the list) — debounced so a burst of edits is one scan.
+            .onReceive(store.objectWillChange.debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)) { _ in
+                refreshUsage()
+            }
             .confirmationDialog(photoMatchTitle(pendingPhotoMatch),
                                 isPresented: Binding(get: { pendingPhotoMatch != nil },
                                                      set: { if !$0 { pendingPhotoMatch = nil } }),
@@ -441,7 +447,14 @@ struct RosterPanelView: View {
 
     // MARK: - Photo storage (v2.6 C-3)
 
-    private func refreshUsage() { storageUsage = store.avatarStorageUsage() }
+    /// The directory walk runs off the main thread; only the latest request's result is kept.
+    private func refreshUsage() {
+        usageTask?.cancel()
+        usageTask = Task {
+            let usage = await store.avatarStorageUsageAsync()
+            if !Task.isCancelled { storageUsage = usage }
+        }
+    }
 
     private var photoStorageReadout: some View {
         let thisRoster = roster.flatMap { r in storageUsage.rosters.first { $0.rosterID == r.id }?.bytes } ?? 0

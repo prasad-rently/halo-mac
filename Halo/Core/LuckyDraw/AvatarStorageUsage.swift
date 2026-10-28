@@ -44,6 +44,15 @@ struct AvatarStorageUsage: Equatable {
 
     static let empty = AvatarStorageUsage(totalBytes: 0, rosters: [])
 
+    /// Pure disk accounting — no main-actor state, safe to run on any queue.
+    static func compute(rosters: [(id: UUID, name: String)], store: AvatarStore) -> AvatarStorageUsage {
+        let rows = rosters.compactMap { r -> AvatarRosterUsage? in
+            let b = store.bytes(forRoster: r.id)
+            return b > 0 ? AvatarRosterUsage(rosterID: r.id, name: r.name, bytes: b) : nil
+        }.sorted { $0.bytes > $1.bytes }
+        return AvatarStorageUsage(totalBytes: store.totalBytes(), rosters: rows)
+    }
+
     static func format(_ bytes: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }

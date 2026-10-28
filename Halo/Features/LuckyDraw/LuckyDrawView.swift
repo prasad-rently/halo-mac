@@ -15,6 +15,8 @@ struct LuckyDrawView: View {
     /// v2.6 C-1: the wheel's and the popup avatar slot's frames, in the stage's own space.
     @State private var wheelFrame: CGRect?
     @State private var heroSlot: CGRect?
+    /// Set when the hero avatar has finished landing; the name reveal waits on it.
+    @State private var heroLanded = false
 
     private var roster: DrawRoster? { store.selected }
     private var pool: [DrawEntry] { roster?.eligible ?? [] }
@@ -168,7 +170,7 @@ struct LuckyDrawView: View {
 
                 GeometryReader { geo in
                     let side = min(geo.size.width, geo.size.height)
-                    SpinnerWheelView(entries: pool,
+                    SpinnerWheelView(entries: wheelEntries,
                                      plan: viewModel.plan,
                                      spinStart: viewModel.spinStart,
                                      restAngle: viewModel.restAngle,
@@ -234,7 +236,7 @@ struct LuckyDrawView: View {
                     rosterID: roster?.id,
                     showAvatar: showAvatar,
                     heroManaged: showAvatar,
-                    nameDelay: showAvatar && heroStyle == .travel ? 0.2 : 0,
+                    nameGate: !showAvatar || heroLanded,
                     reducedMotion: viewModel.reducedMotion,
                     canPutBack: roster?.autoRetireWinner ?? true,
                     onSpinAgain: { viewModel.spinAgain(reduceMotion: reduceMotion) },
@@ -248,7 +250,8 @@ struct LuckyDrawView: View {
                 // slot of the same size and reports where it is.
                 if showAvatar, let slot = heroSlot {
                     WinnerHeroAvatar(avatar: winner.avatar, label: winner.label, rosterID: roster?.id,
-                                     target: slot, origin: heroOrigin, reducedMotion: viewModel.reducedMotion)
+                                     target: slot, origin: heroOrigin, reducedMotion: viewModel.reducedMotion,
+                                     onLanded: { heroLanded = true })
                         .allowsHitTesting(false)
                 }
             }
@@ -273,6 +276,20 @@ struct LuckyDrawView: View {
         )
         .coordinateSpace(name: Self.stageSpace)
         .onPreferenceChange(HeroSlotKey.self) { heroSlot = $0 }
+        .onChange(of: viewModel.showWinner) { showing in if !showing { heroLanded = false } }
+        // Safety net only: if the hero never reports (no slot was measured), do not leave the name hidden.
+        .task(id: viewModel.showWinner) {
+            guard viewModel.showWinner else { return }
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if !Task.isCancelled { heroLanded = true }
+        }
+    }
+
+    /// While the result popup is up the wheel keeps the pool as it was at the win (the winner is
+    /// retired from the live pool at once) so the hero has a segment to leave from.
+    private var wheelEntries: [DrawEntry] {
+        HeroTravel.displayedEntries(live: pool, snapshot: viewModel.winnerWheelSnapshot,
+                                    popupShowing: viewModel.showWinner)
     }
 
     private static let stageSpace = "luckyStage"
