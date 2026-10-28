@@ -89,7 +89,7 @@ struct ExpenditureView: View {
                 Text(m).font(HaloFont.body(11)).foregroundColor(.haloRed)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .boundedEmptyState()
     }
 
     // MARK: Summary
@@ -240,7 +240,7 @@ struct ExpenditureView: View {
             Text(subtitle).font(HaloFont.body(12)).foregroundColor(.haloText2)
                 .multilineTextAlignment(.center).frame(maxWidth: 420)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .boundedEmptyState()
     }
 
     private func dateShort(_ d: Date) -> String {

@@ -156,36 +156,15 @@ struct LetheView: View {
 
     // MARK: - Empty state
 
-    // Centred with `.frame(maxHeight: .infinity)` rather than a pair of
-    // `Spacer()`s, and that distinction is the whole bug.
-    //
-    // Spacers make the *VStack itself* greedy, so it grew past the detail pane
-    // and pushed the module header off the top of the window — measured via the
-    // accessibility tree at y = -465, i.e. 495pt above the window. The frame
-    // modifier instead takes the proposed height and centres a naturally-sized
-    // child inside it, so the header keeps its place.
-    //
-    // The sibling modules (LocalShareView, PortManagerView) dodge this by
-    // wrapping everything in a ScrollView; a chat cannot, because the header and
-    // composer must stay pinned while only the transcript scrolls.
-    // Rooted in a ScrollView, and that is the whole fix — not cosmetic.
-    //
-    // `NavigationSplitView` mis-lays-out the *sidebar* column when the detail
-    // view is an unboundedly flexible sibling: the sidebar jumps/scrolls and
-    // this module's header gets pushed off the top of the window (measured at
-    // y = -443 against a window origin of y = 30).
-    //
-    // This is the same bug `f787e9c` fixed for AI Assistant's "connect your API
-    // key" screen — "every other module's detail view roots itself in a
-    // ScrollView; AIAssistantView's did not". The populated branch is fine
-    // because `roomList` and `messageScroll` are both ScrollViews; only this
-    // branch was missing one.
-    //
-    // `minHeight` rather than `maxHeight: .infinity` for the same reason:
-    // it gives the content a floor without re-introducing an unbounded demand.
-    // Three earlier attempts that kept an unbounded height all failed.
+    // Rooted in a ScrollView via `.boundedEmptyState()` (DesignSystem.swift), and
+    // that is the fix — not cosmetic. With an unbounded-height root here the module
+    // header was pushed off the top of the window (measured at y = -443 against a
+    // window origin of y = 30) and the sidebar column mis-laid-out. Same symptom as
+    // `f787e9c` (AI Assistant). Earlier attempts that kept an unbounded height —
+    // Spacers, `.frame(maxHeight: .infinity)`, a padded natural-height VStack — all
+    // failed when measured. The populated branch is fine because `roomList` and
+    // `messageScroll` are ScrollViews.
     private var emptyState: some View {
-        ScrollView {
         VStack(spacing: 14) {
             Image(systemName: "bubble.left.and.bubble.right")
                 .font(.system(size: 42)).foregroundColor(.haloAccent)
@@ -202,9 +181,7 @@ struct LetheView: View {
                     .buttonStyle(.bordered)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 460)
-        .padding(.top, 100)
-        }
+        .boundedEmptyState()   // same ScrollView + minHeight(460) + top 100 as before
     }
 
     // MARK: - Room list

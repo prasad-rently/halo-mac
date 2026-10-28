@@ -1279,6 +1279,21 @@ The user's **own** Firebase ("BYOB"), configured at runtime (no bundled plist). 
     Xcode fails on a malformed `-I…/include/v5/records` index-store path (an explicit-module quirk,
     not a code error). Add it to the build recipe's flags.
 
+31. **Full-pane empty states use `.boundedEmptyState()` — the "sidebar scroll lock".** Selecting a
+    module whose detail view is a `VStack { … }.frame(maxWidth: .infinity, maxHeight: .infinity)`
+    empty state ("Connect your …", "No … yet") has made `NavigationSplitView` mis-lay-out the **sidebar**
+    column: header and storage indicator vanish, the list shifts up under the traffic lights, and it
+    stops scrolling. Nothing in `SidebarView` is at fault, which is why fixes aimed there never worked.
+    It has happened **four times** (AI Assistant `f787e9c`, Lethe `54c7884`, Messages and Expenditure
+    2026-10-27). Root such an empty state with `.boundedEmptyState()` (`DesignSystem.swift`) — a
+    `ScrollView` with `minHeight`, not an infinite max-height. **The mechanism is empirical, not
+    proven:** other shipped views use the same unbounded frame without the symptom
+    (`ClipboardEmptyState`, `AppDetailEmptyState`, Cleanup/BrowserCleaner scanning states, Files tab
+    empty states), so this is a remedy to apply when the symptom appears, not a lint rule — and
+    "every other detail view is ScrollView-rooted" is *not* true. Not yet audited on screen:
+    Messages' connected-but-no-thread-selected pane (`SMSConsoleView.messagesColumn`) and
+    `LuckyDrawView`'s root.
+
 ---
 
 ## Reorderable Sidebar Modules
