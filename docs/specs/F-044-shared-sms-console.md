@@ -197,7 +197,8 @@ Key points (two-secret model, D11):
 
 ### 7.2 Realtime Database security rules (deployable)
 
-Ships in the user setup guide; scopes everything to the owner and indexes `date` for range pulls:
+Ships in the user setup guide; scopes everything to the owner and indexes `date` for range pulls.
+**The canonical, deployable copy is [`firebase-rules.json`](firebase-rules.json)** — edit that file, not this block (this block previously omitted `clipboard/{uid}`, which F-045 needs, so a project set up from it denied clipboard sync):
 
 ```json
 {
@@ -222,11 +223,17 @@ Ships in the user setup guide; scopes everything to the owner and indexes `date`
         ".read":  "auth != null && auth.uid === $uid",
         ".write": "auth != null && auth.uid === $uid"
       }
+    },
+    "clipboard": {
+      "$uid": {
+        ".read":  "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
     }
   }
 }
 ```
-(Owner-scoped across `sms/{uid}/{deviceId}/…`, `devices/{uid}`, and `meta/{uid}`; `date` indexed per device for range pulls.)
+(Owner-scoped across `sms/{uid}/{deviceId}/…`, `devices/{uid}`, `meta/{uid}` and `clipboard/{uid}/…`; `date` indexed per device for range pulls.)
 (Read-only desktop is enforced app-side; rules stay symmetric so the same account works if two-way is added later. A stricter variant that only allows writes bearing a "phone" custom-claim is noted as a future hardening.)
 
 ### 7.3 Realtime Database cost (user's own account)

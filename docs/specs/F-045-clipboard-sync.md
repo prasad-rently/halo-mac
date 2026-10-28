@@ -76,7 +76,7 @@ the clipboard history on every other connected device.
 
 ## 6. Non-Functional Requirements
 
-- **Privacy/Security:** encrypt-before-upload (D2); owner-only RTDB rules (F-044 §7.2). Nothing excluded by default (D5) — privacy leans on E2E encryption + easy per-item exclude & purge (D10). Retention bounded by the 500-item cap (D4).
+- **Privacy/Security:** encrypt-before-upload (D2); owner-only RTDB rules (`docs/specs/firebase-rules.json`, which includes `clipboard/{uid}`). Nothing excluded by default (D5) — privacy leans on E2E encryption + easy per-item exclude & purge (D10). Retention bounded by the 500-item cap (D4).
 - **Performance:** publish is async/non-blocking on copy; listener merges without UI jank; respects the in-memory 500-item cap.
 - **Battery/network (mobile):** batched writes; sync cadence configurable.
 - **Correctness:** echo suppression prevents loops; last-writer-wins ordering by server timestamp.

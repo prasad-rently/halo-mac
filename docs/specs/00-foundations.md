@@ -53,7 +53,7 @@ runs against a **Firebase project the user creates and owns**.
 
 - **Realtime Database Security Rules** must restrict every node to the owner —
   `auth != null && auth.uid === $uid` under `.../{$uid}`. A hardened rules file
-  ships in the docs so users deploy consistent rules (see F-044 §7.2).
+  ships in the docs so users deploy consistent rules (see `docs/specs/firebase-rules.json`).
 - **Client-side encryption for sensitive payloads.** Clipboard (F-045) and SMS
   (F-044) may contain secrets/PII. Payload bodies are encrypted **before upload**
   with a user passphrase-derived key (e.g., AES-GCM, key via PBKDF2/Argon2), so

@@ -35,7 +35,7 @@ characters with a `'`. (Confidence < 8 → not a formal finding.)
 
 ### 2. Reliance on user-deployed RTDB rules
 Owner-only isolation of `sms|clipboard|devices|meta/{uid}` depends on the user
-deploying the firebase-setup §7.2 rules. A user who leaves their RTDB in "test
+deploying the `docs/specs/firebase-rules.json` rules. A user who leaves their RTDB in "test
 mode" exposes their own data to any authenticated principal. This is a documented
 BYOB deployment step, not a client-code defect — but the setup UI could **deploy
 the rules for the user** (it currently doesn't). Worth folding into the F-049
