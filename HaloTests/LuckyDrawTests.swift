@@ -1347,6 +1347,79 @@ struct LuckyDrawStoreAvatarTests {
         #expect(survivors.count == 2, "a failed read must not trigger a sweep (found \(survivors.count) roster folders)")
     }
 
+    // MARK: Recovery file keeps its photos (review I-3)
+
+    /// A roster with one imported photo, saved. Returns the roster, the photo's name and its path.
+    private func savedRosterWithPhoto(_ s: Scratch) async throws -> (roster: UUID, name: String, url: URL) {
+        let store = s.store()
+        try await importPhoto(store, for: store.selected!.entries[0])
+        store.flushToDisk()
+        let roster = store.selected!.id
+        let name = try #require(store.selected!.entries[0].avatar?.photoFileName)
+        return (roster, name, try #require(store.avatarStore!.url(for: name, rosterID: roster)))
+    }
+
+    private func plantOrphan(_ s: Scratch, in roster: UUID = UUID()) throws -> URL {
+        let url = s.dir.appendingPathComponent("luckydraw/avatars/\(roster.uuidString)/\(UUID().uuidString).jpg")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: url)
+        return url
+    }
+
+    @Test("Corrupt roster, then a relaunch on the fresh roster: the recovery file's photos are not swept")
+    func recoveryFilePhotosSurviveRelaunch() async throws {
+        let s = Scratch()
+        let photo = try await savedRosterWithPhoto(s)
+
+        // Corrupt the saved roster so Codable rejects it but it is still well-formed JSON.
+        var json = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: s.file)) as? [[String: Any]])
+        var entries = try #require(json[0]["entries"] as? [[String: Any]])
+        entries[0]["id"] = 12345
+        json[0]["entries"] = entries
+        try JSONSerialization.data(withJSONObject: json).write(to: s.file)
+
+        let second = s.store()                                     // falls back to a starter, keeps the bad file
+        let backup = s.dir.appendingPathComponent("luckyDraw.corrupt.json")
+        #expect(FileManager.default.fileExists(atPath: backup.path), "premise: the bad file was kept for recovery")
+        #expect(second.selected?.id != photo.roster)
+        second.setAutoRetire(!second.selected!.autoRetireWinner)   // any edit saves the starter roster…
+        second.flushToDisk()
+
+        let third = s.store()                                      // …so the next launch is a clean load
+        let orphan = try plantOrphan(s)                            // control: a real orphan elsewhere
+        let removed = third.sweepOrphanPhotosNow()
+        #expect(removed != nil, "a parseable recovery file must not block the sweep")
+        #expect(FileManager.default.fileExists(atPath: photo.url.path), "the recovery file's photo was deleted")
+        #expect(!FileManager.default.fileExists(atPath: orphan.path), "an unreferenced photo should still go")
+    }
+
+    @Test("A recovery file that cannot be parsed makes the sweep delete nothing")
+    func unparseableRecoveryFileSkipsSweep() async throws {
+        let s = Scratch()
+        _ = try await savedRosterWithPhoto(s)
+        try Data("{ not json".utf8).write(to: s.dir.appendingPathComponent("luckyDraw.corrupt.json"))
+
+        let store = s.store()                                      // the live file is fine: a clean load
+        let orphan = try plantOrphan(s)
+        #expect(store.sweepOrphanPhotosNow() == nil, "must decline rather than assume there are no references")
+        #expect(FileManager.default.fileExists(atPath: orphan.path), "nothing may be deleted next to an unreadable recovery file")
+    }
+
+    @Test("With no recovery file, a clean load still deletes true orphans and keeps referenced photos")
+    func cleanLoadStillDeletesOrphans() async throws {
+        let s = Scratch()
+        let photo = try await savedRosterWithPhoto(s)
+
+        let store = s.store()
+        let strayInLiveRoster = try plantOrphan(s, in: photo.roster)
+        let strayRoster = try plantOrphan(s)
+        #expect(!FileManager.default.fileExists(atPath: s.dir.appendingPathComponent("luckyDraw.corrupt.json").path))
+        #expect(store.sweepOrphanPhotosNow() != nil)
+        #expect(!FileManager.default.fileExists(atPath: strayInLiveRoster.path))
+        #expect(!FileManager.default.fileExists(atPath: strayRoster.path))
+        #expect(FileManager.default.fileExists(atPath: photo.url.path), "a referenced photo must survive")
+    }
+
     @Test("Clearing all photos removes the files and un-points every entry")
     func clearAll() async throws {
         let s = Scratch(); let store = s.store()

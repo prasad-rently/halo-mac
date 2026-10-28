@@ -282,11 +282,70 @@ final class LuckyDrawStore: ObservableObject {
     /// Deletes photo files nothing references — only after a clean load (see `loadedCleanly`).
     private func sweepOrphanPhotos() {
         guard loadedCleanly, let avatarStore else { return }
+        let live = liveReferences()
+        let fileURL = self.fileURL
+        DispatchQueue.global(qos: .utility).async {
+            Self.performSweep(avatarStore: avatarStore, live: live, fileURL: fileURL)
+        }
+    }
+
+    /// Test seam: the same sweep, run synchronously. Returns files removed, or nil when it
+    /// declined to run (unclean load, or an unparseable recovery file).
+    @discardableResult
+    func sweepOrphanPhotosNow() -> Int? {
+        guard loadedCleanly, let avatarStore else { return nil }
+        return Self.performSweep(avatarStore: avatarStore, live: liveReferences(), fileURL: fileURL)
+    }
+
+    private func liveReferences() -> [UUID: Set<String>] {
         var referenced: [UUID: Set<String>] = [:]
         for roster in rosters {
             referenced[roster.id] = Set(roster.entries.compactMap { $0.avatar?.photoFileName })
         }
-        DispatchQueue.global(qos: .utility).async { avatarStore.sweepOrphans(referenced: referenced) }
+        return referenced
+    }
+
+    @discardableResult
+    nonisolated private static func performSweep(avatarStore: AvatarStore,
+                                                 live: [UUID: Set<String>], fileURL: URL?) -> Int? {
+        var referenced = live
+        // A recovery roster (`luckyDraw.corrupt.json`, or any backup beside it) still points at
+        // photos. Deleting them would destroy the only path back to the user's data — so they
+        // count as live, and if a recovery file can't be understood we delete nothing at all.
+        if let fileURL {
+            guard let recovered = recoveryReferences(besides: fileURL) else { return nil }
+            for (rosterID, files) in recovered { referenced[rosterID, default: []].formUnion(files) }
+        }
+        return avatarStore.sweepOrphans(referenced: referenced)
+    }
+
+    /// Every photo file name referenced by a retained recovery/backup roster file next to the live
+    /// one, keyed by roster. Decodes *leniently* (plain JSON, no model types): only enough to
+    /// collect `rosterID → photo file names`. Returns nil — "unsafe, skip the sweep" — when any
+    /// such file can't be read or parsed, or names photos under a roster it can't identify.
+    nonisolated static func recoveryReferences(besides liveFile: URL) -> [UUID: Set<String>]? {
+        let dir = liveFile.deletingLastPathComponent()
+        let liveName = liveFile.lastPathComponent
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+        var result: [UUID: Set<String>] = [:]
+        for name in names where name != liveName && name.hasPrefix("luckyDraw")
+            && (name.hasSuffix(".json") || name.hasSuffix(".bak")) {
+            guard let data = try? Data(contentsOf: dir.appendingPathComponent(name)),
+                  let rosters = (try? JSONSerialization.jsonObject(with: data)) as? [Any] else { return nil }
+            for case let roster as [String: Any] in rosters {
+                var files = Set<String>()
+                for case let entry as [String: Any] in (roster["entries"] as? [Any]) ?? [] {
+                    if let avatar = entry["avatar"] as? [String: Any], avatar["kind"] as? String == "photo",
+                       let file = avatar["file"] as? String, AvatarFileName.isValid(file) {
+                        files.insert(file)
+                    }
+                }
+                guard !files.isEmpty else { continue }
+                guard let idString = roster["id"] as? String, let id = UUID(uuidString: idString) else { return nil }
+                result[id, default: []].formUnion(files)
+            }
+        }
+        return result
     }
 
     // MARK: - Export

@@ -1099,7 +1099,10 @@ so an existing roster looks exactly as before).
   runs it on its own GCD thread with a 4 s timeout and falls back to the centre crop; tests turn it off with `detectFaces: false`
   (one test exercises it). **Blocking imports run on GCD, not the cooperative pool** (gotcha 20's starvation) — `importPhotoAsync`.
 - **The orphan sweep deletes files**, so it runs only after a *successful* roster read (`loadedCleanly`) — an unreadable file
-  must not make every photo look unreferenced. `LuckyDrawStoreAvatarTests.sweepIsSafe` guards it.
+  must not make every photo look unreferenced. `LuckyDrawStoreAvatarTests.sweepIsSafe` guards it. It also treats photos named by
+  `luckyDraw.corrupt.json` (and any `luckyDraw*.json`/`.bak` beside the live file) as live — parsed leniently by
+  `LuckyDrawStore.recoveryReferences` — and **skips the sweep entirely** if such a file can't be parsed: otherwise the first
+  clean launch after a corruption would delete the photos the recovery file points at.
 - `AvatarImageCache` is a lock-based class, not `@MainActor`: the wheel's `Canvas` renderer isn't main-actor isolated, and a
   not-yet-decoded photo must never block it. It returns another decoded size of the same photo while the right one loads.
 - Wheel: avatars stay **upright**, drawn only up to `SpinnerWheelView.avatarLimit` (40, **provisional — never measured**;
