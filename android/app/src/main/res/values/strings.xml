@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_description">Lets Halo notice when you copy text so it can sync your clipboard with your Mac. Halo does not read your screen or anything you type.</string>
+    <string name="clipboard_service_label">Halo clipboard sync</string>
+    <string name="send_to_mac_label">Send to Mac (Halo)</string>
+</resources>

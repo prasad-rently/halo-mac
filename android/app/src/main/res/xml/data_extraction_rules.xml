@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Firebase credential and the data key live here. Never let either leave the device in a cloud
+     backup or a device-to-device transfer (the Keystore key that wraps them would not follow anyway). -->
+<data-extraction-rules>
+    <cloud-backup><exclude domain="root" /></cloud-backup>
+    <device-transfer><exclude domain="root" /></device-transfer>
+</data-extraction-rules>

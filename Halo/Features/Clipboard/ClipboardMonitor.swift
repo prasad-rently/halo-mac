@@ -29,6 +29,16 @@ enum ClipboardPrivacy {
     static func shouldIgnore(types: [String]) -> Bool {
         types.contains { doNotRecord.contains($0) }
     }
+
+    /// Put a secret on the pasteboard the way a password manager does: readable by whoever the user
+    /// pastes into, but marked so Halo's own monitor (and any other clipboard manager that honours the
+    /// convention) skips it. Without the marker, a copied credential lands in clipboard history and —
+    /// with F-045 on — is encrypted and uploaded to the cloud.
+    static func writeConcealed(_ text: String, to pasteboard: NSPasteboard = .general) {
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        pasteboard.setData(Data(), forType: NSPasteboard.PasteboardType(concealed))
+    }
 }
 
 // MARK: - Clipboard Monitor

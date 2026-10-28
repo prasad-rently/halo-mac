@@ -8,7 +8,8 @@ kotlin {
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+    // api: the Rtdb surface exposes JsonElement, so the app module needs it on its own compile classpath.
+    api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     testImplementation("junit:junit:4.13.2")
 }
 
