@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "doc": "Nodes exactly as the Android phone writes them (produced by halocloud's real engines — see WireContractTest). Ciphertext fields are randomly nonced: compare what they decrypt to, not their bytes. The Swift HaloTests decode this same file.",
+  "crypto": {
+    "passphrase": "correct horse battery staple",
+    "saltB64": "AAECAwQFBgcICQoLDA0ODw==",
+    "iterations": 100000
+  },
+  "uid": "uid-1",
+  "nodes": {
+    "devices/uid-1/dev-A": {
+      "name": "Pixel 8",
+      "platform": "android",
+      "lastSeen": 1800000000000
+    },
+    "sms/uid-1/dev-A/lines/1": {
+      "subscriptionId": 1,
+      "label": "Personal",
+      "carrier": "Airtel",
+      "ownNumberEnc": "v1:1vzTku6PrAkmlC7RIt/wRWs1gEy5BWRLzW3mkX7N8fgfvNLnjuae1Y8=",
+      "lineVersion": 1,
+      "updatedAt": 1800000000000
+    },
+    "sms/uid-1/dev-A/lines/2": {
+      "subscriptionId": 2,
+      "label": "Work",
+      "carrier": "Jio",
+      "ownNumberEnc": "v1:R5ldheVIaujxWSLBDAxjH13BWjxQsy07UmuN6eFkfZp4fCo=",
+      "lineVersion": 1,
+      "updatedAt": 1800000000000
+    },
+    "sms/uid-1/dev-A/messages/42_1799996400000": {
+      "addressEnc": "v1:KGV6JsbuL3vaZYLMmv1ASbjIZwi2y+H6Vyry4POwme45yrjlkA==",
+      "bodyEnc": "v1:EJQR5G6cD+IRuuyUKvJzHze4BrNg3WF6ZSuPTSVKvlEA3C+42XS4wtv30nNmTbNYYZPI/E6xPpf3DfRiOrG4Ocry4G5IQvJYAfICVAfoXlcyrG+sdb2vT8csz8FbwhzkfzU8d8QrzGZ3Qgk=",
+      "threadKey": "0771abab8357f1cb0c1ca119b948742a0721a38de5f0858fdba98b437f451df2",
+      "threadId": 7,
+      "subscriptionId": 1,
+      "date": 1799996400000,
+      "type": 1,
+      "read": false,
+      "seen": true,
+      "syncedAt": 1800000000000,
+      "schema": 1,
+      "serviceCenter": "+919810051914"
+    },
+    "sms/uid-1/dev-A/messages/43_1799998200000": {
+      "addressEnc": "v1:JJ+mC/97z9bcE8fcVuusqGIKwBcWI92Bc6mN0jUpa6TfaVpBxL62+etyng==",
+      "bodyEnc": "v1:qC2KptwL0RZA4ym67/CsxiJFvLeV8mrkP0tMjftb8IrPvmzpdYS5wg==",
+      "threadKey": "d6e850b2c736fb12209ebbd7a3173b4fdf7ade12fb31eed172c71170b9aafd7b",
+      "threadId": 8,
+      "subscriptionId": 2,
+      "date": 1799998200000,
+      "type": 1,
+      "read": true,
+      "seen": true,
+      "syncedAt": 1800000000000,
+      "schema": 1
+    },
+    "clipboard/uid-1/items/00000000-0000-4000-8000-0000000000C1": {
+      "itemId": "00000000-0000-4000-8000-0000000000C1",
+      "deviceId": "dev-A",
+      "deviceName": "Pixel 8",
+      "kind": "url",
+      "contentEnc": "v1:wej9bgqmSyACNG/UGSKd+Lfm7FOW8aT40nRlocwm2Esy0PBxaIz5NAdvChLb8MXk2XY=",
+      "createdAt": 1800000000000,
+      "schema": 1
+    }
+  },
+  "decrypted": {
+    "sms/uid-1/dev-A/lines/1": {
+      "ownNumberEnc": "+919876543210"
+    },
+    "sms/uid-1/dev-A/lines/2": {
+      "ownNumberEnc": "Unknown"
+    },
+    "sms/uid-1/dev-A/messages/42_1799996400000": {
+      "addressEnc": "VM-HDFCBK",
+      "bodyEnc": "Rs 500.00 debited from a/c XX1234 on 15-Jan. Avl bal Rs 9,500.00 — héllo ✓"
+    },
+    "sms/uid-1/dev-A/messages/43_1799998200000": {
+      "addressEnc": "+91 98765 43210",
+      "bodyEnc": "See you at 5"
+    },
+    "clipboard/uid-1/items/00000000-0000-4000-8000-0000000000C1": {
+      "contentEnc": "https://halo.app/x?y=1"
+    }
+  }
+}
