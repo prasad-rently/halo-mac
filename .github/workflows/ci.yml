@@ -1,0 +1,170 @@
+name: CI
+
+# F-058 / FR-R1. Gates pull requests into the release branches (and the branches themselves).
+#
+# Built on the earlier `feat/ci-workflow` draft: its Xcode-selection fallback, concurrency
+# cancellation, permissions, timeouts and xcresult upload are kept because they are sound. What
+# changed: the build is `-target Halo` into a CLEAN SYMROOT (the CLAUDE.md signing recipe, so CI
+# compiles exactly what scripts/build-dmg.sh ships), the audit scripts and the Android + rules-sync
+# jobs are added, and the trigger is release/** PRs.
+#
+# NOTHING HERE SIGNS ANYTHING. The runner has no Developer ID keychain and no release keystore;
+# CI proves the code compiles and the tests pass, it does not produce a shippable artefact.
+# Release signing is owner-held: scripts/build-dmg.sh (macOS) and android/scripts/sign-release.sh.
+
+on:
+  pull_request:
+    branches: ['release/**']
+  push:
+    branches: ['release/**']
+  workflow_dispatch:
+
+# macOS runners bill at 10x, so don't leave superseded runs going.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NSUnbufferedIO: "YES"
+
+jobs:
+  # ---------------------------------------------------------------------------------------------
+  # Cheap, fast, Linux: docs-vs-rules drift (H-18). Runs first in wall-clock terms because it is
+  # seconds, not minutes, and fails the PR before the 10x macOS minutes are spent.
+  # ---------------------------------------------------------------------------------------------
+  rules-sync:
+    name: Firebase rules sync (H-18)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Embedded rules must equal docs/specs/firebase-rules.json
+        run: ./scripts/check-rules-sync.sh
+
+  # ---------------------------------------------------------------------------------------------
+  macos:
+    name: macOS build + HaloTests + audits
+    runs-on: macos-26
+    # Cold build ~8 min on an M-series laptop, slower hosted. The cap exists because a deadlocked
+    # subprocess hangs rather than fails, and an uncapped hang burns 6 h at the 10x macOS rate.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select Xcode
+        # Runner images drop old patch releases, so fall back to the image default.
+        run: |
+          if [ -d /Applications/Xcode_26.4.1.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.4.1.app
+          else
+            echo "::warning::Xcode 26.4.1 not on this image; using the default."
+          fi
+          xcodebuild -version
+          swift --version
+
+      - name: Audit entitlements (static form)
+        # `--probe` signs two throwaway bundles with an "Apple Development" identity and runs them
+        # to prove the App Group really shares data. A hosted runner has no such identity in its
+        # keychain, so the probe exits 2 there ("cannot --probe"). The static form still catches the
+        # two real regressions (key dropped; key present but not matching HaloWidgetData.suiteName).
+        # The behavioural probe stays a developer-machine / RC-checklist step.
+        run: ./scripts/audit-entitlements.sh
+
+      - name: Audit subprocess spawning
+        run: ./scripts/audit-subprocess-spawning.sh
+
+      - name: Build -target Halo (clean SYMROOT, signing off)
+        # Clean SYMROOT: a SYMROOT reused from a test build leaves HaloTests.xctest and XCTest
+        # frameworks inside Halo.app (CLAUDE.md "Build & Sign"). -target Halo also builds and embeds
+        # HaloWidget.appex and HaloHelper.xpc. COMPILER_INDEX_STORE_ENABLE=NO: no indexer on CI.
+        run: |
+          rm -rf "$RUNNER_TEMP/HaloBuild"
+          xcodebuild -project Halo.xcodeproj \
+            -target Halo -configuration Debug \
+            SYMROOT="$RUNNER_TEMP/HaloBuild/Products" \
+            OBJROOT="$RUNNER_TEMP/HaloBuild/Intermediates.noindex" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" \
+            build
+          APP="$RUNNER_TEMP/HaloBuild/Products/Debug/Halo.app"
+          test -d "$APP/Contents/PlugIns/HaloWidget.appex"
+          test -d "$APP/Contents/XPCServices/HaloHelper.xpc"
+          # The leftover-test-bundle trap the clean SYMROOT exists to prevent.
+          if find "$APP" -name '*.xctest' -o -name 'XCTest*.framework' -o -name 'Testing.framework' | grep -q .; then
+            echo "::error::test-only bundles found inside Halo.app"; exit 1
+          fi
+
+      - name: Run HaloTests
+        # HaloTests is hosted by Halo.app, so this launches the app. HaloUITests is NOT run:
+        # XCUITest needs Accessibility permission, which a hosted runner cannot grant.
+        run: |
+          xcodebuild -project Halo.xcodeproj \
+            -scheme HaloTests -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/HaloTests.xcresult" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" \
+            test
+
+      - name: HaloShareKit tests (iOS/macOS HaloShare peer)
+        # xcrun: use the selected Xcode's toolchain, not whatever `swift` is first on PATH.
+        run: xcrun swift test --package-path ios/HaloShareKit
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: HaloTests-xcresult
+          path: ${{ runner.temp }}/HaloTests.xcresult
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------------------------
+  android:
+    name: Android tests + unsigned release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Unit tests + unsigned release APK
+        # No signing config exists in the build: assembleRelease yields app-release-unsigned.apk.
+        # The owner signs it with android/scripts/sign-release.sh (see android/RELEASE.md).
+        run: ./gradlew --no-daemon :halocloud:test :haloshare:test :app:assembleRelease
+
+      - name: Confirm the APK is unsigned
+        run: |
+          ls -l app/build/outputs/apk/release/
+          test -f app/build/outputs/apk/release/app-release-unsigned.apk
+
+      - name: Upload unsigned APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: halo-mobile-unsigned-apk
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-test-reports
+          path: |
+            android/*/build/reports/tests
+            android/*/build/test-results
+          retention-days: 7
+          if-no-files-found: ignore
