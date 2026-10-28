@@ -1,0 +1,979 @@
+{
+ "id": "expense-fixtures",
+ "version": 1,
+ "description": "Cross-language contract for F-048/F-056: bank/UPI/card SMS -> expected classification and parse. 'expect' was produced by running the REAL Swift desktop TransactionParser / SmsClassifier / PatternPack.category (HaloTests ExpenseFixtureTests re-checks it); the Kotlin port (android/halocloud ExpenseFixtureTest) must agree. Where the desktop does something questionable it is recorded as-is with a 'note' - fix desktop and fixture together, never one alone. All messages are synthetic (no real account data).",
+ "pack": "india-bank-sms.v1.json",
+ "messages": [
+  {
+   "id": "debit-upi-indusind",
+   "sender": "CP-INDUSB-S",
+   "body": "A/C *XX3833 debited by Rs 1250.00 via UPI. Avl Bal:8420.10 -IndusInd",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 1250,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "3833",
+    "category": "Transfers"
+   },
+   "note": "Category is 'Transfers' only because the body contains the word UPI (the Transfers rule triggers on UPI/IMPS/NEFT/RTGS in the body) - any unrecognised-merchant UPI debit lands in Transfers. Transfers is a label; only isTransfer (same-day debit+credit) excludes from totals."
+  },
+  {
+   "id": "debit-hdfc-balance-rs",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.1250.00 debited from A/C XX4521. Avl Bal Rs.8420.10",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 1250,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "4521",
+    "category": "Other"
+   }
+  },
+  {
+   "id": "debit-hdfc-upi-merchant",
+   "sender": "VM-HDFCBK-T",
+   "body": "Sent Rs.349.00 from HDFC Bank A/C *4521 To SWIGGY on 12-06-26 UPI Ref 616234567890. Not You? Call 18002586161",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 349,
+    "direction": "debit",
+    "merchant": "SWIGGY",
+    "accountHint": "4521",
+    "category": "Food & Dining"
+   }
+  },
+  {
+   "id": "debit-card-zomato",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.842.50 spent at ZOMATO on card XX9981 on 11-Jun-26. Avl limit Rs.45000",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 842.5,
+    "direction": "debit",
+    "merchant": "ZOMATO",
+    "accountHint": "9981",
+    "category": "Food & Dining"
+   }
+  },
+  {
+   "id": "debit-card-txn-rs",
+   "sender": "VK-HDFCBK-T",
+   "body": "Txn Rs.522 On Card XX11 At paytm",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 522,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": null,
+    "category": "Other"
+   },
+   "note": "Merchant is nil: the merchant lookahead needs whitespace before end-of-string, and 'At paytm' ends the body."
+  },
+  {
+   "id": "debit-icici-acct",
+   "sender": "VM-ICICIB-S",
+   "body": "ICICI Bank Acct XX812 debited for Rs 2,499.00 on 09-Jun-26; BIGBASKET credited. UPI:616200000111. Call 18002662 for dispute.",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 2499,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "812",
+    "category": "Groceries"
+   }
+  },
+  {
+   "id": "debit-sbi-upi",
+   "sender": "VK-SBIUPI-S",
+   "body": "Dear UPI user A/C X1234 debited by 560.0 on date 10Jun26 trf to UBER INDIA Refno 616200123456. If not u? call 1800111109",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "unreadable"
+   },
+   "note": "SBI UPI format 'debited by 560.0' has no Rs/INR/rupee token, so the amount regex finds nothing: Unreadable (counted in the 'couldn't read' tally)."
+  },
+  {
+   "id": "debit-sbi-rs-uber",
+   "sender": "VK-SBIINB-T",
+   "body": "Rs.560.00 debited from A/C XX1234 at UBER on 10-06-26",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 560,
+    "direction": "debit",
+    "merchant": "UBER",
+    "accountHint": "1234",
+    "category": "Transport"
+   }
+  },
+  {
+   "id": "debit-axis-card",
+   "sender": "AX-AXISBK-S",
+   "body": "Spent INR 3,200 Axis Bank Card no. XX7788 on 08-06-26 at BOOKMYSHOW. Avl Lmt INR 91,000",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 3200,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "7788",
+    "category": "Entertainment"
+   },
+   "note": "Merchant is nil ('AT BOOKMYSHOW. Avl' - a full stop is not a legal lookahead after the name) but the category still resolves from the body keyword."
+  },
+  {
+   "id": "debit-kotak-fraud-url",
+   "sender": "VK-KOTAKB-T",
+   "body": "Rs.500 sent via UPI. Report fraud at http://kotak.com/x",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 500,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": null,
+    "category": "Transfers"
+   },
+   "note": "Category 'Transfers' from the UPI keyword (see debit-upi-indusind)."
+  },
+  {
+   "id": "debit-atm",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.5000.00 withdrawn from A/C XX4521 at ATM on 05-06-26. Avl Bal Rs.12300.55",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 5000,
+    "direction": "debit",
+    "merchant": "ATM",
+    "accountHint": "4521",
+    "category": "Other"
+   }
+  },
+  {
+   "id": "debit-emi-executed",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.8,333 debited for EMI loan A/C XX3321 on 05-06-26",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 8333,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "3321",
+    "category": "Financial"
+   }
+  },
+  {
+   "id": "debit-emandate-executed",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.500 debited for SIP e-mandate",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 500,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": null,
+    "category": "Financial"
+   }
+  },
+  {
+   "id": "debit-from-bank-amazon-body",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.500 spent at AMAZON on card",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 500,
+    "direction": "debit",
+    "merchant": "AMAZON",
+    "accountHint": null,
+    "category": "Shopping"
+   }
+  },
+  {
+   "id": "debit-fuel",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.1800.00 debited from A/C XX4521 to INDIAN OIL PETROL PUMP on 07-06-26",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 1800,
+    "direction": "debit",
+    "merchant": "INDIAN OIL PETROL PUMP",
+    "accountHint": "4521",
+    "category": "Transport"
+   }
+  },
+  {
+   "id": "debit-pharmacy",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.640 debited via UPI to APOLLO PHARMACY on 07-06-26 Ref 4411",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 640,
+    "direction": "debit",
+    "merchant": "APOLLO PHARMACY",
+    "accountHint": null,
+    "category": "Health"
+   }
+  },
+  {
+   "id": "debit-netflix-from-bank",
+   "sender": "VK-ICICIB-T",
+   "body": "INR 649.00 debited from Acct XX812 for NETFLIX subscription",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 649,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "812",
+    "category": "Entertainment"
+   }
+  },
+  {
+   "id": "debit-nearest-verb",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.8420.10 is your reward. Rs.1250 debited for purchase",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 1250,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": null,
+    "category": "Other"
+   },
+   "note": "Balance-looking 'Rs.8420.10' that is NOT preceded by a balance prefix is a candidate; nearest-to-verb picks 1250."
+  },
+  {
+   "id": "debit-rupee-symbol",
+   "sender": "VK-HDFCBK-T",
+   "body": "₹1,050.75 debited from A/C XX4521 via UPI to RAPIDO",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 1050.75,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "4521",
+    "category": "Transport"
+   }
+  },
+  {
+   "id": "debit-no-merchant",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs 75 debited from A/C XX0042",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 75,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "0042",
+    "category": "Other"
+   }
+  },
+  {
+   "id": "credit-salary",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.85,000.00 credited to A/C XX4521 on 01-06-26 by NEFT-ACME CORP SALARY. Avl Bal Rs.97,200.00",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 85000,
+    "direction": "credit",
+    "merchant": null,
+    "accountHint": "4521",
+    "category": "Income"
+   }
+  },
+  {
+   "id": "credit-simple",
+   "sender": "VK-SBIINB-T",
+   "body": "Rs.5,000.00 credited to A/C XX1234",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 5000,
+    "direction": "credit",
+    "merchant": null,
+    "accountHint": "1234",
+    "category": "Income"
+   }
+  },
+  {
+   "id": "credit-refund-settled",
+   "sender": "VK-ICICIB-T",
+   "body": "INR 649.00 refunded to your Acct XX812 on 12-06-26",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 649,
+    "direction": "credit",
+    "merchant": "YOUR ACCT XX812",
+    "accountHint": "812",
+    "category": "Income"
+   },
+   "note": "Merchant is the junk 'YOUR ACCT XX812' - merchantRegex's 'to ' alternative matched 'refunded to your Acct XX812'. Best-effort field, not used for category on credits (always Income)."
+  },
+  {
+   "id": "credit-upi-received",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.250.00 received in your A/C XX4521 from RAHUL via UPI on 06-06-26",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 250,
+    "direction": "credit",
+    "merchant": null,
+    "accountHint": "4521",
+    "category": "Income"
+   }
+  },
+  {
+   "id": "unreadable-no-amount",
+   "sender": "VK-HDFCBK-T",
+   "body": "Your account was debited today",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "unreadable"
+   }
+  },
+  {
+   "id": "fp-otp-rs",
+   "sender": "VM-HDFCBK-S",
+   "body": "Your OTP is 482913 for transaction of Rs 2500 at AMAZON. Do not share it with anyone.",
+   "expect": {
+    "classifier": "otp",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "fp-otp-upi-registration",
+   "sender": "VK-SBIINB-S",
+   "body": "123456 is your OTP to register UPI. Never share. Rs 1 will be debited for verification",
+   "expect": {
+    "classifier": "otp",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "fp-promo-p-sender",
+   "sender": "VM-AXISBK-P",
+   "body": "Rs.999 debited",
+   "expect": {
+    "classifier": "promotional",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "fp-promo-offer",
+   "sender": "VK-HDFCBK-T",
+   "body": "Get a pre-approved loan offer of Rs 5,00,000! Apply now. T&C apply",
+   "expect": {
+    "classifier": "promotional",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "fp-promo-cashback",
+   "sender": "BZ-PAYZAP-S",
+   "body": "Flat Rs 100 cashback on your next recharge. Click here http://pz.in/x",
+   "expect": {
+    "classifier": "promotional",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "fp-promo-discount-sale",
+   "sender": "AD-MYNTRA-T",
+   "body": "Big sale! Up to 50% OFF. Spend Rs 1999 and get Rs 500 voucher",
+   "expect": {
+    "classifier": "promotional",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "fp-balance-alert",
+   "sender": "VK-HDFCBK-T",
+   "body": "Avl Bal in A/C XX4521 is Rs 12,345.67 as on 12-Jun-26",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "fp-balance-alert-balance-word",
+   "sender": "VK-SBIINB-T",
+   "body": "Your A/C XX1234 balance is Rs.4,000.00",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "fp-bill-due",
+   "sender": "VK-HDFCBK-S",
+   "body": "Your card XX9981 payment due Rs 12,400 on 20-Jun-26. Min amt Rs 620. Pay now",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "fp-will-be-debited",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.500 will be debited on 5th for SIP",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "fp-declined",
+   "sender": "VK-HDFCBK-T",
+   "body": "Your UPI txn of Rs 300 has been declined. Amount not debited",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "fp-failed",
+   "sender": "VK-ICICIB-T",
+   "body": "Transaction of Rs 150 failed on card XX812",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "fp-reversed",
+   "sender": "VK-ICICIB-T",
+   "body": "Rs 150 debited earlier has been reversed to A/C XX812",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "fp-refund-initiated",
+   "sender": "VK-ICICIB-T",
+   "body": "Refund of Rs 899 initiated for order. Reference 3345",
+   "expect": {
+    "classifier": "service",
+    "parse": "notTransaction"
+   },
+   "note": "Desktop classifier says service (ORDER). The pack's broader transactionalStrong list has REFUND, so a pack-driven classifier says transactional; the parser then rejects it (INITIATED). Pipeline result is identical, so the Kotlin test pins pipeline behaviour for it."
+  },
+  {
+   "id": "fp-nonbank-amazon",
+   "sender": "AMAZON",
+   "body": "Rs.500 debited",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "fp-nonbank-paytm",
+   "sender": "VM-PAYTMB-S",
+   "body": "Rs 200 paid to MERCHANT via Paytm",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "fp-delivery",
+   "sender": "AX-AMZNIN-S",
+   "body": "Your order has been delivered. Rs 799 paid via UPI",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 799,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": null,
+    "category": "Transfers"
+   },
+   "note": "DESKTOP QUIRK (false positive): an Amazon delivery notice from a DLT header that is not in nonBankSenders (AMZNIN vs AMAZON) and mentions UPI/'paid' is classified Transactional and parsed as a Rs 799 debit."
+  },
+  {
+   "id": "fp-personal-sender",
+   "sender": "+919876543210",
+   "body": "hey sent you Rs 500 for dinner, check",
+   "expect": {
+    "classifier": "personal",
+    "parse": "ok",
+    "amount": 500,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": null,
+    "category": "Other"
+   },
+   "note": "Parser alone accepts it (a 'sent' verb + Rs); it is the classifier (sender is a bare phone number => Personal) that keeps it out of the pipeline. The cross-language contract is the pipeline: classifier gate then parse."
+  },
+  {
+   "id": "fp-telecom-recharge",
+   "sender": "VM-AIRTEL-S",
+   "body": "Recharge of Rs 299 successful. Validity 28 days",
+   "expect": {
+    "classifier": "service",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "fp-nonmoney-debited",
+   "sender": "VK-HDFCBK-T",
+   "body": "Your debit card XX9981 has been blocked. Call us.",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "fp-minimum-due",
+   "sender": "VK-SBIINB-S",
+   "body": "Minimum amount due Rs 1,200 on A/C XX1234. Overdue",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "fp-no-sender-hint",
+   "sender": "HDFCBK",
+   "body": "Rs.150 debited UPI to CHAI POINT on 12-06-26",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 150,
+    "direction": "debit",
+    "merchant": "CHAI POINT",
+    "accountHint": null,
+    "category": "Transfers"
+   },
+   "note": "Category 'Transfers' from the UPI keyword (see debit-upi-indusind)."
+  },
+  {
+   "id": "fp-credit-card-payment-received",
+   "sender": "VK-HDFCBK-S",
+   "body": "Payment of Rs 12,400 received towards your HDFC Bank Credit Card XX9981. Thank you",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 12400,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "9981",
+    "category": "Financial"
+   },
+   "note": "DESKTOP QUIRK: 'Payment of Rs 12,400 received towards your credit card' is a debit - 'PAYMENT OF' is a debit verb and appears before 'RECEIVED'. It is the user paying their card bill, so a debit is defensible, but it is a settled bill and not a purchase."
+  },
+  {
+   "id": "edge-inr-lowercase",
+   "sender": "VK-HDFCBK-T",
+   "body": "inr 1,000 debited from a/c xx4521 via upi to groww",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 1000,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "4521",
+    "category": "Financial"
+   }
+  },
+  {
+   "id": "edge-balance-late",
+   "sender": "VK-HDFCBK-T",
+   "body": "Debited Rs.300.00 from A/C XX4521 on 10-06. Balance Rs.9000.00",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 300,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "4521",
+    "category": "Other"
+   }
+  },
+  {
+   "id": "edge-grocery",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.1450.00 debited from A/C XX4521 to BLINKIT on 09-06-26 via UPI",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 1450,
+    "direction": "debit",
+    "merchant": "BLINKIT",
+    "accountHint": "4521",
+    "category": "Groceries"
+   }
+  },
+  {
+   "id": "edge-electricity",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.2100 debited from A/C XX4521 for ELECTRICITY bill payment BESCOM",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 2100,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "4521",
+    "category": "Bills & Utilities"
+   }
+  },
+  {
+   "id": "edge-mutual-fund",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.5000 debited from A/C XX4521 for MUTUAL FUND SIP on 05-06-26",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 5000,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "4521",
+    "category": "Financial"
+   }
+  },
+  {
+   "id": "cls-gov-uidai",
+   "sender": "AD-UIDAI-G",
+   "body": "Your Aadhaar update request is received. Visit uidai.gov.in",
+   "expect": {
+    "classifier": "government",
+    "parse": "unreadable"
+   },
+   "note": "Parse is Unreadable because the 'received' credit verb is present with no amount; the pipeline never reaches the parser (classifier says government)."
+  },
+  {
+   "id": "cls-service-pnr",
+   "sender": "AX-IRCTCI-S",
+   "body": "Booking confirmed. PNR 2345678901 Train 12627 on 14-06-26",
+   "expect": {
+    "classifier": "service",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "cls-otp-login-code",
+   "sender": "VK-ICICIB-S",
+   "body": "123456 is your OTP for login. Do not share with anyone",
+   "expect": {
+    "classifier": "otp",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "cls-promo-plain",
+   "sender": "VM-SHOPPY-P",
+   "body": "Mega SALE this weekend! 40% OFF on everything. Unsubscribe: reply STOP",
+   "expect": {
+    "classifier": "promotional",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "cls-personal-chat",
+   "sender": "+918765432109",
+   "body": "are we still meeting at 6?",
+   "expect": {
+    "classifier": "personal",
+    "parse": "notTransaction"
+   }
+  },
+  {
+   "id": "cls-uncategorized",
+   "sender": "VK-ABCDEF",
+   "body": "Welcome to the neighbourhood newsletter",
+   "expect": {
+    "classifier": "uncategorized",
+    "parse": "notTransaction"
+   }
+  }
+ ],
+ "pipelines": [
+  {
+   "name": "self-transfer-same-day-same-amount",
+   "messages": [
+    {
+     "body": "Rs.1000 debited via UPI",
+     "id": "a",
+     "sender": "VK-HDFCBK-T",
+     "tsMs": 1781073000000
+    },
+    {
+     "body": "Rs.1000 credited to A/C XX4521",
+     "id": "b",
+     "sender": "VK-HDFCBK-T",
+     "tsMs": 1781073060000
+    }
+   ],
+   "expectUnreadable": 0,
+   "expect": [
+    {
+     "amount": 1000,
+     "category": "Transfers",
+     "countsTowardTotals": false,
+     "direction": "credit",
+     "id": "b",
+     "isDuplicate": false,
+     "isTransfer": true
+    },
+    {
+     "amount": 1000,
+     "category": "Transfers",
+     "countsTowardTotals": false,
+     "direction": "debit",
+     "id": "a",
+     "isDuplicate": false,
+     "isTransfer": true
+    }
+   ]
+  },
+  {
+   "name": "near-duplicate-within-window-collapses",
+   "messages": [
+    {
+     "body": "Rs.750 debited via UPI",
+     "id": "a",
+     "sender": "VK-HDFCBK-T",
+     "tsMs": 1781073000000
+    },
+    {
+     "body": "Rs.750 debited via UPI",
+     "id": "b",
+     "sender": "VK-ICICIB-T",
+     "tsMs": 1781073030000
+    }
+   ],
+   "expectUnreadable": 0,
+   "expect": [
+    {
+     "amount": 750,
+     "category": "Transfers",
+     "countsTowardTotals": false,
+     "direction": "debit",
+     "id": "b",
+     "isDuplicate": true,
+     "isTransfer": false
+    },
+    {
+     "amount": 750,
+     "category": "Transfers",
+     "countsTowardTotals": true,
+     "direction": "debit",
+     "id": "a",
+     "isDuplicate": false,
+     "isTransfer": false
+    }
+   ]
+  },
+  {
+   "name": "same-amount-outside-window-both-count",
+   "messages": [
+    {
+     "body": "Rs.750 debited via UPI",
+     "id": "a",
+     "sender": "VK-HDFCBK-T",
+     "tsMs": 1781073000000
+    },
+    {
+     "body": "Rs.750 debited via UPI",
+     "id": "b",
+     "sender": "VK-HDFCBK-T",
+     "tsMs": 1781073400000
+    }
+   ],
+   "expectUnreadable": 0,
+   "expect": [
+    {
+     "amount": 750,
+     "category": "Transfers",
+     "countsTowardTotals": true,
+     "direction": "debit",
+     "id": "b",
+     "isDuplicate": false,
+     "isTransfer": false
+    },
+    {
+     "amount": 750,
+     "category": "Transfers",
+     "countsTowardTotals": true,
+     "direction": "debit",
+     "id": "a",
+     "isDuplicate": false,
+     "isTransfer": false
+    }
+   ]
+  },
+  {
+   "name": "force-exclude-removes",
+   "messages": [
+    {
+     "body": "Rs.100 debited",
+     "id": "a",
+     "sender": "VK-HDFCBK-T",
+     "tsMs": 1781073000000
+    }
+   ],
+   "expectUnreadable": 0,
+   "expect": [],
+   "excluded": [
+    "a"
+   ]
+  },
+  {
+   "name": "force-include-personal-sender-bypasses-classifier",
+   "messages": [
+    {
+     "body": "paid Rs 500 for dinner, debited from me",
+     "id": "a",
+     "sender": "+919876543210",
+     "tsMs": 1781073000000
+    },
+    {
+     "body": "paid Rs 700 for lunch, debited from me",
+     "id": "b",
+     "sender": "+919876543210",
+     "tsMs": 1781073100000
+    }
+   ],
+   "expectUnreadable": 0,
+   "expect": [
+    {
+     "amount": 500,
+     "category": "Other",
+     "countsTowardTotals": true,
+     "direction": "debit",
+     "id": "a",
+     "isDuplicate": false,
+     "isTransfer": false
+    }
+   ],
+   "included": [
+    "a"
+   ]
+  },
+  {
+   "name": "category-override-wins",
+   "messages": [
+    {
+     "body": "Rs.640 debited to ZOMATO on 07-06-26",
+     "id": "a",
+     "sender": "VK-HDFCBK-T",
+     "tsMs": 1781073000000
+    }
+   ],
+   "expectUnreadable": 0,
+   "expect": [
+    {
+     "amount": 640,
+     "category": "Health",
+     "countsTowardTotals": true,
+     "direction": "debit",
+     "id": "a",
+     "isDuplicate": false,
+     "isTransfer": false
+    }
+   ],
+   "categoryById": {
+    "a": "Health"
+   }
+  },
+  {
+   "name": "mixed-inbox-filters-and-unreadable",
+   "messages": [
+    {
+     "body": "Your OTP is 482913 for transaction of Rs 2500 at AMAZON. Do not share it with anyone.",
+     "id": "1",
+     "sender": "VM-HDFCBK-S",
+     "tsMs": 1781073000000
+    },
+    {
+     "body": "Rs.842.50 spent at ZOMATO on card XX9981 on 11-Jun-26. Avl limit Rs.45000",
+     "id": "2",
+     "sender": "VK-HDFCBK-T",
+     "tsMs": 1781073100000
+    },
+    {
+     "body": "Your account was debited today",
+     "id": "3",
+     "sender": "VK-HDFCBK-T",
+     "tsMs": 1781073200000
+    },
+    {
+     "body": "Rs.85,000.00 credited to A/C XX4521 by NEFT-ACME CORP SALARY. Avl Bal Rs.97,200.00",
+     "id": "4",
+     "sender": "VK-HDFCBK-T",
+     "tsMs": 1781073300000
+    },
+    {
+     "body": "Rs.999 debited",
+     "id": "5",
+     "sender": "VM-AXISBK-P",
+     "tsMs": 1781073400000
+    },
+    {
+     "body": "Avl Bal in A/C XX4521 is Rs 12,345.67 as on 12-Jun-26",
+     "id": "6",
+     "sender": "VK-HDFCBK-T",
+     "tsMs": 1781073500000
+    },
+    {
+     "body": "Rs.1450.00 debited from A/C XX4521 to BLINKIT on 09-06-26 via UPI",
+     "id": "7",
+     "sender": "VK-HDFCBK-T",
+     "tsMs": 1781073600000
+    }
+   ],
+   "expectUnreadable": 1,
+   "expect": [
+    {
+     "amount": 1450,
+     "category": "Groceries",
+     "countsTowardTotals": true,
+     "direction": "debit",
+     "id": "7",
+     "isDuplicate": false,
+     "isTransfer": false
+    },
+    {
+     "amount": 85000,
+     "category": "Income",
+     "countsTowardTotals": true,
+     "direction": "credit",
+     "id": "4",
+     "isDuplicate": false,
+     "isTransfer": false
+    },
+    {
+     "amount": 842.5,
+     "category": "Food & Dining",
+     "countsTowardTotals": true,
+     "direction": "debit",
+     "id": "2",
+     "isDuplicate": false,
+     "isTransfer": false
+    }
+   ]
+  }
+ ]
+}
