@@ -165,14 +165,40 @@ class ClipboardAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {}
 }
 
-/** The share-sheet target: "Send to Mac" works everywhere, because the user hands Halo the text explicitly. */
+/**
+ * The share-sheet target: "Send to Mac" works everywhere, because the user hands Halo the text explicitly.
+ *
+ * H-15, three things the first version got wrong:
+ *  - it ignored the "Clipboard sync" switch — with sync off the user had said "don't send my clipboard stuff",
+ *    and this path sent anyway. It now declines and says why.
+ *  - it called finish() straight after queueing the upload. A finished, backgrounded process is a cached process
+ *    Android may kill mid-request, so the "Sent" the user saw could be a lie. It now stays (invisibly — the theme
+ *    is translucent) until the upload reports an outcome, with a hard ceiling so it can never linger.
+ *  - the manifest entry accepts only ACTION_SEND / text/plain (see ManifestExportTest); [onCreate] re-checks the action.
+ */
 class SendToMacActivity : Activity() {
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private val ceiling = Runnable { finish() }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val text = intent?.takeIf { it.action == Intent.ACTION_SEND }?.getStringExtra(Intent.EXTRA_TEXT)
         if (text.isNullOrBlank()) { finish(); return }
         val app = applicationContext
-        ClipboardController.publishText(app, text) { msg -> android.os.Handler(android.os.Looper.getMainLooper()).post { Toast.makeText(app, msg, Toast.LENGTH_SHORT).show() } }
-        finish()
+        if (!CloudPrefs(app).clipboardEnabled) {
+            Toast.makeText(app, "Clipboard sync is off — turn it on in Halo's Clipboard tab to send to your Mac.", Toast.LENGTH_LONG).show()
+            finish(); return
+        }
+        main.postDelayed(ceiling, CEILING_MS)
+        ClipboardController.publishText(app, text) { msg ->
+            main.post {
+                Toast.makeText(app, msg, Toast.LENGTH_SHORT).show()
+                if (!isFinishing) finish()
+            }
+        }
     }
+
+    override fun onDestroy() { main.removeCallbacks(ceiling); super.onDestroy() }
+
+    private companion object { const val CEILING_MS = 60_000L }
 }

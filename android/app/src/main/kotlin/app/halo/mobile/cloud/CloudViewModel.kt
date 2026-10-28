@@ -7,6 +7,7 @@ import android.provider.Settings
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.halo.cloud.CryptoService
+import app.halo.cloud.FirebaseHosts
 import app.halo.cloud.FirebaseRtdbClient
 import app.halo.cloud.KeyCheck
 import app.halo.cloud.PairingConfirmation
@@ -26,7 +27,8 @@ import java.util.Base64
 sealed interface PairUi {
     object Idle : PairUi
     data class Working(val what: String) : PairUi
-    data class NeedsPassphrase(val payload: PairingPayload) : PairUi
+    /** [hostWarning]: the database host is not a Firebase address (H-15) — shown, never silently accepted. */
+    data class NeedsPassphrase(val payload: PairingPayload, val hostWarning: String? = null) : PairUi
     /** The database held nothing encrypted, so the passphrase could not be verified: ask for it a second time. [error] is a failed confirmation. */
     data class NeedsConfirmation(val payload: PairingPayload, val error: String? = null) : PairUi
     data class Failed(val why: String) : PairUi
@@ -95,7 +97,7 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
             payload.salt == null || payload.salt!!.size < CryptoService.MINIMUM_SALT_BYTES -> _pair.value = PairUi.Failed("The pairing code's key salt is invalid.")
             payload.iterations < CryptoService.MINIMUM_ITERATIONS -> _pair.value = PairUi.Failed("The pairing code asks for a key-derivation cost below Halo's minimum.")
             !payload.firebaseConfig.databaseURL.startsWith("https://") && !DebugEndpoints.applies(payload.firebaseConfig.databaseURL) -> _pair.value = PairUi.Failed("The pairing code's database address isn't https.")
-            else -> _pair.value = PairUi.NeedsPassphrase(payload)
+            else -> _pair.value = PairUi.NeedsPassphrase(payload, if (DebugEndpoints.applies(payload.firebaseConfig.databaseURL)) null else FirebaseHosts.warning(payload.firebaseConfig.databaseURL))
         }
     }
 
@@ -153,7 +155,7 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun finishPairing(payload: PairingPayload, key: ByteArray, client: FirebaseRtdbClient) {
         _warning.value = if (client.checkPublicAccess() == FirebaseRtdbClient.PublicAccess.OPEN)
-            "Your Realtime Database is open to the internet (test-mode rules). Message text stays encrypted, but device names and timestamps are readable by anyone. Publish the owner-only rules from docs/specs/firebase-setup.md." else null
+            "Your Realtime Database is open to the internet (test-mode rules). Message text stays encrypted, but device names and timestamps are readable by anyone. Publish the owner-only rules in docs/specs/firebase-rules.json (Realtime Database → Rules; steps in docs/specs/firebase-setup.md)." else null
 
         val profile = CloudProfile(payload.firebaseConfig, payload.auth, payload.saltBase64, payload.iterations, Base64.getEncoder().encodeToString(key), epoch = java.util.UUID.randomUUID().toString())
         store.save(profile); CloudRuntime.reset()

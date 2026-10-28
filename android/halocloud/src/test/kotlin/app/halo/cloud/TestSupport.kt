@@ -15,6 +15,8 @@ class FakeRtdb(override val uid: String = "uid-1") : Rtdb {
     /** What a failing write throws: NETWORK by default; OPERATION_FAILED models the server refusing one particular row. */
     @Volatile var failKind: RtdbException.Kind = RtdbException.Kind.NETWORK
     val writes = ArrayList<String>()
+    /** Every path read with [get] (not [shallowKeys]) — lets a test prove a hot path does not pull a whole node. */
+    val reads = java.util.Collections.synchronizedList(ArrayList<String>())
 
     private fun parts(p: String) = p.split('/').filter { it.isNotEmpty() }
 
@@ -25,7 +27,7 @@ class FakeRtdb(override val uid: String = "uid-1") : Rtdb {
         return cur
     }
 
-    @Synchronized override fun get(path: String): JsonElement? = StreamModel.toJson(node(parts(path)))
+    @Synchronized override fun get(path: String): JsonElement? { reads.add(path); return StreamModel.toJson(node(parts(path))) }
 
     @Synchronized override fun put(path: String, value: JsonElement) {
         if (failWrites?.invoke(path) == true) throw RtdbException(failKind, "offline")
@@ -62,7 +64,7 @@ class FakeRtdb(override val uid: String = "uid-1") : Rtdb {
         if (value is JsonNull) cur.remove(p.last()) else cur[p.last()] = explode(value)
     }
 
-    fun dump(path: String): JsonElement? = get(path)
+    @Synchronized fun dump(path: String): JsonElement? = StreamModel.toJson(node(parts(path)))   // not counted in [reads]
 }
 
 fun testCrypto(): CryptoService = CryptoService.create("correct horse battery staple", ByteArray(16) { it.toByte() }, CryptoService.MINIMUM_ITERATIONS)

@@ -204,6 +204,24 @@ class RtdbClientTest {
         assertEquals(listOf("a=1", "b=2", "c=3"), got.sorted())
     }
 
+    private class SpyConn : java.net.HttpURLConnection(java.net.URL("http://127.0.0.1:1/")) {
+        @Volatile var disconnected = false
+        override fun disconnect() { disconnected = true }
+        override fun usingProxy() = false
+        override fun connect() {}
+    }
+
+    @Test fun `a close that lands before the connection is attached still stops it (H-15 stream race)`() {
+        val h = FirebaseRtdbClient.StreamHandle()
+        val early = SpyConn(); assertTrue(h.attach(early)); h.close(); assertTrue("close must disconnect the attached connection", early.disconnected)
+        // The race itself: close() first, then the reader publishes the connection it had just opened.
+        val h2 = FirebaseRtdbClient.StreamHandle(); h2.close()
+        val late = SpyConn()
+        assertFalse("attach after close must refuse", h2.attach(late))
+        assertTrue("and must disconnect the late connection immediately", late.disconnected)
+        assertTrue(h2.stopped)
+    }
+
     @Test fun `https is required in production`() {
         try { FirebaseRtdbClient(FirebaseConfig("k", "p", "a", "s", "http://example.com"), CloudAuthCredential("a", "b")); fail() }
         catch (e: RtdbException) { assertEquals(RtdbException.Kind.CONFIGURE_FAILED, e.kind) }

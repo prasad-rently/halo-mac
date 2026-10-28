@@ -85,6 +85,7 @@ fun PairingPanel(vm: CloudViewModel, why: String) {
             }
             is PairUi.NeedsPassphrase -> {
                 Text("Paired with ${p.payload.firebaseConfig.projectID}.", color = Halo.Green, fontSize = 13.sp, modifier = Modifier.testTag("pair.accepted"))
+                p.hostWarning?.let { Spacer(Modifier.height(6.dp)); Text(it, color = Halo.Amber, fontSize = 12.sp, modifier = Modifier.testTag("pair.hostWarning")) }
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(passphrase, { passphrase = it }, singleLine = true, label = { Text("Encryption passphrase") },
                     visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth().testTag("pair.passphrase"),

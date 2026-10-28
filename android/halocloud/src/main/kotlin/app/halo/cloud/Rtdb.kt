@@ -15,7 +15,6 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
-import java.util.concurrent.atomic.AtomicBoolean
 
 // The Kotlin half of Halo's Realtime Database client. It speaks the same two documented REST APIs the
 // desktop does (Halo/Core/Cloud/FirebaseRTDBClient.swift) and for the same reason: it needs nothing
@@ -129,19 +128,38 @@ class FirebaseRtdbClient(
     // ── Live observation ──────────────────────────────────────────────────────────────────────
 
     override fun observeChildAdded(path: String, onChild: (String, JsonElement?) -> Unit): AutoCloseable {
-        val stop = AtomicBoolean(false)
-        val active = arrayOfNulls<HttpURLConnection>(1)
-        val thread = Thread({ runStream(path, onChild, stop, active) }, "halo-rtdb-stream").apply { isDaemon = true; start() }
-        return AutoCloseable { stop.set(true); active[0]?.disconnect(); thread.interrupt() }
+        val handle = StreamHandle()
+        val thread = Thread({ runStream(path, onChild, handle) }, "halo-rtdb-stream").apply { isDaemon = true; start() }
+        return AutoCloseable { handle.close(); thread.interrupt() }
     }
 
-    private fun runStream(path: String, onChild: (String, JsonElement?) -> Unit, stop: AtomicBoolean, active: Array<HttpURLConnection?>) {
+    /**
+     * H-15: close() raced the reader. The old code kept `stop` and the live connection in two unsynchronised places,
+     * so a close() landing between "connection opened" and "connection published" saw no connection to disconnect;
+     * the reader then sat in a blocking read (up to the 120 s read timeout) on a stream nobody wanted, and could
+     * deliver a child after close() returned. [attach] and [close] now take one lock, so whichever comes second sees
+     * the other: attach-after-close disconnects at once and reports false.
+     */
+    internal class StreamHandle {
+        private val lock = Any()
+        @Volatile var stopped = false; private set
+        private var active: HttpURLConnection? = null
+        /** @return false when already closed — the caller must not use [conn]. */
+        fun attach(conn: HttpURLConnection): Boolean = synchronized(lock) {
+            if (stopped) { conn.disconnect(); false } else { active = conn; true }
+        }
+        fun detach(conn: HttpURLConnection) = synchronized(lock) { if (active === conn) active = null }
+        fun close() { val c = synchronized(lock) { stopped = true; active.also { active = null } }; c?.disconnect() }
+    }
+
+    private fun runStream(path: String, onChild: (String, JsonElement?) -> Unit, handle: StreamHandle) {
         val delivered = HashSet<String>()
         var backoffMs = 1_000L
-        while (!stop.get()) {
+        while (!handle.stopped) {
+            var conn: HttpURLConnection? = null
             try {
-                val conn = open("GET", path, null, null).also { it.setRequestProperty("Accept", "text/event-stream"); it.readTimeout = 120_000 }
-                active[0] = conn
+                conn = open("GET", path, null, null).also { it.setRequestProperty("Accept", "text/event-stream"); it.readTimeout = 120_000 }
+                if (!handle.attach(conn)) return
                 val status = conn.responseCode
                 if (status != 200) {
                     if (status == 401 || status == 403) invalidate()
@@ -151,8 +169,9 @@ class FirebaseRtdbClient(
                 val model = LinkedHashMap<String, Any?>()
                 var event = ""
                 BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { reader ->
-                    while (!stop.get()) {
+                    while (!handle.stopped) {
                         val line = reader.readLine() ?: break
+                        if (handle.stopped) return
                         if (line.startsWith("event:")) event = line.substring(6).trim()
                         else if (line.startsWith("data:")) {
                             when (StreamModel.apply(event, line.substring(5).trim(), model)) {
@@ -168,9 +187,9 @@ class FirebaseRtdbClient(
                     }
                 }
             } catch (e: Exception) {
-                if (stop.get()) return
-            } finally { active[0]?.disconnect(); active[0] = null }
-            if (stop.get()) return
+                if (handle.stopped) return
+            } finally { conn?.let { handle.detach(it); it.disconnect() } }
+            if (handle.stopped) return
             try { Thread.sleep(backoffMs) } catch (e: InterruptedException) { return }
             backoffMs = minOf(backoffMs * 2, 30_000)
         }
