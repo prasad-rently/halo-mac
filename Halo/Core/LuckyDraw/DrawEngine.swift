@@ -84,11 +84,21 @@ enum DrawEngine {
                      currentAngle: Double,
                      duration: Double) -> SpinPlan? {
         var rng = SystemRandomNumberGenerator()
-        return plan(eligibleCount: entries.count,
-                    currentAngle: currentAngle,
-                    duration: duration,
-                    idForIndex: { entries[$0].id },
-                    using: &rng)
+        return plan(for: entries, currentAngle: currentAngle, duration: duration, using: &rng)
+    }
+
+    /// Same, with the generator supplied — what `LuckyDrawViewModel` calls, so a test can seed the
+    /// draw it makes *through the view model* (H-08). Only `entries.count` and each entry's `id`
+    /// are read: nothing about an entry other than its identity may influence the winner.
+    static func plan(for entries: [DrawEntry],
+                     currentAngle: Double,
+                     duration: Double,
+                     using generator: inout some RandomNumberGenerator) -> SpinPlan? {
+        plan(eligibleCount: entries.count,
+             currentAngle: currentAngle,
+             duration: duration,
+             idForIndex: { entries[$0].id },
+             using: &generator)
     }
 
     /// Which segment index sits under the pointer at a given wheel angle.
@@ -108,4 +118,16 @@ enum DrawEngine {
         let r = degrees.truncatingRemainder(dividingBy: 360)
         return r < 0 ? r + 360 : r
     }
+}
+
+/// A `RandomNumberGenerator` that can be handed around as a value and swapped in a test. The
+/// default draws from the system generator; a test passes a seeded one.
+struct AnyRandomNumberGenerator: RandomNumberGenerator {
+    private var source: () -> UInt64
+    init(_ source: @escaping () -> UInt64) { self.source = source }
+    init() {
+        var system = SystemRandomNumberGenerator()
+        self.source = { system.next() }
+    }
+    mutating func next() -> UInt64 { source() }
 }

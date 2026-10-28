@@ -152,7 +152,92 @@ enum CleanupKind: String, CaseIterable, Identifiable {
 /// The one definition of "same path" the Cleanup module uses to compare items across
 /// categories. Item ids are per-scan `UUID`s, so they can never match across categories.
 enum CleanupPath {
-    static func key(_ url: URL) -> String { url.standardizedFileURL.path }
+    /// The path key for `url`. Two spellings of one location must give one key (H-05):
+    /// `/var/folders/x` and `/private/var/folders/x` are the same file, and a row addressed one
+    /// way has to reconcile when the other is reported removed.
+    ///
+    /// **Symlink policy.** Every *directory* component is resolved (`realpath`), the final
+    /// component is NOT. A symlink item is itself the thing a cleanup would trash; resolving
+    /// its leaf would make "trash this link" also erase the row of whatever it points at.
+    /// For a path that does not exist (a removed item, a root not yet created) the deepest
+    /// existing ancestor is resolved and the rest appended verbatim.
+    ///
+    /// **Case policy.** Keys are compared case-SENSITIVELY, on every volume. The default APFS
+    /// volume is case-insensitive, but case-sensitive APFS volumes exist and folding case would
+    /// merge two distinct files there — and the failure modes are not symmetric: an unfolded key
+    /// on a case-insensitive volume costs at worst a duplicate row (every scanner takes its
+    /// spelling from the directory enumerator, so one file is always spelled one way), while a
+    /// folded key on a case-sensitive volume would drop a real row, or trash the wrong file.
+    static func key(_ url: URL) -> String {
+        let std = url.standardizedFileURL
+        let leaf = std.lastPathComponent
+        let parent = std.deletingLastPathComponent().path
+        if leaf.isEmpty || leaf == "/" || parent == std.path { return resolvedDirectory(std.path) }
+        let dir = resolvedDirectory(parent)
+        return dir == "/" ? "/" + leaf : dir + "/" + leaf
+    }
+
+    /// The key of a *directory that is traversed* — a scan root, the Trash. Unlike `key`, the leaf IS
+    /// resolved: items under a symlinked root get keys built from the resolved path, so the root they are
+    /// compared against must be resolved too or `isCovered` never matches (a Trash folder that is a
+    /// symlink would let "already in the Trash" slip through).
+    static func directoryKey(_ url: URL) -> String { resolvedDirectory(url.standardizedFileURL.path) }
+
+    private static let resolvedLock = NSLock()
+    nonisolated(unsafe) private static var resolvedCache: [String: String] = [:]
+
+    /// `realpath` of the deepest existing ancestor of `dir`, plus the unresolved remainder.
+    /// Successful full resolutions are cached (Clean All keys tens of thousands of rows that share
+    /// a handful of parents); a cache is bounded and never stores a path that did not resolve.
+    private static func resolvedDirectory(_ dir: String) -> String {
+        resolvedLock.lock()
+        if let hit = resolvedCache[dir] { resolvedLock.unlock(); return hit }
+        resolvedLock.unlock()
+
+        var existing = dir
+        var rest: [String] = []
+        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+        while true {
+            if realpath(existing, &buffer) != nil {
+                var out = String(cString: buffer)
+                for comp in rest.reversed() { out = out == "/" ? "/" + comp : out + "/" + comp }
+                if rest.isEmpty {
+                    resolvedLock.lock()
+                    if resolvedCache.count > 4096 { resolvedCache.removeAll() }
+                    resolvedCache[dir] = out
+                    resolvedLock.unlock()
+                }
+                return out
+            }
+            let ns = existing as NSString
+            let parent = ns.deletingLastPathComponent
+            if parent == existing || parent.isEmpty { return dir }
+            rest.append(ns.lastPathComponent)
+            existing = parent
+        }
+    }
+
+    /// Test hook: forget cached resolutions (e.g. after re-pointing a symlink).
+    static func resetKeyCache() {
+        resolvedLock.lock(); resolvedCache.removeAll(); resolvedLock.unlock()
+    }
+
+    /// The URLs among `urls` that are no longer on disk. Runs on the CALLER's executor, so call it
+    /// from a detached task — `CleanupViewModel` must never stat 20 000 paths on the main actor
+    /// (H-02). Bounded two ways: it stops at `deadline`, and it stops when its task is cancelled.
+    /// A path it did not get to is treated as still present — the safe direction: a row is never
+    /// dropped on a guess, and cleanup re-checks existence itself.
+    static func missing(among urls: [URL],
+                        exists: (URL) -> Bool = CleanupPath.existsOnDisk,
+                        deadline: TimeInterval = 5) -> [URL] {
+        let stop = Date().addingTimeInterval(deadline)
+        var out: [URL] = []
+        for (i, url) in urls.enumerated() {
+            if i % 256 == 0, Task.isCancelled || Date() > stop { break }
+            if !exists(url) { out.append(url) }
+        }
+        return out
+    }
 
     /// True when something is at `url` — a dangling symlink counts. `fileExists` follows links,
     /// so it reports a broken one as "gone" and a failed trash of it would be swallowed.
@@ -174,8 +259,8 @@ enum CleanupPath {
             for j in roots.indices where j > i {
                 for pa in roots[i].paths {
                     for pb in roots[j].paths {
-                        let ka = URL(fileURLWithPath: pa).standardizedFileURL.path
-                        let kb = URL(fileURLWithPath: pb).standardizedFileURL.path
+                        let ka = directoryKey(URL(fileURLWithPath: pa))
+                        let kb = directoryKey(URL(fileURLWithPath: pb))
                         if isCovered(ka, by: kb) || isCovered(kb, by: ka) {
                             out.append((roots[i].kind, roots[j].kind, pa))
                         }

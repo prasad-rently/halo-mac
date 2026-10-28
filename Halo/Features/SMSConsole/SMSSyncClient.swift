@@ -166,7 +166,10 @@ final class SMSSyncClient: ObservableObject {
         Task {
             do {
                 let linesPath = "sms/\(uid)/\(deviceId)/lines"
-                let linesHandle = try await rtdb.observeChildAdded(at: linesPath) { [weak self] subIdStr, value in
+                // Changes too, not only additions (H-21a): the phone rewrites a line's node whenever its
+                // label or carrier changes, and a plain child_added observer would never report that
+                // to a Mac that is already running.
+                let linesHandle = try await rtdb.observeChildAddedOrChanged(at: linesPath) { [weak self] subIdStr, value in
                     Task { @MainActor in self?.mergeLine(deviceId: deviceId, subIdStr: subIdStr, value: value) }
                 }
                 observers.append((path: linesPath, handle: linesHandle))
@@ -334,58 +337,36 @@ final class SMSSyncClient: ObservableObject {
     // MARK: Merge + decrypt (shared by streaming and reconcile)
 
     private func mergeDevice(deviceId: String, value: Any?) {
-        let d = value as? [String: Any] ?? [:]
-        devicesById[deviceId] = SMSDevice(id: deviceId,
-                                          name: d["name"] as? String ?? deviceId,
-                                          platform: d["platform"] as? String ?? "android")
+        devicesById[deviceId] = SMSWire.device(id: deviceId, value: value)
         publishDevices()
     }
 
-    private func mergeLine(deviceId: String, subIdStr: String, value: Any?) {
+    /// Upsert: called both when a line first appears and whenever its node is rewritten (H-21a).
+    func mergeLine(deviceId: String, subIdStr: String, value: Any?) {
         guard let crypto else { return }
-        let l = value as? [String: Any] ?? [:]
-        let subId = Int(subIdStr) ?? (l["subscriptionId"] as? Int ?? -1)
-        let ownNumber = decryptOptional(l["ownNumberEnc"], crypto) ?? (l["ownNumber"] as? String ?? "Unknown")
-        let id = "\(deviceId)-\(subId)"
-        linesById[id] = SMSLine(id: id, deviceId: deviceId,
-                                label: l["label"] as? String ?? "SIM \(subId)",
-                                ownNumber: ownNumber,
-                                carrier: l["carrier"] as? String ?? "—",
-                                subscriptionId: subId,
-                                syncEnabled: l["syncEnabled"] as? Bool ?? true)
+        let line = SMSWire.line(deviceId: deviceId, subIdStr: subIdStr, value: value, crypto: crypto)
+        linesById[line.id] = line
         publishLines()
     }
 
     private func mergeMessage(deviceId: String, msgId: String, value: Any?) {
-        guard let crypto else { return }
-        let m = value as? [String: Any] ?? [:]
-        guard let addressEnc = m["addressEnc"] as? String,
-              let bodyEnc = m["bodyEnc"] as? String,
-              let address = try? crypto.decrypt(addressEnc),
-              let body = try? crypto.decrypt(bodyEnc) else { return }
-        let subId = m["subscriptionId"] as? Int ?? 0
-        let dateMs = (m["date"] as? NSNumber)?.doubleValue ?? 0
-        let uniqueId = "\(deviceId)/\(msgId)"   // raw keys can repeat across devices
-        let date = Date(timeIntervalSince1970: dateMs / 1000)
-        let category = SmsClassifier.classify(sender: address, body: body)
-        let isNew = messagesById[uniqueId] == nil
-        messagesById[uniqueId] = SMSMessage(
-            id: uniqueId,
-            lineId: "\(deviceId)-\(subId)",
-            contactNumber: address,
-            body: body,
-            date: date,
-            category: category,
-            read: (m["read"] as? Bool) ?? true)
+        guard let crypto, let message = SMSWire.message(deviceId: deviceId, msgId: msgId, value: value, crypto: crypto)
+        else { return }
+        let isNew = messagesById[message.id] == nil
+        messagesById[message.id] = message
         publishThreads()
 
         // D30 — notify only for genuinely-new messages that arrived *after* connect
         // (skip the historical backfill `child_added` re-delivers on attach).
-        if isNew, date >= connectedAt, notificationsEnabled {
-            let note = Self.newMessageNotification(sender: address)
+        if isNew, message.date >= connectedAt, notificationsEnabled {
+            let note = Self.newMessageNotification(sender: message.contactNumber)
             AlertManager.fireExternal(kindRaw: "sms_new", title: note.title, body: note.body)
         }
     }
+
+    /// Test seam (H-21a): install the key a real `connect` would have derived, so the merge path can
+    /// be driven with wire-format values without a network.
+    func installCryptoForTesting(_ crypto: CryptoService) { self.crypto = crypto }
 
     /// What a new-SMS notification says. **Never the message text.**
     ///
@@ -411,11 +392,6 @@ final class SMSSyncClient: ObservableObject {
 
     private func publishThreads() {
         threads = Self.groupThreads(Array(messagesById.values))
-    }
-
-    private func decryptOptional(_ value: Any?, _ crypto: CryptoService) -> String? {
-        guard let s = value as? String else { return nil }
-        return try? crypto.decrypt(s)
     }
 
     private static func groupThreads(_ messages: [SMSMessage]) -> [SMSThread] {
@@ -484,5 +460,59 @@ final class SMSSyncClient: ObservableObject {
         } catch {
             state = .error("Seed failed: \(error.localizedDescription)")
         }
+    }
+}
+
+// MARK: - SMSWire  (H-20a)
+
+/// The desktop's reading of the nodes the phone writes — pure functions, no network and no
+/// observer state, so `WireContractTests` can feed them the committed fixture of real phone-written
+/// nodes (`docs/specs/wire-contract/phone-nodes.v1.json`) and compare what comes out.
+///
+/// The Kotlin side of the same contract is `SmsWire` in `android/halocloud`. A field renamed on
+/// either side makes one of the two suites fail.
+enum SMSWire {
+
+    static func device(id: String, value: Any?) -> SMSDevice {
+        let d = value as? [String: Any] ?? [:]
+        return SMSDevice(id: id,
+                         name: d["name"] as? String ?? id,
+                         platform: d["platform"] as? String ?? "android")
+    }
+
+    static func line(deviceId: String, subIdStr: String, value: Any?, crypto: CryptoService) -> SMSLine {
+        let l = value as? [String: Any] ?? [:]
+        let subId = Int(subIdStr) ?? (l["subscriptionId"] as? Int ?? -1)
+        let ownNumber = decryptOptional(l["ownNumberEnc"], crypto) ?? (l["ownNumber"] as? String ?? "Unknown")
+        return SMSLine(id: "\(deviceId)-\(subId)", deviceId: deviceId,
+                       label: l["label"] as? String ?? "SIM \(subId)",
+                       ownNumber: ownNumber,
+                       carrier: l["carrier"] as? String ?? "—",
+                       subscriptionId: subId,
+                       syncEnabled: l["syncEnabled"] as? Bool ?? true)
+    }
+
+    /// nil when the row cannot be decrypted (wrong key, or a half-written node) — it is skipped, not shown blank.
+    static func message(deviceId: String, msgId: String, value: Any?, crypto: CryptoService) -> SMSMessage? {
+        let m = value as? [String: Any] ?? [:]
+        guard let addressEnc = m["addressEnc"] as? String,
+              let bodyEnc = m["bodyEnc"] as? String,
+              let address = try? crypto.decrypt(addressEnc),
+              let body = try? crypto.decrypt(bodyEnc) else { return nil }
+        let subId = m["subscriptionId"] as? Int ?? 0
+        let dateMs = (m["date"] as? NSNumber)?.doubleValue ?? 0
+        return SMSMessage(
+            id: "\(deviceId)/\(msgId)",   // raw keys can repeat across devices
+            lineId: "\(deviceId)-\(subId)",
+            contactNumber: address,
+            body: body,
+            date: Date(timeIntervalSince1970: dateMs / 1000),
+            category: SmsClassifier.classify(sender: address, body: body),
+            read: (m["read"] as? Bool) ?? true)
+    }
+
+    private static func decryptOptional(_ value: Any?, _ crypto: CryptoService) -> String? {
+        guard let s = value as? String else { return nil }
+        return try? crypto.decrypt(s)
     }
 }

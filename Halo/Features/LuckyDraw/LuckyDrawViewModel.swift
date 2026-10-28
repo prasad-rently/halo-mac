@@ -48,12 +48,20 @@ final class LuckyDrawViewModel: ObservableObject {
     /// from the window's corners — half of it lands behind the sidebar.
     var wheelCentre: CGPoint?
 
-    private let store = LuckyDrawStore.shared
+    private let store: LuckyDrawStore
+    /// Where a draw's randomness comes from. Always the system generator in the app; a test seeds it
+    /// to prove the winner is a function of the seed and the entry *identities* alone (H-08).
+    private var generator: AnyRandomNumberGenerator
     private var finishTask: Task<Void, Never>?
     private var sequenceTask: Task<Void, Never>?
 
     /// How long a run holds each winner on screen before the next spin starts.
     static let sequenceBeat: UInt64 = 1_500_000_000
+
+    init(store: LuckyDrawStore? = nil, generator: AnyRandomNumberGenerator = AnyRandomNumberGenerator()) {
+        self.store = store ?? LuckyDrawStore.shared
+        self.generator = generator
+    }
 
     var isSequenceActive: Bool { sequence != nil }
     var canSpin: Bool { !isSpinning && !isSequenceActive && (store.selected?.canSpin ?? false) }
@@ -87,7 +95,8 @@ final class LuckyDrawViewModel: ObservableObject {
 
         guard let plan = DrawEngine.plan(for: pool,
                                          currentAngle: restAngle,
-                                         duration: roster.spinDuration.seconds) else { return }
+                                         duration: roster.spinDuration.seconds,
+                                         using: &generator) else { return }
         self.plan = plan
         isSpinning = true
 

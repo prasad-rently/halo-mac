@@ -28,6 +28,10 @@ final class LuckyDrawStore: ObservableObject {
     /// it must never run after a failed or missing read — an unreadable file would otherwise
     /// make every photo look unreferenced.
     private var loadedCleanly = false
+    /// Where the launch-time orphan sweep runs. Production hops to a utility queue; a test passes a
+    /// closure that runs the work inline (or records that it was never offered) so it can assert the
+    /// sweep's outcome immediately instead of sleeping and hoping (H-09).
+    private let sweepScheduler: (@escaping @Sendable () -> Void) -> Void
 
     private convenience init() {
         self.init(fileURL: Self.defaultStorageURL)
@@ -36,8 +40,12 @@ final class LuckyDrawStore: ObservableObject {
 
     /// Test seam: a scratch file and a private notification center, so a test never
     /// touches the user's rosters or posts a real app-termination notification.
-    init(fileURL: URL?, notificationCenter: NotificationCenter = .default, detectFaces: Bool = true) {
+    init(fileURL: URL?, notificationCenter: NotificationCenter = .default, detectFaces: Bool = true,
+         sweepScheduler: @escaping (@escaping @Sendable () -> Void) -> Void = { work in
+             DispatchQueue.global(qos: .utility).async(execute: work)
+         }) {
         self.fileURL = fileURL
+        self.sweepScheduler = sweepScheduler
         self.avatarStore = fileURL.map {
             AvatarStore(rootURL: $0.deletingLastPathComponent()
                 .appendingPathComponent("luckydraw/avatars", isDirectory: true),
@@ -284,7 +292,7 @@ final class LuckyDrawStore: ObservableObject {
         guard loadedCleanly, let avatarStore else { return }
         let live = liveReferences()
         let fileURL = self.fileURL
-        DispatchQueue.global(qos: .utility).async {
+        sweepScheduler {
             Self.performSweep(avatarStore: avatarStore, live: live, fileURL: fileURL)
         }
     }
@@ -300,7 +308,7 @@ final class LuckyDrawStore: ObservableObject {
     private func liveReferences() -> [UUID: Set<String>] {
         var referenced: [UUID: Set<String>] = [:]
         for roster in rosters {
-            referenced[roster.id] = Set(roster.entries.compactMap { $0.avatar?.photoFileName })
+            referenced[roster.id] = Set(roster.entries.compactMap { $0.avatar?.photoFileName }.compactMap(AvatarFileName.normalized))
         }
         return referenced
     }
@@ -336,8 +344,8 @@ final class LuckyDrawStore: ObservableObject {
                 var files = Set<String>()
                 for case let entry as [String: Any] in (roster["entries"] as? [Any]) ?? [] {
                     if let avatar = entry["avatar"] as? [String: Any], avatar["kind"] as? String == "photo",
-                       let file = avatar["file"] as? String, AvatarFileName.isValid(file) {
-                        files.insert(file)
+                       let file = avatar["file"] as? String, let canonical = AvatarFileName.normalized(file) {
+                        files.insert(canonical)
                     }
                 }
                 guard !files.isEmpty else { continue }
