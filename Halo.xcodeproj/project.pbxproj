@@ -188,6 +188,7 @@
 		4487D4F4816F78F759BBBB45 /* build-artifact-catalog.json in Resources */ = {isa = PBXBuildFile; fileRef = 1B0D2A13DD248B715CFB8529 /* build-artifact-catalog.json */; };
 		46B5441596DEA5CFB12C4729 /* DashboardUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A64A6695EDCF890E4944D1A /* DashboardUITests.swift */; };
 		48D9F268088D85186495AD71 /* AlertsReportUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 256C0A5343A473D0D89FAB57 /* AlertsReportUITests.swift */; };
+		4F7890DE5CF1CA0CDD33EC5C /* BuildArtifactsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0080EE1057FB9E513F5B090B /* BuildArtifactsViewModel.swift */; };
 		51438AC7C61E57B584FF1A48 /* SMSConsoleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECFF6EE3F66B556B438004F0 /* SMSConsoleView.swift */; };
 		51A984C0AF7FE205602EB397 /* ExpenditureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6915A2D32038A9761B33CFEA /* ExpenditureStore.swift */; };
 		52A63863961FB03CE2564588 /* ClipboardSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F328726F5D927ECE2A09867E /* ClipboardSyncService.swift */; };
@@ -218,6 +219,7 @@
 		B077D7999DC07EC00A7DC597 /* RAGVectorStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5261AF493C8F832B7B7242B /* RAGVectorStore.swift */; };
 		B235974CEB652C09272B4499 /* FilesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB75AC7A8DBC58FFF8D8070B /* FilesUITests.swift */; };
 		B359A9774FABDB8C0EEE7C20 /* CloudRESTClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CF513D852033ACD07DD2CD0 /* CloudRESTClientTests.swift */; };
+		B4B381AD930E431B8043B471 /* BuildArtifactsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ED7FB4070DD3F94310101D3 /* BuildArtifactsView.swift */; };
 		B669A2B0EA32CF1B8D9FE808 /* BuildArtifactRemover.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD674CC0F7026FD9CC4BC2F2 /* BuildArtifactRemover.swift */; };
 		B6BD58778365CFD1769D218A /* AvatarModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A69904FBCA866103B88C16F7 /* AvatarModels.swift */; };
 		B6E3C305908B409F99263327 /* CloudFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88C159A5C1348117FA9F7CA8 /* CloudFoundationTests.swift */; };
@@ -465,6 +467,7 @@
 		000000000000000000009013 /* GetClipboardHistoryIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/GetClipboardHistoryIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009015 /* ExportReportIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/ExportReportIntent.swift; sourceTree = "<group>"; };
 		000000000000000000009017 /* HaloShortcutsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Intents/HaloShortcutsProvider.swift; sourceTree = "<group>"; };
+		0080EE1057FB9E513F5B090B /* BuildArtifactsViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BuildArtifactsViewModel.swift; sourceTree = "<group>"; };
 		00C37BFCA463AB410245B802 /* HelperClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HelperClientTests.swift; sourceTree = "<group>"; };
 		04C24FA6FA6BE8B3F119901F /* HaloTestFixtures.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloTestFixtures.swift; sourceTree = "<group>"; };
 		06D67EEB887057C98492942D /* SMSSyncClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSSyncClient.swift; sourceTree = "<group>"; };
@@ -516,6 +519,7 @@
 		94E717DB998E0BBF1AE83F94 /* HaloTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		95CB5E046AFEAF8DF5C7502C /* FirebaseRTDBClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FirebaseRTDBClient.swift; sourceTree = "<group>"; };
 		99F06F1B0C745181E045DD29 /* ExpenditureViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExpenditureViewModel.swift; sourceTree = "<group>"; };
+		9ED7FB4070DD3F94310101D3 /* BuildArtifactsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BuildArtifactsView.swift; sourceTree = "<group>"; };
 		9F450540DB55422C3FAAE03A /* ExpenditureView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExpenditureView.swift; sourceTree = "<group>"; };
 		A69904FBCA866103B88C16F7 /* AvatarModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AvatarModels.swift; sourceTree = "<group>"; };
 		B4A92E8D0819BCF034A05DF2 /* AIKeyStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIKeyStore.swift; sourceTree = "<group>"; };
@@ -882,6 +886,7 @@
 				E4F59F2553C7EAAA56658F1F /* Expenditure */,
 				85285B7C1F866DE686A0DA8D /* SMSConsole */,
 				7C78E37365953E9A9759F860 /* LuckyDraw */,
+				B1D45648259A2D6A89BD50C9 /* Cleanup */,
 			);
 			name = Features;
 			path = Features;
@@ -924,6 +929,16 @@
 			);
 			name = Cloud;
 			path = Cloud;
+			sourceTree = "<group>";
+		};
+		B1D45648259A2D6A89BD50C9 /* Cleanup */ = {
+			isa = PBXGroup;
+			children = (
+				0080EE1057FB9E513F5B090B /* BuildArtifactsViewModel.swift */,
+				9ED7FB4070DD3F94310101D3 /* BuildArtifactsView.swift */,
+			);
+			name = Cleanup;
+			path = Cleanup;
 			sourceTree = "<group>";
 		};
 		D2B9FF24DEEB6AD1B681E7B7 /* Files */ = {
@@ -1419,6 +1434,8 @@
 				04C7627CF17A79C7D9BBBAFE /* AvatarPickerView.swift in Sources */,
 				04B74942D98716C8BF0FACD2 /* BuildArtifactScanner.swift in Sources */,
 				B669A2B0EA32CF1B8D9FE808 /* BuildArtifactRemover.swift in Sources */,
+				4F7890DE5CF1CA0CDD33EC5C /* BuildArtifactsViewModel.swift in Sources */,
+				B4B381AD930E431B8043B471 /* BuildArtifactsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -12,10 +12,11 @@ import Foundation
 // name (the Trash renames on collision). The single `removeItem` in the whole feature is in
 // `permanentlyRemoveTrashed(_:trashDirectories:)` below.
 //
-// INTENDED CLAUDE.md EDIT (not applied here — a later docs merge does it): "File deletion —
-// mandatory rule" gains a second sanctioned exception beside Drive Speed's `unlink`: F-054's
-// "Trash and empty", limited to URLs returned by this operation's own `trashItem` calls, for
-// Safe + git-verified items only (D-02).
+// This is the SECOND sanctioned exception to CLAUDE.md's trashItem-only rule (beside Drive Speed's
+// `unlink` of its own scratch file) — written into "File deletion — mandatory rule" in the same
+// change as this file: limited to URLs returned by this operation's own `trashItem` calls, for
+// Safe + git-verified items only (D-02), and UNAVAILABLE in a sandboxed build (see
+// `permanentRemovalAvailable` and docs/specs/F-054-spikes.md, spike S-B).
 
 enum BuildArtifactRemover {
 
@@ -40,6 +41,18 @@ enum BuildArtifactRemover {
         /// Ineligible for the requested action (D-02) — nothing was done to them.
         var refused: [Failure] = []
     }
+
+    /// True when the process runs inside an App Sandbox container.
+    static var isSandboxed: Bool {
+        ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] != nil
+    }
+
+    /// Spike S-B (docs/specs/F-054-spikes.md): whether a SANDBOXED build may `removeItem` the URL
+    /// `trashItem` returned could not be proven (it points into `~/.Trash`, or `<volume>/.Trashes`,
+    /// outside any granted root). Unproven => unavailable: the permanent action is hidden in the UI
+    /// and `trashAndEmpty` refuses every item when this is false. Only an unsandboxed build (today's
+    /// shipped DMGs) offers it.
+    static func permanentRemovalAvailable(sandboxed: Bool = isSandboxed) -> Bool { !sandboxed }
 
     /// The real `trashItem`.
     static let systemTrash: TrashFunction = { url in
@@ -74,9 +87,16 @@ enum BuildArtifactRemover {
     static func trashAndEmpty(_ items: [BuildArtifactItem],
                               trash: TrashFunction = systemTrash,
                               trashDirectories: [URL] = defaultTrashDirectories(),
-                              home: String = NSHomeDirectory()) -> Outcome {
+                              home: String = NSHomeDirectory(),
+                              permanentAllowed: Bool = permanentRemovalAvailable()) -> Outcome {
         var out = Outcome()
         for item in items {
+            // S-B: unproven in a sandboxed build => nothing is touched, not even moved to Trash.
+            guard permanentAllowed else {
+                out.refused.append(.init(id: item.id, name: item.artifactURL.lastPathComponent,
+                                         message: "Permanent removal is not available in this build."))
+                continue
+            }
             // D-02: Safe + git-verified only. Everything else is refused, untouched.
             guard item.permanentRemovalEligible else {
                 out.refused.append(.init(id: item.id, name: item.artifactURL.lastPathComponent,

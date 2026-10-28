@@ -301,6 +301,8 @@ actor BuildArtifactScanner {
         var activeWindow: TimeInterval = 24 * 3600
         var now = Date()
         var home = NSHomeDirectory()
+        /// false = behave as if no git binary exists (sandboxed build, or tests of that path).
+        var useGit = true
     }
 
     /// Directory names never descended into during DETECTION (heavy, or output we would only
@@ -376,7 +378,7 @@ actor BuildArtifactScanner {
 
         // Phase 2: gates (git), then exact sizing, at most N at a time.
         var gated: [(Candidate, BuildArtifactGitStatus)] = []
-        let gitPath = GitGate.locateGit()
+        let gitPath = config.useGit ? GitGate.locateGit() : nil
         for c in candidates {
             if Task.isCancelled { break }
             let key = c.url.path
