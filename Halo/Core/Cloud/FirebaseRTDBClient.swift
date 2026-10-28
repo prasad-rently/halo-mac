@@ -356,11 +356,17 @@ actor FirebaseRTDBClient {
             var out: [(key: String, value: Any?)] = []
             for key in model.keys.sorted() {
                 let value = model[key]
-                let print = Self.fingerprint(value)
+                // Only a changes-observer needs a fingerprint. A plain child_added observer (messages,
+                // clipboard: thousands of children, an event per new one) must stay O(keys) per event —
+                // serialising every child's JSON on every event would make it O(total bytes).
                 if let last = delivered[key] {
-                    guard includeChanges, last != print else { continue }
+                    guard includeChanges else { continue }
+                    let print = Self.fingerprint(value)
+                    guard last != print else { continue }
+                    delivered[key] = print
+                } else {
+                    delivered[key] = includeChanges ? Self.fingerprint(value) : ""
                 }
-                delivered[key] = print
                 out.append((key, value))
             }
             // A removed child that comes back must fire again.

@@ -160,8 +160,10 @@ final class AvatarStore: @unchecked Sendable {
     /// the ImageIO property check in `importPhoto(source:)`.
     private static func checkHeader(ofData data: Data, pixelLimit: Int) throws {
         try check(ImageHeaderProbe.probe(read: { off, n in
+            // Offsets are relative to the first byte — a `Data` slice does not start at index 0.
             guard off >= 0, off < data.count else { return nil }
-            return data.subdata(in: off..<min(data.count, off + n))
+            let lo = data.startIndex + off
+            return data.subdata(in: lo..<min(data.endIndex, lo + n))
         }), pixelLimit: pixelLimit)
     }
 

@@ -177,6 +177,12 @@ enum CleanupPath {
         return dir == "/" ? "/" + leaf : dir + "/" + leaf
     }
 
+    /// The key of a *directory that is traversed* — a scan root, the Trash. Unlike `key`, the leaf IS
+    /// resolved: items under a symlinked root get keys built from the resolved path, so the root they are
+    /// compared against must be resolved too or `isCovered` never matches (a Trash folder that is a
+    /// symlink would let "already in the Trash" slip through).
+    static func directoryKey(_ url: URL) -> String { resolvedDirectory(url.standardizedFileURL.path) }
+
     private static let resolvedLock = NSLock()
     nonisolated(unsafe) private static var resolvedCache: [String: String] = [:]
 
@@ -253,8 +259,8 @@ enum CleanupPath {
             for j in roots.indices where j > i {
                 for pa in roots[i].paths {
                     for pb in roots[j].paths {
-                        let ka = key(URL(fileURLWithPath: pa))
-                        let kb = key(URL(fileURLWithPath: pb))
+                        let ka = directoryKey(URL(fileURLWithPath: pa))
+                        let kb = directoryKey(URL(fileURLWithPath: pb))
                         if isCovered(ka, by: kb) || isCovered(kb, by: ka) {
                             out.append((roots[i].kind, roots[j].kind, pa))
                         }

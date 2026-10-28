@@ -98,6 +98,8 @@ final class CleanupViewModel: ObservableObject {
     /// later saw the folder as it is now, so a file that reappeared (a cache an app regenerated,
     /// an item put back from the Trash) is real and must stay listed.
     private var removalSerial = 0
+    /// Bumped whenever the category lists are replaced wholesale (a scan landing, a full reset).
+    private var listRevision = 0
     private var removals: [String: Int] = [:]
 
     /// How existence is checked by `pruneMissing`. Injectable so a test can observe which thread
@@ -137,6 +139,7 @@ final class CleanupViewModel: ObservableObject {
         let startedAt = removalSerial
         isScanning = true
         categories = kinds.map { CleanupCategory(kind: $0) }
+        listRevision += 1
         await withTaskGroup(of: CleanupCategory.self) { group in
             for kind in kinds {
                 group.addTask { await self.coordinator.scanCategory(kind) }
@@ -179,6 +182,7 @@ final class CleanupViewModel: ObservableObject {
             }
         }
         categories[idx] = fresh
+        listRevision += 1
     }
 
     /// Re-scan just these categories (after a delete), so sizes are exact without a full rescan.
@@ -217,10 +221,26 @@ final class CleanupViewModel: ObservableObject {
         let urls = categories.flatMap(\.items).map(\.url)
         guard !urls.isEmpty else { return }
         let exists = existsOnDisk, deadline = pruneDeadline
-        let missing = await Task.detached(priority: .userInitiated) {
-            CleanupPath.missing(among: urls, exists: exists, deadline: deadline)
-        }.value
+        let revision = listRevision
+        var missing = await Self.detachedMissing(urls, exists: exists, deadline: deadline)
+        // The lists can be replaced by a rescan while the stats run. A file that was gone when it was
+        // checked may have been re-created since (the rescan then listed it): confirm before dropping a
+        // row on stale information. Only the (usually few) candidates are re-checked, off the main actor.
+        if !missing.isEmpty, revision != listRevision {
+            missing = await Self.detachedMissing(missing, exists: exists, deadline: deadline)
+        }
         if !missing.isEmpty { reconcile(removed: missing) }
+    }
+
+    /// `CleanupPath.missing` on a detached task that is cancelled with its caller. A bare
+    /// `Task.detached { }.value` does NOT inherit cancellation, so without the handler the
+    /// "stops when cancelled" bound in `CleanupPath.missing` could never trigger.
+    nonisolated private static func detachedMissing(_ urls: [URL], exists: @escaping @Sendable (URL) -> Bool,
+                                                    deadline: TimeInterval) async -> [URL] {
+        let task = Task.detached(priority: .userInitiated) {
+            CleanupPath.missing(among: urls, exists: exists, deadline: deadline)
+        }
+        return await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
     }
 
     // MARK: Cleaning
@@ -240,9 +260,7 @@ final class CleanupViewModel: ObservableObject {
         await pruneMissing()
         let exists = existsOnDisk
         let urls = snapshot.items.map(\.url)
-        let missing = Set(await Task.detached(priority: .userInitiated) {
-            CleanupPath.missing(among: urls, exists: exists, deadline: 30)
-        }.value.map(CleanupPath.key))
+        let missing = Set(await Self.detachedMissing(urls, exists: exists, deadline: 30).map(CleanupPath.key))
         let stillThere = snapshot.items.filter { !missing.contains(CleanupPath.key($0.url)) }
         await clean(items: stillThere, from: snapshot.kind)
     }

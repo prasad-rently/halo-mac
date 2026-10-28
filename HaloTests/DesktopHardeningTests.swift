@@ -56,6 +56,26 @@ struct CleanupHardeningTests {
         #expect(missing.count < urls.count)
     }
 
+    @Test("H-02 (review): cancelling the caller stops the detached existence sweep")
+    func pruneMissingHonoursCancellation() async throws {
+        let f = try Fixture()
+        for i in 0..<1500 { try f.file("f\(i).bin", bytes: 1) }
+        let root = f.root, trash = f.trash
+        let coordinator = ScanCoordinator(roots: { $0 == .userCaches ? [root.path] : [] },
+                                          trashDirectories: { [trash] }, trash: { _ in })
+        // 1500 checks x 2 ms = ~3 s if nothing stops the sweep.
+        let vm = CleanupViewModel(coordinator: coordinator, kinds: [.userCaches],
+                                  existsOnDisk: { _ in Thread.sleep(forTimeInterval: 0.002); return true },
+                                  pruneDeadline: 30)
+        await vm.scanAll()
+        let start = Date()
+        let task = Task { await vm.pruneMissing() }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        task.cancel()
+        await task.value
+        #expect(Date().timeIntervalSince(start) < 2.0, "the sweep kept running after its caller was cancelled")
+    }
+
     @Test("H-03: partial failure produces 'Moved 2, 1 failed: …' and the banner survives")
     func partialFailureBanner() async throws {
         let f = try Fixture()
@@ -193,6 +213,20 @@ struct CleanupPathKeyTests {
         let link = dir.appendingPathComponent("link")
         try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: target.path)
         #expect(CleanupPath.key(link) != CleanupPath.key(target))
+    }
+
+    @Test("A scan root / Trash that is itself a symlink still covers the items under it")
+    func symlinkedRootCoversItems() throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let real = dir.appendingPathComponent("real"); let link = dir.appendingPathComponent("link")
+        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: real.path)
+        let item = link.appendingPathComponent("a.bin"); try Data([1]).write(to: item)
+        // `key(link)` leaves the leaf alone (a link item is its own thing) — wrong for a root.
+        #expect(!CleanupPath.isCovered(CleanupPath.key(item), by: CleanupPath.key(link)))
+        #expect(CleanupPath.isCovered(CleanupPath.key(item), by: CleanupPath.directoryKey(link)))
+        let overlaps = CleanupPath.overlappingRoots([(.systemCaches, [link.path]), (.userCaches, [real.appendingPathComponent("x").path])])
+        #expect(overlaps.count == 1, "a root reached through a symlinked root overlaps it")
     }
 
     @Test("Case policy: keys are case-sensitive (documented in CleanupPath.key)")
@@ -514,6 +548,17 @@ struct AvatarBoundsTests {
         return (id, names)
     }
 
+    @Test("A Data slice (non-zero startIndex) is probed from its first byte, not trapped on")
+    func dataSliceIsProbedRelativeToItsStart() throws {
+        let store = AvatarStore(rootURL: Pixels.tempRoot(), detectFaces: false)
+        var png = Pixels.png(width: 16, height: 16)
+        for (i, byte) in [UInt8(0), 0, 0x4E, 0x20, 0, 0, 0x4E, 0x20].enumerated() { png[16 + i] = byte }   // 20 000 x 20 000
+        let padded = Data(repeating: 0xAA, count: 10) + png
+        let slice = padded.dropFirst(10)
+        #expect(slice.startIndex == 10)
+        #expect(throws: AvatarStore.AvatarError.tooManyPixels) { _ = try store.importPhoto(data: slice, rosterID: UUID()) }
+    }
+
     @Test("A 500-photo roster never holds more than 64 MB of decoded images")
     func cacheStaysUnderTheCap() throws {
         let root = Pixels.tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
@@ -733,6 +778,13 @@ struct LiveLineChangeTests {
             #expect(d.pending(in: [:], includeChanges: includeChanges).isEmpty)
             #expect(d.pending(in: model, includeChanges: includeChanges).count == 1, "includeChanges=\(includeChanges)")
         }
+    }
+
+    @Test("A child_added observer never re-delivers a changed child and keeps no fingerprints")
+    func addedModeIgnoresChanges() {
+        var d = FirebaseRTDBClient.ChildDelivery()
+        #expect(d.pending(in: ["m1": ["body": "a"]], includeChanges: false).map(\.key) == ["m1"])
+        #expect(d.pending(in: ["m1": ["body": "CHANGED"], "m2": ["body": "b"]], includeChanges: false).map(\.key) == ["m2"])
     }
 
     @Test("Phone fields the desktop does not know about (lineVersion, updatedAt) are ignored, not fatal")
