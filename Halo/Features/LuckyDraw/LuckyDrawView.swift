@@ -170,7 +170,9 @@ struct LuckyDrawView: View {
                                      spinStart: viewModel.spinStart,
                                      restAngle: viewModel.restAngle,
                                      highlightID: viewModel.showWinner ? viewModel.winner?.id : viewModel.interimWinner?.id,
-                                     reducedMotion: viewModel.reducedMotion)
+                                     reducedMotion: viewModel.reducedMotion,
+                                     rosterID: roster?.id,
+                                     avatarMode: roster?.avatarDisplay ?? .nameOnly)
                         .frame(width: side, height: side)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(
@@ -220,6 +222,9 @@ struct LuckyDrawView: View {
             if viewModel.showWinner, let winner = viewModel.winner {
                 DrawResultOverlay(
                     label: winner.label,
+                    avatar: winner.avatar,
+                    rosterID: roster?.id,
+                    showAvatar: (roster?.avatarDisplay ?? .nameOnly).showsAvatar(for: winner),
                     reducedMotion: viewModel.reducedMotion,
                     canPutBack: roster?.autoRetireWinner ?? true,
                     onSpinAgain: { viewModel.spinAgain(reduceMotion: reduceMotion) },
@@ -233,6 +238,8 @@ struct LuckyDrawView: View {
             if let winners = viewModel.sequenceSummary {
                 DrawSequenceOverlay(
                     winners: winners,
+                    rosterID: roster?.id,
+                    avatarMode: roster?.avatarDisplay ?? .nameOnly,
                     plannedCount: viewModel.sequenceSummaryPlanned,
                     reducedMotion: viewModel.reducedMotion,
                     onCopy: { viewModel.copyWinnersList() },

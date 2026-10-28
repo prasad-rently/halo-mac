@@ -167,6 +167,7 @@
 		000000000000000000009016 /* ExportReportIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009015 /* ExportReportIntent.swift */; };
 		000000000000000000009018 /* HaloShortcutsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000009017 /* HaloShortcutsProvider.swift */; };
 		00F245126B433EB57A6DBEDB /* CloudSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B94BA772014635FAA0E43E3 /* CloudSetupView.swift */; };
+		04C7627CF17A79C7D9BBBAFE /* AvatarPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC026F0B86B2061394DA57F7 /* AvatarPickerView.swift */; };
 		0694F5C8D69B4212BCBD5B07 /* TransactionParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B9818391AC23A293096CB28 /* TransactionParser.swift */; };
 		0CBA4BAFF23A6F3013A747F9 /* HaloTestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04C24FA6FA6BE8B3F119901F /* HaloTestFixtures.swift */; };
 		0D95339BD7D85794863633C8 /* HaloUITestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D05BDD3E3859F2D36BB0F6B /* HaloUITestCase.swift */; };
@@ -215,10 +216,12 @@
 		B077D7999DC07EC00A7DC597 /* RAGVectorStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5261AF493C8F832B7B7242B /* RAGVectorStore.swift */; };
 		B235974CEB652C09272B4499 /* FilesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB75AC7A8DBC58FFF8D8070B /* FilesUITests.swift */; };
 		B359A9774FABDB8C0EEE7C20 /* CloudRESTClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CF513D852033ACD07DD2CD0 /* CloudRESTClientTests.swift */; };
+		B6BD58778365CFD1769D218A /* AvatarModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A69904FBCA866103B88C16F7 /* AvatarModels.swift */; };
 		B6E3C305908B409F99263327 /* CloudFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88C159A5C1348117FA9F7CA8 /* CloudFoundationTests.swift */; };
 		B8A113E56E32C2E1E8AB07B8 /* ExpenditureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F450540DB55422C3FAAE03A /* ExpenditureView.swift */; };
 		BC6CC8DD60AB3F804E646D2B /* AIProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D2C02D89C828E5968F14081 /* AIProvider.swift */; };
 		BD357D07AA2AF45C095CEF86 /* DocumentParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E879866CBEB7335399FCD4D /* DocumentParser.swift */; };
+		C200A4C172AF5C57E60F7154 /* AvatarStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B518CF2DF8C12353A61AFF66 /* AvatarStore.swift */; };
 		C5FB28DC66873BB366B72244 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76EB7D00744BA3399A508E64 /* ConversationStore.swift */; };
 		C7FCC24A08F234940C32D22C /* CloudSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C4927677822093E95006BE /* CloudSettingsPane.swift */; };
 		CB68399B0AA4C27AB85AA8C2 /* FirebaseRTDBClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95CB5E046AFEAF8DF5C7502C /* FirebaseRTDBClient.swift */; };
@@ -228,6 +231,7 @@
 		D52607DADA626DF2FA479956 /* HelperClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00C37BFCA463AB410245B802 /* HelperClientTests.swift */; };
 		D6C27E0D2D06F494CFF23FBF /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3824F98C3251B8B75207CE9 /* Cocoa.framework */; };
 		D849AC493D18FC2554225120 /* ExpenditureViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99F06F1B0C745181E045DD29 /* ExpenditureViewModel.swift */; };
+		D8763AFD932179594C760770 /* AvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3AE1EE8C07067A1E19BDF85 /* AvatarView.swift */; };
 		DA81E23B26EDEEB31AA3CBE8 /* PerformanceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB8CF496ED5F2B47F5909F7 /* PerformanceUITests.swift */; };
 		DAD955EB87553E3597A06791 /* CloudConfigStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA43D8737B3D8C7250909178 /* CloudConfigStore.swift */; };
 		DAE8C8E0B8E4571846256A4C /* TransactionPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC277F045F73084A793F8C0D /* TransactionPipeline.swift */; };
@@ -508,11 +512,14 @@
 		95CB5E046AFEAF8DF5C7502C /* FirebaseRTDBClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FirebaseRTDBClient.swift; sourceTree = "<group>"; };
 		99F06F1B0C745181E045DD29 /* ExpenditureViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExpenditureViewModel.swift; sourceTree = "<group>"; };
 		9F450540DB55422C3FAAE03A /* ExpenditureView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExpenditureView.swift; sourceTree = "<group>"; };
+		A69904FBCA866103B88C16F7 /* AvatarModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AvatarModels.swift; sourceTree = "<group>"; };
 		B4A92E8D0819BCF034A05DF2 /* AIKeyStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIKeyStore.swift; sourceTree = "<group>"; };
+		B518CF2DF8C12353A61AFF66 /* AvatarStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AvatarStore.swift; sourceTree = "<group>"; };
 		B538907434F4863E07BD21FE /* AppGroupContractTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppGroupContractTests.swift; sourceTree = "<group>"; };
 		BDC5CF096A98BF13A23F809C /* HaloSidebar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HaloSidebar.swift; sourceTree = "<group>"; };
 		C410A9DA24CA458075531BA7 /* AIAssistantView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIAssistantView.swift; sourceTree = "<group>"; };
 		C5261AF493C8F832B7B7242B /* RAGVectorStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RAGVectorStore.swift; sourceTree = "<group>"; };
+		CC026F0B86B2061394DA57F7 /* AvatarPickerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AvatarPickerView.swift; sourceTree = "<group>"; };
 		CC277F045F73084A793F8C0D /* TransactionPipeline.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TransactionPipeline.swift; sourceTree = "<group>"; };
 		CCB7849370C86E175D74B077 /* ToolRegistry.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ToolRegistry.swift; sourceTree = "<group>"; };
 		CFB8CF496ED5F2B47F5909F7 /* PerformanceUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PerformanceUITests.swift; sourceTree = "<group>"; };
@@ -522,6 +529,7 @@
 		DB75AC7A8DBC58FFF8D8070B /* FilesUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FilesUITests.swift; sourceTree = "<group>"; };
 		DF513D5DDD7399B797BE21F2 /* AnthropicProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AnthropicProvider.swift; sourceTree = "<group>"; };
 		E1F44C9D0695A26A2333D149 /* ActionsUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ActionsUITests.swift; sourceTree = "<group>"; };
+		E3AE1EE8C07067A1E19BDF85 /* AvatarView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AvatarView.swift; sourceTree = "<group>"; };
 		E654E24D942547F5E7C88B57 /* CloudModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudModels.swift; sourceTree = "<group>"; };
 		EBEDE3049FF72B28000BC2DE /* SMSModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSModels.swift; sourceTree = "<group>"; };
 		ECFF6EE3F66B556B438004F0 /* SMSConsoleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMSConsoleView.swift; sourceTree = "<group>"; };
@@ -789,6 +797,16 @@
 			path = Scanner;
 			sourceTree = "<group>";
 		};
+		0FA4CC07550B1604C197D475 /* LuckyDraw */ = {
+			isa = PBXGroup;
+			children = (
+				A69904FBCA866103B88C16F7 /* AvatarModels.swift */,
+				B518CF2DF8C12353A61AFF66 /* AvatarStore.swift */,
+			);
+			name = LuckyDraw;
+			path = LuckyDraw;
+			sourceTree = "<group>";
+		};
 		3FC68D77CD5D51D58443674D /* HaloUITests */ = {
 			isa = PBXGroup;
 			children = (
@@ -836,6 +854,16 @@
 			path = HaloTests;
 			sourceTree = "<group>";
 		};
+		7C78E37365953E9A9759F860 /* LuckyDraw */ = {
+			isa = PBXGroup;
+			children = (
+				E3AE1EE8C07067A1E19BDF85 /* AvatarView.swift */,
+				CC026F0B86B2061394DA57F7 /* AvatarPickerView.swift */,
+			);
+			name = LuckyDraw;
+			path = LuckyDraw;
+			sourceTree = "<group>";
+		};
 		831E06F76773A70833D4AD12 /* Features */ = {
 			isa = PBXGroup;
 			children = (
@@ -844,6 +872,7 @@
 				E68AB33C0860C47E173F7F54 /* ClipboardSync */,
 				E4F59F2553C7EAAA56658F1F /* Expenditure */,
 				85285B7C1F866DE686A0DA8D /* SMSConsole */,
+				7C78E37365953E9A9759F860 /* LuckyDraw */,
 			);
 			name = Features;
 			path = Features;
@@ -869,6 +898,7 @@
 				0E2AB6F5D2E1B5E920E3EF8E /* Scanner */,
 				9C0A26C13D10D5D6D7C7B577 /* Cloud */,
 				F94FE09387A79F641A7615BE /* RAG */,
+				0FA4CC07550B1604C197D475 /* LuckyDraw */,
 			);
 			name = Core;
 			path = Core;
@@ -1373,6 +1403,10 @@
 				CD482393B681AFF599DB1BBB /* RAGService.swift in Sources */,
 				B077D7999DC07EC00A7DC597 /* RAGVectorStore.swift in Sources */,
 				7A1FB97CB2F8F78F2BDCBEAA /* RAGContextView.swift in Sources */,
+				B6BD58778365CFD1769D218A /* AvatarModels.swift in Sources */,
+				C200A4C172AF5C57E60F7154 /* AvatarStore.swift in Sources */,
+				D8763AFD932179594C760770 /* AvatarView.swift in Sources */,
+				04C7627CF17A79C7D9BBBAFE /* AvatarPickerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

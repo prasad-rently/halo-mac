@@ -19,14 +19,29 @@ struct DrawEntry: Identifiable, Codable, Hashable {
     var isExcluded: Bool
     var isRetired: Bool
     let addedAt: Date
+    /// F-053. `nil` = none chosen, rendered as a derived monogram. **Never read by the draw.**
+    var avatar: EntryAvatar?
 
     init(id: UUID = UUID(), label: String, isExcluded: Bool = false,
-         isRetired: Bool = false, addedAt: Date = Date()) {
+         isRetired: Bool = false, addedAt: Date = Date(), avatar: EntryAvatar? = nil) {
         self.id = id
         self.label = label
         self.isExcluded = isExcluded
         self.isRetired = isRetired
         self.addedAt = addedAt
+        self.avatar = avatar
+    }
+
+    /// Tolerant of a missing, unknown or invalid `avatar`: those become "no avatar". A thrown
+    /// error here would send the whole roster file to the corrupt backup (see `DrawRoster`).
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        label = try c.decode(String.self, forKey: .label)
+        isExcluded = try c.decodeIfPresent(Bool.self, forKey: .isExcluded) ?? false
+        isRetired = try c.decodeIfPresent(Bool.self, forKey: .isRetired) ?? false
+        addedAt = try c.decodeIfPresent(Date.self, forKey: .addedAt) ?? Date()
+        avatar = (try? c.decodeIfPresent(EntryAvatar.self, forKey: .avatar)) ?? nil
     }
 
     /// Eligible to be drawn — and, equivalently, to appear on the wheel.
@@ -96,6 +111,9 @@ struct DrawRoster: Identifiable, Codable {
     /// D9 — off by default, and per roster. Halo had never made a sound before this
     /// feature, so audio is opt-in rather than something a user discovers by surprise.
     var soundEnabled: Bool
+    /// F-053 — how the wheel shows entries. Defaults to `.auto`, which changes nothing until an
+    /// avatar is chosen.
+    var avatarDisplay: AvatarDisplayMode
     var modifiedAt: Date
 
     static let entryCap = 500
@@ -104,6 +122,7 @@ struct DrawRoster: Identifiable, Codable {
     init(id: UUID = UUID(), name: String, entries: [DrawEntry] = [],
          history: [DrawResult] = [], autoRetireWinner: Bool = true,
          spinDuration: SpinDuration = .standard, soundEnabled: Bool = false,
+         avatarDisplay: AvatarDisplayMode = .auto,
          modifiedAt: Date = Date()) {
         self.id = id
         self.name = name
@@ -112,6 +131,7 @@ struct DrawRoster: Identifiable, Codable {
         self.autoRetireWinner = autoRetireWinner
         self.spinDuration = spinDuration
         self.soundEnabled = soundEnabled
+        self.avatarDisplay = avatarDisplay
         self.modifiedAt = modifiedAt
     }
 
@@ -259,6 +279,7 @@ extension DrawRoster {
         autoRetireWinner = try c.decodeIfPresent(Bool.self, forKey: .autoRetireWinner) ?? true
         spinDuration = try c.decodeIfPresent(SpinDuration.self, forKey: .spinDuration) ?? .standard
         soundEnabled = try c.decodeIfPresent(Bool.self, forKey: .soundEnabled) ?? false
+        avatarDisplay = (try? c.decodeIfPresent(AvatarDisplayMode.self, forKey: .avatarDisplay)) ?? .auto
         modifiedAt = try c.decodeIfPresent(Date.self, forKey: .modifiedAt) ?? Date()
     }
 
@@ -266,11 +287,15 @@ extension DrawRoster {
     /// nobody retired — a copy is a new round, not a clone of the old one's history.
     func duplicated(named newName: String) -> DrawRoster {
         DrawRoster(name: newName,
-                   entries: entries.map { DrawEntry(label: $0.label, isExcluded: $0.isExcluded) },
+                   // Photos stay behind: a copy's photo files belong to the *new* roster's folder, so
+                   // `LuckyDrawStore.duplicateSelected` copies and re-points those; other kinds carry over.
+                   entries: entries.map { DrawEntry(label: $0.label, isExcluded: $0.isExcluded,
+                                                    avatar: $0.avatar?.isPhoto == true ? nil : $0.avatar) },
                    history: [],
                    autoRetireWinner: autoRetireWinner,
                    spinDuration: spinDuration,
-                   soundEnabled: soundEnabled)
+                   soundEnabled: soundEnabled,
+                   avatarDisplay: avatarDisplay)
     }
 }
 

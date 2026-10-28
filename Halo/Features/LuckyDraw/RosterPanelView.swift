@@ -21,10 +21,13 @@ struct RosterPanelView: View {
     @State private var editingText = ""
     @State private var confirmReset = false
     @State private var confirmClear = false
+    @State private var confirmClearPhotos = false
     @State private var limitNotice: String?
     @State private var selectedEntryID: UUID?
     @State private var pendingImport: RosterImport.Plan?
     @State private var dropTargeted = false
+    @State private var pickerEntryID: UUID?
+    @State private var pendingPhotoMatch: AvatarFolderMatcher.Result?
 
     private var roster: DrawRoster? { store.selected }
 
@@ -134,9 +137,21 @@ struct RosterPanelView: View {
             .clipShape(Capsule())
         } else {
             HStack(spacing: 6) {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(colour(for: entry))
-                    .frame(width: 8, height: 8)
+                // F-053: the avatar replaces the colour swatch, and keeps its job — the ring is the
+                // same colour as the entry's wheel segment, so list and wheel still read as one object.
+                Button { pickerEntryID = entry.id } label: {
+                    AvatarView(avatar: entry.avatar, label: entry.label, rosterID: roster?.id,
+                               diameter: 22, ringColor: colour(for: entry), dimmed: !entry.isEligible)
+                }
+                .buttonStyle(.plain)
+                .help("Choose an avatar")
+                // The avatar itself is hidden from VoiceOver (decorative), so without this the button
+                // that opens the picker has no name at all.
+                .accessibilityLabel("Choose avatar for \(entry.label)")
+                .popover(isPresented: Binding(get: { pickerEntryID == entry.id },
+                                              set: { if !$0 { pickerEntryID = nil } })) {
+                    AvatarPickerView(store: store, entry: entry, rosterID: roster?.id) { pickerEntryID = nil }
+                }
                 Text(entry.label)
                     .font(.system(size: 12))
                     .foregroundColor(entry.isEligible ? .haloText : .haloText3)
@@ -257,6 +272,15 @@ struct RosterPanelView: View {
                 .font(.system(size: 11))
                 .foregroundColor(row.wasReturned ? .haloAmber : .haloGreen)
 
+            if let roster, roster.avatarDisplay != .nameOnly {
+                // The entry may have been deleted since — the row keeps its label, so it falls back to a monogram.
+                let entry = roster.entries.first { $0.id == row.entryID }
+                if entry.map({ roster.avatarDisplay.showsAvatar(for: $0) }) ?? (roster.avatarDisplay != .auto) {
+                    AvatarView(avatar: entry?.avatar, label: row.label, rosterID: roster.id, diameter: 24,
+                               ringColor: .haloAmber, dimmed: row.wasReturned)
+                }
+            }
+
             VStack(alignment: .leading, spacing: 1) {
                 Text(row.label)
                     .font(.system(size: 12, weight: .medium))
@@ -321,6 +345,53 @@ struct RosterPanelView: View {
             .tint(.haloAccent)
 
             VStack(alignment: .leading, spacing: 6) {
+                Text("AVATARS ON THE WHEEL")
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .tracking(1.4)
+                    .foregroundColor(.haloText3)
+                Picker("", selection: Binding(
+                    get: { roster?.avatarDisplay ?? .auto },
+                    set: { store.setAvatarDisplay($0) }
+                )) {
+                    ForEach(AvatarDisplayMode.allCases) { m in Text(m.title).tag(m) }
+                }
+                .labelsHidden()
+                Text("Automatic shows an avatar only where you've chosen one. Above \(SpinnerWheelView.avatarLimit) entries the wheel stays plain; the winner card still shows the avatar.")
+                    .font(.system(size: 10)).foregroundColor(.haloText3)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 14) {
+                    Button("Import photos from a folder…") { chooseFolderForPhotos() }
+                    Button("Clear all photos") { confirmClearPhotos = true }
+                        .foregroundColor(.haloText3)
+                }
+                .buttonStyle(.plain).font(.system(size: 11)).foregroundColor(.haloAccent)
+                .confirmationDialog("Delete every stored photo?",
+                                    isPresented: $confirmClearPhotos, titleVisibility: .visible) {
+                    Button("Delete all photos", role: .destructive) {
+                        // Every roster's photos, not just this one's — drop every cached decode too.
+                        store.clearAllPhotos()
+                        for r in store.rosters { AvatarImageCache.shared.forget(rosterID: r.id) }
+                    }
+                    Button("Cancel", role: .cancel) { }
+                } message: {
+                    Text("This removes the photo avatars of every roster on this Mac, not just this one. Those entries go back to initials. It cannot be undone.")
+                }
+                Text("Photos stay on this Mac, as small copies, and are deleted with the roster.")
+                    .font(.system(size: 10)).foregroundColor(.haloText3)
+            }
+            .confirmationDialog(photoMatchTitle(pendingPhotoMatch),
+                                isPresented: Binding(get: { pendingPhotoMatch != nil },
+                                                     set: { if !$0 { pendingPhotoMatch = nil } }),
+                                titleVisibility: .visible, presenting: pendingPhotoMatch) { match in
+                if !match.matches.isEmpty {
+                    Button("Add \(match.matches.count) photo\(match.matches.count == 1 ? "" : "s")") { applyPhotoMatch(match) }
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: { match in
+                Text(photoMatchMessage(match))
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
                 Text("SPIN DURATION")
                     .font(.system(size: 9.5, weight: .semibold))
                     .tracking(1.4)
@@ -357,6 +428,43 @@ struct RosterPanelView: View {
         let raw = newEntry
         newEntry = ""
         beginImport(RosterImport.labels(fromPasted: raw))
+    }
+
+    // MARK: - Photo import from a folder (F-053 FR-B1)
+
+    private func chooseFolderForPhotos() {
+        guard let roster else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a folder of pictures named after the entries (for example “Anna Maria.jpg”)"
+        guard panel.runModal() == .OK, let dir = panel.url else { return }
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? []
+        pendingPhotoMatch = AvatarFolderMatcher.match(files: files, entries: roster.entries)
+    }
+
+    private func photoMatchTitle(_ m: AvatarFolderMatcher.Result?) -> String {
+        guard let m else { return "Photos" }
+        return m.matches.isEmpty ? "No photos matched" : "Matched \(m.matches.count) photo\(m.matches.count == 1 ? "" : "s")"
+    }
+
+    private func photoMatchMessage(_ m: AvatarFolderMatcher.Result) -> String {
+        var parts = ["\(m.unmatchedFiles.count) picture\(m.unmatchedFiles.count == 1 ? "" : "s") didn't match a name.",
+                     "\(m.entriesWithoutPhoto.count) entr\(m.entriesWithoutPhoto.count == 1 ? "y" : "ies") still without a photo."]
+        if !m.ambiguousLabels.isEmpty {
+            parts.append("Shared names were skipped: \(m.ambiguousLabels.prefix(4).joined(separator: ", ")).")
+        }
+        return parts.joined(separator: " ")
+    }
+
+    private func applyPhotoMatch(_ match: AvatarFolderMatcher.Result) {
+        Task {
+            let r = await store.applyPhotoMatches(match.matches)
+            limitNotice = r.failed == 0 ? "Added \(r.applied) photo\(r.applied == 1 ? "" : "s")."
+                                        : "Added \(r.applied); \(r.failed) couldn't be used."
+        }
     }
 
     // MARK: - Import (FR-2, FR-3, FR-4)

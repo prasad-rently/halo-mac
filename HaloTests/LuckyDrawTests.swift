@@ -807,6 +807,99 @@ struct LuckyDrawRenderingTests {
                                size: CGSize(width: 312, height: 760), name: "roster-panel")
         #expect(isNotBlank(image))
     }
+
+    // MARK: F-053 — avatars (rendered for a human to look at; assertions only prove it draws)
+
+    /// A photo-backed roster: real files through the real store and cache.
+    private func avatarFixture() throws -> (roster: UUID, entries: [DrawEntry], root: URL) {
+        let root = AvatarFixtures.tempRoot()
+        let store = AvatarStore(rootURL: root, detectFaces: false)
+        let roster = UUID()
+        let colours: [(UInt8, UInt8, UInt8)] = [(210, 80, 70), (60, 160, 200), (90, 190, 110)]
+        var entries: [DrawEntry] = []
+        let names = ["Priya", "Marcus", "Yuki", "Amara", "Tomás", "Nadia"]
+        for (i, n) in names.enumerated() {
+            switch i % 3 {
+            case 0:  entries.append(DrawEntry(label: n, avatar: .photo(fileName:
+                        try store.importPhoto(data: AvatarFixtures.png(width: 500, height: 500, color: colours[i % 3]), rosterID: roster))))
+            case 1:  entries.append(DrawEntry(label: n, avatar: .emoji(["🦊", "🚀", "🌈"][i % 3])))
+            default: entries.append(DrawEntry(label: n))                         // monogram
+            }
+        }
+        AvatarImageCache.shared.store = store
+        // Warm the cache so the render has the decoded photos: the first draw only starts the load.
+        for e in entries { if case .photo(let f)? = e.avatar { _ = AvatarImageCache.shared.photo(fileName: f, rosterID: roster, points: 56) } }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+        return (roster, entries, root)
+    }
+
+    @Test("The wheel draws avatars — photo, emoji and monogram — in each display mode")
+    func wheelWithAvatars() throws {
+        let fx = try avatarFixture(); defer { try? FileManager.default.removeItem(at: fx.root); AvatarImageCache.shared.store = nil }
+        for mode in AvatarDisplayMode.allCases {
+            let image = try render(SpinnerWheelView(entries: fx.entries, plan: nil, spinStart: nil, restAngle: 0,
+                                                    highlightID: fx.entries[1].id, reducedMotion: true,
+                                                    rosterID: fx.roster, avatarMode: mode),
+                                   size: CGSize(width: 480, height: 480), name: "wheel-avatars-\(mode.rawValue)")
+            #expect(isNotBlank(image))
+        }
+    }
+
+    @Test("A wheel with an avatar-less roster is unchanged by Automatic mode")
+    func autoModeLeavesAPlainRosterAlone() throws {
+        let entries = ["Priya", "Marcus", "Yuki", "Amara"].map { DrawEntry(label: $0) }
+        func pixels(_ mode: AvatarDisplayMode) throws -> Data {
+            let img = try render(SpinnerWheelView(entries: entries, plan: nil, spinStart: nil, restAngle: 0,
+                                                  highlightID: nil, reducedMotion: true, rosterID: UUID(), avatarMode: mode),
+                                 size: CGSize(width: 420, height: 420), name: "wheel-plain-\(mode.rawValue)")
+            return img.dataProvider?.data as Data? ?? Data()
+        }
+        #expect(try pixels(.auto) == pixels(.nameOnly), "Automatic must not change a wheel nobody has given an avatar to")
+    }
+
+    @Test("A busy wheel past the avatar limit stays plain")
+    func manyEntriesStayPlain() throws {
+        let many = (0..<(SpinnerWheelView.avatarLimit + 10)).map { DrawEntry(label: "E\($0)", avatar: .emoji("🦊")) }
+        func pixels(_ mode: AvatarDisplayMode) throws -> Data {
+            let img = try render(SpinnerWheelView(entries: many, plan: nil, spinStart: nil, restAngle: 0,
+                                                  highlightID: nil, reducedMotion: true, rosterID: UUID(), avatarMode: mode),
+                                 size: CGSize(width: 420, height: 420), name: "wheel-many-\(mode.rawValue)")
+            return img.dataProvider?.data as Data? ?? Data()
+        }
+        #expect(try pixels(.avatarOnly) == pixels(.nameOnly))
+    }
+
+    @Test("The winner popup shows a large avatar — emoji, photo and monogram")
+    func winnerPopupWithAvatar() throws {
+        let fx = try avatarFixture(); defer { try? FileManager.default.removeItem(at: fx.root); AvatarImageCache.shared.store = nil }
+        for (i, e) in [fx.entries[0], fx.entries[1], fx.entries[2]].enumerated() {
+            let image = try render(DrawResultOverlay(label: e.label, avatar: e.avatar, rosterID: fx.roster, showAvatar: true,
+                                                     reducedMotion: true, canPutBack: true,
+                                                     onSpinAgain: {}, onPutBack: {}, onCopy: {}, onClose: {}),
+                                   size: CGSize(width: 520, height: 420), name: "winner-popup-avatar-\(i)")
+            #expect(isNotBlank(image))
+        }
+    }
+
+    @Test("The winners strip shows an avatar beside each name")
+    func sequenceWithAvatars() throws {
+        let fx = try avatarFixture(); defer { try? FileManager.default.removeItem(at: fx.root); AvatarImageCache.shared.store = nil }
+        let image = try render(DrawSequenceOverlay(winners: Array(fx.entries.prefix(5)), rosterID: fx.roster,
+                                                   avatarMode: .avatarAndName, plannedCount: 5, reducedMotion: true,
+                                                   onCopy: {}, onClose: {}),
+                               size: CGSize(width: 520, height: 420), name: "sequence-avatars")
+        #expect(isNotBlank(image))
+    }
+
+    @Test("The avatar picker renders")
+    func picker() throws {
+        let store = LuckyDrawStore(fileURL: AvatarFixtures.tempRoot().appendingPathComponent("luckyDraw.json"),
+                                   notificationCenter: NotificationCenter())
+        let image = try render(AvatarPickerView(store: store, entry: store.selected!.entries[0],
+                                                rosterID: store.selected!.id, dismiss: {}),
+                               size: CGSize(width: 330, height: 360), name: "avatar-picker")
+        #expect(isNotBlank(image))
+    }
 }
 
 
@@ -866,5 +959,635 @@ struct LuckyDrawDurabilityTests {
             let cell = line.split(separator: ",", maxSplits: 2)[1]
             #expect(!"=+-@".contains(cell.dropFirst().first ?? " "), "unguarded cell: \(cell)")
         }
+    }
+}
+
+// MARK: - F-053 Lucky Draw avatars
+
+/// Test helper: a real, small picture on disk and in memory.
+private enum AvatarFixtures {
+    static func png(width: Int, height: Int, color: (UInt8, UInt8, UInt8) = (200, 60, 60)) -> Data {
+        let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpaceCreateDeviceRGB(),
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(red: CGFloat(color.0) / 255, green: CGFloat(color.1) / 255, blue: CGFloat(color.2) / 255, alpha: 1)
+        ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        // A lighter block so a crop that lands in the wrong place is visible in a render.
+        ctx.setFillColor(red: 1, green: 1, blue: 1, alpha: 1)
+        ctx.fill(CGRect(x: width / 3, y: height / 3, width: width / 3, height: height / 3))
+        let image = ctx.makeImage()!
+        let data = NSMutableData()
+        let dest = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil)!
+        CGImageDestinationAddImage(dest, image, nil)
+        CGImageDestinationFinalize(dest)
+        return data as Data
+    }
+
+    static func tempRoot() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("halo-avatars-\(UUID().uuidString)", isDirectory: true)
+    }
+}
+
+@Suite("Avatar model")
+struct AvatarModelTests {
+
+    private func roundTrip(_ a: EntryAvatar) throws -> EntryAvatar {
+        let data = try JSONEncoder().encode(DrawEntry(label: "X", avatar: a))
+        return try #require(try JSONDecoder().decode(DrawEntry.self, from: data).avatar)
+    }
+
+    @Test("Every avatar kind survives a save and load")
+    func codableRoundTrip() throws {
+        let photo = "\(UUID().uuidString).jpg"
+        for a in [EntryAvatar.emoji("🦊"), .emoji("🧑‍🚀"), .animated(pack: "fun", item: "wave-1"),
+                  .character(pack: "people", item: "c_07"), .photo(fileName: photo)] {
+            #expect(try roundTrip(a) == a)
+        }
+    }
+
+    @Test("A roster file written before avatars existed still loads, with no avatar and the Automatic mode")
+    func oldRosterFileDecodes() throws {
+        let id = UUID(), entry = UUID()
+        let json = """
+        [{"id":"\(id)","name":"Old","entries":[{"id":"\(entry)","label":"Priya","isExcluded":false,"isRetired":false,"addedAt":0}],
+          "history":[],"autoRetireWinner":true,"spinDuration":"standard","soundEnabled":false,"modifiedAt":0}]
+        """
+        let rosters = try JSONDecoder().decode([DrawRoster].self, from: Data(json.utf8))
+        #expect(rosters.count == 1)
+        #expect(rosters[0].entries[0].avatar == nil)
+        #expect(rosters[0].avatarDisplay == .auto)
+    }
+
+    @Test("An unknown avatar kind, or an invalid payload, becomes 'no avatar' — it never fails the roster")
+    func hostileOrFutureAvatarIsTolerated() throws {
+        let id = UUID()
+        func entry(_ avatar: String) -> String {
+            "{\"id\":\"\(id)\",\"label\":\"A\",\"isExcluded\":false,\"isRetired\":false,\"addedAt\":0,\"avatar\":\(avatar)}"
+        }
+        for bad in ["{\"kind\":\"hologram\",\"value\":\"x\"}",                          // a future kind
+                    "{\"kind\":\"emoji\",\"value\":\"not an emoji\"}",
+                    "{\"kind\":\"emoji\",\"value\":\"🙂🙂\"}",
+                    "{\"kind\":\"photo\",\"file\":\"../../etc/passwd\"}",
+                    "{\"kind\":\"photo\",\"file\":\"/etc/passwd\"}",
+                    "{\"kind\":\"photo\",\"file\":\"photo.jpg\"}",
+                    "{\"kind\":\"animated\",\"pack\":\"../x\",\"item\":\"y\"}",
+                    "{\"kind\":\"photo\"}", "\"just a string\"", "42"] {
+            let decoded = try JSONDecoder().decode(DrawEntry.self, from: Data(entry(bad).utf8))
+            #expect(decoded.avatar == nil, "accepted a bad avatar: \(bad)")
+            #expect(decoded.label == "A")
+        }
+    }
+
+    @Test("Photo file names must be a generated UUID.jpg; identifiers can't carry a path")
+    func nameValidation() {
+        #expect(AvatarFileName.isValid("\(UUID().uuidString).jpg"))
+        for bad in ["", "a.jpg", "../\(UUID().uuidString).jpg", "\(UUID().uuidString).png", "\(UUID().uuidString)",
+                    "/\(UUID().uuidString).jpg", "\(UUID().uuidString).jpg/"] {
+            #expect(!AvatarFileName.isValid(bad), "accepted \(bad)")
+        }
+        #expect(AvatarIdentifier.isValid("wave-1_a.b"))
+        for bad in ["", ".hidden", "..", "a/b", "a b", "é", String(repeating: "a", count: 65)] {
+            #expect(!AvatarIdentifier.isValid(bad), "accepted \(bad)")
+        }
+    }
+
+    @Test("Emoji validation accepts one emoji — ZWJ, flag, keycap, skin tone — and nothing else")
+    func emojiValidation() {
+        for ok in ["🙂", "🧑‍🚀", "👩‍👩‍👧", "🇮🇳", "1️⃣", "👍🏽", "❤️", "🦊"] { #expect(EmojiValidation.isSingleEmoji(ok), "rejected \(ok)") }
+        for bad in ["", "a", "1", "ab", "🙂🙂", "🙂 ", "©", "#", "é"] { #expect(!EmojiValidation.isSingleEmoji(bad), "accepted \(bad)") }
+    }
+
+    @Test("Every quick-pick emoji passes the validator, so no button silently does nothing")
+    func shortlistIsValid() {
+        for e in AvatarEmojiCatalog.common { #expect(EmojiValidation.isSingleEmoji(e), "\(e) is rejected") }
+        #expect(Set(AvatarEmojiCatalog.common).count == AvatarEmojiCatalog.common.count, "duplicate in the shortlist")
+    }
+
+    @Test("Monogram: grapheme-aware initials")
+    func monograms() {
+        #expect(Monogram.initials(for: "Priya") == "P")
+        #expect(Monogram.initials(for: "anna maria") == "AM")
+        #expect(Monogram.initials(for: "Åsa Lindqvist") == "ÅL")
+        #expect(Monogram.initials(for: "Jean Luc Picard") == "JL")           // two words at most
+        #expect(Monogram.initials(for: "  spaced   out  ") == "SO")
+        #expect(Monogram.initials(for: "田中太郎") == "田")                      // no spaces: first character
+        #expect(Monogram.initials(for: "🦊 Fox") == "🦊F")                     // the emoji stays whole
+        #expect(Monogram.initials(for: "👩‍🚀 Sam") == "👩‍🚀S")
+        #expect(Monogram.initials(for: "") == "?")
+        #expect(Monogram.initials(for: "   ") == "?")
+    }
+
+    @Test("Folder matching ignores case, accents, spacing and extension; leaves ambiguity alone")
+    func folderMatching() {
+        let anna = DrawEntry(label: "Anna Maria"), asa = DrawEntry(label: "Åsa")
+        let alex1 = DrawEntry(label: "Alex"), alex2 = DrawEntry(label: "alex"), solo = DrawEntry(label: "Solo")
+        let entries = [anna, asa, alex1, alex2, solo]
+        func f(_ n: String) -> URL { URL(fileURLWithPath: "/photos/\(n)") }
+        let r = AvatarFolderMatcher.match(
+            files: [f("anna_maria.JPG"), f("ASA.png"), f("Alex.jpg"), f("nobody.jpg"), f("notes.txt"), f("Solo.heic"), f("solo.png")],
+            entries: entries)
+        #expect(Set(r.matches.map(\.entryID)) == [anna.id, asa.id, solo.id])
+        #expect(r.unmatchedFiles.map(\.lastPathComponent).sorted() == ["Alex.jpg", "nobody.jpg", "solo.png"],
+                "ambiguous 'Alex', the stranger, and a second picture for the same entry stay unmatched; notes.txt isn't an image")
+        #expect(r.ambiguousLabels == ["Alex"])
+        #expect(Set(r.entriesWithoutPhoto) == [alex1.id, alex2.id])
+    }
+
+    @Test("Crop: centred without a face, on the face with one, never outside the picture")
+    func cropGeometry() {
+        let plain = AvatarCrop.squareRect(imageWidth: 400, imageHeight: 300, face: nil)
+        #expect(plain == CGRect(x: 50, y: 0, width: 300, height: 300))
+        let face = CGRect(x: 20, y: 30, width: 40, height: 50)                 // near the top-left corner
+        let r = AvatarCrop.squareRect(imageWidth: 400, imageHeight: 300, face: face)
+        #expect(r.minX >= 0 && r.minY >= 0 && r.maxX <= 400 && r.maxY <= 300)
+        #expect(r.width == r.height && abs(r.width - 110) < 0.001)             // 2.2 × the larger face edge
+        #expect(r.contains(face), "the face must be inside its own crop")
+        let big = AvatarCrop.squareRect(imageWidth: 100, imageHeight: 100, face: CGRect(x: 10, y: 10, width: 90, height: 90))
+        #expect(big.width == 100, "capped at the picture's shorter side")
+    }
+}
+
+@Suite("Avatar store")
+struct AvatarStoreTests {
+
+    @Test("A photo is copied in, square, downsampled to 256 px, as a JPEG named by a UUID")
+    func importDownsamples() throws {
+        let root = AvatarFixtures.tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let store = AvatarStore(rootURL: root, detectFaces: false)
+        let roster = UUID()
+        let source = root.appendingPathComponent("source.png")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try AvatarFixtures.png(width: 1600, height: 900).write(to: source)
+
+        let name = try store.importPhoto(from: source, rosterID: roster)
+        #expect(AvatarFileName.isValid(name))
+        let stored = try #require(store.url(for: name, rosterID: roster))
+        let image = try #require(store.loadImage(fileName: name, rosterID: roster, maxPixel: 1024))
+        #expect(image.width == 256 && image.height == 256)
+        #expect(FileManager.default.fileExists(atPath: stored.path))
+        #expect(try Data(contentsOf: stored).count < 60_000, "a 256-px JPEG is well under 60 KB")
+        #expect(FileManager.default.fileExists(atPath: source.path), "the original is never touched")
+    }
+
+    @Test("Face detection never blocks an import: a picture with no face still imports, within the timeout")
+    func faceDetectionDoesNotBlock() throws {
+        let root = AvatarFixtures.tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let store = AvatarStore(rootURL: root, detectFaces: true, faceTimeout: 3)
+        let started = Date()
+        let name = try store.importPhoto(data: AvatarFixtures.png(width: 600, height: 400), rosterID: UUID())
+        #expect(AvatarFileName.isValid(name))
+        #expect(Date().timeIntervalSince(started) < 8, "the import waited on Vision far longer than the timeout")
+    }
+
+    @Test("A picture past the pixel limit is refused from its header, before any decode")
+    func tooManyPixels() throws {
+        // The production limit is 100 MP; lowering it here lets a small real file stand in for a bomb.
+        let root = AvatarFixtures.tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let store = AvatarStore(rootURL: root, pixelLimit: 10_000, detectFaces: false)
+        #expect(throws: AvatarStore.AvatarError.tooManyPixels) {
+            _ = try store.importPhoto(data: AvatarFixtures.png(width: 200, height: 200), rosterID: UUID())   // 40 000 px
+        }
+        #expect(!FileManager.default.fileExists(atPath: root.path), "nothing is written for a refused picture")
+        #expect(AvatarStore.maxPixels == 100_000_000 && AvatarStore.maxFileBytes == 50_000_000)
+        _ = try store.importPhoto(data: AvatarFixtures.png(width: 90, height: 90), rosterID: UUID())        // 8 100 px — fine
+    }
+
+    @Test("Something that isn't a picture is refused")
+    func notAnImage() throws {
+        let store = AvatarStore(rootURL: AvatarFixtures.tempRoot(), detectFaces: false)
+        #expect(throws: AvatarStore.AvatarError.notAnImage) {
+            _ = try store.importPhoto(data: Data("hello, I am text".utf8), rosterID: UUID())
+        }
+    }
+
+    @Test("A stored name can never resolve outside the roster's folder")
+    func pathContainment() {
+        let store = AvatarStore(rootURL: AvatarFixtures.tempRoot(), detectFaces: false)
+        let roster = UUID()
+        #expect(store.url(for: "\(UUID().uuidString).jpg", rosterID: roster) != nil)
+        for bad in ["../../etc/passwd", "../\(UUID().uuidString).jpg", "/etc/passwd", "x.jpg", "", "..", "\(UUID().uuidString).jpg/../../x.jpg"] {
+            #expect(store.url(for: bad, rosterID: roster) == nil, "resolved \(bad)")
+            #expect(store.loadImage(fileName: bad, rosterID: roster, maxPixel: 64) == nil)
+        }
+        #expect(AvatarStore.isInside(URL(fileURLWithPath: "/a/b/c"), URL(fileURLWithPath: "/a/b")))
+        #expect(!AvatarStore.isInside(URL(fileURLWithPath: "/a/bc"), URL(fileURLWithPath: "/a/b")), "a look-alike sibling is not inside")
+        #expect(!AvatarStore.isInside(URL(fileURLWithPath: "/a/b/../x"), URL(fileURLWithPath: "/a/b")))
+    }
+
+    @Test("Deleting a photo, a roster's photos, or everything removes only Halo's own files")
+    func deletion() throws {
+        let root = AvatarFixtures.tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let store = AvatarStore(rootURL: root, detectFaces: false)
+        let r1 = UUID(), r2 = UUID()
+        let a = try store.importPhoto(data: AvatarFixtures.png(width: 300, height: 300), rosterID: r1)
+        let b = try store.importPhoto(data: AvatarFixtures.png(width: 300, height: 300), rosterID: r1)
+        let c = try store.importPhoto(data: AvatarFixtures.png(width: 300, height: 300), rosterID: r2)
+        let outsider = root.deletingLastPathComponent().appendingPathComponent("halo-bystander-\(UUID().uuidString).txt")
+        try Data("keep".utf8).write(to: outsider); defer { try? FileManager.default.removeItem(at: outsider) }
+
+        store.delete(fileName: a, rosterID: r1)
+        #expect(store.url(for: a, rosterID: r1).map { !FileManager.default.fileExists(atPath: $0.path) } == true)
+        #expect(store.url(for: b, rosterID: r1).map { FileManager.default.fileExists(atPath: $0.path) } == true)
+        store.deleteAll(rosterID: r1)
+        #expect(!FileManager.default.fileExists(atPath: store.directory(for: r1).path))
+        #expect(store.url(for: c, rosterID: r2).map { FileManager.default.fileExists(atPath: $0.path) } == true)
+        #expect(store.totalBytes() > 0)
+        store.deleteEverything()
+        #expect(store.totalBytes() == 0)
+        #expect(FileManager.default.fileExists(atPath: outsider.path), "a file outside the avatars root is never touched")
+    }
+
+    @Test("The orphan sweep removes unreferenced photos and unknown roster folders, and nothing else")
+    func orphanSweep() throws {
+        let root = AvatarFixtures.tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let store = AvatarStore(rootURL: root, detectFaces: false)
+        let live = UUID(), gone = UUID()
+        let kept = try store.importPhoto(data: AvatarFixtures.png(width: 300, height: 300), rosterID: live)
+        let orphan = try store.importPhoto(data: AvatarFixtures.png(width: 300, height: 300), rosterID: live)
+        _ = try store.importPhoto(data: AvatarFixtures.png(width: 300, height: 300), rosterID: gone)
+        let stray = store.directory(for: live).appendingPathComponent("notes.txt")      // not Halo's naming
+        try Data("mine".utf8).write(to: stray)
+
+        let removed = store.sweepOrphans(referenced: [live: [kept]])
+        #expect(removed == 2)
+        #expect(store.url(for: kept, rosterID: live).map { FileManager.default.fileExists(atPath: $0.path) } == true)
+        #expect(store.url(for: orphan, rosterID: live).map { !FileManager.default.fileExists(atPath: $0.path) } == true)
+        #expect(!FileManager.default.fileExists(atPath: store.directory(for: gone).path))
+        #expect(FileManager.default.fileExists(atPath: stray.path), "a file that doesn't match Halo's naming is left alone")
+    }
+
+    @Test("A copied photo is a new file in the target roster")
+    func copy() throws {
+        let root = AvatarFixtures.tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let store = AvatarStore(rootURL: root, detectFaces: false)
+        let from = UUID(), to = UUID()
+        let name = try store.importPhoto(data: AvatarFixtures.png(width: 300, height: 300), rosterID: from)
+        let copied = try #require(store.copyPhoto(fileName: name, from: from, to: to))
+        #expect(copied != name)
+        #expect(store.loadImage(fileName: copied, rosterID: to, maxPixel: 256) != nil)
+        #expect(store.copyPhoto(fileName: "../x", from: from, to: to) == nil)
+    }
+}
+
+@MainActor
+@Suite("Lucky Draw store avatars")
+struct LuckyDrawStoreAvatarTests {
+
+    private final class Scratch {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("halo-draw-av-\(UUID().uuidString)", isDirectory: true)
+        var file: URL { dir.appendingPathComponent("luckyDraw.json") }
+        init() { try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) }
+        deinit { try? FileManager.default.removeItem(at: dir) }
+        @MainActor func store() -> LuckyDrawStore { LuckyDrawStore(fileURL: file, notificationCenter: NotificationCenter(), detectFaces: false) }
+    }
+
+    private func photoCount(_ store: LuckyDrawStore, _ roster: UUID) -> Int {
+        let dir = store.avatarStore!.directory(for: roster)
+        return ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []).count
+    }
+
+    private func importPhoto(_ store: LuckyDrawStore, for entry: DrawEntry) async throws {
+        let src = store.avatarStore!.rootURL.deletingLastPathComponent().appendingPathComponent("src-\(UUID().uuidString).png")
+        try FileManager.default.createDirectory(at: src.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try AvatarFixtures.png(width: 400, height: 400).write(to: src)
+        try await store.setPhoto(from: src, for: entry)
+    }
+
+    @Test("Setting an emoji, replacing it with a photo, then another photo leaves exactly one file")
+    func replaceRemovesTheOldPhoto() async throws {
+        let s = Scratch(); let store = s.store()
+        let roster = store.selected!.id
+        let entry = store.selected!.entries[0]
+
+        store.setAvatar(.emoji("🦊"), for: entry)
+        #expect(store.selected!.entries[0].avatar == .emoji("🦊"))
+        try await importPhoto(store, for: entry)
+        #expect(photoCount(store, roster) == 1)
+        try await importPhoto(store, for: entry)
+        #expect(photoCount(store, roster) == 1, "the first photo must be deleted when it is replaced")
+        store.setAvatar(nil, for: entry)
+        #expect(photoCount(store, roster) == 0)
+        #expect(store.selected!.entries[0].avatar == nil)
+    }
+
+    @Test("Removing an entry, clearing entries, and deleting a roster each remove their photos")
+    func cascades() async throws {
+        let s = Scratch(); let store = s.store()
+        let first = store.selected!.id
+        let e0 = store.selected!.entries[0], e1 = store.selected!.entries[1]
+        try await importPhoto(store, for: e0); try await importPhoto(store, for: e1)
+        #expect(photoCount(store, first) == 2)
+
+        store.removeEntry(e0)
+        #expect(photoCount(store, first) == 1)
+        store.clearEntries()
+        #expect(photoCount(store, first) == 0)
+
+        store.addRoster(named: "Second")
+        let second = store.selected!.id
+        store.addEntries(from: "Zed")
+        try await importPhoto(store, for: store.selected!.entries[0])
+        #expect(photoCount(store, second) == 1)
+        store.deleteSelected()
+        #expect(!FileManager.default.fileExists(atPath: store.avatarStore!.directory(for: second).path))
+    }
+
+    @Test("Duplicating a roster copies photos into the copy, and the two are independent")
+    func duplicateCopiesPhotos() async throws {
+        let s = Scratch(); let store = s.store()
+        let original = store.selected!.id
+        try await importPhoto(store, for: store.selected!.entries[0])
+        store.setAvatar(.emoji("🐼"), for: store.selected!.entries[1])
+
+        store.duplicateSelected()
+        let copy = try #require(store.selected)
+        #expect(copy.id != original)
+        let photo = try #require(copy.entries[0].avatar?.photoFileName)
+        #expect(store.avatarStore!.loadImage(fileName: photo, rosterID: copy.id, maxPixel: 64) != nil)
+        #expect(copy.entries[1].avatar == .emoji("🐼"))
+        #expect(copy.avatarDisplay == store.rosters.first { $0.id == original }?.avatarDisplay)
+
+        store.deleteSelected()                                      // the copy goes…
+        #expect(photoCount(store, original) == 1, "…and the original's photo is untouched")
+    }
+
+    @Test("Avatars persist across a relaunch")
+    func persists() async throws {
+        let s = Scratch(); let store = s.store()
+        let entry = store.selected!.entries[0]
+        try await importPhoto(store, for: entry)
+        store.setAvatar(.emoji("🚀"), for: store.selected!.entries[1])
+        store.setAvatarDisplay(.avatarOnly)
+        store.flushToDisk()
+
+        let reopened = s.store()
+        #expect(reopened.selected!.entries[0].avatar?.isPhoto == true)
+        #expect(reopened.selected!.entries[1].avatar == .emoji("🚀"))
+        #expect(reopened.selected!.avatarDisplay == .avatarOnly)
+    }
+
+    @Test("The orphan sweep runs after a clean load — and never after an unreadable roster file")
+    func sweepIsSafe() async throws {
+        let s = Scratch()
+        do {
+            let store = s.store()
+            try await importPhoto(store, for: store.selected!.entries[0])
+            store.flushToDisk()
+        }
+        let root = s.dir.appendingPathComponent("luckydraw/avatars")
+        let stray = root.appendingPathComponent("\(UUID().uuidString)/\(UUID().uuidString).jpg")
+        try FileManager.default.createDirectory(at: stray.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: stray)
+
+        // Corrupt the roster file: the photos must survive, because "unreadable" is not "unreferenced".
+        try Data("{ not json".utf8).write(to: s.file)
+        _ = s.store()
+        try await Task.sleep(nanoseconds: 400_000_000)
+        let survivors = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
+        #expect(survivors.count == 2, "a failed read must not trigger a sweep (found \(survivors.count) roster folders)")
+    }
+
+    // MARK: Recovery file keeps its photos (review I-3)
+
+    /// A roster with one imported photo, saved. Returns the roster, the photo's name and its path.
+    private func savedRosterWithPhoto(_ s: Scratch) async throws -> (roster: UUID, name: String, url: URL) {
+        let store = s.store()
+        try await importPhoto(store, for: store.selected!.entries[0])
+        store.flushToDisk()
+        let roster = store.selected!.id
+        let name = try #require(store.selected!.entries[0].avatar?.photoFileName)
+        return (roster, name, try #require(store.avatarStore!.url(for: name, rosterID: roster)))
+    }
+
+    private func plantOrphan(_ s: Scratch, in roster: UUID = UUID()) throws -> URL {
+        let url = s.dir.appendingPathComponent("luckydraw/avatars/\(roster.uuidString)/\(UUID().uuidString).jpg")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: url)
+        return url
+    }
+
+    @Test("Corrupt roster, then a relaunch on the fresh roster: the recovery file's photos are not swept")
+    func recoveryFilePhotosSurviveRelaunch() async throws {
+        let s = Scratch()
+        let photo = try await savedRosterWithPhoto(s)
+
+        // Corrupt the saved roster so Codable rejects it but it is still well-formed JSON.
+        var json = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: s.file)) as? [[String: Any]])
+        var entries = try #require(json[0]["entries"] as? [[String: Any]])
+        entries[0]["id"] = 12345
+        json[0]["entries"] = entries
+        try JSONSerialization.data(withJSONObject: json).write(to: s.file)
+
+        let second = s.store()                                     // falls back to a starter, keeps the bad file
+        let backup = s.dir.appendingPathComponent("luckyDraw.corrupt.json")
+        #expect(FileManager.default.fileExists(atPath: backup.path), "premise: the bad file was kept for recovery")
+        #expect(second.selected?.id != photo.roster)
+        second.setAutoRetire(!second.selected!.autoRetireWinner)   // any edit saves the starter roster…
+        second.flushToDisk()
+
+        let third = s.store()                                      // …so the next launch is a clean load
+        let orphan = try plantOrphan(s)                            // control: a real orphan elsewhere
+        let removed = third.sweepOrphanPhotosNow()
+        #expect(removed != nil, "a parseable recovery file must not block the sweep")
+        #expect(FileManager.default.fileExists(atPath: photo.url.path), "the recovery file's photo was deleted")
+        #expect(!FileManager.default.fileExists(atPath: orphan.path), "an unreferenced photo should still go")
+    }
+
+    @Test("A recovery file that cannot be parsed makes the sweep delete nothing")
+    func unparseableRecoveryFileSkipsSweep() async throws {
+        let s = Scratch()
+        _ = try await savedRosterWithPhoto(s)
+        try Data("{ not json".utf8).write(to: s.dir.appendingPathComponent("luckyDraw.corrupt.json"))
+
+        let store = s.store()                                      // the live file is fine: a clean load
+        let orphan = try plantOrphan(s)
+        #expect(store.sweepOrphanPhotosNow() == nil, "must decline rather than assume there are no references")
+        #expect(FileManager.default.fileExists(atPath: orphan.path), "nothing may be deleted next to an unreadable recovery file")
+    }
+
+    @Test("With no recovery file, a clean load still deletes true orphans and keeps referenced photos")
+    func cleanLoadStillDeletesOrphans() async throws {
+        let s = Scratch()
+        let photo = try await savedRosterWithPhoto(s)
+
+        let store = s.store()
+        let strayInLiveRoster = try plantOrphan(s, in: photo.roster)
+        let strayRoster = try plantOrphan(s)
+        #expect(!FileManager.default.fileExists(atPath: s.dir.appendingPathComponent("luckyDraw.corrupt.json").path))
+        #expect(store.sweepOrphanPhotosNow() != nil)
+        #expect(!FileManager.default.fileExists(atPath: strayInLiveRoster.path))
+        #expect(!FileManager.default.fileExists(atPath: strayRoster.path))
+        #expect(FileManager.default.fileExists(atPath: photo.url.path), "a referenced photo must survive")
+    }
+
+    @Test("Clearing all photos removes the files and un-points every entry")
+    func clearAll() async throws {
+        let s = Scratch(); let store = s.store()
+        let roster = store.selected!.id
+        try await importPhoto(store, for: store.selected!.entries[0])
+        store.setAvatar(.emoji("🐸"), for: store.selected!.entries[1])
+        store.clearAllPhotos()
+        #expect(photoCount(store, roster) == 0)
+        #expect(store.selected!.entries[0].avatar == nil)
+        #expect(store.selected!.entries[1].avatar == .emoji("🐸"), "emoji avatars have no file and are kept")
+    }
+
+    @Test("A photo imported for an entry that vanished meanwhile is not left behind")
+    func vanishedEntryLeavesNoOrphan() async throws {
+        let s = Scratch(); let store = s.store()
+        let roster = store.selected!.id
+        let ghost = DrawEntry(label: "Ghost")                       // never added to the roster
+        let name = "\(UUID().uuidString).jpg"
+        let dest = try #require(store.avatarStore!.url(for: name, rosterID: roster))
+        try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("jpeg".utf8).write(to: dest)
+        store.setAvatar(.photo(fileName: name), for: ghost, inRoster: roster)
+        #expect(!FileManager.default.fileExists(atPath: dest.path))
+    }
+}
+
+@Suite("Avatars never influence the draw")
+struct DrawFairnessWithAvatarsTests {
+
+    @Test("The same seed picks the same winner whether or not entries carry avatars")
+    func sameSeedSameWinner() {
+        let plain = (0..<12).map { DrawEntry(label: "N\($0)") }
+        let adorned = plain.map { DrawEntry(id: $0.id, label: $0.label,
+                                            avatar: .emoji("🦊")) }
+        for seed in UInt64(1)...200 {
+            var a = DrawEngineTests.SeededGenerator(seed: seed), b = DrawEngineTests.SeededGenerator(seed: seed)
+            let p1 = DrawEngine.plan(eligibleCount: plain.count, currentAngle: 0, duration: 5,
+                                     idForIndex: { plain[$0].id }, using: &a)
+            let p2 = DrawEngine.plan(eligibleCount: adorned.count, currentAngle: 0, duration: 5,
+                                     idForIndex: { adorned[$0].id }, using: &b)
+            #expect(p1?.winnerIndex == p2?.winnerIndex)
+            #expect(p1?.targetAngle == p2?.targetAngle)
+            #expect(p1?.winnerID == p2?.winnerID)
+        }
+    }
+
+    @Test("Eligibility ignores avatars")
+    func eligibilityIgnoresAvatars() {
+        let e = DrawEntry(label: "A", avatar: .emoji("🦊"))
+        #expect(e.isEligible)
+        #expect(DrawEntry(label: "A", isExcluded: true, avatar: .emoji("🦊")).isEligible == false)
+        #expect(DrawRoster(name: "r", entries: [e, DrawEntry(label: "B")]).eligible.count == 2)
+    }
+}
+
+// MARK: - F-053 independent review regressions
+
+@Suite("Avatar store — symlink containment")
+struct AvatarSymlinkTests {
+
+    /// A real stored photo (made by a throwaway store elsewhere) that lives *outside* the avatars root.
+    private func outsidePhoto() throws -> (dir: URL, name: String, file: URL) {
+        let other = AvatarStore(rootURL: AvatarFixtures.tempRoot(), detectFaces: false)
+        let r = UUID()
+        let name = try other.importPhoto(data: AvatarFixtures.png(width: 300, height: 300), rosterID: r)
+        let file = try #require(other.url(for: name, rosterID: r))
+        return (file.deletingLastPathComponent(), name, file)
+    }
+
+    @Test("A roster folder that is a symlink out of the root is never read, swept, deleted or written through")
+    func symlinkedRosterFolder() throws {
+        let root = AvatarFixtures.tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let store = AvatarStore(rootURL: root, detectFaces: false)
+        let victim = try outsidePhoto(); defer { try? FileManager.default.removeItem(at: victim.dir) }
+        let roster = UUID()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: store.directory(for: roster), withDestinationURL: victim.dir)
+
+        #expect(store.url(for: victim.name, rosterID: roster) == nil, "resolved a path through a symlinked roster folder")
+        #expect(store.loadImage(fileName: victim.name, rosterID: roster, maxPixel: 64) == nil)
+
+        store.delete(fileName: victim.name, rosterID: roster)
+        #expect(FileManager.default.fileExists(atPath: victim.file.path), "delete followed the symlink")
+
+        store.sweepOrphans(referenced: [roster: []])
+        #expect(FileManager.default.fileExists(atPath: victim.file.path), "the orphan sweep followed the symlink")
+
+        let target = UUID()
+        try FileManager.default.createSymbolicLink(at: store.directory(for: target), withDestinationURL: victim.dir)
+        let before = try FileManager.default.contentsOfDirectory(atPath: victim.dir.path).count
+        #expect(store.copyPhoto(fileName: victim.name, from: roster, to: target) == nil)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: victim.dir.path).count == before, "a copy was written outside the root")
+
+        store.sweepOrphans(referenced: [:])                                  // unknown roster: the folder goes ...
+        store.deleteAll(rosterID: roster)
+        store.deleteEverything()
+        #expect(FileManager.default.fileExists(atPath: victim.file.path), "... but only the link, never what it points at")
+    }
+
+    @Test("A photo file that is a symlink is never read through; the sweep removes the link, not its target")
+    func symlinkedPhotoFile() throws {
+        let root = AvatarFixtures.tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let store = AvatarStore(rootURL: root, detectFaces: false)
+        let victim = try outsidePhoto(); defer { try? FileManager.default.removeItem(at: victim.dir) }
+        let roster = UUID()
+        let dir = store.directory(for: roster)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let link = dir.appendingPathComponent(victim.name)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: victim.file)
+
+        #expect(store.loadImage(fileName: victim.name, rosterID: roster, maxPixel: 64) == nil, "read an arbitrary file through a link")
+        store.sweepOrphans(referenced: [roster: []])
+        #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: link.path)) == nil, "the link should be swept")
+        #expect(FileManager.default.fileExists(atPath: victim.file.path), "the target must survive")
+    }
+}
+
+@Suite("Avatar emoji — bounded")
+struct AvatarEmojiBoundTests {
+    @Test("One grapheme is not enough: a pile of combining marks on an emoji is refused")
+    func zalgoEmoji() throws {
+        let pile = "🙂" + String(repeating: "\u{0301}", count: 500)
+        #expect(pile.count == 1, "premise: Swift sees this as a single Character")
+        #expect(!EmojiValidation.isSingleEmoji(pile))
+        #expect(EmojiValidation.isSingleEmoji("👩🏽‍❤️‍💋‍👨🏿"), "the longest real sequences still pass")
+        #expect(EmojiValidation.isSingleEmoji("🏴󠁧󠁢󠁥󠁮󠁧󠁿"))
+        let data = Data("{\"id\":\"\(UUID())\",\"label\":\"A\",\"avatar\":{\"kind\":\"emoji\",\"value\":\"\(pile)\"}}".utf8)
+        #expect(try JSONDecoder().decode(DrawEntry.self, from: data).avatar == nil)
+    }
+}
+
+@Suite("Avatar image cache")
+struct AvatarImageCacheTests {
+
+    private func wait(timeout: TimeInterval = 5, _ cond: () -> Bool) async {
+        let end = Date().addingTimeInterval(timeout)
+        while !cond(), Date() < end { try? await Task.sleep(nanoseconds: 10_000_000) }
+    }
+
+    @Test("A photo that can't be loaded is asked for once, not re-read on every frame of the wheel")
+    func missingPhotoIsNotRetriedEveryFrame() async {
+        let store = AvatarStore(rootURL: AvatarFixtures.tempRoot(), detectFaces: false)
+        let cache = AvatarImageCache(); cache.store = store
+        let roster = UUID(), name = "\(UUID().uuidString).jpg"      // valid name, no file
+        _ = cache.photo(fileName: name, rosterID: roster, points: 40)
+        await wait { cache.loadAttempts >= 1 }
+        try? await Task.sleep(nanoseconds: 150_000_000)             // let it finish
+        for _ in 0..<200 { _ = cache.photo(fileName: name, rosterID: roster, points: 40) }   // 200 "frames"
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(cache.loadAttempts == 1, "re-attempted a known-missing photo \(cache.loadAttempts) times")
+        cache.forget(rosterID: roster)                              // forgetting a roster lets it try again
+        _ = cache.photo(fileName: name, rosterID: roster, points: 40)
+        await wait { cache.loadAttempts >= 2 }
+        #expect(cache.loadAttempts == 2)
+    }
+
+    @Test("Photos landing together bump the redraw counter in a batch, not once each")
+    @MainActor func revisionBumpsAreCoalesced() async throws {
+        let root = AvatarFixtures.tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let store = AvatarStore(rootURL: root, detectFaces: false)
+        let roster = UUID()
+        let names = try (0..<40).map { _ in try store.importPhoto(data: AvatarFixtures.png(width: 120, height: 120), rosterID: roster) }
+        let cache = AvatarImageCache(); cache.store = store
+        for n in names { _ = cache.photo(fileName: n, rosterID: roster, points: 24) }
+        await wait { cache.decodedCount == names.count }
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        #expect(cache.decodedCount == names.count)
+        #expect(cache.revision >= 1)
+        #expect(cache.revision < names.count / 2, "every one of \(names.count) photos redrew every avatar on screen (revision \(cache.revision))")
     }
 }

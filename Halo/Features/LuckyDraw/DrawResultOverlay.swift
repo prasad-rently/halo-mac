@@ -6,6 +6,11 @@ import SwiftUI
 /// all suppressed to a plain fade when Reduced Motion is on.
 struct DrawResultOverlay: View {
     let label: String
+    /// F-053: the winner's avatar, shown large above the name. `showAvatar` is decided by the caller
+    /// from the roster's display mode, so a name-only roster's popup is exactly what it was.
+    var avatar: EntryAvatar? = nil
+    var rosterID: UUID? = nil
+    var showAvatar = false
     let reducedMotion: Bool
     let canPutBack: Bool
     var onSpinAgain: () -> Void
@@ -31,6 +36,17 @@ struct DrawResultOverlay: View {
             }
 
             VStack(spacing: 10) {
+                if showAvatar {
+                    AvatarView(avatar: avatar, label: label, rosterID: rosterID, diameter: 132,
+                               ringColor: .haloAmber, ringStyle: AvatarView.winnerRing, ringFraction: 0.07)
+                        .shadow(color: Color(hex: "#ffd36b").opacity(0.35), radius: 22)
+                        // Reduced Motion: it simply fades in with the card; otherwise it springs up a
+                        // beat after the card lands.
+                        .scaleEffect(reducedMotion ? 1 : (appeared ? 1 : 0.4))
+                        .animation(reducedMotion ? nil : .spring(response: 0.55, dampingFraction: 0.6).delay(0.12),
+                                   value: appeared)
+                        .padding(.bottom, 2)
+                }
                 Text("WINNER")
                     .font(.system(size: 10, weight: .bold))
                     .tracking(2.6)
