@@ -1,7 +1,7 @@
 {
  "id": "expense-fixtures",
  "version": 1,
- "description": "Cross-language contract for F-048/F-056: bank/UPI/card SMS -> expected classification and parse. 'expect' was produced by running the REAL Swift desktop TransactionParser / SmsClassifier / PatternPack.category (HaloTests ExpenseFixtureTests re-checks it); the Kotlin port (android/halocloud ExpenseFixtureTest) must agree. Where the desktop does something questionable it is recorded as-is with a 'note' - fix desktop and fixture together, never one alone. All messages are synthetic (no real account data).",
+ "description": "Cross-language contract for F-048/F-056: bank/UPI/card SMS -> expected classification and parse. 'expect' was produced by running the REAL Swift desktop TransactionParser / SmsClassifier / PatternPack.category (HaloTests ExpenseFixtureTests re-checks it); the Kotlin port (android/halocloud ExpenseFixtureTest) must agree. The one sanctioned difference is expect.classifierKotlin: the Kotlin classifier is pack-driven (full classifier lists) while the desktop's is a compact hard-coded port, so two non-transactional messages classify differently; the Kotlin test insists such a difference never changes transactional-or-not. Where the desktop does something questionable it is recorded as-is with a 'note' - fix desktop and fixture together, never one alone. All messages are synthetic (no real account data).",
  "pack": "india-bank-sms.v1.json",
  "messages": [
   {
@@ -474,9 +474,10 @@
    "body": "Refund of Rs 899 initiated for order. Reference 3345",
    "expect": {
     "classifier": "service",
+    "classifierKotlin": "transactional",
     "parse": "notTransaction"
    },
-   "note": "Desktop classifier says service (ORDER). The pack's broader transactionalStrong list has REFUND, so a pack-driven classifier says transactional; the parser then rejects it (INITIATED). Pipeline result is identical, so the Kotlin test pins pipeline behaviour for it."
+   "note": "Desktop classifier says service (ORDER). The pack's broader transactionalStrong list has REFUND, so a pack-driven classifier says transactional; the parser then rejects it (INITIATED). Pipeline result is identical, so the Kotlin test pins pipeline behaviour for it. The Kotlin port classifies it from the pack (transactional, via REFUND) and the Swift desktop from its compact lists (service): see expect.classifierKotlin. Harmless - it is not a transaction either way."
   },
   {
    "id": "fp-nonbank-amazon",
@@ -532,8 +533,10 @@
    "body": "Recharge of Rs 299 successful. Validity 28 days",
    "expect": {
     "classifier": "service",
+    "classifierKotlin": "promotional",
     "parse": "notTransaction"
-   }
+   },
+   "note": "Classifier divergence (non-transactional both ways): the pack's promoKeywords include RECHARGE so the pack-driven Kotlin classifier says promotional; the Swift desktop's compact promo list lacks it, so it falls to the -S DLT suffix and says service. See expect.classifierKotlin. Neither feeds the expense pipeline."
   },
   {
    "id": "fp-nonmoney-debited",

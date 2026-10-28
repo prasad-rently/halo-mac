@@ -1093,5 +1093,13 @@ struct ExpenseFixtureTests {
         #expect(parser["nonBankSenders"] as? [String] == pack.nonBankSenders)
         #expect(parser["balancePrefix"] as? [String] == pack.balancePrefix)
         #expect(parser["amountRegex"] as? String == pack.amountRegex)
+        // F-056: the §12 category rules are now in the pack so the phone reads the SAME copy; the desktop's embedded
+        // copy must not drift from it.
+        let cats = try #require((j["categories"] as? [String: Any])?["rules"] as? [[String: Any]])
+        #expect(cats.count == pack.categories.count)
+        for (c, p) in zip(cats, pack.categories) {
+            #expect(c["category"] as? String == p.category, "category name \(p.category)")
+            #expect(c["triggers"] as? [String] == p.triggers, "triggers \(p.category)")
+        }
     }
 }
