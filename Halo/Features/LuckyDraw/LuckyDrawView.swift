@@ -12,6 +12,11 @@ struct LuckyDrawView: View {
     @State private var renaming = false
     @State private var rosterName = ""
     @FocusState private var renameFocused: Bool
+    /// v2.6 C-1: the wheel's and the popup avatar slot's frames, in the stage's own space.
+    @State private var wheelFrame: CGRect?
+    @State private var heroSlot: CGRect?
+    /// Set when the hero avatar has finished landing; the name reveal waits on it.
+    @State private var heroLanded = false
 
     private var roster: DrawRoster? { store.selected }
     private var pool: [DrawEntry] { roster?.eligible ?? [] }
@@ -165,14 +170,15 @@ struct LuckyDrawView: View {
 
                 GeometryReader { geo in
                     let side = min(geo.size.width, geo.size.height)
-                    SpinnerWheelView(entries: pool,
+                    SpinnerWheelView(entries: wheelEntries,
                                      plan: viewModel.plan,
                                      spinStart: viewModel.spinStart,
                                      restAngle: viewModel.restAngle,
                                      highlightID: viewModel.showWinner ? viewModel.winner?.id : viewModel.interimWinner?.id,
                                      reducedMotion: viewModel.reducedMotion,
                                      rosterID: roster?.id,
-                                     avatarMode: roster?.avatarDisplay ?? .nameOnly)
+                                     avatarMode: roster?.avatarDisplay ?? .nameOnly,
+                                     hubEntry: roster?.lastWinnerEntry)
                         .frame(width: side, height: side)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(
@@ -181,10 +187,13 @@ struct LuckyDrawView: View {
                                     key: WheelCentreKey.self,
                                     value: CGPoint(x: wheelGeo.frame(in: .global).midX,
                                                    y: wheelGeo.frame(in: .global).midY))
+                                .preference(key: WheelFrameKey.self,
+                                            value: wheelGeo.frame(in: .named(Self.stageSpace)))
                             }
                         )
                 }
                 .onPreferenceChange(WheelCentreKey.self) { viewModel.wheelCentre = $0 }
+                .onPreferenceChange(WheelFrameKey.self) { wheelFrame = $0 }
                 .frame(maxHeight: 460)
 
                 VStack(spacing: 8) {
@@ -220,11 +229,14 @@ struct LuckyDrawView: View {
             .padding(.horizontal, 24)
 
             if viewModel.showWinner, let winner = viewModel.winner {
+                let showAvatar = (roster?.avatarDisplay ?? .nameOnly).showsAvatar(for: winner)
                 DrawResultOverlay(
                     label: winner.label,
                     avatar: winner.avatar,
                     rosterID: roster?.id,
-                    showAvatar: (roster?.avatarDisplay ?? .nameOnly).showsAvatar(for: winner),
+                    showAvatar: showAvatar,
+                    heroManaged: showAvatar,
+                    nameGate: !showAvatar || heroLanded,
                     reducedMotion: viewModel.reducedMotion,
                     canPutBack: roster?.autoRetireWinner ?? true,
                     onSpinAgain: { viewModel.spinAgain(reduceMotion: reduceMotion) },
@@ -233,6 +245,15 @@ struct LuckyDrawView: View {
                     onClose: { viewModel.dismissWinner() }
                 )
                 .transition(.opacity)
+
+                // The avatar is its own layer so it can fly from the wheel; the card keeps an empty
+                // slot of the same size and reports where it is.
+                if showAvatar, let slot = heroSlot {
+                    WinnerHeroAvatar(avatar: winner.avatar, label: winner.label, rosterID: roster?.id,
+                                     target: slot, origin: heroOrigin, reducedMotion: viewModel.reducedMotion,
+                                     onLanded: { heroLanded = true })
+                        .allowsHitTesting(false)
+                }
             }
 
             if let winners = viewModel.sequenceSummary {
@@ -253,6 +274,37 @@ struct LuckyDrawView: View {
             RadialGradient(colors: [Color.haloAccent.opacity(0.07), .clear],
                            center: .center, startRadius: 10, endRadius: 360)
         )
+        .coordinateSpace(name: Self.stageSpace)
+        .onPreferenceChange(HeroSlotKey.self) { heroSlot = $0 }
+        .onChange(of: viewModel.showWinner) { showing in if !showing { heroLanded = false } }
+        // Safety net only: if the hero never reports (no slot was measured), do not leave the name hidden.
+        .task(id: viewModel.showWinner) {
+            guard viewModel.showWinner else { return }
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if !Task.isCancelled { heroLanded = true }
+        }
+    }
+
+    /// While the result popup is up the wheel keeps the pool as it was at the win (the winner is
+    /// retired from the live pool at once) so the hero has a segment to leave from.
+    private var wheelEntries: [DrawEntry] {
+        HeroTravel.displayedEntries(live: pool, snapshot: viewModel.winnerWheelSnapshot,
+                                    popupShowing: viewModel.showWinner)
+    }
+
+    private static let stageSpace = "luckyStage"
+
+    /// Where the winner's avatar flies from, in stage space — nil when the wheel drew no avatar for
+    /// this winner (name-only mode, too many entries), in which case the popup just fades it in.
+    private var heroOrigin: (centre: CGPoint, diameter: CGFloat)? {
+        guard let origin = viewModel.heroOrigin, let frame = wheelFrame, let roster else { return nil }
+        return HeroTravel.wheelOrigin(origin, mode: roster.avatarDisplay, side: min(frame.width, frame.height),
+                                      wheelCentre: CGPoint(x: frame.midX, y: frame.midY),
+                                      avatarLimit: SpinnerWheelView.avatarLimit)
+    }
+
+    private var heroStyle: HeroTravel.Style {
+        HeroTravel.style(reducedMotion: viewModel.reducedMotion, hasOrigin: heroOrigin != nil)
     }
 
     // MARK: - Draw N in a row
@@ -324,6 +376,12 @@ private struct WheelCentreKey: PreferenceKey {
     static func reduce(value: inout CGPoint?, nextValue: () -> CGPoint?) {
         value = nextValue() ?? value
     }
+}
+
+/// The wheel's frame in the stage's coordinate space (C-1 hero travel).
+private struct WheelFrameKey: PreferenceKey {
+    static var defaultValue: CGRect?
+    static func reduce(value: inout CGRect?, nextValue: () -> CGRect?) { value = nextValue() ?? value }
 }
 
 // MARK: - SpinButtonStyle

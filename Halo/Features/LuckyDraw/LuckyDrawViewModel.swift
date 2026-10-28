@@ -19,6 +19,11 @@ final class LuckyDrawViewModel: ObservableObject {
     @Published var winner: DrawEntry?
     @Published var showWinner = false
     @Published var celebrate = false
+    /// v2.6 C-1: where the winner's avatar sat on the wheel when the spin stopped, for the hero
+    /// travel into the popup. Set with `winner`, cleared when the popup is dismissed. Display only.
+    @Published private(set) var heroOrigin: WheelHeroOrigin?
+    /// The pool the wheel was showing at the win — see `HeroTravel.displayedEntries`.
+    @Published private(set) var winnerWheelSnapshot: [DrawEntry]?
 
     /// Set when Reduced Motion is on at the moment Spin is pressed, so the renderer
     /// and the reveal agree on which presentation they are giving.
@@ -151,6 +156,9 @@ final class LuckyDrawViewModel: ObservableObject {
         }
 
         winner = won
+        // Captured before the winner is retired off the wheel (a later redraw has one fewer segment).
+        heroOrigin = WheelHeroOrigin(index: plan.winnerIndex, count: pool.count, angle: plan.targetAngle)
+        winnerWheelSnapshot = pool
 
         withAnimation(reducedMotion ? .easeOut(duration: 0.32)
                                     : .spring(response: 0.42, dampingFraction: 0.68)) {
@@ -225,6 +233,8 @@ final class LuckyDrawViewModel: ObservableObject {
         withAnimation(.easeOut(duration: 0.2)) { showWinner = false }
         celebrate = false
         winner = nil
+        heroOrigin = nil
+        winnerWheelSnapshot = nil
     }
 
     func cancelInFlight() {
@@ -268,6 +278,19 @@ final class LuckyDrawViewModel: ObservableObject {
         guard !csv.isEmpty else { return }
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "halo-lucky-draw.csv"
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            try? csv.write(to: url, atomically: true, encoding: .utf8)
+        }
+    }
+
+    /// v2.6 C-4: the roster as `name,avatar_kind,avatar_value` — emoji/monogram only, never photos.
+    func exportRosterCSV() {
+        guard let roster = store.selected else { return }
+        let csv = RosterImport.rosterCSV(entries: roster.entries)
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(roster.name)-roster.csv"
         panel.allowedContentTypes = [.commaSeparatedText]
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
