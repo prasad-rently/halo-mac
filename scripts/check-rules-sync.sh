@@ -47,14 +47,21 @@ for path in (l.strip() for l in sys.stdin if l.strip()):
     except OSError:
         continue
     for m in fence.finditer(text):
+        line = text.count("\n", 0, m.start()) + 1
         try:
             obj = json.loads(m.group(1))
         except Exception:
-            continue                      # an illustrative snippet, not a rules copy
+            # Not valid JSON. If it still looks like a rules copy (top-level "rules" key) it is a
+            # copy that has drifted into a broken state (trailing comma, "..." ellipsis); skipping
+            # it would let the check pass while a doc carries stale rules. Anything else is an
+            # illustrative snippet.
+            if re.search(r"^\s*\{\s*\"rules\"\s*:", m.group(1)):
+                found += 1
+                drift.append(f"{path}:{line} (not valid JSON)")
+            continue
         if not (isinstance(obj, dict) and "rules" in obj):
             continue
         found += 1
-        line = text.count("\n", 0, m.start()) + 1
         if obj != canon:
             drift.append(f"{path}:{line}")
         else:

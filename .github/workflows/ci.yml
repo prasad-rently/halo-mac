@@ -19,10 +19,12 @@ on:
     branches: ['release/**']
   workflow_dispatch:
 
-# macOS runners bill at 10x, so don't leave superseded runs going.
+# macOS runners bill at 10x, so don't leave superseded PR runs going. Pushes to release/** are NOT
+# cancelled: a later push would otherwise cancel the earlier tip's run and leave that commit with
+# no result at all.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
