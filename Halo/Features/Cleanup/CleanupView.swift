@@ -22,6 +22,7 @@ struct CleanupView: View {
         .background(Color.haloSurface)
         .task { await viewModel.scanAll() }
         .task { await browserViewModel.loadAll() }
+        .onChange(of: selectedCategory) { _ in viewModel.clearOutcome() }
         // Changes made outside Halo (Finder, `rm`, another app) can't be seen without a file
         // watcher; coming back to the app after a minute rescans, which is the cheap answer.
         .onChange(of: browserViewModel.isClearing) { clearing in
@@ -43,6 +44,33 @@ struct CleanAllSnapshot: Sendable {
     var formatted: String { ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
 }
 
+// MARK: - Per-operation result (H-03)
+
+/// What the last Clean All / per-row trash did — one value, so the banner can never mix the
+/// outcome of one operation with the error of another.
+struct CleanOutcome: Equatable, Sendable {
+    var moved: Int
+    var failed: Int
+    var freed: Int64
+    /// "<name>: <message>" of the first failure, if any.
+    var firstError: String?
+
+    var hasFailures: Bool { failed > 0 }
+
+    /// Nothing happened worth a banner (nothing moved, nothing failed).
+    var isEmpty: Bool { moved == 0 && failed == 0 }
+
+    /// Banner text. A partial failure leads with the counts — "Moved 2, 1 failed: …" — rather than
+    /// hiding the successes behind the error.
+    var message: String {
+        let size = ByteCountFormatter.string(fromByteCount: freed, countStyle: .file)
+        if failed > 0 {
+            return "Moved \(moved), \(failed) failed: \(firstError ?? "unknown error")"
+        }
+        return "Moved \(moved) item\(moved == 1 ? "" : "s") (\(size)) to the Trash — space is freed when you empty the Trash."
+    }
+}
+
 // MARK: - ViewModel
 
 @MainActor
@@ -52,6 +80,9 @@ final class CleanupViewModel: ObservableObject {
     @Published var isCleaning = false
     @Published var cleanError: String? = nil
     @Published var lastCleanResult: (deleted: Int, freed: Int64)? = nil
+    /// The banner's source of truth (H-03): set by every clean operation, cleared by a category
+    /// switch (`clearOutcome()`, called from the view) or the next full rescan.
+    @Published private(set) var outcome: CleanOutcome? = nil
     @Published private(set) var lastScanned: Date? = nil
 
     private let coordinator: ScanCoordinator
@@ -69,9 +100,26 @@ final class CleanupViewModel: ObservableObject {
     private var removalSerial = 0
     private var removals: [String: Int] = [:]
 
-    init(coordinator: ScanCoordinator = ScanCoordinator(), kinds: [CleanupKind] = CleanupKind.allCases) {
+    /// How existence is checked by `pruneMissing`. Injectable so a test can observe which thread
+    /// the stat work runs on and make it slow.
+    private let existsOnDisk: @Sendable (URL) -> Bool
+    private let pruneDeadline: TimeInterval
+
+    init(coordinator: ScanCoordinator = ScanCoordinator(),
+         kinds: [CleanupKind] = CleanupKind.allCases,
+         existsOnDisk: @escaping @Sendable (URL) -> Bool = CleanupPath.existsOnDisk,
+         pruneDeadline: TimeInterval = 5) {
         self.coordinator = coordinator
         self.kinds = kinds
+        self.existsOnDisk = existsOnDisk
+        self.pruneDeadline = pruneDeadline
+    }
+
+    /// Drop the result banner — a category switch or the user's dismiss.
+    func clearOutcome() {
+        outcome = nil
+        cleanError = nil
+        lastCleanResult = nil
     }
 
     /// Distinct paths — a file listed by two categories is counted once (BUG-001 R6).
@@ -85,6 +133,7 @@ final class CleanupViewModel: ObservableObject {
         scanGeneration += 1
         let generation = scanGeneration
         removals = [:]
+        clearOutcome()                     // a banner describes the list it was shown against
         let startedAt = removalSerial
         isScanning = true
         categories = kinds.map { CleanupCategory(kind: $0) }
@@ -161,11 +210,17 @@ final class CleanupViewModel: ObservableObject {
     }
 
     /// Drop rows whose file has disappeared, so a confirmation sheet never lists something that
-    /// is already gone.
-    func pruneMissing() {
-        let fm = FileManager.default
-        let missing = categories.flatMap(\.items).map(\.url).filter { !CleanupPath.existsOnDisk($0) }
-        reconcile(removed: missing)
+    /// is already gone. The stat work (one per row — 20 000 rows is routine) runs on a detached
+    /// task, not the main actor, and is bounded by `pruneDeadline` (H-02); only the list surgery
+    /// happens back on the main actor.
+    func pruneMissing() async {
+        let urls = categories.flatMap(\.items).map(\.url)
+        guard !urls.isEmpty else { return }
+        let exists = existsOnDisk, deadline = pruneDeadline
+        let missing = await Task.detached(priority: .userInitiated) {
+            CleanupPath.missing(among: urls, exists: exists, deadline: deadline)
+        }.value
+        if !missing.isEmpty { reconcile(removed: missing) }
     }
 
     // MARK: Cleaning
@@ -173,8 +228,8 @@ final class CleanupViewModel: ObservableObject {
     /// Capture what the user is about to be asked to confirm. The snapshot is immutable: a rescan
     /// (activation, manual, post-clean) that lands while the dialog is open changes the live list
     /// but never what "Move to Trash" acts on. Returns nil when there is nothing to clean.
-    func beginCleanAll(for kind: CleanupKind) -> CleanAllSnapshot? {
-        pruneMissing()      // never offer to trash what is already gone
+    func beginCleanAll(for kind: CleanupKind) async -> CleanAllSnapshot? {
+        await pruneMissing()      // never offer to trash what is already gone
         guard let cat = category(for: kind), !cat.items.isEmpty else { return nil }
         return CleanAllSnapshot(kind: kind, items: cat.items)
     }
@@ -182,8 +237,13 @@ final class CleanupViewModel: ObservableObject {
     /// Clean exactly the items the user confirmed — the snapshot, intersected with what still
     /// exists on disk. Items a later rescan discovered are NOT included.
     func cleanAll(confirmed snapshot: CleanAllSnapshot) async {
-        pruneMissing()
-        let stillThere = snapshot.items.filter { CleanupPath.existsOnDisk($0.url) }
+        await pruneMissing()
+        let exists = existsOnDisk
+        let urls = snapshot.items.map(\.url)
+        let missing = Set(await Task.detached(priority: .userInitiated) {
+            CleanupPath.missing(among: urls, exists: exists, deadline: 30)
+        }.value.map(CleanupPath.key))
+        let stillThere = snapshot.items.filter { !missing.contains(CleanupPath.key($0.url)) }
         await clean(items: stillThere, from: snapshot.kind)
     }
 
@@ -196,6 +256,7 @@ final class CleanupViewModel: ObservableObject {
         guard !items.isEmpty else { return }
         isCleaning = true
         cleanError = nil
+        outcome = nil
         let result = await coordinator.executeCleanup(items: items)
 
         // Only what actually left the disk leaves the lists — in EVERY category.
@@ -208,6 +269,9 @@ final class CleanupViewModel: ObservableObject {
             cleanError = "Could not trash \"\(first.name)\": \(first.message)\(more)"
         }
         lastCleanResult = (result.removed.count, result.freed)
+        let op = CleanOutcome(moved: result.removed.count, failed: result.failures.count, freed: result.freed,
+                              firstError: result.failures.first.map { "\($0.name) — \($0.message)" })
+        outcome = op.isEmpty ? nil : op
 
         await rescan(kinds: affected)    // exact sizes; failures stay listed
         isCleaning = false
@@ -405,8 +469,12 @@ struct CleanupFileList: View {
                 if let cat = currentCategory, !cat.items.isEmpty {
                     // Clean All button — trashes every item in this category
                     Button {
-                        pendingCleanAll = viewModel.beginCleanAll(for: category)
-                        showCleanAllConfirm = pendingCleanAll != nil
+                        Task {
+                            // The existence checks run off the main actor (H-02), so the sheet
+                            // opens a beat after the click rather than freezing the window.
+                            pendingCleanAll = await viewModel.beginCleanAll(for: category)
+                            showCleanAllConfirm = pendingCleanAll != nil
+                        }
                     } label: {
                         HStack(spacing: 6) {
                             if viewModel.isCleaning {
@@ -443,45 +511,24 @@ struct CleanupFileList: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
 
-            // Error banner
-            if let error = viewModel.cleanError {
+            // Per-operation result banner (H-03): one banner for the last operation — success,
+            // partial failure ("Moved 2, 1 failed: …") or total failure. Cleared on category
+            // switch and on the next full rescan.
+            if let outcome = viewModel.outcome {
+                let tint: Color = outcome.hasFailures ? .haloAmber : .haloGreen
                 HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.haloAmber)
-                    Text(error)
-                        .font(HaloFont.body(12))
-                        .foregroundColor(.haloText)
-                        .lineLimit(2)
-                    Spacer()
-                    Button {
-                        viewModel.cleanError = nil
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 11))
-                            .foregroundColor(.haloText2)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Color.haloAmber.opacity(0.08))
-                .overlay(Rectangle().fill(Color.haloAmber).frame(height: 1), alignment: .bottom)
-            }
-
-            // Result banner — the Trash does not free space until it is emptied, so say so.
-            if viewModel.cleanError == nil, let r = viewModel.lastCleanResult, r.deleted > 0 {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill").foregroundColor(.haloGreen)
-                    Text("Moved \(r.deleted) item\(r.deleted == 1 ? "" : "s") (\(ByteCountFormatter.string(fromByteCount: r.freed, countStyle: .file))) to the Trash — space is freed when you empty the Trash.")
+                    Image(systemName: outcome.hasFailures ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                        .foregroundColor(tint)
+                    Text(outcome.message)
                         .font(HaloFont.body(12)).foregroundColor(.haloText).lineLimit(2)
                     Spacer()
-                    Button { viewModel.lastCleanResult = nil } label: {
+                    Button { viewModel.clearOutcome() } label: {
                         Image(systemName: "xmark").font(.system(size: 11)).foregroundColor(.haloText2)
                     }.buttonStyle(.plain)
                 }
                 .padding(.horizontal, 16).padding(.vertical, 10)
-                .background(Color.haloGreen.opacity(0.08))
-                .overlay(Rectangle().fill(Color.haloGreen).frame(height: 1), alignment: .bottom)
+                .background(tint.opacity(0.08))
+                .overlay(Rectangle().fill(tint).frame(height: 1), alignment: .bottom)
                 .accessibilityIdentifier("cleanup.result.banner")
             }
 
