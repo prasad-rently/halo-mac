@@ -290,6 +290,14 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 
 ---
 
+### Requested 2026-10-27 — requirements written (F-053 partly built on unmerged PR #54; the rest not started)
+
+| ID | Item | Summary |
+|----|------|---------|
+| BUG-001 | **Cleanup rescan + stale cross-category items** | Add a Rescan button; stop System Caches and User Caches both scanning `~/Library/Caches`; reconcile every category after each delete. **Do first — F-054 depends on it.** Spec: `docs/specs/BUG-001-cleanup-stale-state.md` |
+| F-054 | **Build Artifact Cleaner** | New Cleanup pane: regenerable build folders (`node_modules`, `target/`, `build/`, DerivedData …) across all projects, ranked by size, marker- and git-gated, review sheet. Spec: `docs/specs/F-054-build-artifact-cleaner.md` |
+| F-053 | **Lucky Draw Avatars** | Emoji / animated emoji / caricature / photo avatars with a ring, on the wheel and the winner popup. Spec: `docs/specs/F-053-lucky-draw-avatars.md` |
+
 ### Recommended Sequencing
 
 **Quick wins** (low effort, immediate value — implement first):

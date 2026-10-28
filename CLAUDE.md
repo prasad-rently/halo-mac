@@ -167,6 +167,12 @@ actor BrowserCleanerScanner { ... }
 try FileManager.default.trashItem(at: url, resultingItemURL: nil)
 ```
 
+> **Approved exceptions, not yet implemented (2026-10-27):** two narrow permanent-deletion exceptions
+> were approved for planned features — F-054 (permanently remove only the exact items it just trashed,
+> never *Empty Trash*) and F-053 (Halo's own avatar copies under `Application Support/Halo/luckydraw/avatars/`).
+> **Until those features exist the rule above is absolute.** Add each exception here, with its scope,
+> in the same change that implements it.
+
 ### All deletions require confirmation
 Show a review sheet before any destructive action. Users must explicitly confirm.
 
@@ -819,7 +825,9 @@ a branch that has not merged yet.
 | `8181`–`8200` | F-051 Lucky Draw Spinner Wheel | claimed |
 | `8201`–`8216` | F-052 Lethe ephemeral chat | claimed |
 | `8217`–`8224` | F-051 Lucky Draw follow-up pass (import, sound, draw-N) | claimed |
-| `8225`+ | — | **free — take the next block from here** |
+| `8225`–`8244` | F-053 Lucky Draw Avatars (spec `docs/specs/F-053-lucky-draw-avatars.md`; PR #54 added its files with `add_source_files.rb` → random ids, so this block is unused unless ids are hand-assigned) | claimed |
+| `8245`–`8264` | F-054 Build Artifact Cleaner (planned — spec only, `docs/specs/F-054-build-artifact-cleaner.md`) | claimed |
+| `8265`+ | — | **free — take the next block from here** |
 
 Auditing the whole batch for collisions:
 

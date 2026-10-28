@@ -69,6 +69,9 @@
 | [F-050](#f-050--haloshare-mobile--desktop-nfeat-127) | HaloShare Mobile ↔ Desktop (NFeat-127) | 🔧 Merged to v2.4 — tests and builds pass; not yet run on a device or against official LocalSend | ~6 d so far | HaloShare (LocalSend) |
 | [F-051](#f-051--lucky-draw-spinner-wheel-nfeat-128) | Lucky Draw Spinner Wheel (NFeat-128) | ✅ Done | ~6 d | CelebrationOverlay (F-037) |
 | [F-052](#f-052--lethe-anonymous-ephemeral-chat-nfeat-129) | Lethe — Anonymous Ephemeral Chat (NFeat-129) | 🔧 Merged to v2.4 — ship gate (Mac ↔ real phone) not yet run | ~8 d | Keychain, `AlertManager` |
+| [F-053](#f-053--lucky-draw-avatars-nfeat-130) | Lucky Draw Avatars (NFeat-130) | 🔧 Emoji / photo / monogram built on PR #54 (not merged, not clicked through, 60 fps unmeasured); animated + caricature await art | ~8–10 d | F-051 |
+| [F-054](#f-054--build-artifact-cleaner-nfeat-131) | Build Artifact Cleaner (NFeat-131) | 🗓 Planned — requirements written 2026-10-27, no code | ~7–9 d | BUG-001 |
+| [BUG-001](#bug-001--cleanup-no-rescan-and-stale-cross-category-items) | Cleanup: no rescan + stale cross-category items | 📋 Queued — root cause analysed from code, not yet reproduced | ~2.5–3 d | none (blocks F-054) |
 
 > **Status legend:** ✅ Done · 📋 Queued (next up) · 🗓 Planned (user-requested, spec pending discussion) · 💡 Future Idea (unsolicited) · ⏭ Skipped · 🔧 Built on a branch, not yet merged or validated against its ship gate
 
@@ -128,6 +131,32 @@ Theme: **land the cloud line.** F-044/F-045/F-048 were built in July on `feature
 | Assisted Firebase provisioning (S2) | Blocked on Google restricted-scope app verification |
 | Notarisation | Needs a paid Developer ID |
 | Owner decisions | `main` is ~119 commits behind; stale PRs #1/#6/#7 (#7 is now superseded by this branch); two things called "F-051"; HaloShare plain-HTTP (MD1) |
+
+---
+
+## v2.6 candidates — requirements raised 2026-10-27 (F-053 partly built on PR #54; BUG-001 and F-054 not started)
+
+Three owner requests were analysed and specified. **No development has started on BUG-001 or F-054** (BUG-001 has an open fix PR, #53, at the time of writing); **F-053's emoji / photo / monogram kinds are built on the unmerged PR #54** — see its card. Order is dictated by one dependency: F-054 must be built on the state model BUG-001 introduces.
+
+| Order | Item | One line | Spec |
+|---|---|---|---|
+| 1 | **BUG-001** Cleanup rescan + stale categories | `~/Library/Caches` is scanned by *both* System Caches and User Caches; deletes only update the category they came from; no rescan exists; totals double-count | [`specs/BUG-001-cleanup-stale-state.md`](specs/BUG-001-cleanup-stale-state.md) |
+| 2 | **F-054** Build Artifact Cleaner | Find regenerable build folders (`node_modules`, `target/`, `build/`, DerivedData …) across all projects; marker-pair + git-aware safety gates; review sheet; new Cleanup pane | [`specs/F-054-build-artifact-cleaner.md`](specs/F-054-build-artifact-cleaner.md) |
+| 3 | **F-053** Lucky Draw Avatars | Emoji / animated emoji / bundled caricatures / local photos in a ring on the wheel segments, the winner popup, multi-draw strip and log | [`specs/F-053-lucky-draw-avatars.md`](specs/F-053-lucky-draw-avatars.md) |
+
+**Owner decisions — all five answered 2026-10-27** (recorded in each spec):
+
+| # | Decision | Answer | Where |
+|---|---|---|---|
+| 1 | Does "delete" have to free space? | **Yes — a narrow second exception:** F-054 gets a separate, labelled action that permanently removes *only the exact items just trashed* (never Empty Trash). Default stays *Move to Trash*. | F-054 D4b |
+| 2 | What does "exclusive builds folders" mean? | **All regenerable build output**, not Xcode-only | F-054 §0 |
+| 3 | `removeItem` on Halo's own avatar copies | **Allowed**, confined to `Application Support/Halo/luckydraw/avatars/` | F-053 NFR-S4 |
+| 4 | Art source for animated emoji / caricatures | **Commissioned or self-drawn** (owner supplies ~40 characters + a few animated emoji). Until it exists F-053 ships emoji + monogram + photos | F-053 D9, R1 |
+| 5 | What System Caches contains | **Minimal fix, then measure** — drop the `~/Library/Caches` overlap, keep `/private/var/folders`, check `/Library/Caches` on a real Mac before adding it | BUG-001 OQ-1 |
+
+> The two permanent-deletion exceptions (1 and 3) are **approved but not yet in `CLAUDE.md`'s rule text or in code** — they are written into the rule when the features are built, so the mandatory `trashItem` rule is not weakened ahead of an implementation that scopes it.
+
+**Not decided here:** release assignment (v2.5 is already merged; v2.6 is a label for "after v2.5", not a frozen scope).
 
 ---
 
@@ -2264,7 +2293,7 @@ New **"iCloud"** tab in the **Files** module, alongside SpaceLens, Exact Duplica
 
 ---
 
-*Last updated: 2026-10-24 · `release/v2.4` @ 6ee0a21 · the Pipeline Status table above is authoritative; per-card statuses were reconciled with it and with the code on that date. Features without a card here: F-035 and F-040 (merged into F-026 / F-027).*
+*Last updated: 2026-10-27 (F-053, F-054, BUG-001 requirements added; F-053 status reconciled with PR #54) · previously 2026-10-24 · `release/v2.4` @ 6ee0a21 · the Pipeline Status table above is authoritative; per-card statuses were reconciled with it and with the code on that date. Features without a card here: F-035 and F-040 (merged into F-026 / F-027).*
 
 ---
 
@@ -3598,3 +3627,76 @@ a phone share a room. Not a new protocol.
 
 ### Why this is not ✅ Done
 The spec's own ship gate (AC-1: Mac ↔ real phone against the production relay) has not been run — only the Node reference client has been exercised. See the spec's §8.1 for the per-criterion verification table. Mobile feasibility study: done (`HALO_MOBILE_ROADMAP.md` §3 / §9).
+
+
+---
+
+## F-053 — Lucky Draw Avatars (NFeat-130)
+
+**Status:** 🔧 Partly built on PR #54 (2026-10-27; not merged) — emoji, photos and monogram; **animated emoji and caricatures wait for the commissioned art** · **Effort:** ~8–10 d incl. 1.5 d spikes · **Depends on:** F-051
+**Full spec:** [`docs/specs/F-053-lucky-draw-avatars.md`](specs/F-053-lucky-draw-avatars.md)
+
+### Intent
+Give every Lucky Draw entry an optional **avatar** — emoji, animated emoji, a bundled caricature, or a real photo — drawn as a ringed circle on the wheel's segments, as a large hero in the winner popup, in the multi-draw winners strip, and in the roster/log. No avatar ⇒ a derived initials monogram, so existing rosters look right with no migration.
+
+### Scope
+- Five avatar kinds (monogram derived · emoji · animated · caricature · photo); picker, drag-drop, folder import matched by name, CSV avatar column, "give everyone a character".
+- Wheel rendering via pre-resolved `Canvas` symbols, faded with spin speed, dropped above a data-driven entry threshold (default 40, tuned by spike).
+- Winner popup: gold conic ring, hero travel from the winning segment, animated playback; Reduced Motion alternative.
+- Photos: local only, face-centred crop (Vision), ≤256 px JPEG, copied in (never referenced by path), deleted with the entry/roster, bounded decode.
+
+### The rule that does not change
+The winner is chosen before the wheel moves, and **an avatar can never influence selection** (AC-3: same seed ⇒ same winner with or without avatars; mutation-checked).
+
+### Honest constraints recorded in the spec
+Apple emoji are static — "animated" needs a bundled pack (commissioned/self-drawn, per the owner's decision); "caricature from my photo" needs an ML model and is **out of scope** (spike only); animated avatars play only in the popup, posters elsewhere.
+
+### Mobile parity (governance)
+✅ Port / ✅ Port, **P2**, rides on the F-051 mobile port. The `EntryAvatar` JSON shape is the contract to freeze now. Study: [`HALO_MOBILE_ROADMAP.md`](HALO_MOBILE_ROADMAP.md) §3 / §9.
+
+### Open questions
+Default display mode · pack themes · hub shows last winner (see spec §12). *Resolved 2026-10-27:* `removeItem` on avatar copies allowed; art is **commissioned/self-drawn** (owner supplies it — F-053's headline visuals depend on that art existing).
+
+---
+
+## F-054 — Build Artifact Cleaner (NFeat-131)
+
+**Status:** 🗓 Planned (requirements written 2026-10-27; **no code**) · **Effort:** ~7–9 d incl. 1 d spikes · **Depends on:** BUG-001
+**Full spec:** [`docs/specs/F-054-build-artifact-cleaner.md`](specs/F-054-build-artifact-cleaner.md)
+
+### Intent
+A **Build Artifacts** pane in the Cleanup sidebar that finds regenerable build output in every project under the user's scan roots, ranks it by size, shows the project, toolchain, age and how to regenerate it, and removes the chosen items through the existing review sheet + `trashItem` path.
+
+### Scope
+- Data-driven toolchain catalogue (Xcode, Swift Package, Node, Rust, Gradle/Android, Flutter in the MVP; Maven, .NET, CMake, CocoaPods, Python caches, venv, Unity behind the same code).
+- **Safety gates, all required:** marker-pair detection (a bare `build/` is never offered) · git-aware (tracked content ⇒ skipped; ignored ⇒ offered; non-repo ⇒ *Unverified*) · no symlinks · scan-root containment · recency badge · regeneration class (*Safe* / *Needs network* / *Caution*, the last never bulk-selected).
+- Exact, uncapped sizes (the existing 20,000-file cap would understate `node_modules`).
+- The existing `.xcodeData` category is folded in so DerivedData is listed once (a second listing would recreate BUG-001).
+
+### Important consequence stated up front
+`trashItem` frees **no disk space until the Trash is emptied**. The pane says so, links to the Trash category, and — **owner-approved 2026-10-27** — offers a separate, explicit "also remove those exact items permanently" action, limited to the URLs `trashItem` just returned, never *Empty Trash*.
+
+### Mobile parity (governance)
+❌ iOS / ❌ Android — **Won't do** (no developer build trees on a phone; sandbox forbids the access). Study: [`HALO_MOBILE_ROADMAP.md`](HALO_MOBILE_ROADMAP.md) §3 / §9.
+
+### Open questions
+Smart Scan inclusion · default scan roots (see spec §12). *Resolved 2026-10-27:* free-space exception (approved, narrow) and scope (all regenerable build output).
+
+---
+
+## BUG-001 — Cleanup: no rescan, and stale cross-category items
+
+**Status:** 📋 Queued (analysis written 2026-10-27; **not yet reproduced in a running app, no fix**) · **Effort:** ~2.5–3 d · **Blocks:** F-054
+**Full spec:** [`docs/specs/BUG-001-cleanup-stale-state.md`](specs/BUG-001-cleanup-stale-state.md)
+
+### Report
+No rescan button; an item deleted under *User Caches* is still listed under *System Caches*; lists should update in real time after each action.
+
+### Root cause (from reading the code)
+`.systemCaches` and `.userCaches` **both scan `~/Library/Caches`** (`Models.swift:103-106`), each scan mints fresh `UUID`s, and a delete edits only the category it came from (`CleanupView.swift:60-94`). Also found: totals double-count the shared bytes; the Trash category isn't refreshed after a trash; `cleanAll` removes every row if any item succeeded; a naive rescan button would let a stale scan overwrite a newer one.
+
+### Fix (requirements)
+Rescan (+⌘R, +auto on app activation after 60 s) · one owner per path with a static invariant test · a shared `CleanupStore` keyed by standardized path with `reconcile(removed:)` after every deletion, refreshing Trash · scan-generation tokens · honest partial-failure results. No FSEvents watcher (non-goal).
+
+### Not a feature
+No mobile row required (governance rule applies to `F-xxx` features).
