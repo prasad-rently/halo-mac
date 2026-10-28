@@ -34,9 +34,13 @@ class ExpensePrefs(ctx: Context) {
 
 object ExpenseRuntime {
     private var ledger: ExpenseLedger? = null
+    // Two locks on purpose: a scan holds the object monitor for its whole run, and the screen's reads / "Exclude"
+    // taps only need the ledger, which has its own lock — they must not queue behind a long first scan.
+    private val ledgerLock = Any()
 
-    @Synchronized fun ledger(ctx: Context): ExpenseLedger =
+    fun ledger(ctx: Context): ExpenseLedger = synchronized(ledgerLock) {
         ledger ?: ExpenseLedger(File(ctx.applicationContext.filesDir, "expense-ledger.bin"), SecretBoxSealer).also { ledger = it }
+    }
 
     /** Blocking; call off the main thread. One scan at a time. */
     @Synchronized fun scan(ctx: Context, isCancelled: () -> Boolean): IngestReport {
@@ -60,8 +64,11 @@ object ExpenseRuntime {
     }
 
     @Synchronized fun wipe(ctx: Context) {
-        ledger(ctx).resetScan()
-        File(ctx.applicationContext.filesDir, "expense-ledger.bin").delete()
-        ledger = null
+        synchronized(ledgerLock) {
+            ledger(ctx).resetScan()
+            File(ctx.applicationContext.filesDir, "expense-ledger.bin").delete()
+            File(ctx.applicationContext.filesDir, "expense-ledger.bin.tmp").delete()
+            ledger = null
+        }
     }
 }

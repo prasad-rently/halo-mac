@@ -89,6 +89,8 @@ class ExpenseViewModel(app: Application) : AndroidViewModel(app) {
     fun setLineEnabled(subscriptionId: Int, enabled: Boolean) {
         prefs.disabledLines = if (enabled) prefs.disabledLines - subscriptionId else prefs.disabledLines + subscriptionId
         refresh()
+        // The toggle also applies to what is already stored; that happens at the end of a scan (ExpenseIngest.run).
+        if (prefs.enabled) scan()
     }
 
     val categoryNames: List<String> get() = app.halo.cloud.expense.PatternPack.indiaDefault.allCategoryNames

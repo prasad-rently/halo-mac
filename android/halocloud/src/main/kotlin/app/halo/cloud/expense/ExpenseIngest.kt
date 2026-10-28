@@ -60,7 +60,7 @@ class ExpenseIngest(
                 } else {
                     val cat = SmsClassifier.classify(r.address, r.body, pack)
                     when (val one = TransactionPipeline.parseOne(SmsInput(id, r.address, r.body, r.dateMs, cat), pack)) {
-                        is TransactionPipeline.One.Txn -> { parsed++; ledger.record(one, id) }
+                        is TransactionPipeline.One.Txn -> { parsed++; ledger.record(one, id, l.subscriptionId) }
                         TransactionPipeline.One.Unreadable -> { unreadable++; ledger.record(one, id) }
                         TransactionPipeline.One.Skip -> ledger.record(one, id)
                     }
@@ -70,6 +70,9 @@ class ExpenseIngest(
                 if (++sinceCheckpoint >= CHECKPOINT_EVERY) { ledger.flush(); sinceCheckpoint = 0 }
             }
         }
+        // The toggles apply to what is already stored, not just to what is read from now on (FR-E5): switching a SIM
+        // off or denying a sender must take its amounts out of the totals, and allowing it again must bring them back.
+        ledger.purge { t -> (t.line == null || t.line !in off) && filter.permits(t.sender) }
         ledger.flush()
         return report()
     }

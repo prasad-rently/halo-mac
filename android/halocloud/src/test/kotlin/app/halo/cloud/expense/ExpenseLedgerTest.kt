@@ -115,6 +115,24 @@ class ExpenseLedgerTest {
         assertEquals(listOf(300.0), l2.all().map { it.amount })
     }
 
+    @Test fun `switching a SIM off or denying a sender AFTER the scan removes its amounts, and allowing it again brings them back`() {
+        val rows = listOf(
+            sms(1, "VM-HDFCBK-T", "Rs.100 debited from A/C XX4521 to SHOPA on 09-06-26", june, sub = 1),
+            sms(2, "VM-ICICIB-T", "Rs.200 debited from A/C XX812 to SHOPB on 09-06-26", june + 1000, sub = 1),
+            sms(3, "VM-SBIINB-T", "Rs.300 debited from A/C XX1234 to SHOPC on 09-06-26", june + 2000, sub = 2))
+        val sims = listOf(SimLine(1, "Airtel", "", "SIM 1"), SimLine(2, "Jio", "", "SIM 2"))
+        val l = ledger(); l.exclude("1_$june")                                   // a user override must survive all of this
+        var off = emptySet<Int>(); var deny = emptySet<String>()
+        fun run() = ExpenseIngest(FakeSmsSource(rows, sims), l, ExpenseSettings(filter = { SenderFilter(deny = deny) }, disabledLines = { off }), clock = { now }).run()
+        fun amounts() = l.all().map { it.amount }.sorted()
+        run(); assertEquals(listOf(200.0, 300.0), amounts())
+        off = setOf(2); run(); assertEquals(listOf(200.0), amounts())             // SIM 2 off -> its 300 leaves the totals
+        off = emptySet(); run(); assertEquals(listOf(200.0, 300.0), amounts())    // SIM 2 on again -> re-read, not lost behind the mark
+        deny = setOf("VM-ICICIB-T"); run(); assertEquals(listOf(300.0), amounts())
+        deny = emptySet(); run(); assertEquals(listOf(200.0, 300.0), amounts())
+        assertEquals(setOf("1_$june"), l.overrides().excludedIds)
+    }
+
     @Test fun `a revoked SMS permission is reported, not thrown`() {
         val src = FakeSmsSource(inbox).also { it.denied = true }
         val rep = ExpenseIngest(src, ledger(), clock = { now }).run()

@@ -29,13 +29,15 @@ data class StoredTxn(
     val accountHint: String? = null,
     val confidence: Double,
     val sender: String,
+    /** The SIM line this was read from (null = unknown). Lets a later "SIM off" / sender-deny change remove it again. */
+    val line: Int? = null,
 ) {
     fun toParsed(currency: String) = ParsedTransaction(
         id = id, amount = amount, currency = currency, direction = if (direction == "credit") Direction.CREDIT else Direction.DEBIT,
         merchant = merchant, category = category, dateMs = dateMs, accountHint = accountHint, confidence = confidence, sender = sender)
 
     companion object {
-        fun of(t: ParsedTransaction) = StoredTxn(t.id, t.amount, t.direction.wire, t.merchant, t.category, t.dateMs, t.accountHint, t.confidence, t.sender)
+        fun of(t: ParsedTransaction, line: Int? = null) = StoredTxn(t.id, t.amount, t.direction.wire, t.merchant, t.category, t.dateMs, t.accountHint, t.confidence, t.sender, line)
     }
 }
 
@@ -110,12 +112,25 @@ class ExpenseLedger(
     @Synchronized fun transactionCount(): Int = txns.size
 
     /** Record one parsed message. Idempotent by id (the boundary row of a resumed scan is read twice). */
-    @Synchronized fun record(one: TransactionPipeline.One, id: String) {
+    @Synchronized fun record(one: TransactionPipeline.One, id: String, line: Int? = null) {
         when (one) {
-            is TransactionPipeline.One.Txn -> { txns[id] = StoredTxn.of(one.t); unreadable.remove(id) }
+            is TransactionPipeline.One.Txn -> { txns[id] = StoredTxn.of(one.t, line); unreadable.remove(id) }
             TransactionPipeline.One.Unreadable -> { unreadable.add(id); txns.remove(id) }
             TransactionPipeline.One.Skip -> { txns.remove(id); unreadable.remove(id) }
         }
+    }
+
+    /**
+     * Drop every stored row [keep] rejects (a SIM switched off, a sender denied since it was read). The marks of the
+     * lines that lost rows are forgotten too, so that allowing them again re-reads the inbox instead of leaving a
+     * permanent hole behind the mark. Returns how many rows were dropped. Overrides are untouched.
+     */
+    @Synchronized fun purge(keep: (StoredTxn) -> Boolean): Int {
+        val gone = txns.values.filter { !keep(it) }
+        if (gone.isEmpty()) return 0
+        gone.forEach { txns.remove(it.id) }
+        gone.mapNotNull { it.line }.toSet().forEach { marks.remove(it) }
+        return gone.size
     }
 
     /** Write the ledger now. Called at checkpoints during a scan and when it ends or is cancelled. */
@@ -125,7 +140,9 @@ class ExpenseLedger(
         val bytes = sealer.seal(json.encodeToString(LedgerState.serializer(), st).toByteArray(Charsets.UTF_8))
         file.parentFile?.mkdirs()
         val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeBytes(bytes)
+        // fsync before the rename: a rename over unsynced data can leave a zero-length file after a power loss, which
+        // would read as "empty" and quietly drop the user's overrides.
+        java.io.FileOutputStream(tmp).use { it.write(bytes); it.flush(); it.fd.sync() }
         if (!tmp.renameTo(file)) { file.delete(); if (!tmp.renameTo(file)) { tmp.delete(); error("could not replace ${file.name}") } }
     }
 
