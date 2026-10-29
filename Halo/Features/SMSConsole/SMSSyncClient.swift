@@ -249,8 +249,8 @@ final class SMSSyncClient: ObservableObject {
         guard case let .connected(uid) = state else { return }
         await removeDeviceObservers(deviceId)
         do {
-            try await rtdb.removeValue(at: "sms/\(uid)/\(deviceId)")
-            try await rtdb.removeValue(at: "devices/\(uid)/\(deviceId)")
+            // F-057 FR-S4: the id is spliced into a path, so DeviceRetirement refuses an empty or "/"-bearing one.
+            try await DeviceRetirement.retire(uid: uid, deviceId: deviceId) { try await rtdb.removeValue(at: $0) }
             devicesById[deviceId] = nil
             linesById = linesById.filter { $0.value.deviceId != deviceId }
             messagesById = messagesById.filter { !$0.key.hasPrefix("\(deviceId)/") }
@@ -337,7 +337,8 @@ final class SMSSyncClient: ObservableObject {
         let d = value as? [String: Any] ?? [:]
         devicesById[deviceId] = SMSDevice(id: deviceId,
                                           name: d["name"] as? String ?? deviceId,
-                                          platform: d["platform"] as? String ?? "android")
+                                          platform: d["platform"] as? String ?? "android",
+                                          lastSeen: DeviceLastSeen.date(fromRaw: d["lastSeen"]))
         publishDevices()
     }
 

@@ -21,9 +21,8 @@ struct CloudSettingsPane: View {
 
     @State private var pending: PendingAction?
     /// The pairing code holds the Firebase sign-in, so it is not even built until asked for (no Keychain read on
-    /// every render), and is dropped again on Hide or on leaving the pane.
-    @State private var pairingCode: String?
-    @State private var pairingUnavailable = false
+    /// every render), hides itself after 60 s (F-057 FR-S3), and is dropped again on Hide or on leaving the pane.
+    @StateObject private var pairing = PairingCodeSession()
     @State private var busy = false
 
     /// A destructive action awaiting confirmation.
@@ -54,6 +53,7 @@ struct CloudSettingsPane: View {
             VStack(alignment: .leading, spacing: 18) {
                 header
                 notificationsSection
+                DatabaseCheckSection()
                 linesSection
                 devicesSection
                 pairingSection
@@ -129,18 +129,23 @@ struct CloudSettingsPane: View {
         }
     }
 
-    // MARK: Devices (D28 per-device wipe)
+    // MARK: Devices (D28 per-device wipe; F-057 FR-S4 last-seen + retire)
 
     @ViewBuilder private var devicesSection: some View {
         if !client.devices.isEmpty {
-            section("Devices", "Retire a phone — removes its entire synced subtree.") {
+            section("Devices", "Each phone that syncs to your cloud, and when it last did. Retire a phone you no longer use — this removes its entire synced subtree from your cloud (the messages on the phone itself are untouched).") {
                 ForEach(client.devices) { device in
                     HStack(spacing: 10) {
                         Image(systemName: device.iconName).foregroundColor(.haloText2).frame(width: 20)
-                        Text(device.name).font(HaloFont.body(12, weight: .semibold)).foregroundColor(.haloText)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(device.name).font(HaloFont.body(12, weight: .semibold)).foregroundColor(.haloText)
+                            Text("Last seen: \(DeviceLastSeen.text(lastSeen: device.lastSeen))")
+                                .font(HaloFont.body(10))
+                                .foregroundColor(DeviceLastSeen.isStale(lastSeen: device.lastSeen) ? .haloAmber : .haloText2)
+                        }
                         Spacer()
                         Button { pending = .wipeDevice(device) } label: {
-                            Label("Wipe", systemImage: "trash").font(HaloFont.body(11)).foregroundColor(.haloRed)
+                            Label("Retire", systemImage: "trash").font(HaloFont.body(11)).foregroundColor(.haloRed)
                         }.buttonStyle(.plain)
                     }
                     .padding(.vertical, 6)
@@ -151,15 +156,6 @@ struct CloudSettingsPane: View {
     }
 
     // MARK: Phone pairing (F-049 US-1)
-
-    /// The payload the phone scans or pastes. nil until a config, credential and salt are all stored.
-    private func makePairingCode() -> String? {
-        let store = CloudConfigStore.shared
-        guard let config = store.firebaseConfig, let auth = store.authCredential, let salt = store.salt else { return nil }
-        let payload = CloudPairingPayload(firebaseConfig: config, auth: auth, salt: salt,
-                                          iterations: store.kdfIterations ?? CryptoService.legacyIterations)
-        return try? payload.encoded()
-    }
 
     private func qrImage(for text: String) -> NSImage? {
         let filter = CIFilter.qrCodeGenerator()
@@ -174,7 +170,7 @@ struct CloudSettingsPane: View {
 
     private var pairingSection: some View {
         section("Pair a phone", "Show a code your Halo phone app scans or pastes. It carries your Firebase sign-in so the phone can connect — never your encryption passphrase, which you type on the phone.") {
-            if let code = pairingCode {
+            if let code = pairing.code {
                 HStack(alignment: .top, spacing: 16) {
                     if let img = qrImage(for: code) {
                         // CIQRCodeGenerator draws no quiet zone; a camera needs a light border or the dark
@@ -194,19 +190,28 @@ struct CloudSettingsPane: View {
                             .font(HaloFont.body(10)).foregroundColor(.haloAmber)
                     }
                 }
-                HaloGhostButton("Hide", icon: "eye.slash") { pairingCode = nil }
+                HStack(spacing: 12) {
+                    HaloGhostButton("Hide", icon: "eye.slash") { pairing.hide() }
+                    HaloGhostButton("New code", icon: "arrow.clockwise") { pairing.show() }
+                    // Whole-second countdown; TimelineView re-evaluates it each second without a timer of our own.
+                    TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                        Text("Hides in \(pairing.secondsRemaining(at: ctx.date)) s")
+                            .font(HaloFont.body(10)).foregroundColor(.haloText3)
+                    }
+                }
             } else {
-                if pairingUnavailable {
+                if pairing.unavailable {
                     Text("Connect your Firebase first — there is nothing to pair yet.")
                         .font(HaloFont.body(10)).foregroundColor(.haloText3)
                 }
-                HaloGhostButton("Show pairing code", icon: "qrcode") {
-                    pairingCode = makePairingCode()
-                    pairingUnavailable = pairingCode == nil
+                if pairing.expired {
+                    Text("The code was hidden after 60 seconds. Show it again to get a fresh one.")
+                        .font(HaloFont.body(10)).foregroundColor(.haloText3)
                 }
+                HaloGhostButton("Show pairing code", icon: "qrcode") { pairing.show() }
             }
         }
-        .onDisappear { pairingCode = nil; pairingUnavailable = false }
+        .onDisappear { pairing.hide() }
     }
 
     // MARK: Re-key (D24)
@@ -249,6 +254,7 @@ struct CloudSettingsPane: View {
         switch pending {
         case .rekey: return "Re-key and wipe cloud data?"
         case .disconnect: return "Disconnect and forget this cloud?"
+        case .wipeDevice: return "Retire this phone?"
         default: return "Wipe synced data?"
         }
     }
@@ -257,6 +263,7 @@ struct CloudSettingsPane: View {
         switch action {
         case .rekey: return "Re-key & wipe"
         case .disconnect: return "Disconnect"
+        case .wipeDevice: return "Retire"
         default: return "Wipe"
         }
     }
@@ -264,7 +271,7 @@ struct CloudSettingsPane: View {
     private func confirmMessage(_ action: PendingAction) -> String {
         switch action {
         case .wipeAll: return "Removes all synced messages and devices from your cloud. Originals on your phone are untouched; devices can re-sync."
-        case .wipeDevice(let d): return "Removes “\(d.name)” and all its synced messages from your cloud."
+        case .wipeDevice(let d): return "Retires “\(d.name)”: removes it and all its synced messages from your cloud. The messages on the phone are untouched, and it can sync again if you pair it again."
         case .wipeLine(let l): return "Removes the “\(l.label)” line (\(l.ownNumber)) and its synced messages from your cloud."
         case .rekey: return "The cloud SMS store is wiped and re-encrypted under the new passphrase. Your devices re-sync from their inboxes. This can't be undone from here."
         case .disconnect: return "Clears the saved Firebase config, credential and key from this Mac's Keychain. Cloud data is left intact."
@@ -278,7 +285,7 @@ struct CloudSettingsPane: View {
         case .wipeDevice(let d):  run { await client.wipeDevice(d.id) }
         case .wipeLine(let l):    run { await client.wipeLine(l) }
         case .rekey(let pass):    run { await client.rekey(newPassphrase: pass); newPass = ""; confirmPass = ""
-                                        pairingCode = nil }   // it carried the OLD salt — never leave a stale code on screen
+                                        pairing.hide() }      // it carried the OLD salt — never leave a stale code on screen
         case .disconnect:         run { await client.disconnect(); dismiss() }
         }
     }
