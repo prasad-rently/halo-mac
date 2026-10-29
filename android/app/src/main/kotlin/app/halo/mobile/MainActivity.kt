@@ -13,7 +13,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { HaloTheme { HaloApp(vm, cloud) } }
-        debugPairing(intent); handleShare(intent)
+        debugPairing(intent)
+        if (savedInstanceState == null) handleShare(intent)      // a rotation re-delivers the original intent: don't re-stage what was already sent or discarded
     }
 
     override fun onNewIntent(intent: android.content.Intent) { super.onNewIntent(intent); debugPairing(intent); handleShare(intent) }

@@ -13,11 +13,20 @@ import androidx.core.content.IntentCompat
 object SharedUris {
     const val MAX = 100
 
+    /**
+     * Provider authorities that hold data this app can read but the sharing app may not be entitled to. Halo holds
+     * READ_SMS, so a hostile app could otherwise name the telephony providers and have Halo read them on its behalf.
+     */
+    private val sensitiveAuthorities = setOf("sms", "mms", "mms-sms", "telephony", "com.android.contacts", "call_log", "icc")
+
     /** The pure rule, JVM-testable. [authority] is the URI's authority; [ownPackage] this app's package. */
     fun acceptable(scheme: String?, authority: String?, ownPackage: String = "app.halo.mobile"): Boolean {
         if (!"content".equals(scheme, ignoreCase = true)) return false          // file://, android.resource://, http://, … all refused
-        val a = authority?.lowercase() ?: return false
-        return !a.startsWith(ownPackage.lowercase())                              // never one of our own providers
+        // `content://<userId>@<authority>/…` addresses the same provider (ContentProvider strips the user id), so a bare
+        // startsWith on the raw authority would let `content://0@app.halo.mobile.x/…` straight past the own-package check.
+        val a = authority?.substringAfterLast('@')?.lowercase()?.takeIf { it.isNotEmpty() } ?: return false
+        if (a.startsWith(ownPackage.lowercase())) return false                    // never one of our own providers
+        return a !in sensitiveAuthorities
     }
 
     fun extract(intent: Intent?): List<Uri> {

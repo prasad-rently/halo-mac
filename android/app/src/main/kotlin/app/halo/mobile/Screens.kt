@@ -153,6 +153,7 @@ fun ShareScreen(vm: AppViewModel) {
     val listen by vm.listen.collectAsStateWithLifecycle()
     val peers by vm.peers.collectAsStateWithLifecycle()
     val selected by vm.selectedPeerId.collectAsStateWithLifecycle()
+    val selectedAlias = peers.firstOrNull { it.id == selected }?.alias
     val scanning by vm.scanning.collectAsStateWithLifecycle()
     val transfer by vm.transfer.collectAsStateWithLifecycle()
     val notice by vm.notice.collectAsStateWithLifecycle()
@@ -170,7 +171,9 @@ fun ShareScreen(vm: AppViewModel) {
         val sharedIn by vm.shared.collectAsStateWithLifecycle()
         if (sharedIn.isNotEmpty()) HaloCard {
             Text("${sharedIn.size} item${if (sharedIn.size == 1) "" else "s"} shared to Halo", color = Halo.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("share.sharedTitle"))
-            Text(if (selected == null) "Choose a device below, then tap Send. Nothing is sent until you do." else "Tap Send to send to the selected device. The other device still has to accept.", color = Halo.Text3, fontSize = 12.sp)
+            val labels by vm.sharedLabels.collectAsStateWithLifecycle()
+            if (labels.isNotEmpty()) Text(labels.joinToString(", ") + if (sharedIn.size > labels.size) " and ${sharedIn.size - labels.size} more" else "", color = Halo.Text2, fontSize = 12.sp, modifier = Modifier.testTag("share.sharedNames"))
+            Text(if (selected == null) "Choose a device below, then tap Send. Nothing is sent until you do." else "Tap Send to send to ${selectedAlias ?: "the selected device"}. The other device still has to accept.", color = Halo.Text3, fontSize = 12.sp)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(onClick = { vm.sendShared() }, enabled = selected != null, modifier = Modifier.testTag("share.sendShared")) { Text("Send") }

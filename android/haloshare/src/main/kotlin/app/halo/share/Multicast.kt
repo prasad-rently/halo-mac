@@ -14,6 +14,9 @@ import java.net.SocketTimeoutException
 object MulticastCodec {
     const val MAX_DATAGRAM = 4096
     const val MAX_ALIAS = 64
+    /** Per discovery window. Fingerprints are attacker-chosen, so unique-per-datagram floods must not grow memory, the device list or our replies without bound. */
+    const val MAX_PEERS = 64
+    const val MAX_ANSWERS = 16
 
     fun encode(me: DeviceInfo, announce: Boolean, port: Int = me.port): ByteArray =
         HaloJson.encodeToString(DeviceInfo.serializer(), me.copy(announce = announce, download = false, port = port)).toByteArray(Charsets.UTF_8)
@@ -74,8 +77,8 @@ class MulticastDiscovery(private val me: DeviceInfo, private val windowMs: Long 
             if (clock() >= nextAnnounce) { runCatching { transport.send(MulticastCodec.encode(me, announce = true)) }; nextAnnounce = clock() + windowMs / 2 }
             val r = transport.receive(minOf(250L, maxOf(1L, end - clock())).toInt()) ?: continue
             val info = MulticastCodec.decode(r.bytes, r.length, me.fingerprint) ?: continue
-            if (info.announce == true && answered.add(info.fingerprint)) runCatching { transport.send(MulticastCodec.encode(me, announce = false)) }
-            if (info.fingerprint !in found) { val peer = Peer(info, r.host); found[info.fingerprint] = peer; onFound(peer) }
+            if (info.announce == true && answered.size < MulticastCodec.MAX_ANSWERS && answered.add(info.fingerprint)) runCatching { transport.send(MulticastCodec.encode(me, announce = false)) }
+            if (info.fingerprint !in found && found.size < MulticastCodec.MAX_PEERS) { val peer = Peer(info, r.host); found[info.fingerprint] = peer; onFound(peer) }
         }
         return found.values.toList()
     }

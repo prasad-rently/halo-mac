@@ -72,4 +72,12 @@ class MulticastTest {
         MulticastDiscovery(me, windowMs = 10_000, clock = { n2.also { n2 += 1 } }).run(Fake(ArrayDeque()), isCancelled = { ++calls > 3 })
         assertTrue(calls <= 5)
     }
+
+    @Test fun `a flood of unique spoofed fingerprints cannot grow the peer list or our replies without bound`() {
+        val inbound = ArrayDeque((1..500).map { i -> bytes(peer(fp = "spoof-$i")).let { DatagramTransport.Received(it, it.size, "10.0.0.${i % 250}") } })
+        val t = Fake(inbound); var now = 0L
+        val found = MulticastDiscovery(me, windowMs = 100_000, clock = { now.also { now += 10 } }).run(t)
+        assertEquals(MulticastCodec.MAX_PEERS, found.size)
+        assertEquals(MulticastCodec.MAX_ANSWERS, t.sent.count { it.contains("\"announce\":false") })
+    }
 }

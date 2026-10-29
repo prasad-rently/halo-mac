@@ -135,8 +135,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Listens while the app is visible (and, if the user opted in, in the background via [HaloShareService]). */
     fun startServer() = ReceiverHost.start(getApplication(), _identity.value)
 
-    /** Only stops the receiver when nothing else needs it: with background receiving on, the service keeps it. */
-    fun stopServer() { if (!bg.enabled) ReceiverHost.stop(getApplication()) }
+    /**
+     * Only stops the receiver when nothing else will keep it: the foreground service must actually be running. Keying this
+     * on the toggle alone left a listener open with no service and no notification whenever Android had ended the service
+     * (the Android 15 six-hour limit, a refused start) while the screen was up.
+     */
+    fun stopServer() { if (!ReceiverHost.serviceActive) ReceiverHost.stop(getApplication()) }
 
     fun resolveConsent(decision: ConsentDecision) = ReceiverHost.resolve(decision)
 
@@ -150,14 +154,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Called when the app comes to the front: re-assert the service the user asked for, and pick up a system pause. */
     fun syncBackgroundState() {
         _backgroundReceive.value = bg.enabled; _pausedBySystem.value = bg.pausedBySystem
-        if (bg.enabled && !bg.pausedBySystem) HaloShareService.start(getApplication())
+        if (bg.enabled && !bg.pausedBySystem && !ReceiverHost.serviceActive) HaloShareService.start(getApplication())
     }
 
     // ── Sharesheet (F-055 FR-B3) ──────────────────────────────────────────────────────────────
 
-    fun stageShared(uris: List<Uri>) { _shared.value = uris; if (uris.isNotEmpty()) _notice.value = "${uris.size} shared item(s) ready — choose a device, then tap Send." }
-    fun clearShared() { _shared.value = emptyList() }
-    fun sendShared() { val u = _shared.value; if (u.isNotEmpty()) { send(u); _shared.value = emptyList() } }
+    /** What the person is about to send, by name — the share card shows it so a swapped-in second share is visible. */
+    private val _sharedLabels = MutableStateFlow<List<String>>(emptyList())
+    val sharedLabels: StateFlow<List<String>> = _sharedLabels.asStateFlow()
+
+    fun stageShared(uris: List<Uri>) {
+        _shared.value = uris; _sharedLabels.value = emptyList()
+        if (uris.isEmpty()) return
+        _notice.value = "${uris.size} shared item(s) ready — choose a device, then tap Send."
+        val resolver = getApplication<Application>().contentResolver
+        viewModelScope.launch(Dispatchers.IO) {
+            val names = uris.take(3).map { u -> runCatching { displayName(resolver, u) }.getOrNull() ?: "(unreadable item)" }
+            if (_shared.value == uris) _sharedLabels.value = names
+        }
+    }
+    fun clearShared() { _shared.value = emptyList(); _sharedLabels.value = emptyList() }
+    fun sendShared() { val u = _shared.value; if (u.isNotEmpty()) { send(u); clearShared() } }
+
+    private fun displayName(resolver: android.content.ContentResolver, uri: Uri): String? =
+        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getColumnIndex(OpenableColumns.DISPLAY_NAME).takeIf { it >= 0 }?.let { c.getString(it) } else null
+        }?.filter { !it.isISOControl() }?.take(80)
 
     fun refreshInbox() {
         _inbox.value = receiveDirectory.walkTopDown().filter { it.isFile && !it.name.startsWith(".") }
@@ -173,7 +195,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _scanning.value = true; _notice.value = null; scanCancelled = false
         scanJob = viewModelScope.launch(Dispatchers.IO) {
             // Multicast (F-055 FR-B4) and the /24 HTTP scan run together; whichever sees a peer first wins, duplicates merge by fingerprint.
-            val multicast = launch { app.halo.mobile.background.MulticastScope.run(getApplication(), _identity.value.deviceInfo(), onFound = { merge(it) }, isCancelled = { scanCancelled }) }
+            val multicast = launch { app.halo.mobile.background.MulticastScope.run(getApplication(), _identity.value.deviceInfo(), onFound = { mergeUnverified(it) }, isCancelled = { scanCancelled }) }
             val found = SubnetScanner(client).scan(onFound = { merge(it) }, isCancelled = { scanCancelled })
             found.forEach { merge(it) }
             multicast.join()
@@ -188,6 +210,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _peers.update { list -> (list.filter { it.id != peer.id } + peer).sortedBy { it.alias.lowercase() } }
         if (_selected.value == null) _selected.value = peer.id
     }
+
+    /**
+     * A multicast datagram is unauthenticated, and a device's fingerprint is public (it is in every announcement), so a
+     * second host claiming a fingerprint we already hold must not silently take over that entry — that would redirect
+     * the next send. First sighting wins; an address that actually answered over HTTP (the /24 scan, manual add) is
+     * authoritative and still replaces it via [merge].
+     */
+    private fun mergeUnverified(peer: Peer) { if (_peers.value.none { it.id == peer.id }) merge(peer) }
 
     fun select(id: String) { _selected.value = id }
 
@@ -212,12 +242,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val resolver = getApplication<Application>().contentResolver
         val files = uris.mapNotNull { uri ->
             var name = uri.lastPathSegment ?: "file"; var size = -1L
-            resolver.query(uri, null, null, null, null)?.use { c ->
-                if (c.moveToFirst()) {
-                    c.getColumnIndex(OpenableColumns.DISPLAY_NAME).takeIf { it >= 0 }?.let { name = c.getString(it) }
-                    c.getColumnIndex(OpenableColumns.SIZE).takeIf { it >= 0 }?.let { if (!c.isNull(it)) size = c.getLong(it) }
+            // A shared URI is another app's input: a revoked grant or a provider that refuses us throws, and that must be
+            // "couldn't read", not a crash on the main thread.
+            try {
+                resolver.query(uri, null, null, null, null)?.use { c ->
+                    if (c.moveToFirst()) {
+                        c.getColumnIndex(OpenableColumns.DISPLAY_NAME).takeIf { it >= 0 }?.let { name = c.getString(it) }
+                        c.getColumnIndex(OpenableColumns.SIZE).takeIf { it >= 0 }?.let { if (!c.isNull(it)) size = c.getLong(it) }
+                    }
                 }
-            }
+            } catch (e: Exception) { return@mapNotNull null }
             if (size < 0) return@mapNotNull null
             OutgoingFile(name = name, size = size, mimeType = resolver.getType(uri) ?: "application/octet-stream",
                 open = { resolver.openInputStream(uri) ?: throw java.io.IOException("cannot open $name") })

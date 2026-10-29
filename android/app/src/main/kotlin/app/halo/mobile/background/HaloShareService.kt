@@ -17,11 +17,12 @@ class HaloShareService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
+        if (intent?.action == ACTION_STOP) {          // from the notification's Stop button (a plain startService, so no startForeground owed)
             BackgroundPrefs(this).enabled = false
             stopSelf(); return START_NOT_STICKY
         }
-        if (!BackgroundPrefs(this).enabled) { stopSelf(); return START_NOT_STICKY }      // the user turned it off while we were starting
+        // startForegroundService() obliges us to call startForeground() promptly on EVERY path — including the ones that
+        // then stop straight away — or Android kills the app with ForegroundServiceDidNotStartInTimeException.
         try {
             val n = Notifications.serviceNotification(this)
             if (Build.VERSION.SDK_INT >= 29) startForeground(Notifications.ID_SERVICE, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC) else startForeground(Notifications.ID_SERVICE, n)
@@ -29,7 +30,9 @@ class HaloShareService : Service() {
             // e.g. a sticky restart from the background that Android refuses: do not crash, just stand down.
             stopSelf(); return START_NOT_STICKY
         }
+        if (!BackgroundPrefs(this).enabled) { stopSelf(); return START_NOT_STICKY }      // the user turned it off while we were starting
         BackgroundPrefs(this).pausedBySystem = false
+        ReceiverHost.serviceActive = true
         ReceiverHost.start(this)
         ClipboardController.start(this)          // no-op unless clipboard sync is on and the phone is paired
         return START_STICKY
@@ -42,6 +45,7 @@ class HaloShareService : Service() {
     }
 
     override fun onDestroy() {
+        ReceiverHost.serviceActive = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         if (!ReceiverHost.uiVisible) ReceiverHost.stop(this)      // with the screen up the visible app keeps its own receiver
         super.onDestroy()

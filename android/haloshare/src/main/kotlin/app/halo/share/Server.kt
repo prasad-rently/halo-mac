@@ -84,6 +84,8 @@ class HaloShareServer(
     private val pool = Executors.newCachedThreadPool { r -> Thread(r, "haloshare-conn").apply { isDaemon = true } }
     private var serverSocket: ServerSocket? = null
     private val running = AtomicBoolean(false)
+    /** Terminal: a stopped server is never restarted (a new instance is made instead), so a stop() that races a start() always wins. */
+    private val stopped = AtomicBoolean(false)
     private val sweeper = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "haloshare-sweep").apply { isDaemon = true } }
 
     /** Sessions currently held. For tests. */
@@ -111,6 +113,7 @@ class HaloShareServer(
 
     /** Starts listening. Pass `0` for an ephemeral port (tests). Returns the bound port. */
     fun start(port: Int = HaloShare.DEFAULT_PORT): Int {
+        check(!stopped.get()) { "stopped" }
         check(running.compareAndSet(false, true)) { "already started" }
         val socket = ServerSocket()
         socket.reuseAddress = true
@@ -120,23 +123,28 @@ class HaloShareServer(
             running.set(false)
             throw e
         }
-        serverSocket = socket
-        val period = (sessionTimeoutMs / 4).coerceIn(250, 30_000)
-        sweeper.scheduleWithFixedDelay({ runCatching { sweepExpiredSessions() } }, period, period, java.util.concurrent.TimeUnit.MILLISECONDS)
-        Thread({ acceptLoop(socket) }, "haloshare-accept").apply { isDaemon = true }.start()
+        // stop() may have run while we were binding. It found no socket to close, so nobody else will: close it here,
+        // or the port stays open with no owner. (`stopped` and the socket are published under `lock`, as stop() reads them.)
+        synchronized(lock) {
+            if (stopped.get()) { runCatching { socket.close() }; throw IOException("stopped while starting") }
+            serverSocket = socket
+            val period = (sessionTimeoutMs / 4).coerceIn(250, 30_000)
+            sweeper.scheduleWithFixedDelay({ runCatching { sweepExpiredSessions() } }, period, period, java.util.concurrent.TimeUnit.MILLISECONDS)
+            Thread({ acceptLoop(socket) }, "haloshare-accept").apply { isDaemon = true }.start()
+        }
         return socket.localPort
     }
 
     fun stop() {
-        if (!running.compareAndSet(true, false)) return
-        runCatching { serverSocket?.close() }
-        serverSocket = null
+        stopped.set(true); running.set(false)
         synchronized(lock) {
+            runCatching { serverSocket?.close() }
+            serverSocket = null
             sessions.values.forEach { discardPartials(it) }
             sessions.clear()
+            pool.shutdownNow()
+            sweeper.shutdownNow()
         }
-        pool.shutdownNow()
-        sweeper.shutdownNow()
     }
 
     private fun acceptLoop(socket: ServerSocket) {
