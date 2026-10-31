@@ -357,6 +357,8 @@ fun CloudSettingsCard(vm: CloudViewModel) {
             TextButton(onClick = { vm.deviceName = name }, enabled = name.isNotBlank() && name.trim() != vm.deviceName) { Text("Save name") }
             OutlinedButton(onClick = { confirm = true }, modifier = Modifier.testTag("settings.disconnect")) { Text("Disconnect") }
             Text("Forgets the connection and the key on this phone. Your messages and cloud data are not deleted.", color = Halo.Text3, fontSize = 11.sp)
+            Spacer(Modifier.height(12.dp))
+            DatabaseCheckSection(p)      // F-057: per-path database check (DatabaseCheckUi.kt)
         }
     }
     if (confirm) androidx.compose.material3.AlertDialog(

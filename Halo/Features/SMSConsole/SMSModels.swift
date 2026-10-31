@@ -52,6 +52,8 @@ struct SMSDevice: Identifiable, Hashable, Sendable {
     let id: String
     let name: String       // "Pixel 8"
     let platform: String   // "android" / "ios"
+    /// When the phone last synced (`devices/{uid}/{id}.lastSeen`); nil if it never wrote one. F-057 FR-S4.
+    var lastSeen: Date? = nil
     var iconName: String { platform == "ios" ? "iphone" : "candybarphone" }
 }
 
