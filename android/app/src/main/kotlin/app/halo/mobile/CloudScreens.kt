@@ -270,7 +270,7 @@ fun ClipboardScreen(vm: CloudViewModel) {
     val ctx = LocalContext.current
     var accessibility by remember { mutableStateOf(vm.accessibilityEnabled()) }
     var confirmPurge by remember { mutableStateOf(false) }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { accessibility = vm.accessibilityEnabled() }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { accessibility = vm.accessibilityEnabled(); vm.retryHistory() }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Clipboard", color = Halo.Text, fontSize = 34.sp, fontWeight = FontWeight.Bold)
