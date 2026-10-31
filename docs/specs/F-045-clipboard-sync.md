@@ -1,6 +1,8 @@
 # F-045 — Cross-Device Clipboard Sync (NFeat-123)
 
 > **Status:** 🗓 Planned · **Platform:** Desktop + Mobile
+>
+> **v2.6 hardening cross-references (added 2026-11-01; no behaviour change to this spec).** The status line above is historical — current status is in `FEATURE_ROADMAP.md` Pipeline Status (desktop merged in v2.5; Android built; **automatic background capture not verified on a real phone**). v2.6 hardening that touches this feature, all **built on unmerged PRs** and tracked in [`../V2_6_PLAN.md`](../V2_6_PLAN.md) §6: **H-13** phone clipboard history sealed at rest — built, JVM-verified, **real-device Keystore behaviour NOT verified** (#61) · **H-15** Android minors incl. the accessibility-service config (**gated on V-3**) and the Send-to-Mac share target (#61) · **H-16** password-leak test inspects bodies (#61) · **H-20** wire-contract fixture (#60/#61) · **F-055** foreground service hosts the clipboard stream while enabled (#62) · **F-057** the database check probes `clipboard/` (the real v2.5 defect). Verification debt: V-2, V-3.
 > **Depends on:** [00-foundations](00-foundations.md) (BYOB Firebase), existing Clipboard module, F-049 (mobile)
 > **Supersedes:** F-013 "iCloud Clipboard Sync" (skipped) — replaced with a user-owned Firebase approach (no Pro tier, no iCloud lock-in)
 

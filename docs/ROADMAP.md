@@ -149,6 +149,22 @@ Before any release:
 
 ---
 
+### 6. v2.6 — "stabilise, finish, clean up" (2026-11-01)
+
+Built on open, **unmerged** PRs #56–#63 against `release/v2.6`; nothing is released and no owner device test has been run, so nothing here is ✅. Plan and record: [`V2_6_PLAN.md`](V2_6_PLAN.md); roadmap table: `FEATURE_ROADMAP.md` "v2.6 scope & status".
+
+- 🔧 **Hardening H-01…H-21** — H-01/04/07/12 merged in v2.5; the rest on #56/#60/#61; H-05 and H-11 partial, **H-17 open** (#56 #60 #61)
+- 🔧 **F-054** Build Artifact Cleaner — built on #59, pane never viewed on screen
+- 🔧 **F-053** completion (non-art) — C-1…C-4 on #57; hero flight not seen on screen; animated/caricatures ⛔ ART
+- 🔧 **F-055** Android background receiving & sharing — #62 (real multicast/Doze not verified)
+- 🔧 **F-056** Expenditure on the phone — #58 (JVM-only; known parser false positives)
+- 🔧 **F-057** Cloud setup assistant — #63 (stubs/loopback only; reviewed, 10 fixes)
+- 🔧 **F-058** Release engineering — #56 (CI never run on GitHub)
+
+**v2.7** (blocked or too large — devices, accounts, art, iOS client, MLX, notarisation, HaloShare TLS, mobile ports): see `FEATURE_ROADMAP.md` "v2.7 backlog". Owner verification debt V-1…V-10: `MANUAL_TEST_PLAN.md` §20.6–§20.7.
+
+---
+
 ## Raycast-Inspired Features (F-031 → F-042) — v4.0 Execution Plan
 
 > Source: Analysis of [raycast/extensions](https://github.com/raycast/extensions) (2,962 extensions, 7.5k stars) and [raycast/ray-so](https://github.com/raycast/ray-so) (8 web tools). Full analysis in `docs/RAYCAST_ANALYSIS.md`. Full execution cards in `docs/FEATURE_ROADMAP.md`.
@@ -290,7 +306,7 @@ Brainstormed during v2.0 planning. Full cards with rationale, data sources, and 
 
 ---
 
-### Requested 2026-10-27 — requirements written (F-053 partly built on unmerged PR #54; the rest not started)
+### Requested 2026-10-27 — requirements written; BUG-001 and F-053 (emoji/photo/monogram) merged in v2.5, F-054 and the F-053 completion built on unmerged v2.6 PRs (see §6 above)
 
 | ID | Item | Summary |
 |----|------|---------|

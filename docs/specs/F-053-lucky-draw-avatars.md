@@ -1,6 +1,6 @@
 # F-053 — Lucky Draw Avatars (NFeat-130)
 
-> **Status:** 🔧 **Partly built on PR #54 (2026-10-27, not merged)** — emoji, photos and monogram avatars on the wheel, popup, winners strip, roster chips and log. **Not built:** animated emoji, caricatures (no art yet), hero travel, avatar-storage readout. Owner decisions on art source and file deletion recorded 2026-10-27.
+> **Status:** 🔧 **Emoji / photo / monogram avatars are merged in `release/v2.5` (PR #54; not clicked through, 60 fps never measured on screen).** **v2.6 completion (non-art) is built on PR #57 (unmerged; head `c700dfc`, independently reviewed) and hardening on PR #60 (unmerged):** hero travel, hub last winner, storage readout + per-roster clear, CSV avatar column, wheel signposts — **hero flight, name reveal, Reduce-Motion cross-fade and 60 fps have NOT been seen on a screen** (V-8). **Not built:** animated emoji, caricatures (no art; ⛔ ART → v2.7), "give everyone a character". Owner decisions on art source and file deletion recorded 2026-10-27.
 > **Extends:** F-051 Lucky Draw Spinner Wheel · **Raised:** 2026-10-27 · **Effort estimate:** ~8–10 d desktop (incl. 1.5 d of spikes)
 > **Reserved pbxproj ID block:** `8225`–`8244` (claimed in `CLAUDE.md`)
 
@@ -253,9 +253,11 @@ Manual (cannot be asserted): hero transition feel, animated playback, ring contr
 
 ---
 
+---
+
 ## 14. Implementation Record
 
-**PR #54, branch `feat/f053-lucky-draw-avatars`** — written 2026-10-27, **not merged**.
+### 14.1 PR #54 — merged into `release/v2.5` (written 2026-10-27)
 
 **Built (P1–P4, for the kinds that need no art):**
 `EntryAvatar` (emoji / photo, plus the reserved animated / character cases) with tolerant `Codable`; `AvatarDisplayMode` per roster; `AvatarStore` (copy-in, Vision face crop with a timeout, 256-px JPEG, bounded decode, path containment, orphan sweep, copy, delete); `AvatarImageCache`; `AvatarView`; the picker popover (Emoji / Photo); roster chips and log rows with avatars; avatars on the wheel (upright, faded with speed, spotlight lift, capped at 40 entries); the winner popup's gold-ringed avatar; the winners-strip avatars; folder import by name with a confirm sheet; "Clear all photos"; cascade deletes. 742 tests pass on a fresh clone; the three data-safety guards were mutation-checked.
@@ -266,6 +268,59 @@ Manual (cannot be asserted): hero transition feel, animated playback, ring contr
 - **`AvatarStore` is a class, not an actor** (stateless; CLAUDE.md's rule), with blocking work on GCD, not Swift's cooperative pool.
 - **`AvatarImageCache` returns another decoded size** while the right one loads, so a larger avatar never flashes initials.
 
-**Not built:** animated emoji and bundled characters (art pending, §12 R1); "give everyone a character" (FR-A5); hero travel from the segment to the popup (FR-P2); the hub's last-winner avatar (FR-W7); avatar playback in the popup; the Settings storage readout (NFR-P4's button exists, the byte count does not); CSV avatar column (FR-B2); VoiceOver extras (FR-R2) beyond hiding decorative avatars.
+**Not verified at #54 (still true):** no one has used the picker, drop, folder sheet, popup animation or Reduced Motion in the running app; Vision on a real face is untested (test images are synthetic); the sandboxed release build was not tried. (#54's "not built" list — hero travel, hub last winner, storage readout, CSV column — is what #57 builds.)
 
-**Not verified:** no one has used it in the running app (picker, drop, folder sheet, popup animation, Reduced Motion); **60 fps was never measured** — the 40-entry limit (D4) is still a guess pending spike S3; the sandboxed release build was not tried (the user-selected-files entitlement is present); Vision on a real face is untested (test images are synthetic).
+### 14.2 v2.6 requirements added (BRD §6 and §4.2)
+
+| ID | Requirement | Status |
+|---|---|---|
+| C-1 | **Hero travel**: the winner's avatar animates from its wheel segment to the popup (Reduce Motion → cross-fade) | 🔧 #57 |
+| C-2 | **Hub last-winner**: the hub shows the previous winner's avatar (FR-W7) | 🔧 #57 — see "hub shows the last winner" below |
+| C-3 | **Storage readout + manage**: avatar storage used, per roster, "Clear this roster's photos" (confirmed) | 🔧 #57 — **deviation: lives in the Lucky Draw roster panel, not Settings** |
+| C-4 | **CSV avatar column**: export avatar kind + emoji/monogram (never photo bytes or paths); import accepts it | 🔧 #57 |
+| C-5 | Update this record, `CLAUDE.md` avatars section, owner-art checklist for v2.7 | 🔧 record + checklist in this PR; **`CLAUDE.md` avatars section is a follow-up** (the docs PR does not edit `CLAUDE.md`) |
+| C-6 | Animated emoji, bundled caricatures, "give everyone a character" | ⛔ **ART → v2.7** (`V2.7-06/07`) |
+| H-07 | The orphan sweep never deletes a photo referenced by `luckyDraw.corrupt.json` | ✅ merged v2.5 (#54) |
+| H-08 | Fairness tested end to end | 🔧 #60 |
+| H-09 | Sweep tests assert both "no delete after a failed load" and "deletes true orphans after a clean load", without sleeps | 🔧 #60 |
+| H-10 | Bounds hardened: fail-closed size, header-checked PNG/TIFF dimensions, one UUID case, 64 MB LRU cache | 🔧 #60 |
+| H-11 | Measure the wheel; set the avatar-entry limit from data | 🔧 **partial** — see the table below; limit left at 40 |
+
+### 14.3 PR #57 — completion (head `c700dfc`, unmerged, independently reviewed)
+
+**Built:** C-3 (roster panel shows total photo bytes, this roster's bytes and a per-roster list; "Clear this roster's photos" behind a confirmation, touching only that roster's folder; deletion still goes through `AvatarStore.removeInsideRoot` — the existing, owner-approved NFR-S4 exception; **no new deletion path**; readout refreshes on any store change and scans off the main thread); C-4 (`name,avatar_kind,avatar_value`; a photo exports as the bare kind `photo` with an **empty** value; the only avatar a CSV can create on import is a validated single emoji — `photo`/`animated`/`character`/paths/`../`/oversized/combining-mark bombs yield none; `commitImport` re-validates; import never touches the avatars folder; row cap 5 000; formula-guard names round-trip); C-2 (hub shows the last winner when the display mode shows an avatar for that entry; unchanged F-051 hub while spinning, in name-only mode, or for an avatar-less entry under Automatic); C-1 (pure `WheelGeometry`/`HeroTravel`; `SpinnerWheelView` draws avatars with the same functions so the flight origin cannot drift; `WinnerHeroAvatar` flies from the winning segment to the popup slot in 450 ms ease-out; the name reveal waits for the hero's completion — `.logicallyComplete` on macOS 14+, the animation duration on macOS 13, plus a 2 s safety net); H-11 signposts (`os_signpost`, subsystem `com.halo.mac`, category `LuckyDrawWheel`) + a headless draw-cost test (skipped unless `HALO_MEASURE_DRAW_COST` is set).
+**Review fixes:** the wheel now draws a **pre-retire pool snapshot while the result popup is up** (auto-retire previously removed the winner's segment before the hero started, so the hero flew from a spot showing a different entry — selection and retirement untouched, display only); name reveal gated on the hero; storage-readout staleness and main-thread scan; header-only CSV fix and a fairness **source-pin** test (`DrawEngine.swift` must not mention avatar/hub/hero/photo/emoji/display-mode — fragile by nature but the only check that can fail).
+
+**Not built:** the C-5 `CLAUDE.md` section; animated/characters (ART); the avatar-entry limit is **unchanged (40)**.
+
+**H-11 measurement** (offscreen CPU rasteriser, median ms/frame, **not on-screen fps**; the machine was loaded by parallel builds, so absolute numbers are noisy):
+
+| entries | wheel pt | plain | with photo avatars | ratio |
+|---|---|---|---|---|
+| 10 | 480 | 12.6 | 13.6 | 1.08× |
+| 20 | 480 | 18.1 | 23.3 | 1.29× |
+| 40 | 480 | 14.3 | 15.4 | 1.08× |
+| 10 | 720 | 29.6 | 34.9 | 1.18× |
+| 20 | 720 | 47.4 | 52.3 | 1.10× |
+| 40 | 720 | 29.3 | 30.7 | 1.05× |
+| 60 | 720 | 34.7 | 36.3 | 1.05× |
+
+What it supports: drawing avatars adds roughly 1.0–1.3× to the plain wheel's cost, and the plain wheel's own cost dominates; above ~60 entries at 480 pt the fitted diameter falls below the 20 pt minimum so no avatars are drawn. What it does **not** support: any statement about 60 fps on a real display (GPU/compositor not measured). Limit left at 40.
+
+**Verified:** compiles; full `HaloTests` 800 tests — 799 pass, 1 failure is the pre-existing 5 s-wait timing test `AvatarImageCacheTests.missingPhotoIsNotRetriedEveryFrame` in a run where the machine stalled for ~13 minutes (passes in isolation 2/2); 23 new tests (storage accounting/clear scoping/symlink, CSV export/round-trip/hostile import/traversal/store re-validation/row cap, geometry vs `DrawEngine` for 4×50 random plans, hero start transform, hub model, fairness, 2 render tests incl. one tying the hero origin to what the wheel draws); mutation checks (re-importing any avatar; accepting `photo` in `avatar(kind:value:)`; exporting the photo file name; wiping every roster's folder; wheel drawing at 0.7r; hub branch disabled) — 17 failures in 8 tests, all red then green. The fairness test is an **invariant pin**: green before and after by design.
+
+**NOT verified:** the **hero flight in the running app** (path, timing, ring landing on the popup, name reveal after it); Reduce Motion cross-fade visually (style selection unit-tested only); the hub avatar at real sizes with real photos (rendered offscreen only); 60 fps / Instruments / Intel Mac; the sandboxed release build; wheel-keeps-winner-segment and name-reveal gating **at model level only**.
+
+**Known issues carried:**
+- **The hub shows the last winner (`history.first`)** — right after a draw that is the winner just announced, beneath the popup. The BRD says "previous winner". Reviewer opinion: keep (it is more useful between spins and the transient is hidden behind the popup); if the owner means the one *before*, use `history.dropFirst().first` while a popup/interim winner is showing.
+- **C-3 deviation:** readout in the roster panel, not Settings.
+- `EmojiValidation.isSingleEmoji` accepts `"7" + U+0301` (pre-existing; harmless, bounded).
+- The `WheelDrawCostMeasurement` 60-entry/480 pt row measured nothing (no avatars drawn) and was dropped.
+
+### 14.4 PR #60 — hardening (unmerged; Lucky Draw parts)
+
+H-08 (`LuckyDrawViewModel(store:generator:)` + `DrawEngine.plan(for:…using:)`: 60 seeds × 4 display modes, with and without photo/emoji avatars, same winner and landing angle; a filter on photo avatars turns it red), H-09 (`LuckyDrawStore(sweepScheduler:)` runs the sweep inline so tests assert outcomes with no `Task.sleep`; both directions asserted), H-10 (unreadable file size → `AvatarError.unreadable` instead of `?? 0`; `ImageHeaderProbe` reads PNG IHDR / TIFF IFD0 dimensions from raw header bytes before ImageIO; photo names normalised to one UUID case — a lower-case hand-edited name previously made the sweep delete its own photo; cache capped at **64 MB** with real **LRU**). Residuals: a roster of ≥ 256 entries all drawn at the 256-px bucket exceeds the cap and would thrash; a hand-placed lower-case file on a case-sensitive volume becomes unreachable (not deleted). **Not verified:** the 64 MB cap against a real 500-person roster on screen (verified by a 500-photo cache test).
+
+### 14.5 Owner-art checklist for v2.7 (C-5)
+
+Before any art work starts: fix the **format** (APNG vs GIF vs Lottie — spike S1) · canvas size, frame count/rate, ring-safe transparent safe area · naming and `manifest.json` fields incl. **licence and attribution, valid for both app stores** · a 3-item pilot to validate the pipeline · record the licence in the repo (AC-12). Nothing is bundled until AC-12 is satisfiable (`V2.7-06/07`).
