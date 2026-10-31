@@ -11,6 +11,8 @@ import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
 import app.halo.cloud.ClipboardSyncEngine
 import app.halo.cloud.RemoteClip
+import app.halo.cloud.SealedFile
+import app.halo.cloud.SealedStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
@@ -22,24 +24,44 @@ import java.util.concurrent.Executors
 @Serializable
 data class ClipItem(val id: String, val text: String, val kind: String, val from: String, val atMs: Long, val received: Boolean)
 
-/** The phone-side clipboard history (D9: remote copies land HERE — never in the live clipboard). Capped like the cloud. */
+/**
+ * The phone-side clipboard history (D9: remote copies land HERE — never in the live clipboard). Capped like the cloud.
+ * H-13: sealed at rest under the Keystore key, like the pairing profile — clipboard text is exactly where a
+ * password someone copied ends up. A plaintext file left by an earlier version is migrated on first read.
+ */
 class ClipboardHistory(ctx: Context) {
-    private val file = File(ctx.filesDir, "clipboard-history.json")
+    private val store = SealedStore(SealedFile(File(ctx.filesDir, "clipboard-history.json"), SecretBox))
     private val json = Json { ignoreUnknownKeys = true }
     private val ser = ListSerializer(ClipItem.serializer())
     private val _items = MutableStateFlow(load())
     val items: StateFlow<List<ClipItem>> = _items
+    private val _warning = MutableStateFlow(store.warning)
+    /** Content-free storage status ("temporarily unreadable", "could not be sealed yet") or null. */
+    val warning: StateFlow<String?> = _warning
 
-    private fun load(): List<ClipItem> = try { if (file.exists()) json.decodeFromString(ser, file.readText()) else emptyList() } catch (e: Exception) { emptyList() }
+    private fun parse(text: String?): List<ClipItem> = try { text?.let { json.decodeFromString(ser, it) } ?: emptyList() } catch (e: Exception) { emptyList() }
+    private fun load(): List<ClipItem> = parse(store.load())
 
     @Synchronized fun add(item: ClipItem) {
         if (_items.value.any { it.id == item.id }) return
-        val next = (listOf(item) + _items.value).sortedByDescending { it.atMs }.take(ClipboardSyncEngine.CAP)
-        _items.value = next; persist(next)
+        _items.value = (listOf(item) + _items.value).sortedByDescending { it.atMs }.take(ClipboardSyncEngine.CAP)
+        persist()
     }
 
-    @Synchronized fun clear() { _items.value = emptyList(); file.delete() }
-    private fun persist(l: List<ClipItem>) { runCatching { file.writeText(json.encodeToString(ser, l)) } }
+    @Synchronized fun clear() { _items.value = emptyList(); store.delete(); _warning.value = null }
+
+    /**
+     * Never replaces a file that could not be read: if Keystore was momentarily unavailable at load, the first
+     * successful re-read merges what is on disk with what arrived since, then writes. See [SealedStore].
+     */
+    private fun persist() {
+        store.save { onDisk ->
+            val merged = (_items.value + parse(onDisk)).distinctBy { it.id }.sortedByDescending { it.atMs }.take(ClipboardSyncEngine.CAP)
+            _items.value = merged
+            json.encodeToString(ser, merged)
+        }
+        _warning.value = store.warning
+    }
 
     companion object {
         @Volatile private var instance: ClipboardHistory? = null
@@ -160,14 +182,40 @@ class ClipboardAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {}
 }
 
-/** The share-sheet target: "Send to Mac" works everywhere, because the user hands Halo the text explicitly. */
+/**
+ * The share-sheet target: "Send to Mac" works everywhere, because the user hands Halo the text explicitly.
+ *
+ * H-15, three things the first version got wrong:
+ *  - it ignored the "Clipboard sync" switch — with sync off the user had said "don't send my clipboard stuff",
+ *    and this path sent anyway. It now declines and says why.
+ *  - it called finish() straight after queueing the upload. A finished, backgrounded process is a cached process
+ *    Android may kill mid-request, so the "Sent" the user saw could be a lie. It now stays (invisibly — the theme
+ *    is translucent) until the upload reports an outcome, with a hard ceiling so it can never linger.
+ *  - the manifest entry accepts only ACTION_SEND / text/plain (see ManifestExportTest); [onCreate] re-checks the action.
+ */
 class SendToMacActivity : Activity() {
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private val ceiling = Runnable { finish() }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val text = intent?.takeIf { it.action == Intent.ACTION_SEND }?.getStringExtra(Intent.EXTRA_TEXT)
+        val text = intent?.takeIf { it.action == Intent.ACTION_SEND }?.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()   // not getStringExtra: many apps share a Spanned, which that returns as null
         if (text.isNullOrBlank()) { finish(); return }
         val app = applicationContext
-        ClipboardController.publishText(app, text) { msg -> android.os.Handler(android.os.Looper.getMainLooper()).post { Toast.makeText(app, msg, Toast.LENGTH_SHORT).show() } }
-        finish()
+        if (!CloudPrefs(app).clipboardEnabled) {
+            Toast.makeText(app, "Clipboard sync is off — turn it on in Halo's Clipboard tab to send to your Mac.", Toast.LENGTH_LONG).show()
+            finish(); return
+        }
+        main.postDelayed(ceiling, CEILING_MS)
+        ClipboardController.publishText(app, text) { msg ->
+            main.post {
+                Toast.makeText(app, msg, Toast.LENGTH_SHORT).show()
+                if (!isFinishing) finish()
+            }
+        }
     }
+
+    override fun onDestroy() { main.removeCallbacks(ceiling); super.onDestroy() }
+
+    private companion object { const val CEILING_MS = 60_000L }
 }

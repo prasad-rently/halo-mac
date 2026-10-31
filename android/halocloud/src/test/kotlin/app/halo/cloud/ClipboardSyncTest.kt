@@ -111,6 +111,25 @@ class ClipboardSyncTest {
         assertFalse("seed0" in left); assertFalse("seed1" in left); assertFalse("seed2" in left); assertTrue("seed3" in left)
     }
 
+    @Test fun `the cap sweep never downloads the items under the cap, and not again in steady state (H-15)`() {
+        val db = FakeRtdb(); var t = 1_000_000L
+        val e = engine(db, clock = { t })
+        for (i in 0 until 10) { t += 60_000; e.publish("copy $i") }
+        assertTrue("under the cap the sweep must use keys only, but read ${db.reads}", db.reads.none { it == "clipboard/uid-1/items" })
+
+        // Over the cap by two: one full read to learn the age order …
+        for (i in 0 until 502) db.put("clipboard/uid-1/items/seed$i", JsonObject(mapOf("itemId" to JsonPrimitive("seed$i"), "createdAt" to JsonPrimitive(i.toLong()))))
+        t += 60_000; e.publish("over the cap")
+        assertEquals(500, (db.dump("clipboard/uid-1/items") as JsonObject).size)
+        val fullReads = db.reads.count { it == "clipboard/uid-1/items" }
+        assertEquals(1, fullReads)
+        // … then the steady state (each publish puts it one over) evicts from the remembered order, no further full read.
+        t += 60_000; e.publish("one more")
+        t += 60_000; e.publish("and another")
+        assertEquals(500, (db.dump("clipboard/uid-1/items") as JsonObject).size)
+        assertEquals("steady state must not re-download the node", fullReads, db.reads.count { it == "clipboard/uid-1/items" })
+    }
+
     @Test fun `purge empties the cloud`() {
         val db = FakeRtdb(); val e = engine(db)
         e.publish("a"); e.publish("b"); e.purge()

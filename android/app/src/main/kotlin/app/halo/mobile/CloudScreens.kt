@@ -85,6 +85,7 @@ fun PairingPanel(vm: CloudViewModel, why: String) {
             }
             is PairUi.NeedsPassphrase -> {
                 Text("Paired with ${p.payload.firebaseConfig.projectID}.", color = Halo.Green, fontSize = 13.sp, modifier = Modifier.testTag("pair.accepted"))
+                p.hostWarning?.let { Spacer(Modifier.height(6.dp)); Text(it, color = Halo.Amber, fontSize = 12.sp, modifier = Modifier.testTag("pair.hostWarning")) }
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(passphrase, { passphrase = it }, singleLine = true, label = { Text("Encryption passphrase") },
                     visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth().testTag("pair.passphrase"),
@@ -193,6 +194,15 @@ fun SmsScreen(vm: CloudViewModel) {
                     color = Halo.Text2, fontSize = 13.sp, modifier = Modifier.testTag("sms.last"))
                 prefs.lastSyncError?.let { Text(it, color = Halo.Red, fontSize = 12.sp, modifier = Modifier.testTag("sms.error")) }
                 notice?.let { Text(it, color = Halo.Text2, fontSize = 12.sp, modifier = Modifier.testTag("sms.notice")) }
+                val skipped = prefs.quarantinedCount
+                if (skipped > 0) {
+                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (skipped == 1) "1 message couldn't be synced" else "$skipped messages couldn't be synced", color = Halo.Amber, fontSize = 12.sp,
+                            modifier = Modifier.weight(1f).testTag("sms.skipped"))
+                        TextButton(onClick = { vm.retrySkipped() }, enabled = !syncing, modifier = Modifier.testTag("sms.retrySkipped")) { Text("Retry skipped") }
+                    }
+                }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Button(onClick = { vm.syncNow(reconcile = true) }, enabled = !syncing, modifier = Modifier.testTag("sms.syncNow")) {
@@ -254,6 +264,7 @@ fun ClipboardScreen(vm: CloudViewModel) {
     val enabled by vm.clipEnabled.collectAsStateWithLifecycle()
     val filter by vm.clipFilter.collectAsStateWithLifecycle()
     val history by vm.history.collectAsStateWithLifecycle()
+    val historyWarning by vm.historyWarning.collectAsStateWithLifecycle()
     val notice by vm.clipNotice.collectAsStateWithLifecycle()
     val status by vm.clipStatus.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
@@ -313,6 +324,7 @@ fun ClipboardScreen(vm: CloudViewModel) {
                 SectionLabel("History")
                 if (history.isNotEmpty()) TextButton(onClick = { confirmPurge = true }) { Icon(Icons.Filled.Delete, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Purge synced") }
             }
+            historyWarning?.let { Text(it, color = Halo.Amber, fontSize = 12.sp, modifier = Modifier.testTag("clip.storageWarning")) }
             if (history.isEmpty()) HaloCard { Text("Nothing synced yet.", color = Halo.Text3, fontSize = 13.sp) }
             history.take(50).forEach { ClipRow(it) { vm.copy(it) } }
         }
