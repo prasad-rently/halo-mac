@@ -36,6 +36,7 @@ class RtdbClientTest {
     private val signIns = AtomicInteger(); private val refreshes = AtomicInteger()
     private val rejectNextData = AtomicInteger()
     private val seenOnDb = CopyOnWriteArrayList<String>()
+    private val liveStreams = CopyOnWriteArrayList<HttpExchange>()
     private var openToPublic = false
     private var now = 1_000_000L
     private var tokenSerial = 0
@@ -72,7 +73,10 @@ class RtdbClientTest {
 
     private fun db(ex: HttpExchange) {
         val query = ex.requestURI.rawQuery.orEmpty().split('&').filter { it.contains('=') }.associate { it.substringBefore('=') to URLDecoder.decode(it.substringAfter('='), "UTF-8") }
-        seenOnDb.add(ex.requestURI.toString() + " " + ex.requestHeaders.entries.joinToString())
+        // Read the body once, up front: the leak test below must see bodies, not just the URL and headers
+        // (a password smuggled into a PUT payload would otherwise pass), and a stream can only be read once.
+        val requestBody = ex.requestBody.readBytes().decodeToString()
+        seenOnDb.add(ex.requestMethod + " " + ex.requestURI + " " + ex.requestHeaders.entries.joinToString() + " BODY:" + requestBody)
         val path = URLDecoder.decode(ex.requestURI.rawPath.removePrefix("/db").removePrefix("/").removeSuffix(".json"), "UTF-8")
         val auth = query["auth"]
         if (auth == null) {
@@ -84,7 +88,7 @@ class RtdbClientTest {
             "GET" -> if (ex.requestHeaders.getFirst("Accept") == "text/event-stream") stream(ex, path)
                      else if (query["shallow"] == "true") reply(ex, 200, JsonObject(backing.shallowKeys(path).associateWith { JsonPrimitive(true) }).toString())
                      else reply(ex, 200, (backing.get(path) ?: JsonNull).toString())
-            "PUT" -> { backing.put(path, Json.parseToJsonElement(ex.requestBody.readBytes().decodeToString())); reply(ex, 200, "{}") }
+            "PUT" -> { backing.put(path, Json.parseToJsonElement(requestBody)); reply(ex, 200, "{}") }
             "DELETE" -> { backing.delete(path); reply(ex, 200, "null") }
             else -> reply(ex, 405, "{}")
         }
@@ -94,6 +98,7 @@ class RtdbClientTest {
         ex.responseHeaders.add("Content-Type", "text/event-stream"); ex.sendResponseHeaders(200, 0)
         val out = ex.responseBody
         val done = CountDownLatch(1)
+        liveStreams.add(ex)
         fun emit(event: String, data: String) { synchronized(out) { try { out.write("event: $event\ndata: $data\n\n".toByteArray()); out.flush() } catch (e: Exception) { done.countDown() } } }
         // Snapshot once and derive both the opening event and the "already sent" set from it, so a child
         // written between the two can never be missed.
@@ -165,9 +170,15 @@ class RtdbClientTest {
     }
 
     @Test fun `the password is only ever sent to the auth endpoints, never to the database host`() {
-        val c = client(); c.signIn(); c.put("meta/uid-9/y", JsonPrimitive(1)); c.get("meta/uid-9/y")
-        assertTrue(seenOnDb.isNotEmpty())
-        assertTrue(seenOnDb.none { it.contains("hunter2") })
+        val c = client(); c.signIn()
+        c.put("meta/uid-9/y", JsonObject(mapOf("k" to JsonPrimitive(1)))); c.patch("meta/uid-9/y", JsonObject(mapOf("z" to JsonPrimitive("v"))))
+        c.get("meta/uid-9/y"); c.shallowKeys("meta/uid-9"); c.delete("meta/uid-9/y")
+        // The recorder includes method, URL, every header and the request BODY, so each of these is covered.
+        assertTrue("PUT bodies must have been recorded for this test to mean anything", seenOnDb.any { it.startsWith("PUT ") && it.contains("BODY:{") })
+        assertEquals(5, seenOnDb.size)    // put, patch (one child = one PUT), get, shallow, delete — every request was inspected
+        assertTrue("password reached the database host: ${seenOnDb.filter { it.contains("hunter2") }}", seenOnDb.none { it.contains("hunter2") })
+        // Also the URL-encoded spelling, in case it were ever sent as a query/form value.
+        assertTrue(seenOnDb.none { it.contains(java.net.URLEncoder.encode("hunter2-pass", "UTF-8")) })
     }
 
     @Test fun `testConnection round-trips meta and cleans up after itself`() {
@@ -193,6 +204,40 @@ class RtdbClientTest {
         assertTrue("stream did not deliver in time: $got", latch.await(10, TimeUnit.SECONDS))
         handle.close()
         assertEquals(listOf("a=1", "b=2", "c=3"), got.sorted())
+    }
+
+    @Test fun `the live stream survives a dropped connection - it reconnects and delivers what arrived meanwhile, without repeats (F-055 FR-B2)`() {
+        val c = client(); c.signIn()
+        c.put("clipboard/uid-9/items/a", JsonObject(mapOf("v" to JsonPrimitive(1))))
+        val got = CopyOnWriteArrayList<String>()
+        val first = CountDownLatch(1); val afterLoss = CountDownLatch(2)
+        val handle = c.observeChildAdded("clipboard/uid-9/items") { k, _ -> got.add(k); first.countDown(); if (k != "a") afterLoss.countDown() }
+        assertTrue("initial delivery", first.await(10, TimeUnit.SECONDS))
+        // Network loss: the server end of every live stream goes away, then two items are written while the client is "offline".
+        liveStreams.forEach { runCatching { it.close() } }
+        backing.put("clipboard/uid-9/items/b", JsonObject(mapOf("v" to JsonPrimitive(2))))
+        backing.put("clipboard/uid-9/items/c", JsonObject(mapOf("v" to JsonPrimitive(3))))
+        assertTrue("stream did not recover after the drop: $got", afterLoss.await(20, TimeUnit.SECONDS))
+        handle.close()
+        assertEquals("each child exactly once across the reconnect", listOf("a", "b", "c"), got.sorted())
+    }
+
+    private class SpyConn : java.net.HttpURLConnection(java.net.URL("http://127.0.0.1:1/")) {
+        @Volatile var disconnected = false
+        override fun disconnect() { disconnected = true }
+        override fun usingProxy() = false
+        override fun connect() {}
+    }
+
+    @Test fun `a close that lands before the connection is attached still stops it (H-15 stream race)`() {
+        val h = FirebaseRtdbClient.StreamHandle()
+        val early = SpyConn(); assertTrue(h.attach(early)); h.close(); assertTrue("close must disconnect the attached connection", early.disconnected)
+        // The race itself: close() first, then the reader publishes the connection it had just opened.
+        val h2 = FirebaseRtdbClient.StreamHandle(); h2.close()
+        val late = SpyConn()
+        assertFalse("attach after close must refuse", h2.attach(late))
+        assertTrue("and must disconnect the late connection immediately", late.disconnected)
+        assertTrue(h2.stopped)
     }
 
     @Test fun `https is required in production`() {

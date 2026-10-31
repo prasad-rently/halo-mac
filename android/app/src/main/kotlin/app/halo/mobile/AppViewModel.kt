@@ -6,6 +6,9 @@ import android.os.Build
 import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.halo.mobile.background.BackgroundPrefs
+import app.halo.mobile.background.HaloShareService
+import app.halo.mobile.background.ReceiverHost
 import app.halo.share.CancelToken
 import app.halo.share.ConsentDecision
 import app.halo.share.ConsentHandler
@@ -63,11 +66,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _identity = MutableStateFlow(load())
     val identity: StateFlow<DeviceIdentity> = _identity.asStateFlow()
 
-    private val _listen = MutableStateFlow<ListenState>(ListenState.Stopped)
-    val listen: StateFlow<ListenState> = _listen.asStateFlow()
+    // F-055: the receiver is process-wide (ReceiverHost) so the foreground service and this screen share one server.
+    val listen: StateFlow<ListenState> = ReceiverHost.listen
+    val pendingOffer: StateFlow<IncomingOffer?> = ReceiverHost.offer
 
-    private val _offer = MutableStateFlow<IncomingOffer?>(null)
-    val pendingOffer: StateFlow<IncomingOffer?> = _offer.asStateFlow()
+    private val bg = BackgroundPrefs(app)
+    private val _backgroundReceive = MutableStateFlow(bg.enabled)
+    val backgroundReceive: StateFlow<Boolean> = _backgroundReceive.asStateFlow()
+    private val _pausedBySystem = MutableStateFlow(bg.pausedBySystem)
+    val pausedBySystem: StateFlow<Boolean> = _pausedBySystem.asStateFlow()
+
+    /** Files handed to us by the Sharesheet, waiting for the person to pick a device (F-055 FR-B3). */
+    private val _shared = MutableStateFlow<List<Uri>>(emptyList())
+    val shared: StateFlow<List<Uri>> = _shared.asStateFlow()
 
     private val _inbox = MutableStateFlow<List<InboxItem>>(emptyList())
     val inbox: StateFlow<List<InboxItem>> = _inbox.asStateFlow()
@@ -89,18 +100,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val receiveDirectory: File = (app.getExternalFilesDir("Received") ?: File(app.filesDir, "Received")).also { it.mkdirs() }
 
-    private var server: HaloShareServer? = null
     private var client = HaloShareClient(_identity.value)
-    private var consentFuture: CompletableFuture<ConsentDecision>? = null
     private var sendJob: Job? = null
     private var scanJob: Job? = null
     private var cancelToken: CancelToken? = null
     @Volatile private var scanCancelled = false
 
-    init { refreshInbox() }
+    init {
+        refreshInbox()
+        viewModelScope.launch {
+            ReceiverHost.events.collect { e -> when (e) {
+                is ReceiverHost.Event.Received -> { refreshInbox(); _notice.value = "Received ${e.name}" }
+                ReceiverHost.Event.InboxChanged -> refreshInbox()
+                ReceiverHost.Event.SenderCancelled -> { refreshInbox(); _notice.value = "The sender cancelled the transfer." }
+            } }
+        }
+    }
 
-    private fun load(): DeviceIdentity =
-        DeviceIdentityStore.loadOrCreate(store, defaultAlias = Build.MODEL ?: "Android", deviceModel = Build.MODEL, deviceType = "mobile")
+    private fun load(): DeviceIdentity = app.halo.mobile.background.HaloIdentity.load(getApplication())
 
     val selectedPeer: Peer? get() = _peers.value.firstOrNull { it.id == _selected.value }
 
@@ -110,48 +127,59 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         DeviceIdentityStore.setAlias(store, alias)
         _identity.value = load()
         client = HaloShareClient(_identity.value)
-        if (_listen.value is ListenState.Listening) { stopServer(); startServer() }   // peers must see the new name
+        ReceiverHost.restart(getApplication(), _identity.value)   // peers must see the new name
     }
 
     // ── Receive ───────────────────────────────────────────────────────────────────────────────
 
-    /** Listens while the app is visible. (A foreground service for background receive is a later milestone.) */
-    fun startServer() {
-        if (server != null) return
-        _listen.value = ListenState.Starting
-        val handler = ConsentHandler { offer -> askConsent(offer) }
-        val listener = object : ServerListener {
-            override fun onFileReceived(sessionId: String, fileId: String, file: File) { refreshInbox(); _notice.value = "Received ${file.name}" }
-            override fun onSessionCompleted(sessionId: String) { refreshInbox() }
-            override fun onSessionCancelled(sessionId: String) { refreshInbox(); _notice.value = "The sender cancelled the transfer." }
-        }
-        val s = HaloShareServer(_identity.value, receiveDirectory, handler, listener)
-        server = s
+    /** Listens while the app is visible (and, if the user opted in, in the background via [HaloShareService]). */
+    fun startServer() = ReceiverHost.start(getApplication(), _identity.value)
+
+    /**
+     * Only stops the receiver when nothing else will keep it: the foreground service must actually be running. Keying this
+     * on the toggle alone left a listener open with no service and no notification whenever Android had ended the service
+     * (the Android 15 six-hour limit, a refused start) while the screen was up.
+     */
+    fun stopServer() { if (!ReceiverHost.serviceActive) ReceiverHost.stop(getApplication()) }
+
+    fun resolveConsent(decision: ConsentDecision) = ReceiverHost.resolve(decision)
+
+    // ── Background receiving (F-055 FR-B1/B2) ─────────────────────────────────────────────────
+
+    fun setBackgroundReceive(on: Boolean) {
+        bg.enabled = on; _backgroundReceive.value = on
+        if (on) { bg.pausedBySystem = false; _pausedBySystem.value = false; HaloShareService.start(getApplication()) } else HaloShareService.stop(getApplication())
+    }
+
+    /** Called when the app comes to the front: re-assert the service the user asked for, and pick up a system pause. */
+    fun syncBackgroundState() {
+        _backgroundReceive.value = bg.enabled; _pausedBySystem.value = bg.pausedBySystem
+        if (bg.enabled && !bg.pausedBySystem && !ReceiverHost.serviceActive) HaloShareService.start(getApplication())
+    }
+
+    // ── Sharesheet (F-055 FR-B3) ──────────────────────────────────────────────────────────────
+
+    /** What the person is about to send, by name — the share card shows it so a swapped-in second share is visible. */
+    private val _sharedLabels = MutableStateFlow<List<String>>(emptyList())
+    val sharedLabels: StateFlow<List<String>> = _sharedLabels.asStateFlow()
+
+    fun stageShared(uris: List<Uri>) {
+        _shared.value = uris; _sharedLabels.value = emptyList()
+        if (uris.isEmpty()) return
+        _notice.value = "${uris.size} shared item(s) ready — choose a device, then tap Send."
+        val resolver = getApplication<Application>().contentResolver
         viewModelScope.launch(Dispatchers.IO) {
-            try { _listen.value = ListenState.Listening(s.start(HaloShare.DEFAULT_PORT)) }
-            catch (e: Exception) { server = null; _listen.value = ListenState.Failed(e.message ?: "couldn't listen") }
+            val names = uris.take(3).map { u -> runCatching { displayName(resolver, u) }.getOrNull() ?: "(unreadable item)" }
+            if (_shared.value == uris) _sharedLabels.value = names
         }
     }
+    fun clearShared() { _shared.value = emptyList(); _sharedLabels.value = emptyList() }
+    fun sendShared() { val u = _shared.value; if (u.isNotEmpty()) { send(u); clearShared() } }
 
-    fun stopServer() {
-        resolveConsent(ConsentDecision.DECLINE)       // a prompt left open can't be answered once we stop
-        server?.stop(); server = null
-        _listen.value = ListenState.Stopped
-    }
-
-    /** Called on a server thread; blocks until the person answers. One prompt at a time. */
-    private fun askConsent(offer: IncomingOffer): ConsentDecision {
-        if (_offer.value != null) return ConsentDecision.DECLINE
-        val future = CompletableFuture<ConsentDecision>()
-        consentFuture = future
-        _offer.value = offer
-        return try { future.get() } catch (e: Exception) { ConsentDecision.DECLINE }
-    }
-
-    fun resolveConsent(decision: ConsentDecision) {
-        _offer.value = null
-        consentFuture?.complete(decision); consentFuture = null
-    }
+    private fun displayName(resolver: android.content.ContentResolver, uri: Uri): String? =
+        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getColumnIndex(OpenableColumns.DISPLAY_NAME).takeIf { it >= 0 }?.let { c.getString(it) } else null
+        }?.filter { !it.isISOControl() }?.take(80)
 
     fun refreshInbox() {
         _inbox.value = receiveDirectory.walkTopDown().filter { it.isFile && !it.name.startsWith(".") }
@@ -166,8 +194,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (_scanning.value) return
         _scanning.value = true; _notice.value = null; scanCancelled = false
         scanJob = viewModelScope.launch(Dispatchers.IO) {
+            // Multicast (F-055 FR-B4) and the /24 HTTP scan run together; whichever sees a peer first wins, duplicates merge by fingerprint.
+            val multicast = launch { app.halo.mobile.background.MulticastScope.run(getApplication(), _identity.value.deviceInfo(), onFound = { mergeUnverified(it) }, isCancelled = { scanCancelled }) }
             val found = SubnetScanner(client).scan(onFound = { merge(it) }, isCancelled = { scanCancelled })
             found.forEach { merge(it) }
+            multicast.join()
             _scanning.value = false
             if (_peers.value.isEmpty()) _notice.value = "No devices found. Make sure the other device has HaloShare or LocalSend open on the same Wi-Fi — or add its address below."
         }
@@ -179,6 +210,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _peers.update { list -> (list.filter { it.id != peer.id } + peer).sortedBy { it.alias.lowercase() } }
         if (_selected.value == null) _selected.value = peer.id
     }
+
+    /**
+     * A multicast datagram is unauthenticated, and a device's fingerprint is public (it is in every announcement), so a
+     * second host claiming a fingerprint we already hold must not silently take over that entry — that would redirect
+     * the next send. First sighting wins; an address that actually answered over HTTP (the /24 scan, manual add) is
+     * authoritative and still replaces it via [merge].
+     */
+    private fun mergeUnverified(peer: Peer) { if (_peers.value.none { it.id == peer.id }) merge(peer) }
 
     fun select(id: String) { _selected.value = id }
 
@@ -203,12 +242,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val resolver = getApplication<Application>().contentResolver
         val files = uris.mapNotNull { uri ->
             var name = uri.lastPathSegment ?: "file"; var size = -1L
-            resolver.query(uri, null, null, null, null)?.use { c ->
-                if (c.moveToFirst()) {
-                    c.getColumnIndex(OpenableColumns.DISPLAY_NAME).takeIf { it >= 0 }?.let { name = c.getString(it) }
-                    c.getColumnIndex(OpenableColumns.SIZE).takeIf { it >= 0 }?.let { if (!c.isNull(it)) size = c.getLong(it) }
+            // A shared URI is another app's input: a revoked grant or a provider that refuses us throws, and that must be
+            // "couldn't read", not a crash on the main thread.
+            try {
+                resolver.query(uri, null, null, null, null)?.use { c ->
+                    if (c.moveToFirst()) {
+                        c.getColumnIndex(OpenableColumns.DISPLAY_NAME).takeIf { it >= 0 }?.let { name = c.getString(it) }
+                        c.getColumnIndex(OpenableColumns.SIZE).takeIf { it >= 0 }?.let { if (!c.isNull(it)) size = c.getLong(it) }
+                    }
                 }
-            }
+            } catch (e: Exception) { return@mapNotNull null }
             if (size < 0) return@mapNotNull null
             OutgoingFile(name = name, size = size, mimeType = resolver.getType(uri) ?: "application/octet-stream",
                 open = { resolver.openInputStream(uri) ?: throw java.io.IOException("cannot open $name") })
@@ -250,5 +293,5 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         run(listOf(OutgoingFile.fromFile(file)), peer)
     }
 
-    override fun onCleared() { server?.stop(); super.onCleared() }
+    override fun onCleared() { stopServer(); super.onCleared() }
 }
