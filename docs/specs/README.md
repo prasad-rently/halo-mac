@@ -33,7 +33,7 @@ it opens with a Requirements Specification and closes with an Execution Plan.
 | [F-057-cloud-setup-assistant.md](F-057-cloud-setup-assistant.md) | F-057 | — | Cloud Setup Assistant (🔧 PR #63) | Desktop + Android |
 | [F-058-release-engineering.md](F-058-release-engineering.md) | F-058 | — | Release Engineering — CI, DMG, APK signing (🔧 PR #56) | Repo (mobile n/a) |
 | [../V2_6_PLAN.md](../V2_6_PLAN.md) | — | — | **v2.6 plan and record** — scope, H-xx hardening, decisions D-01…D-08, verification debt V-1…V-10, risks | — |
-| [BUG-001-cleanup-stale-state.md](BUG-001-cleanup-stale-state.md) | BUG-001 | — | Cleanup: no rescan + stale cross-category items (fix merged v2.5, #53; hardening on #60) | Desktop |
+| [BUG-001-cleanup-stale-state.md](BUG-001-cleanup-stale-state.md) | BUG-001 | — | Cleanup: no rescan + stale cross-category items (🔧 fix merged v2.5, #53; hardening on #60) | Desktop |
 
 ## Document structure (each feature)
 
