@@ -65,8 +65,8 @@ struct DatabaseProbeNetworkError: Error, Sendable {}
 protocol DatabaseProbeTransport: Sendable {
     func signIn() async throws -> DatabaseCheckSignIn
     func request(method: String, path: String, body: String?) async throws -> DatabaseProbeResponse
-    /// HTTP status of an UNAUTHENTICATED shallow read of the root. No credentials are sent.
-    func unauthenticatedStatus() async throws -> Int
+    /// HTTP status of an UNAUTHENTICATED shallow read of `path` ("" = the database root). No credentials are sent.
+    func unauthenticatedStatus(path: String) async throws -> Int
 }
 
 enum DatabaseCheckText {
@@ -88,6 +88,12 @@ enum DatabaseCheckText {
 }
 
 struct DatabaseCheckEngine: Sendable {
+    /// Every probe entry is named `_haloCheck_<nonce>` and lives directly under `{root}/{uid}`. The live
+    /// sync observers watch exactly those nodes (child_added on `sms/{uid}` and `devices/{uid}`), so they MUST
+    /// ignore this prefix — otherwise a probe shows up as a phantom device and gets its own observers.
+    static let probePrefix = "_haloCheck_"
+    static func isProbeKey(_ key: String) -> Bool { key.hasPrefix(probePrefix) }
+
     let transport: DatabaseProbeTransport
     let databaseURL: String
     var nonce: @Sendable () -> String = { String(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased().prefix(12)) }
@@ -116,6 +122,9 @@ struct DatabaseCheckEngine: Sendable {
         var offline = false
         do {
             switch try await transport.signIn() {
+            case .ok(let u) where u.isEmpty || u.contains("/"):
+                // An empty uid would collapse "meta//x" to "meta/x" — a probe outside the user's own node.
+                out[.signIn] = Self.signInFailure("MALFORMED_RESPONSE")
             case .ok(let u):
                 uid = u
                 out[.signIn] = DatabaseCheckItem(kind: .signIn, status: .pass, problem: .none, title: DatabaseCheckText.title(.signIn), detail: "Signed in.")
@@ -153,7 +162,7 @@ struct DatabaseCheckEngine: Sendable {
 
     private func probe(kind: DatabaseCheckKind, root: String, uid: String) async -> DatabaseCheckItem {
         let template = "\(root)/{uid}"
-        let name = "_haloCheck_\(nonce())"
+        let name = "\(Self.probePrefix)\(nonce())"
         let path = "\(root)/\(uid)/\(name)"
         let token = nonce() + nonce()
         let title = DatabaseCheckText.title(kind)
@@ -165,16 +174,18 @@ struct DatabaseCheckEngine: Sendable {
         // WRITE. Only a write that may have landed needs cleaning up: a refused one left nothing behind.
         let put: DatabaseProbeResponse
         do { put = try await transport.request(method: "PUT", path: path, body: body) } catch {
-            _ = await cleanUp(path)                // the request may have reached the server before the connection dropped
-            return fail(.network, "The connection dropped while writing to \(template).", "Check the internet connection and run the check again.")
+            // The request may have reached the server before the connection dropped. If the delete cannot get
+            // through either, the entry may exist — say where, rather than silently leaving junk.
+            let cleaned = await cleanUp(path)
+            return fail(.network, "The connection dropped while writing to \(template).\(Self.maybeLeftover(cleaned, template, name))", "Check the internet connection and run the check again.")
         }
         guard (200..<300).contains(put.status) else { return Self.refused(kind, template, put.status, "write") }
 
         // READ BACK. From here on the probe exists, so every exit path removes it.
         let read: DatabaseProbeResponse
         do { read = try await transport.request(method: "GET", path: path, body: nil) } catch {
-            _ = await cleanUp(path)
-            return fail(.network, "The connection dropped while reading from \(template).", "Check the internet connection and run the check again.")
+            let cleaned = await cleanUp(path)
+            return fail(.network, "The connection dropped while reading from \(template).\(Self.leftover(cleaned, template, name))", "Check the internet connection and run the check again.")
         }
         guard (200..<300).contains(read.status) else {
             let cleaned = await cleanUp(path)
@@ -212,24 +223,51 @@ struct DatabaseCheckEngine: Sendable {
         cleaned ? "" : " The test entry \"\(name)\" under \(template) couldn't be removed — delete it in the Firebase console."
     }
 
-    /// One best-effort delete. True only when the server confirmed it.
-    private func cleanUp(_ path: String) async -> Bool {
-        guard let r = try? await transport.request(method: "DELETE", path: path, body: nil) else { return false }
-        return (200..<300).contains(r.status)
+    private static func maybeLeftover(_ cleaned: Bool, _ template: String, _ name: String) -> String {
+        cleaned ? "" : " A test entry \"\(name)\" may have been left under \(template) — if you see it in the Firebase console, delete it."
     }
 
+    /// One best-effort delete. True only when the server confirmed it. Runs detached so that cancelling the
+    /// check (the parent Task) cannot abort the very delete that removes the probe: a cancelled task's
+    /// URLSession call throws immediately, which would leave the entry behind.
+    private func cleanUp(_ path: String) async -> Bool {
+        let transport = self.transport
+        return await Task.detached {
+            guard let r = try? await transport.request(method: "DELETE", path: path, body: nil) else { return false }
+            return (200..<300).contains(r.status)
+        }.value
+    }
+
+    /// Anonymous reads, no credentials. The root first (test-mode rules open everything); if the root is locked,
+    /// each folder the apps use — rules that open only `clipboard` would otherwise pass as "refused".
     private func publicAccess() async -> DatabaseCheckItem {
         let t = DatabaseCheckText.title(.publicAccess)
-        switch (try? await transport.unauthenticatedStatus()) ?? -1 {
-        case 200:
+        let rootStatus = (try? await transport.unauthenticatedStatus(path: "")) ?? -1
+        if rootStatus == 200 {
             return DatabaseCheckItem(kind: .publicAccess, status: .warn, problem: .openRules, title: t,
                                      detail: "Your database answers anyone on the internet without signing in (test-mode rules). Message text stays encrypted, but device names, labels and timestamps are readable, and a stranger could write to it.",
                                      fix: DatabaseCheckText.rulesFix)
-        case 401, 403:
-            return DatabaseCheckItem(kind: .publicAccess, status: .pass, problem: .none, title: t, detail: "Anonymous access is refused.")
-        default:
+        }
+        var open: [String] = []
+        var undetermined = rootStatus != 401 && rootStatus != 403
+        if !undetermined {
+            for (_, root) in Self.paths {
+                switch (try? await transport.unauthenticatedStatus(path: root)) ?? -1 {
+                case 200: open.append(root)
+                case 401, 403: break
+                default: undetermined = true
+                }
+            }
+        }
+        if !open.isEmpty {
+            return DatabaseCheckItem(kind: .publicAccess, status: .warn, problem: .openRules, title: t,
+                                     detail: "Part of your database (\(open.map { "\($0)/" }.joined(separator: ", "))) answers anyone on the internet without signing in. Message text stays encrypted, but names, labels and timestamps are readable, and a stranger could write there.",
+                                     fix: DatabaseCheckText.rulesFix)
+        }
+        if undetermined {
             return DatabaseCheckItem(kind: .publicAccess, status: .warn, problem: .unknownAccess, title: t, detail: "Couldn't tell whether the database is open to the public.", fix: nil)
         }
+        return DatabaseCheckItem(kind: .publicAccess, status: .pass, problem: .none, title: t, detail: "Anonymous access is refused.")
     }
 
     private static func signInFailure(_ code: String) -> DatabaseCheckItem {
@@ -241,7 +279,7 @@ struct DatabaseCheckEngine: Sendable {
             return f(.emailPasswordDisabled, "Email/Password sign-in is turned off for this Firebase project.", DatabaseCheckText.authFix)
         case "EMAIL_NOT_FOUND", "INVALID_PASSWORD", "INVALID_LOGIN_CREDENTIALS":
             return f(.badCredentials, "The email or password doesn't match a user in this Firebase project.", "Firebase console → Authentication → Users: check the user exists, or set the cloud up again.")
-        case "API_KEY_INVALID", "INVALID_API_KEY":
+        case "API_KEY_INVALID", "INVALID_API_KEY", "API_KEY_NOT_VALID":
             return f(.badAPIKey, "The API key isn't valid for this Firebase project.", "Copy the Web API key from Firebase console → Project settings.")
         case "USER_DISABLED":
             return f(.accountDisabled, "That Firebase user has been disabled.", "Firebase console → Authentication → Users → enable the user.")
@@ -272,7 +310,8 @@ final class LiveDatabaseProbeTransport: DatabaseProbeTransport, @unchecked Senda
         self.password = credential.password
         if let session { self.session = session } else {
             let c = URLSessionConfiguration.ephemeral
-            c.timeoutIntervalForRequest = 15
+            c.timeoutIntervalForRequest = 15      // idle gap between packets…
+            c.timeoutIntervalForResource = 25     // …and a hard ceiling per request, so a trickling server cannot hold the check open
             c.waitsForConnectivity = false
             self.session = URLSession(configuration: c)
         }
@@ -295,8 +334,19 @@ final class LiveDatabaseProbeTransport: DatabaseProbeTransport, @unchecked Senda
             }
             return .rejected(code: "MALFORMED_RESPONSE")
         }
-        let raw = ((json?["error"] as? [String: Any])?["message"] as? String) ?? ""
-        return .rejected(code: raw.split(separator: " ").first.map(String.init) ?? "")
+        return .rejected(code: Self.signInErrorCode(json))
+    }
+
+    /// Identity Toolkit reports most refusals as `error.message = "CODE"` or `"CODE : text"`, but a bad API key
+    /// comes back as the prose "API key not valid. Please pass a valid API key." with the code only in
+    /// `error.details[].reason` — so the first word of the message ("API") is not a code.
+    static func signInErrorCode(_ json: [String: Any]?) -> String {
+        let err = json?["error"] as? [String: Any]
+        let message = (err?["message"] as? String) ?? ""
+        if message.lowercased().hasPrefix("api key not valid") { return "API_KEY_INVALID" }
+        if let details = err?["details"] as? [[String: Any]],
+           let reason = details.compactMap({ $0["reason"] as? String }).first(where: { $0 == "API_KEY_INVALID" }) { return reason }
+        return message.split(separator: " ").first.map(String.init) ?? ""
     }
 
     func request(method: String, path: String, body: String?) async throws -> DatabaseProbeResponse {
@@ -309,8 +359,9 @@ final class LiveDatabaseProbeTransport: DatabaseProbeTransport, @unchecked Senda
         return DatabaseProbeResponse(status: status, body: String(decoding: data, as: UTF8.self))
     }
 
-    func unauthenticatedStatus() async throws -> Int {
-        guard let base, var c = URLComponents(string: base.absoluteString + "/.json") else { throw DatabaseProbeNetworkError() }
+    func unauthenticatedStatus(path: String) async throws -> Int {
+        let tail = path.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "" }.joined(separator: "/")
+        guard let base, var c = URLComponents(string: base.absoluteString + "/" + (tail.isEmpty ? "" : tail) + ".json") else { throw DatabaseProbeNetworkError() }
         c.queryItems = [URLQueryItem(name: "shallow", value: "true")]
         guard let url = c.url else { throw DatabaseProbeNetworkError() }
         return try await send(URLRequest(url: url)).1

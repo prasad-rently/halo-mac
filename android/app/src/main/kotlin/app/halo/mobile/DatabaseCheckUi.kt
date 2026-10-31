@@ -50,12 +50,15 @@ fun DatabaseCheckSection(profile: CloudProfile) {
         Button(onClick = {
             running = true
             scope.launch {
-                val result = withContext(Dispatchers.IO) {
-                    val insecure = DebugEndpoints.applies(profile.config.databaseURL)
-                    val transport = LiveDatabaseProbeTransport(profile.config, profile.auth, DebugEndpoints.auth(profile.config.databaseURL), insecure)
-                    DatabaseCheck(transport, profile.config.databaseURL, insecure).run()
-                }
-                report = result; running = false
+                // try/finally: an unexpected exception must not leave the button disabled for good.
+                try {
+                    val result = withContext(Dispatchers.IO) {
+                        val insecure = DebugEndpoints.applies(profile.config.databaseURL)
+                        val transport = LiveDatabaseProbeTransport(profile.config, profile.auth, DebugEndpoints.auth(profile.config.databaseURL), insecure)
+                        DatabaseCheck(transport, profile.config.databaseURL, insecure).run()
+                    }
+                    report = result
+                } finally { running = false }
             }
         }, enabled = !running, modifier = Modifier.testTag("dbcheck.run")) {
             if (running) { CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Halo.Text); Spacer(Modifier.width(8.dp)) }

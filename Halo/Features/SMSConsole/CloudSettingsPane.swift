@@ -23,6 +23,9 @@ struct CloudSettingsPane: View {
     /// The pairing code holds the Firebase sign-in, so it is not even built until asked for (no Keychain read on
     /// every render), hides itself after 60 s (F-057 FR-S3), and is dropped again on Hide or on leaving the pane.
     @StateObject private var pairing = PairingCodeSession()
+    /// `NSPasteboard.changeCount` right after "Copy code" — so hiding the code removes it from the pasteboard
+    /// too, but only if nothing else has been copied since (never clobber the user's later copy).
+    @State private var copiedChangeCount: Int?
     @State private var busy = false
 
     /// A destructive action awaiting confirmation.
@@ -65,6 +68,7 @@ struct CloudSettingsPane: View {
             .disabled(busy)
         }
         .background(Color.haloSurface)
+        .task { await client.refreshDevices() }      // "Last seen" would otherwise be frozen at the Mac's first sight of the phone
         .confirmationDialog(confirmTitle, isPresented: confirmBinding, presenting: pending) { action in
             Button(confirmVerb(action), role: .destructive) { perform(action) }
             Button("Cancel", role: .cancel) { pending = nil }
@@ -133,7 +137,7 @@ struct CloudSettingsPane: View {
 
     @ViewBuilder private var devicesSection: some View {
         if !client.devices.isEmpty {
-            section("Devices", "Each phone that syncs to your cloud, and when it last did. Retire a phone you no longer use — this removes its entire synced subtree from your cloud (the messages on the phone itself are untouched).") {
+            section("Devices", "Each phone that syncs to your cloud, and when it last did. Retire a phone you no longer use — this removes its entire synced subtree from your cloud (the messages on the phone itself are untouched). A phone that is still signed in re-registers itself the next time it syncs.") {
                 ForEach(client.devices) { device in
                     HStack(spacing: 10) {
                         Image(systemName: device.iconName).foregroundColor(.haloText2).frame(width: 20)
@@ -185,6 +189,7 @@ struct CloudSettingsPane: View {
                             // Concealed: the code carries the Firebase password, so it must not enter Halo's
                             // clipboard history or be synced to the cloud as an ordinary copy.
                             ClipboardPrivacy.writeConcealed(code)
+                            copiedChangeCount = NSPasteboard.general.changeCount
                         }
                         Text("Anyone who sees this can sign in to your database (though not read your messages without the passphrase). Hide it when you're done.")
                             .font(HaloFont.body(10)).foregroundColor(.haloAmber)
@@ -211,7 +216,15 @@ struct CloudSettingsPane: View {
                 HaloGhostButton("Show pairing code", icon: "qrcode") { pairing.show() }
             }
         }
-        .onDisappear { pairing.hide() }
+        .onChange(of: pairing.code) { code in if code == nil { clearCopiedCode() } }
+        .onDisappear { pairing.hide(); clearCopiedCode() }
+    }
+
+    /// Remove the pairing code from the pasteboard if it is still what "Copy code" put there.
+    private func clearCopiedCode() {
+        guard let n = copiedChangeCount else { return }
+        copiedChangeCount = nil
+        if NSPasteboard.general.changeCount == n { NSPasteboard.general.clearContents() }
     }
 
     // MARK: Re-key (D24)
@@ -271,7 +284,7 @@ struct CloudSettingsPane: View {
     private func confirmMessage(_ action: PendingAction) -> String {
         switch action {
         case .wipeAll: return "Removes all synced messages and devices from your cloud. Originals on your phone are untouched; devices can re-sync."
-        case .wipeDevice(let d): return "Retires “\(d.name)”: removes it and all its synced messages from your cloud. The messages on the phone are untouched, and it can sync again if you pair it again."
+        case .wipeDevice(let d): return "Retires “\(d.name)”: removes it and all its synced messages from your cloud. The messages on the phone are untouched. If that phone is still signed in it will appear again the next time it syncs."
         case .wipeLine(let l): return "Removes the “\(l.label)” line (\(l.ownNumber)) and its synced messages from your cloud."
         case .rekey: return "The cloud SMS store is wiped and re-encrypted under the new passphrase. Your devices re-sync from their inboxes. This can't be undone from here."
         case .disconnect: return "Clears the saved Firebase config, credential and key from this Mac's Keychain. Cloud data is left intact."

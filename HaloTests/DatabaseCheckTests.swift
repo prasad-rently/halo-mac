@@ -15,6 +15,11 @@ private final class StubTransport: DatabaseProbeTransport, @unchecked Sendable {
     var mismatchOnRead = false
     var notFound = false
     var publicStatus = 401
+    /// Folders ("sms", …) that answer an anonymous read with 200 even though the root is locked.
+    var publicOpenPaths: Set<String> = []
+    var signedInUID = "uid-1"
+    /// Cancel the engine's own task on the first GET, then fail the way URLSession does for a cancelled task.
+    var cancelOnGET = false
     var dropOn: String?
     var dropFromRoot: String?
     private var store: [String: String] = [:]
@@ -24,11 +29,20 @@ private final class StubTransport: DatabaseProbeTransport, @unchecked Sendable {
     var leftover: [String: String] { lock.lock(); defer { lock.unlock() }; return store }
 
     func signIn() async throws -> DatabaseCheckSignIn { try signInResult() }
-    func unauthenticatedStatus() async throws -> Int { publicStatus }
+    func unauthenticatedStatus(path: String) async throws -> Int {
+        lock.lock(); defer { lock.unlock() }
+        logged.append("ANON \(path)")
+        return publicOpenPaths.contains(path) ? 200 : publicStatus
+    }
 
     func request(method: String, path: String, body: String?) async throws -> DatabaseProbeResponse {
         lock.lock(); defer { lock.unlock() }
         logged.append("\(method) \(path)")
+        if Task.isCancelled { throw DatabaseProbeNetworkError() }      // what URLSession does inside a cancelled task
+        if cancelOnGET, method == "GET" {
+            withUnsafeCurrentTask { $0?.cancel() }
+            throw DatabaseProbeNetworkError()
+        }
         let root = String(path.split(separator: "/").first ?? "")
         if dropOn == method, dropFromRoot == nil || dropFromRoot == root {
             if method == "PUT" { store[path] = body }          // the request landed, the response didn't
@@ -157,7 +171,7 @@ struct DatabaseCheckEngineTests {
         #expect(r.item(.signIn).problem == .emailPasswordDisabled)
         #expect(r.item(.signIn).fix?.contains("Sign-in method") == true)
         #expect(r.item(.meta).status == .skipped)
-        #expect(t.log.isEmpty)
+        #expect(t.log.allSatisfy { $0.hasPrefix("ANON") }, "no authenticated traffic without a session")
         #expect(r.item(.publicAccess).problem == .openRules)
     }
 
@@ -190,6 +204,80 @@ struct DatabaseCheckEngineTests {
         let r = await check(t, url: "http://insecure.example.com")
         #expect(r.item(.databaseURL).problem == .invalidURL)
         #expect(t.log.isEmpty)
+    }
+
+    @Test("Every probe is a child named _haloCheck_… directly under {root}/{uid} — it can never address an app node")
+    func probeNamespace() async {
+        let t = StubTransport()
+        _ = await DatabaseCheckEngine(transport: t, databaseURL: "https://demo-default-rtdb.firebaseio.com").run()    // real nonces
+        let writes = t.log.filter { $0.hasPrefix("PUT ") }.map { String($0.dropFirst(4)) }
+        #expect(writes.count == 4)
+        for w in writes {
+            let parts = w.split(separator: "/").map(String.init)
+            #expect(parts.count == 3 && ["meta", "devices", "sms", "clipboard"].contains(parts[0]) && parts[1] == "uid-1", "\(w)")
+            #expect(DatabaseCheckEngine.isProbeKey(parts[2]) && parts[2].count > DatabaseCheckEngine.probePrefix.count + 8, "\(w)")
+        }
+        #expect(Set(writes).count == 4)
+        #expect(t.leftover.isEmpty)
+    }
+
+    @Test("A sign-in that returns an empty or slash-bearing uid probes nothing (it would collapse out of the user's own node)")
+    func degenerateUID() async {
+        for bad in ["", "a/b"] {
+            let t = StubTransport(); t.signInResult = { .ok(uid: bad) }
+            let r = await check(t)
+            #expect(r.item(.signIn).status == .fail)
+            #expect(!t.log.contains { $0.hasPrefix("PUT") })
+        }
+    }
+
+    @Test("A network drop while writing, when the delete cannot get through either, names the entry that may remain")
+    func dropWhileWritingNamesLeftover() async {
+        let t = StubTransport(); t.dropOn = "PUT"; t.dropFromRoot = "meta"; t.denyDelete = ["meta"]
+        let r = await check(t)
+        #expect(r.item(.meta).problem == .network)
+        #expect(r.item(.meta).detail.contains("_haloCheck_n0nce"))
+        #expect(r.item(.meta).detail.contains("meta/{uid}"))
+    }
+
+    @Test("Cancelling the check mid-run still deletes the probe that landed")
+    func cancelStillCleansUp() async {
+        let t = StubTransport(); t.cancelOnGET = true
+        let box = Task { await check(t) }
+        let r = await box.value
+        #expect(t.log.contains { $0.hasPrefix("PUT meta/") })
+        #expect(t.log.contains { $0.hasPrefix("DELETE meta/") }, "the delete must run even though the task is cancelled")
+        #expect(t.leftover.isEmpty)
+        #expect(r.item(.meta).problem == .network)
+    }
+
+    @Test("Rules that open only one folder are caught even though the root is locked; the report names the folder")
+    func partiallyOpenRules() async {
+        let t = StubTransport(); t.publicOpenPaths = ["clipboard"]
+        let r = await check(t)
+        let item = r.item(.publicAccess)
+        #expect(item.problem == .openRules)
+        #expect(item.status == .warn)
+        #expect(item.detail.contains("clipboard/"))
+        #expect(!item.detail.contains("sms/"))
+        for p in ["", "meta", "devices", "sms", "clipboard"] { #expect(t.log.contains("ANON \(p)"), "\(p)") }
+    }
+
+    @Test("An unreadable folder status does not pass as 'refused'")
+    func undeterminedFolder() async {
+        let t = StubTransport(); t.publicStatus = 500
+        #expect(await check(t).item(.publicAccess).problem == .unknownAccess)
+    }
+
+    @Test("Identity Toolkit's prose for a bad API key is recognised (its first word is 'API', not a code)")
+    func apiKeyProse() {
+        let prose: [String: Any] = ["error": ["code": 400, "message": "API key not valid. Please pass a valid API key.", "status": "INVALID_ARGUMENT"]]
+        #expect(LiveDatabaseProbeTransport.signInErrorCode(prose) == "API_KEY_INVALID")
+        let details: [String: Any] = ["error": ["message": "Bad request", "details": [["reason": "API_KEY_INVALID"]]]]
+        #expect(LiveDatabaseProbeTransport.signInErrorCode(details) == "API_KEY_INVALID")
+        #expect(LiveDatabaseProbeTransport.signInErrorCode(["error": ["message": "OPERATION_NOT_ALLOWED"]]) == "OPERATION_NOT_ALLOWED")
+        #expect(LiveDatabaseProbeTransport.signInErrorCode(["error": ["message": "TOO_MANY_ATTEMPTS_TRY_LATER : Access temporarily disabled"]]) == "TOO_MANY_ATTEMPTS_TRY_LATER")
+        #expect(LiveDatabaseProbeTransport.signInErrorCode(nil) == "")
     }
 
     @Test("The report never contains the password, API key, token, email or the concrete uid")
@@ -244,7 +332,8 @@ struct DatabaseCheckLiveTransportTests {
 
         let all = StubURLProtocol.requests(id)
         let anonymous = all.filter { $0.url.host == dbHost && $0.query("auth") == nil }
-        #expect(anonymous.count == 1 && anonymous[0].query("shallow") == "true")
+        // Root + the four folders, all shallow, none with a token.
+        #expect(anonymous.count == 5 && anonymous.allSatisfy { $0.query("shallow") == "true" })
         #expect(all.filter { $0.url.host?.hasSuffix("googleapis.com") == true }.allSatisfy { $0.bodyString.contains("hunter2-pass") })
         #expect(!all.filter { $0.url.host == dbHost }.contains { $0.bodyString.contains("hunter2") || $0.url.absoluteString.contains("hunter2") })
     }
@@ -330,6 +419,16 @@ struct PairingCodeSessionTests {
         #expect(!s.expired)
     }
 
+    @Test("The real timer (not the test clock) hides the code")
+    func realTimerHides() async throws {
+        let s = PairingCodeSession(lifetime: 0.05, generate: { "REAL" })
+        s.show()
+        #expect(s.code == "REAL")
+        try await Task.sleep(nanoseconds: 600_000_000)
+        #expect(s.code == nil)
+        #expect(s.expired)
+    }
+
     @Test("The code reaches no log, UserDefaults, AppStorage or AlertLog sink (source audit)")
     func noSinks() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
@@ -387,13 +486,25 @@ struct DeviceRetirementTests {
 
     @Test("An empty, slash-bearing or dot id removes NOTHING (an empty id would wipe the account's whole sms tree)")
     func unsafeIdsRefused() async {
-        for bad in ["", "a/b", "..", ".", "/"] {
+        let long = String(repeating: "a", count: 769)
+        for bad in ["", "a/b", "..", ".", "/", " ", "\t\n", "a b/c", "a\u{0}b", "x.json", "a$b", "a#b", "a[0]", "../sms", long] {
             let box = Removed()
             await #expect(throws: DeviceRetirementError.invalidDeviceID) {
                 try await DeviceRetirement.retire(uid: "u1", deviceId: bad) { box.nodes.append($0) }
             }
             #expect(box.nodes.isEmpty, "id \(bad.debugDescription)")
         }
+    }
+
+    @Test("Ordinary ids are accepted, including a literal percent sequence (it is encoded, not decoded, on the wire)")
+    func safeIdsAccepted() {
+        for ok in ["3f2b8c1e-aaaa-bbbb-cccc-0123456789ab", "pixel_8", "a%2Fb", "%2e%2e"] { #expect(DeviceRetirement.isSafeDeviceID(ok), "\(ok)") }
+        #expect(FirebaseRTDBClient.requestURL(base: URL(string: "https://x.firebaseio.com")!, path: "sms/u/%2e%2e", token: "t")?.absoluteString.contains("/sms/u/%252e%252e.json") == true)
+    }
+
+    @Test("A boolean lastSeen is not a timestamp")
+    func booleanLastSeen() {
+        #expect(DeviceLastSeen.date(fromRaw: NSNumber(value: true)) == nil)
     }
 
     @Test("A failing removal stops the retire (the device row is not removed if the messages were not)")

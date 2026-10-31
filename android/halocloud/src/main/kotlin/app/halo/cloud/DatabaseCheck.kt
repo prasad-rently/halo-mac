@@ -63,8 +63,8 @@ class ProbeNetworkException(message: String = "Couldn't reach the network.") : I
 interface DatabaseProbeTransport {
     fun signIn(): SignInOutcome
     fun request(method: String, path: String, body: String?): ProbeResponse
-    /** HTTP status of an UNAUTHENTICATED shallow read of the root. No credentials are sent. */
-    fun unauthenticatedStatus(): Int
+    /** HTTP status of an UNAUTHENTICATED shallow read of [path] ("" = the database root). No credentials are sent. */
+    fun unauthenticatedStatus(path: String): Int
 }
 
 object DatabaseCheckText {
@@ -98,7 +98,10 @@ class DatabaseCheck(
         // 2. Sign-in (also the Email/Password-disabled and bad-key checks).
         val uid: String? = try {
             when (val s = transport.signIn()) {
-                is SignInOutcome.Ok -> { out[CheckKind.SIGN_IN] = CheckItem(CheckKind.SIGN_IN, CheckStatus.PASS, CheckProblem.NONE, titleOf(CheckKind.SIGN_IN), "Signed in."); s.uid }
+                is SignInOutcome.Ok -> if (s.uid.isEmpty() || '/' in s.uid) {
+                    // An empty uid would collapse "meta//x" to "meta/x" — a probe outside the user's own node.
+                    out[CheckKind.SIGN_IN] = signInFailure("MALFORMED_RESPONSE"); null
+                } else { out[CheckKind.SIGN_IN] = CheckItem(CheckKind.SIGN_IN, CheckStatus.PASS, CheckProblem.NONE, titleOf(CheckKind.SIGN_IN), "Signed in."); s.uid }
                 is SignInOutcome.Rejected -> { out[CheckKind.SIGN_IN] = signInFailure(s.code); null }
             }
         } catch (e: ProbeNetworkException) {
@@ -134,22 +137,24 @@ class DatabaseCheck(
 
     private fun probe(kind: CheckKind, root: String, uid: String): CheckItem {
         val template = "$root/{uid}"
-        val name = "_haloCheck_${nonce()}"
+        val name = "$PROBE_PREFIX${nonce()}"
         val path = "$root/$uid/$name"
         val token = nonce() + nonce()
         val fail = { p: CheckProblem, detail: String, fix: String? -> CheckItem(kind, CheckStatus.FAIL, p, titleOf(kind), detail, fix) }
 
         // WRITE. Only a write that may have landed needs cleaning up: a refused one left nothing behind.
         val put = try { transport.request("PUT", path, JsonPrimitive(token).toString()) } catch (e: ProbeNetworkException) {
-            cleanUp(path)                         // the request may have reached the server before the connection dropped
-            return fail(CheckProblem.NETWORK, "The connection dropped while writing to $template.", "Check the internet connection and run the check again.")
+            // The request may have reached the server before the connection dropped. If the delete cannot get
+            // through either, the entry may exist — say where, rather than silently leaving junk.
+            val cleaned = cleanUp(path)
+            return fail(CheckProblem.NETWORK, "The connection dropped while writing to $template.${if (cleaned) "" else " A test entry \"$name\" may have been left under $template — if you see it in the Firebase console, delete it."}", "Check the internet connection and run the check again.")
         }
         if (put.status !in 200..299) return refused(kind, template, put.status, "write")
 
         // READ BACK. From here on the probe exists, so every exit path removes it.
         val read = try { transport.request("GET", path, null) } catch (e: ProbeNetworkException) {
-            cleanUp(path)
-            return fail(CheckProblem.NETWORK, "The connection dropped while reading from $template.", "Check the internet connection and run the check again.")
+            val cleaned = cleanUp(path)
+            return fail(CheckProblem.NETWORK, "The connection dropped while reading from $template.${leftover(cleaned, template, name)}", "Check the internet connection and run the check again.")
         }
         if (read.status !in 200..299) {
             val cleaned = cleanUp(path)
@@ -181,13 +186,21 @@ class DatabaseCheck(
     /** One best-effort delete. True only when the server confirmed it. */
     private fun cleanUp(path: String): Boolean = try { transport.request("DELETE", path, null).status in 200..299 } catch (e: ProbeNetworkException) { false }
 
+    /** Anonymous reads, no credentials. The root first; if it is locked, each folder the apps use (rules that open only `clipboard` would otherwise pass). */
     private fun publicAccess(): CheckItem {
-        val status = try { transport.unauthenticatedStatus() } catch (e: ProbeNetworkException) { -1 }
-        return when (status) {
-            200 -> CheckItem(CheckKind.PUBLIC_ACCESS, CheckStatus.WARN, CheckProblem.OPEN_RULES, titleOf(CheckKind.PUBLIC_ACCESS),
-                "Your database answers anyone on the internet without signing in (test-mode rules). Message text stays encrypted, but device names, labels and timestamps are readable, and a stranger could write to it.", DatabaseCheckText.RULES_FIX)
-            401, 403 -> CheckItem(CheckKind.PUBLIC_ACCESS, CheckStatus.PASS, CheckProblem.NONE, titleOf(CheckKind.PUBLIC_ACCESS), "Anonymous access is refused.")
-            else -> CheckItem(CheckKind.PUBLIC_ACCESS, CheckStatus.WARN, CheckProblem.UNKNOWN_ACCESS, titleOf(CheckKind.PUBLIC_ACCESS), "Couldn't tell whether the database is open to the public.", null)
+        val t = titleOf(CheckKind.PUBLIC_ACCESS)
+        fun status(path: String) = try { transport.unauthenticatedStatus(path) } catch (e: ProbeNetworkException) { -1 }
+        val rootStatus = status("")
+        if (rootStatus == 200) return CheckItem(CheckKind.PUBLIC_ACCESS, CheckStatus.WARN, CheckProblem.OPEN_RULES, t,
+            "Your database answers anyone on the internet without signing in (test-mode rules). Message text stays encrypted, but device names, labels and timestamps are readable, and a stranger could write to it.", DatabaseCheckText.RULES_FIX)
+        val open = ArrayList<String>()
+        var undetermined = rootStatus != 401 && rootStatus != 403
+        if (!undetermined) for ((_, root) in paths) when (status(root)) { 200 -> open.add(root); 401, 403 -> Unit; else -> undetermined = true }
+        return when {
+            open.isNotEmpty() -> CheckItem(CheckKind.PUBLIC_ACCESS, CheckStatus.WARN, CheckProblem.OPEN_RULES, t,
+                "Part of your database (${open.joinToString(", ") { "$it/" }}) answers anyone on the internet without signing in. Message text stays encrypted, but names, labels and timestamps are readable, and a stranger could write there.", DatabaseCheckText.RULES_FIX)
+            undetermined -> CheckItem(CheckKind.PUBLIC_ACCESS, CheckStatus.WARN, CheckProblem.UNKNOWN_ACCESS, t, "Couldn't tell whether the database is open to the public.", null)
+            else -> CheckItem(CheckKind.PUBLIC_ACCESS, CheckStatus.PASS, CheckProblem.NONE, t, "Anonymous access is refused.")
         }
     }
 
@@ -196,7 +209,7 @@ class DatabaseCheck(
         return when (code) {
             "OPERATION_NOT_ALLOWED", "PASSWORD_LOGIN_DISABLED" -> f(CheckProblem.EMAIL_PASSWORD_DISABLED, "Email/Password sign-in is turned off for this Firebase project.", DatabaseCheckText.AUTH_FIX)
             "EMAIL_NOT_FOUND", "INVALID_PASSWORD", "INVALID_LOGIN_CREDENTIALS" -> f(CheckProblem.BAD_CREDENTIALS, "The email or password doesn't match a user in this Firebase project.", "Firebase console → Authentication → Users: check the user exists, or pair again from your Mac.")
-            "API_KEY_INVALID", "INVALID_API_KEY" -> f(CheckProblem.BAD_API_KEY, "The API key isn't valid for this Firebase project.", "Pair again from your Mac, or copy the Web API key from Firebase console → Project settings.")
+            "API_KEY_INVALID", "INVALID_API_KEY", "API_KEY_NOT_VALID" -> f(CheckProblem.BAD_API_KEY, "The API key isn't valid for this Firebase project.", "Pair again from your Mac, or copy the Web API key from Firebase console → Project settings.")
             "USER_DISABLED" -> f(CheckProblem.ACCOUNT_DISABLED, "That Firebase user has been disabled.", "Firebase console → Authentication → Users → enable the user.")
             "TOO_MANY_ATTEMPTS_TRY_LATER" -> f(CheckProblem.RATE_LIMITED, "Too many sign-in attempts.", "Wait a few minutes and run the check again.")
             else -> f(CheckProblem.UNEXPECTED, "Sign-in was refused.", null)       // the code is deliberately not echoed
@@ -204,6 +217,13 @@ class DatabaseCheck(
     }
 
     companion object {
+        /**
+         * Every probe entry is named `_haloCheck_<nonce>` and lives directly under `{root}/{uid}`. A client that
+         * observes those nodes live must ignore this prefix so a probe is never mistaken for a device.
+         */
+        const val PROBE_PREFIX = "_haloCheck_"
+        fun isProbeKey(key: String) = key.startsWith(PROBE_PREFIX)
+
         fun titleOf(kind: CheckKind) = when (kind) {
             CheckKind.DATABASE_URL -> "Database address"
             CheckKind.SIGN_IN -> "Sign-in"
@@ -237,8 +257,23 @@ class LiveDatabaseProbeTransport(
             if (token != null && uid != null) { idToken = token; return SignInOutcome.Ok(uid) }
             return SignInOutcome.Rejected("MALFORMED_RESPONSE")
         }
-        val raw = (json?.get("error") as? kotlinx.serialization.json.JsonObject)?.get("message")?.jsonPrimitive?.contentOrNull.orEmpty()
-        return SignInOutcome.Rejected(raw.split(' ').firstOrNull().orEmpty())
+        return SignInOutcome.Rejected(signInErrorCode(json))
+    }
+
+    companion object {
+        /**
+         * Identity Toolkit reports most refusals as `error.message = "CODE"` or `"CODE : text"`, but a bad API key
+         * comes back as the prose "API key not valid. Please pass a valid API key." with the code only in
+         * `error.details[].reason` — so the first word of the message ("API") is not a code.
+         */
+        fun signInErrorCode(json: kotlinx.serialization.json.JsonObject?): String {
+            val err = json?.get("error") as? kotlinx.serialization.json.JsonObject
+            val message = (err?.get("message") as? JsonPrimitive)?.contentOrNull.orEmpty()
+            if (message.lowercase().startsWith("api key not valid")) return "API_KEY_INVALID"
+            val details = err?.get("details") as? kotlinx.serialization.json.JsonArray
+            if (details?.any { ((it as? kotlinx.serialization.json.JsonObject)?.get("reason") as? JsonPrimitive)?.contentOrNull == "API_KEY_INVALID" } == true) return "API_KEY_INVALID"
+            return message.split(' ').firstOrNull().orEmpty()
+        }
     }
 
     override fun request(method: String, path: String, body: String?): ProbeResponse {
@@ -247,9 +282,9 @@ class LiveDatabaseProbeTransport(
         return http("$b/${FirebaseRtdbClient.requestPath(path)}?auth=${URLEncoder.encode(token, "UTF-8")}", method, body)
     }
 
-    override fun unauthenticatedStatus(): Int {
+    override fun unauthenticatedStatus(path: String): Int {
         val b = base ?: return -1
-        return http("$b/.json?shallow=true", "GET", null).status
+        return http("$b/${FirebaseRtdbClient.requestPath(path)}?shallow=true", "GET", null).status
     }
 
     private fun http(url: String, method: String, body: String?): ProbeResponse {

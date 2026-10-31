@@ -32,7 +32,9 @@ enum DeviceLastSeen {
 
     /// `devices/{uid}/{id}.lastSeen` is epoch milliseconds (Android) — accept seconds too (be lenient).
     static func date(fromRaw raw: Any?) -> Date? {
-        guard let n = (raw as? NSNumber)?.doubleValue, n > 0 else { return nil }
+        guard let num = raw as? NSNumber, CFGetTypeID(num) != CFBooleanGetTypeID() else { return nil }     // `true` is not a timestamp
+        let n = num.doubleValue
+        guard n > 0 else { return nil }
         return Date(timeIntervalSince1970: n > 1e11 ? n / 1000 : n)
     }
 }
@@ -46,8 +48,14 @@ enum DeviceRetirement {
         ["sms/\(uid)/\(deviceId)", "devices/\(uid)/\(deviceId)"]
     }
 
+    /// Firebase keys cannot contain `. $ # [ ] /` or ASCII control characters, and are at most 768 bytes — so a
+    /// real device id never has any of them. Refusing them (and whitespace-only ids) keeps the id a single
+    /// path segment. A literal `%2F` is fine: the request builder percent-encodes `%`, so it stays one segment.
     static func isSafeDeviceID(_ id: String) -> Bool {
-        !id.isEmpty && !id.contains("/") && id != "." && id != ".."
+        guard !id.isEmpty, id.utf8.count <= 768 else { return false }
+        guard !id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        let illegal = CharacterSet(charactersIn: "./$#[]").union(.controlCharacters)
+        return id.rangeOfCharacter(from: illegal) == nil
     }
 
     /// Remove a phone's subtrees through `remove`. Throws `invalidDeviceID` — removing nothing — for an id

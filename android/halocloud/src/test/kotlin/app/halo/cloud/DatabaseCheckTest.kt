@@ -2,6 +2,8 @@ package app.halo.cloud
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -27,13 +29,15 @@ class DatabaseCheckTest {
         var mismatchOnRead = false
         var notFound = false
         var publicStatus = 401
+        val publicOpenPaths = HashSet<String>()
+        var signedInUid = uid
         var dropOn: String? = null                       // "PUT" / "GET" / "DELETE": throw a network error on that verb
         var dropFromRoot: String? = null
         val store = HashMap<String, String>()
         val log = CopyOnWriteArrayList<String>()
 
         override fun signIn() = signIn.invoke()
-        override fun unauthenticatedStatus(): Int = publicStatus
+        override fun unauthenticatedStatus(path: String): Int { log.add("ANON $path"); return if (path in publicOpenPaths) 200 else publicStatus }
         override fun request(method: String, path: String, body: String?): ProbeResponse {
             log.add("$method $path")
             val root = path.substringBefore('/')
@@ -69,6 +73,57 @@ class DatabaseCheckTest {
     }
 
     /** The real v2.5 defect: rules published for sms/devices/meta but not clipboard. */
+    @Test fun everyProbeIsAChildNamedHaloCheckDirectlyUnderRootAndUid() {
+        val t = StubTransport()
+        DatabaseCheck(t, "https://demo-default-rtdb.firebaseio.com").run()          // real nonces
+        val writes = t.log.filter { it.startsWith("PUT ") }.map { it.removePrefix("PUT ") }
+        assertEquals(4, writes.size)
+        for (w in writes) {
+            val parts = w.split('/')
+            assertTrue(w, parts.size == 3 && parts[0] in listOf("meta", "devices", "sms", "clipboard") && parts[1] == "uid-1")
+            assertTrue(w, DatabaseCheck.isProbeKey(parts[2]) && parts[2].length > DatabaseCheck.PROBE_PREFIX.length + 8)
+        }
+        assertEquals(4, writes.toSet().size)
+        assertTrue(t.store.isEmpty())
+    }
+
+    @Test fun anEmptyOrSlashBearingUidProbesNothing() {
+        for (bad in listOf("", "a/b")) {
+            val t = StubTransport().apply { signIn = { SignInOutcome.Ok(bad) } }
+            val r = check(t)
+            assertEquals(CheckStatus.FAIL, r.item(CheckKind.SIGN_IN).status)
+            assertTrue(t.log.none { it.startsWith("PUT") })
+        }
+    }
+
+    @Test fun aDropWhileWritingWithADeleteThatAlsoFailsNamesTheEntryThatMayRemain() {
+        val t = StubTransport().apply { dropOn = "PUT"; dropFromRoot = "meta"; denyDelete.add("meta") }
+        val d = check(t).item(CheckKind.META)
+        assertEquals(CheckProblem.NETWORK, d.problem)
+        assertTrue(d.detail, d.detail.contains("_haloCheck_n0nce") && d.detail.contains("meta/{uid}"))
+    }
+
+    @Test fun rulesThatOpenOnlyOneFolderAreCaughtEvenThoughTheRootIsLocked() {
+        val t = StubTransport().apply { publicOpenPaths.add("clipboard") }
+        val item = check(t).item(CheckKind.PUBLIC_ACCESS)
+        assertEquals(CheckProblem.OPEN_RULES, item.problem)
+        assertTrue(item.detail, item.detail.contains("clipboard/") && !item.detail.contains("sms/"))
+        for (p in listOf("", "meta", "devices", "sms", "clipboard")) assertTrue(p, t.log.contains("ANON $p"))
+    }
+
+    @Test fun anUnreadableFolderStatusDoesNotPassAsRefused() {
+        assertEquals(CheckProblem.UNKNOWN_ACCESS, check(StubTransport().apply { publicStatus = 500 }).item(CheckKind.PUBLIC_ACCESS).problem)
+    }
+
+    @Test fun identityToolkitProseForABadApiKeyIsRecognised() {
+        fun j(s: String) = Json.parseToJsonElement(s).jsonObject
+        assertEquals("API_KEY_INVALID", LiveDatabaseProbeTransport.signInErrorCode(j("""{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT"}}""")))
+        assertEquals("API_KEY_INVALID", LiveDatabaseProbeTransport.signInErrorCode(j("""{"error":{"message":"Bad request","details":[{"reason":"API_KEY_INVALID"}]}}""")))
+        assertEquals("OPERATION_NOT_ALLOWED", LiveDatabaseProbeTransport.signInErrorCode(j("""{"error":{"message":"OPERATION_NOT_ALLOWED"}}""")))
+        assertEquals("TOO_MANY_ATTEMPTS_TRY_LATER", LiveDatabaseProbeTransport.signInErrorCode(j("""{"error":{"message":"TOO_MANY_ATTEMPTS_TRY_LATER : slow down"}}""")))
+        assertEquals("", LiveDatabaseProbeTransport.signInErrorCode(null))
+    }
+
     @Test fun clipboardDeniedIsReportedOnItsOwnWithTheFix() {
         val t = StubTransport().apply { denyWrite.add("clipboard"); denyRead.add("clipboard") }
         val r = check(t)
@@ -150,7 +205,7 @@ class DatabaseCheckTest {
         assertEquals(CheckProblem.EMAIL_PASSWORD_DISABLED, s.problem)
         assertTrue(s.fix!!.contains("Sign-in method"))
         assertEquals(CheckStatus.SKIPPED, r.item(CheckKind.META).status)
-        assertTrue("no database traffic without a session", t.log.isEmpty())
+        assertTrue("no authenticated database traffic without a session", t.log.all { it.startsWith("ANON") })
         assertEquals("open rules are still detected without signing in", CheckProblem.OPEN_RULES, r.item(CheckKind.PUBLIC_ACCESS).problem)
     }
 
@@ -234,8 +289,8 @@ class DatabaseCheckTest {
         assertEquals(CheckStatus.PASS, r.item(CheckKind.SMS).status)
         assertEquals(CheckProblem.PERMISSION_DENIED, r.item(CheckKind.CLIPBOARD).problem)
         assertEquals("public check is unauthenticated and was refused", CheckStatus.PASS, r.item(CheckKind.PUBLIC_ACCESS).status)
-        assertEquals(1, seen.unauth.size)
-        assertTrue("the unauthenticated probe carries no credentials", seen.unauth.single().contains("shallow=true") && !seen.unauth.single().contains("auth="))
+        assertEquals("root + the four folders", 5, seen.unauth.size)
+        assertTrue("the unauthenticated probes carry no credentials", seen.unauth.all { it.contains("shallow=true") && !it.contains("auth=") })
         // the password went to the auth endpoint and only there
         assertTrue(seen.idtBodies.single().contains("hunter2-pass"))
         assertFalse(seen.db.any { it.contains("hunter2") })

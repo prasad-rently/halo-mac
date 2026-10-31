@@ -90,7 +90,9 @@ final class PairingCodeSession: ObservableObject {
 
     static let sleepingSchedule: Schedule = { after, action in
         let task = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64(after * 1_000_000_000))
+            // ContinuousClock keeps counting while the Mac sleeps. Task.sleep(nanoseconds:) is not guaranteed to,
+            // and a code that outlived a lid-close by "however long was left" would be a hide in name only.
+            try? await ContinuousClock().sleep(for: .seconds(after))
             if !Task.isCancelled { action() }
         }
         return { task.cancel() }
