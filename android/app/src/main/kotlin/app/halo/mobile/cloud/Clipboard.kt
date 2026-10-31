@@ -12,6 +12,7 @@ import android.widget.Toast
 import app.halo.cloud.ClipboardSyncEngine
 import app.halo.cloud.RemoteClip
 import app.halo.cloud.SealedFile
+import app.halo.cloud.SealedStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
@@ -29,22 +30,38 @@ data class ClipItem(val id: String, val text: String, val kind: String, val from
  * password someone copied ends up. A plaintext file left by an earlier version is migrated on first read.
  */
 class ClipboardHistory(ctx: Context) {
-    private val file = SealedFile(File(ctx.filesDir, "clipboard-history.json"), SecretBox)
+    private val store = SealedStore(SealedFile(File(ctx.filesDir, "clipboard-history.json"), SecretBox))
     private val json = Json { ignoreUnknownKeys = true }
     private val ser = ListSerializer(ClipItem.serializer())
     private val _items = MutableStateFlow(load())
     val items: StateFlow<List<ClipItem>> = _items
+    private val _warning = MutableStateFlow(store.warning)
+    /** Content-free storage status ("temporarily unreadable", "could not be sealed yet") or null. */
+    val warning: StateFlow<String?> = _warning
 
-    private fun load(): List<ClipItem> = try { file.read()?.let { json.decodeFromString(ser, it) } ?: emptyList() } catch (e: Exception) { emptyList() }
+    private fun parse(text: String?): List<ClipItem> = try { text?.let { json.decodeFromString(ser, it) } ?: emptyList() } catch (e: Exception) { emptyList() }
+    private fun load(): List<ClipItem> = parse(store.load())
 
     @Synchronized fun add(item: ClipItem) {
         if (_items.value.any { it.id == item.id }) return
-        val next = (listOf(item) + _items.value).sortedByDescending { it.atMs }.take(ClipboardSyncEngine.CAP)
-        _items.value = next; persist(next)
+        _items.value = (listOf(item) + _items.value).sortedByDescending { it.atMs }.take(ClipboardSyncEngine.CAP)
+        persist()
     }
 
-    @Synchronized fun clear() { _items.value = emptyList(); file.delete() }
-    private fun persist(l: List<ClipItem>) { runCatching { file.write(json.encodeToString(ser, l)) } }
+    @Synchronized fun clear() { _items.value = emptyList(); store.delete(); _warning.value = null }
+
+    /**
+     * Never replaces a file that could not be read: if Keystore was momentarily unavailable at load, the first
+     * successful re-read merges what is on disk with what arrived since, then writes. See [SealedStore].
+     */
+    private fun persist() {
+        store.save { onDisk ->
+            val merged = (_items.value + parse(onDisk)).distinctBy { it.id }.sortedByDescending { it.atMs }.take(ClipboardSyncEngine.CAP)
+            _items.value = merged
+            json.encodeToString(ser, merged)
+        }
+        _warning.value = store.warning
+    }
 
     companion object {
         @Volatile private var instance: ClipboardHistory? = null
@@ -182,7 +199,7 @@ class SendToMacActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val text = intent?.takeIf { it.action == Intent.ACTION_SEND }?.getStringExtra(Intent.EXTRA_TEXT)
+        val text = intent?.takeIf { it.action == Intent.ACTION_SEND }?.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()   // not getStringExtra: many apps share a Spanned, which that returns as null
         if (text.isNullOrBlank()) { finish(); return }
         val app = applicationContext
         if (!CloudPrefs(app).clipboardEnabled) {

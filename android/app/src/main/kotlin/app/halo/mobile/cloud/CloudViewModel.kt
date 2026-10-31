@@ -74,6 +74,7 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
     val syncing: StateFlow<Boolean> = SmsSyncRunner.running
     val syncTick: StateFlow<Int> = SmsSyncRunner.tick
     val history get() = ClipboardHistory.get(ctx).items
+    val historyWarning get() = ClipboardHistory.get(ctx).warning
     val clipStatus: StateFlow<String> = ClipboardController.status
 
     init {

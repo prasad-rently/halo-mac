@@ -65,7 +65,9 @@ object SmsSyncRunner {
     }
 
     /** "Retry skipped" (H-14): un-park the quarantined messages and sync again. */
-    fun retrySkipped(ctx: Context): SyncReport {
+    // @Synchronized like [run]: an un-park + mark rewind that interleaved with a running pass would be overwritten by
+    // that pass's final high-water write, and the rows would be un-parked yet never re-sent.
+    @Synchronized fun retrySkipped(ctx: Context): SyncReport {
         val prefs = CloudPrefs(ctx)
         return try {
             val session = CloudRuntime.session(ctx) ?: return SyncReport(error = "This phone isn't paired yet.")
