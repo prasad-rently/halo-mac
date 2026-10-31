@@ -217,7 +217,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * the next send. First sighting wins; an address that actually answered over HTTP (the /24 scan, manual add) is
      * authoritative and still replaces it via [merge].
      */
-    private fun mergeUnverified(peer: Peer) { if (_peers.value.none { it.id == peer.id }) merge(peer) }
+    private fun mergeUnverified(peer: Peer) {
+        // One atomic update: a check-then-merge could be overtaken by the HTTP scan adding the verified entry between the two,
+        // and the unverified datagram source would then replace it.
+        var added = false
+        _peers.update { list -> added = false; if (list.any { it.id == peer.id }) list else { added = true; (list + peer).sortedBy { it.alias.lowercase() } } }
+        if (added && _selected.value == null) _selected.value = peer.id
+    }
 
     fun select(id: String) { _selected.value = id }
 
