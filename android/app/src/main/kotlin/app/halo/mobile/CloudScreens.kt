@@ -264,6 +264,7 @@ fun ClipboardScreen(vm: CloudViewModel) {
     val enabled by vm.clipEnabled.collectAsStateWithLifecycle()
     val filter by vm.clipFilter.collectAsStateWithLifecycle()
     val history by vm.history.collectAsStateWithLifecycle()
+    val historyWarning by vm.historyWarning.collectAsStateWithLifecycle()
     val notice by vm.clipNotice.collectAsStateWithLifecycle()
     val status by vm.clipStatus.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
@@ -323,6 +324,7 @@ fun ClipboardScreen(vm: CloudViewModel) {
                 SectionLabel("History")
                 if (history.isNotEmpty()) TextButton(onClick = { confirmPurge = true }) { Icon(Icons.Filled.Delete, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Purge synced") }
             }
+            historyWarning?.let { Text(it, color = Halo.Amber, fontSize = 12.sp, modifier = Modifier.testTag("clip.storageWarning")) }
             if (history.isEmpty()) HaloCard { Text("Nothing synced yet.", color = Halo.Text3, fontSize = 13.sp) }
             history.take(50).forEach { ClipRow(it) { vm.copy(it) } }
         }

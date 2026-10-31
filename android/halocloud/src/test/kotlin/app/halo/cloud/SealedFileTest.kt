@@ -47,8 +47,9 @@ class SealedFileTest {
     @Test fun `an existing plaintext file is read once and sealed in place`() {
         val f = File(tmp.root, "clipboard-history.json"); f.writeText(secret)         // what v2.5 wrote
         val sf = SealedFile(f, AesSealer())
-        assertEquals(secret, sf.read())
-        assertTrue(sf.lastReadMigrated)
+        val r = sf.readResult() as SealedRead.Text
+        assertEquals(secret, r.text)
+        assertTrue(r.migrated)
         assertFalse("plaintext must be gone after migration", String(f.readBytes(), Charsets.ISO_8859_1).contains("hunter2"))
         assertEquals(secret, SealedFile(f, AesSealer()).read())       // and still readable afterwards
     }
@@ -58,7 +59,7 @@ class SealedFileTest {
         SealedFile(f, AesSealer()).write(secret)
         val other = SealedFile(f, AesSealer(ByteArray(32) { 9 }))     // Keystore reset ⇒ a different key
         assertNull(other.read())
-        assertFalse(other.lastReadMigrated)
+        assertEquals(SealedRead.Corrupt, other.readResult())
     }
 
     @Test fun `a tampered sealed file reads as empty`() {

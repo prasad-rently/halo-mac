@@ -34,11 +34,16 @@ object SecretBox : app.halo.cloud.Sealer {
         return c.iv + c.doFinal(plain)
     }
 
+    /**
+     * Only an authentication failure (or an impossible blob) is a [app.halo.cloud.SealCorruptException]; a Keystore or
+     * provider error propagates as itself, which [app.halo.cloud.SealedFile] treats as "try again later — keep the file".
+     */
     override fun open(blob: ByteArray): ByteArray {
-        require(blob.size > IV_BYTES) { "sealed blob too short" }
+        if (blob.size <= IV_BYTES) throw app.halo.cloud.SealCorruptException("sealed blob too short")
         val c = Cipher.getInstance("AES/GCM/NoPadding")
         c.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, blob, 0, IV_BYTES))
-        return c.doFinal(blob, IV_BYTES, blob.size - IV_BYTES)
+        return try { c.doFinal(blob, IV_BYTES, blob.size - IV_BYTES) }
+        catch (e: javax.crypto.AEADBadTagException) { throw app.halo.cloud.SealCorruptException("authentication failed", e) }
     }
 
     fun destroy() { runCatching { KeyStore.getInstance(PROVIDER).apply { load(null) }.deleteEntry(ALIAS) } }
