@@ -1,7 +1,7 @@
 # Halo — Feature Specifications & Execution Plans
 
 Detailed requirements and phased execution plans for the upcoming feature set
-(NFeat-122 → NFeat-131 / F-044 → F-054). Each document is **self-contained**:
+(NFeat-122 → NFeat-131 / F-044 → F-054, plus the v2.6 additions F-055 → F-058). Each document is **self-contained**:
 it opens with a Requirements Specification and closes with an Execution Plan.
 
 > **Status:** planning artifacts. No code is written from these yet — they exist
@@ -26,9 +26,14 @@ it opens with a Requirements Specification and closes with an Execution Plan.
 | [F-050-haloshare-mobile.md](F-050-haloshare-mobile.md) | F-050 | 127 | HaloShare Mobile ↔ Desktop | Desktop + Mobile |
 | [F-051-lucky-draw-spinner.md](F-051-lucky-draw-spinner.md) | F-051 | 128 | Lucky Draw Spinner Wheel | Desktop (mobile ✅ Port) |
 | [F-052-lethe-ephemeral-chat.md](F-052-lethe-ephemeral-chat.md) | F-052 | 129 | Lethe — Anonymous Ephemeral Chat | Desktop (mobile client already exists) |
-| [F-053-lucky-draw-avatars.md](F-053-lucky-draw-avatars.md) | F-053 | 130 | Lucky Draw Avatars (spec + partial build on PR #54) | Desktop (mobile ✅ Port, P2) |
-| [F-054-build-artifact-cleaner.md](F-054-build-artifact-cleaner.md) | F-054 | 131 | Build Artifact Cleaner (requirements only) | Desktop (mobile ❌ Won't do) |
-| [BUG-001-cleanup-stale-state.md](BUG-001-cleanup-stale-state.md) | BUG-001 | — | Cleanup: no rescan + stale cross-category items (analysis + requirements) | Desktop |
+| [F-053-lucky-draw-avatars.md](F-053-lucky-draw-avatars.md) | F-053 | 130 | Lucky Draw Avatars (core merged v2.5; completion 🔧 on PR #57) | Desktop (mobile ✅ Port, P2) |
+| [F-054-build-artifact-cleaner.md](F-054-build-artifact-cleaner.md) | F-054 | 131 | Build Artifact Cleaner (🔧 built on PR #59, unmerged) | Desktop (mobile ❌ Won't do) |
+| [F-055-android-background-and-sharing.md](F-055-android-background-and-sharing.md) | F-055 | — | Android Background Receiving & Sharing (🔧 PR #62) | Android (iOS ❌ deferred) |
+| [F-056-expenditure-on-android.md](F-056-expenditure-on-android.md) | F-056 | — | Expenditure on the Phone — F-048 mobile half (🔧 PR #58) | Android (iOS via cloud, v2.7) |
+| [F-057-cloud-setup-assistant.md](F-057-cloud-setup-assistant.md) | F-057 | — | Cloud Setup Assistant (🔧 PR #63) | Desktop + Android |
+| [F-058-release-engineering.md](F-058-release-engineering.md) | F-058 | — | Release Engineering — CI, DMG, APK signing (🔧 PR #56) | Repo (mobile n/a) |
+| [../V2_6_PLAN.md](../V2_6_PLAN.md) | — | — | **v2.6 plan and record** — scope, H-xx hardening, decisions D-01…D-08, verification debt V-1…V-10, risks | — |
+| [BUG-001-cleanup-stale-state.md](BUG-001-cleanup-stale-state.md) | BUG-001 | — | Cleanup: no rescan + stale cross-category items (fix merged v2.5, #53; hardening on #60) | Desktop |
 
 ## Document structure (each feature)
 
@@ -64,3 +69,14 @@ F-048 is intentionally last — it consumes F-044's data.
 F-051 sits outside the Firebase wave entirely: it touches no cloud foundation and no
 macOS system API, so it can be slotted in wherever a self-contained, high-delight piece
 of work is wanted without blocking or being blocked by anything above.
+
+### v2.6 build order (2026-11-01 — see [`../V2_6_PLAN.md`](../V2_6_PLAN.md))
+
+```
+#53 ─► F-054 (Build Artifact Cleaner)                      #54 ─► H-07…H-11 ─► F-053 completion
+#55 ─► H-13…H-16 ─► F-055 (background/sharing) ─► F-056 (expenditure on the phone)
+D-01 ─► H-12 ─► F-057 (setup assistant)          H-20a (Swift) ─► H-20b (Kotlin) ─► H-21
+F-058 (release engineering): independent after the RC
+```
+
+Desktop and Android tracks touch disjoint files except `docs/*`, `CLAUDE.md` and the wire-contract fixture; docs and `CLAUDE.md` edits are kept to the end and merged serially. As of 2026-11-01 every v2.6 item is **built on an open, unmerged PR (#56–#63)** — the order above describes dependencies, not what has landed.

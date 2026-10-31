@@ -123,7 +123,7 @@ feasibility study (§6). iOS / Android assessed separately.
 | **AI assistant — cloud (F-046)** | ✅ | ✅ | Cloud providers portable; fewer agent tools on mobile | P1 | Assessed ✓ (§9) |
 | **AI — on-device (F-047)** | 🟡 | 🟡 | MLX is Mac-only → mobile uses Core ML / MLC-LLM / llama.cpp | P2 | Assessed |
 | **SMS console (F-044)** | 🟡 | ✅ | Android sync source; iOS viewer only | P0 | Desktop merged (v2.5); **Android sync built** (`android/halocloud` + `android/app`) — emulator-verified against a local stand-in, not yet against live Firebase / a physical phone |
-| **Expenditure (F-048)** | ✅ | ✅ | Parse device SMS (Android) / cloud (iOS) | P1 | Desktop v1 merged (v2.5); mobile not started |
+| **Expenditure (F-048)** | ✅ | ✅ | Parse device SMS (Android) / cloud (iOS) | P1 | Desktop v1 merged (v2.5); **Android half built as F-056 on PR #58 (unmerged, JVM-verified only)**; iOS not started (cloud sync is a v2.7 decision) |
 | **Clipboard sync (F-045)** | 🟡 | 🟡 | F-045 (AccessibilityService Android) | P1 | Desktop merged (v2.5); **Android built** (share-sheet + manual send verified on emulator; automatic background capture unverified on a real phone); iOS not started |
 | **Browser Cleaner (F-024)** | ❌ | ❌ | Sandbox blocks reading/deleting another app's (browser's) data entirely | — | Won't do |
 | **Permission Auditor (F-016)** | ❌ | 🟡 | iOS exposes zero introspection into other apps' TCC/permission grants — no viable path; Android `PackageManager` can enumerate other installed apps' declared + granted permissions, gated by `QUERY_ALL_PACKAGES` visibility and Play policy | P3 | Assessed ✓ (§9) |
@@ -133,6 +133,10 @@ feasibility study (§6). iOS / Android assessed separately.
 | **Lethe — anonymous ephemeral chat (F-052)** | ✅ | ✅ | **Already built.** The Lethe Flutter app ships on both platforms against the same relay; desktop is the new client, not the other way round | P2 | Assessed |
 | **Lucky Draw Avatars (F-053)** | ✅ | ✅ | Emoji, monogram, bundled packs and ring rendering are the same kind of work as F-051 itself. Photos are *easier* on a phone: `PHPickerViewController` / the Android Photo Picker need **no permission**. Face-centred crop = Vision (iOS) / ML Kit Face Detection (Android). Rides on the F-051 mobile port | P2 | Assessed ✓ (§9) |
 | **Build Artifact Cleaner (F-054)** | ❌ | ❌ | No developer build trees on a phone; both mobile sandboxes forbid enumerating or deleting outside the app's own container — the same blocker as Browser Cleaner (F-024) | — | Won't do |
+| **Android background receiving & sharing (F-055)** | ❌ | ✅ | Android: foreground service (`dataSync`) hosting the HaloShare receiver + clipboard stream, Sharesheet target, multicast with a scoped `MulticastLock`. iOS cannot hold a background listener (MR-OS-2 iOS clause) and multicast needs a restricted entitlement | P0 | **Android 🔧 built on PR #62 (unmerged)** — emulator-verified (API 36); real multicast, Doze/OEM **not verified (V-6)**. iOS ❌ deferred |
+| **Expenditure on the phone (F-056)** | 🟡 | ✅ | Android parses the device's own SMS with the same pattern pack and a sealed local ledger; iOS has no SMS read API → cloud-fed viewer only, a v2.7 decision (`V2.7-11`) | P1 | **Android 🔧 built on PR #58 (unmerged)** — JVM-only; Keystore/UI/device perf **not verified (V-7)**; known parser false positives. iOS deferred |
+| **Cloud setup assistant (F-057)** | 🟡 | ✅ | "Check my database" per-path probe on the phone (Kotlin twin of the Mac engine); iOS gets it with the iOS client | P1 | **Android 🔧 built on PR #63 (unmerged)** — stubs/loopback only; not verified vs real Firebase or on screen. iOS deferred with the iOS client (`V2.7-08`) |
+| **Release engineering (F-058)** | n/a | n/a | Repo-level CI / DMG / APK-signing plumbing — not a desktop capability with a phone equivalent | — | n/a (🔧 built on PR #56; recorded so the governance rule is visibly satisfied) |
 
 ---
 
@@ -229,6 +233,7 @@ Copy this block into a study when assessing a feature for mobile.
 
 | Date | Change |
 |------|--------|
+| 2026-11-01 | **v2.6 docs merge.** Rows added to §3 for **F-055** (Android ✅ built on PR #62 / iOS ❌ deferred), **F-056** (Android ✅ built on PR #58 / iOS 🟡 via cloud in v2.7) and **F-057** (Android ✅ built on PR #63 / iOS deferred with the iOS client); **F-058** recorded as n/a (repo-level). **F-054 ❌/❌ Won't do** re-confirmed — now built on desktop (PR #59), no mobile path. F-048's row updated (Android half = F-056). Short feasibility studies in §9. **Every Android status is "built on an unmerged PR" — none is verified on a physical phone** (V-1…V-7). |
 | 2026-10 | Requirements written (no code) for **F-053 Lucky Draw Avatars** and **F-054 Build Artifact Cleaner**; **BUG-001** (Cleanup stale state) analysed. F-053 assessed ✅/✅ Port → P2 (§9) — the one mobile action is to **freeze the `EntryAvatar` JSON contract** (`docs/specs/F-053-lucky-draw-avatars.md` §7) so the mobile Lucky Draw port reads the same roster files. F-054 assessed ❌/❌ Won't do (§9). Rows added to §3. |
 | 2026-09 | F-051 Lucky Draw Spinner Wheel specced **and shipped** on desktop. Feasibility study added (§9): ✅/✅ **Port** → P2 — the first desktop feature assessed with *zero* mobile blockers, because it touches no OS capability at all. Row added to §3. |
 | 2026-08 | F-017 Network Traffic Monitor shipped on desktop. Feasibility study added (§9): verdict ❌/❌ Won't do — same OS-sandbox blocker as top-processes/ports. Row added to §3. |
@@ -494,3 +499,30 @@ promote to `Planned` (spec) when scheduled.
 - **Effort:** n/a. **Dependencies:** n/a.
 - **Verdict:** **Blocked** (both platforms) → **Won't do**.
 - **Recommendation:** do not build; recorded so the question is not re-opened without a new OS capability.
+
+### Feasibility — Android background receiving & sharing (from F-055, v2.6)
+- **Desktop capability:** none — this is a mobile-side gap in F-050 HaloShare (MR-OS-1, MR-OS-2, MR-DI-4), not a port of a desktop feature.
+- **iOS mechanism:** none viable. A suspended iOS app cannot keep a listener; a Share Extension (MR-OS-1) is possible but deferred; multicast needs Apple's restricted entitlement · verdict ❌
+- **Android mechanism:** foreground service type `dataSync` (Android 14 rules; Android 15 `onTimeout`), `ACTION_SEND`/`SEND_MULTIPLE` target, `MulticastLock` · verdict ✅
+- **OS blockers:** Doze and OEM battery managers can still kill the service on real phones (**unverified — V-6**); Android 14/15 foreground-service policy (user-initiated start only, declared type).
+- **Permissions required:** `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS` (API 33+, with rationale), `CHANGE_WIFI_MULTICAST_STATE`.
+- **Store-policy risk:** low–medium — an always-on plain-HTTP listener with a persistent notification; default off; consent required per offer. Not published (sideload only for v1).
+- **Scope on mobile:** Android full; iOS none. **Effort:** ~8 d (built on PR #62) · **Dependencies:** F-050, F-049, PR #61.
+- **Verdict:** **Port (Android)** / **Blocked (iOS)** → P0 (Android). **Recommendation:** merge after the owner's phone confirms the service survives Doze (V-6).
+
+### Feasibility — Expenditure on the phone (from F-056, v2.6)
+- **Desktop capability:** F-048 — approximate spend from bank SMS, categories, month totals.
+- **iOS mechanism:** none for reading SMS (no API); a cloud-fed viewer is possible only after an expenditure cloud-sync design (`V2.7-11`) · verdict 🟡
+- **Android mechanism:** `READ_SMS` content provider (already declared for F-044) + the shared pattern pack; ledger sealed with the Android Keystore · verdict ✅
+- **OS blockers:** none beyond the existing SMS permission; Play-store `READ_SMS` policy is already the F-044/F-049 risk.
+- **Permissions required:** none new. **Store-policy risk:** unchanged (sideload only for v1); amounts are sensitive → local only, never uploaded in v2.6.
+- **Scope on mobile:** Android full minimal UI (month, categories, recent, exclude). **Effort:** ~7 d (built on PR #58) · **Dependencies:** F-048 pattern pack, F-049 SMS permission.
+- **Verdict:** **Port (Android)** / **Adapt (iOS, v2.7)** → P1. **Recommendation:** merge once the parser's known false positives are decided and V-7 compares totals to real statements.
+
+### Feasibility — Cloud setup assistant (from F-057, v2.6)
+- **Desktop capability:** "Check my database" per-path probe, auto-hiding pairing code, Devices last-seen + retire.
+- **iOS mechanism:** the same engine in Swift once an iOS cloud client exists (`V2.7-08`) · verdict 🟡 (deferred, not blocked)
+- **Android mechanism:** Kotlin twin in `android/halocloud` + a Compose section; REST only · verdict ✅
+- **OS blockers:** none. **Permissions required:** none. **Store-policy risk:** none (credentials go only to Google's sign-in host and the user's own database).
+- **Scope on mobile:** Android full. **Effort:** ~2 d of the ≈ 4 d (built on PR #63) · **Dependencies:** F-044/F-045.
+- **Verdict:** **Port** → P1. **Recommendation:** merge after the check is run once against the owner's real Firebase project (V-2).
