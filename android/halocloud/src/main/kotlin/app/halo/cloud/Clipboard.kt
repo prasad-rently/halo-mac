@@ -137,13 +137,30 @@ class ClipboardSyncEngine(
         synchronized(this) { seenItemIds.clear() }
     }
 
+    /** Oldest-first keys from the last full read, so a steady-state sweep (one over the cap) needs no full read. */
+    private var evictionOrder = ArrayList<String>()
+
+    /**
+     * H-15: the old sweep downloaded the whole `items` node — up to 500 encrypted payloads — on every publish just to
+     * count it. Now: count keys only (`?shallow=true`, a few KB). Only when over the cap is the node read, to learn
+     * the age order; that order is remembered, so the next sweeps evict from it without another full read. A stale
+     * order can only mis-evict an item by a few positions (clock skew between devices), never exceed the cap.
+     */
     private fun sweepCap(uid: String) {
         if (clock() - lastSweepMs < SWEEP_INTERVAL_MS) return
         lastSweepMs = clock()
-        val raw = rtdb.get("clipboard/$uid/items") as? JsonObject ?: return
-        if (raw.size <= CAP) return
-        val oldest = raw.entries.map { (k, v) -> k to (((v as? JsonObject)?.get("createdAt") as? JsonPrimitive)?.doubleOrNull ?: 0.0) }.sortedBy { it.second }
-        for ((k, _) in oldest.take(raw.size - CAP)) runCatching { rtdb.delete("clipboard/$uid/items/$k") }
+        val path = "clipboard/$uid/items"
+        val keys = rtdb.shallowKeys(path)
+        if (keys.size <= CAP) return
+        val excess = keys.size - CAP
+        var victims = evictionOrder.filter { it in keys }.take(excess)
+        if (victims.size < excess) {
+            val raw = rtdb.get(path) as? JsonObject ?: return
+            evictionOrder = ArrayList(raw.entries.map { (k, v) -> k to (((v as? JsonObject)?.get("createdAt") as? JsonPrimitive)?.doubleOrNull ?: 0.0) }.sortedBy { it.second }.map { it.first })
+            victims = evictionOrder.take(excess)
+        }
+        for (k in victims) runCatching { rtdb.delete("$path/$k") }
+        evictionOrder.removeAll(victims.toSet())
     }
 
     companion object {

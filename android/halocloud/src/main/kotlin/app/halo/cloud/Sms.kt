@@ -72,14 +72,22 @@ object SmsWire {
      * half-built (no label, no number) and never refreshed. `syncEnabled` belongs to the desktop (D29): the
      * caller passes back the value it just read so this whole-node write cannot reset it.
      */
-    fun lineNode(l: SimLine, crypto: CryptoService, syncEnabled: Boolean? = null): JsonObject {
+    fun lineNode(
+        l: SimLine, crypto: CryptoService, syncEnabled: Boolean? = null,
+        lineVersion: Int? = null, updatedAtMs: Long? = null, ownNumberEnc: String? = null,
+    ): JsonObject {
         val m = linkedMapOf<String, JsonElement>(
             "subscriptionId" to JsonPrimitive(l.subscriptionId),
             "label" to JsonPrimitive(l.label),
             "carrier" to JsonPrimitive(l.carrier),
-            "ownNumberEnc" to JsonPrimitive(crypto.encrypt(l.ownNumber.ifBlank { "Unknown" })),
+            "ownNumberEnc" to JsonPrimitive(ownNumberEnc ?: crypto.encrypt(l.ownNumber.ifBlank { "Unknown" })),
         )
         syncEnabled?.let { m["syncEnabled"] = JsonPrimitive(it) }
+        // H-21: the desktop reads a line once, when it first appears. These two fields are the change signal it
+        // re-reads on: `lineVersion` goes up (and `updatedAt` moves) only when label / carrier / own number change,
+        // so a rename on the phone reaches a Mac that is already running.
+        lineVersion?.let { m["lineVersion"] = JsonPrimitive(it) }
+        updatedAtMs?.let { m["updatedAt"] = JsonPrimitive(it) }
         return JsonObject(m)
     }
 
