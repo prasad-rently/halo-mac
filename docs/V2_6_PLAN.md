@@ -49,7 +49,7 @@ Status words: ✅ done and verified (how stated) · 🔧 built / open PR, not me
 | 3 | F-053 completion (non-art) | ≈ 5 | 🔧 C-1…C-4 built on #57; hero flight not seen on screen | [`specs/F-053-…`](specs/F-053-lucky-draw-avatars.md) |
 | 4 | F-055 Android background & sharing | ≈ 8 | 🔧 built on #62 (stacked on #61) | [`specs/F-055-…`](specs/F-055-android-background-and-sharing.md) |
 | 5 | F-056 Expenditure on Android | ≈ 7 | 🔧 built on #58; JVM-only; known parser false positives | [`specs/F-056-…`](specs/F-056-expenditure-on-android.md) |
-| 6 | F-057 Cloud setup assistant | ≈ 4 | 🔧 built on #63; review in progress | [`specs/F-057-…`](specs/F-057-cloud-setup-assistant.md) |
+| 6 | F-057 Cloud setup assistant | ≈ 4 | 🔧 built on #63; reviewed, 10 defects fixed (`0228187`); stubs/loopback only | [`specs/F-057-…`](specs/F-057-cloud-setup-assistant.md) |
 | 7 | F-058 Release engineering | ≈ 4 | 🔧 built on #56; CI never run on GitHub | [`specs/F-058-…`](specs/F-058-release-engineering.md) |
 | — | Docs / test plan / wrap-up | ≈ 4 | 🔧 this PR | — |
 
@@ -58,7 +58,7 @@ Status words: ✅ done and verified (how stated) · 🔧 built / open PR, not me
 ## 5. Phases — as executed
 
 ### P0 — Land v2.5
-Six PRs merged into `release/v2.5` (head `bf8fde2`) after independent reviews: #52 → #51 → #53 → #50 → #54 → #55. Fixes added before merge: scan-generation guards test-proven (H-04), Clean All acts on the confirmed snapshot (H-01), avatar recovery-file photos never swept (H-07), passphrase typed twice when the DB cannot verify it (H-12, D-01). Verified on the merged head (handover): `HaloTests` 777 passed (one timing flake that passed on rerun), Android `:halocloud:test :haloshare:test` 141, `:app:assembleRelease` OK, both audits OK. RC artifacts (unpublished, not notarised): `~/Downloads/Halo-2.5-RC/`. **The owner's live tests T-1…T-9 have not been run** (cases in `MANUAL_TEST_PLAN.md` §20.6, all ◆).
+Six PRs merged into `release/v2.5` (head `bf8fde2`) after independent reviews: #52 → #51 → #50 → #53 → #54 → #55 (the order GitHub recorded on 2026-10-28; the pack's planned order had #53 before #50). Fixes added before merge: scan-generation guards test-proven (H-04), Clean All acts on the confirmed snapshot (H-01), avatar recovery-file photos never swept (H-07), passphrase typed twice when the DB cannot verify it (H-12, D-01). Verified on the merged head (handover): `HaloTests` 777 passed (one timing flake that passed on rerun), Android `:halocloud:test :haloshare:test` 141, `:app:assembleRelease` OK, both audits OK. RC artifacts (unpublished, not notarised): `~/Downloads/Halo-2.5-RC/`. **The owner's live tests T-1…T-9 have not been run** (cases in `MANUAL_TEST_PLAN.md` §20.6, all ◆).
 
 ### P1 — Hardening (#56 H-18; #60 desktop; #61 Android)
 See §6. Review fixes: #60 five (prune cancellation was false; stale prune could drop a live row; `ChildDelivery.pending` O(total bytes) regression; symlinked scan root/Trash never covered its items; header-probe on `Data` slices); #61 three (outages/rate limits counted toward quarantine; "Retry skipped" raced a running sync; the Send-to-Mac share intent read `getStringExtra` and silently ignored `CharSequence` text) plus two H-13 data-safety fixes (`c5a02a8`, see §6) that **have not had a separate re-review**.
@@ -70,7 +70,7 @@ Built and reviewed (7 fixes). Spikes S-A/S-B are **analysis only** (`docs/specs/
 C-1 hero travel, C-2 hub last winner, C-3 storage readout + per-roster clear, C-4 CSV avatar column, H-11 signposts + a headless draw-cost measurement. **Deviation:** the C-3 readout lives in the Lucky Draw **roster panel**, not Settings. C-5 docs are this PR. C-6 (animated emoji, caricatures) stays ⛔ ART → v2.7.
 
 ### P4 — Android (#61 hardening, #62 F-055, #58 F-056)
-#62 is stacked on #61 (now `6d93b85` = #61 merged in; its emulator results pre-date the merge). #58 is independent.
+#62 is stacked on #61 (now `6d93b85` = #61 merged in; its emulator results pre-date both the review fixes `e4966f1` and the merge — JVM only since). #58 is independent.
 
 ### P5 — F-057 (#63) · P6 — F-058 (#56)
 See their specs.
@@ -78,9 +78,11 @@ See their specs.
 ### P7 — Wrap-up
 This documentation PR (`docs/v2.6-plan`, base `release/v2.6`). Not done: the RC build for v2.6, the owner verification run, any release.
 
-## 6. Hardening — H-01…H-21 (authoritative status; requirements in the BRD text preserved below)
+## 6. Hardening — H-01…H-21 (authoritative status; one-line requirements)
 
 "Built" means code on an **unmerged** PR; none is ✅ unless it is merged **and** verified as stated.
+
+> **"BRD" in this and the other v2.6 docs** means the v2.6 planning pack's `03-BRD-v2.6.md`, which is staged **untracked** in the primary checkout (`docs/planning/v2.6/`) and is **not in the repository**. The full per-item acceptance text (e.g. the H-05 "case-insensitive temp volume" AC, H-02's "20 000 items, no stall > 50 ms") lives only there; this table keeps the requirement in one line and the honest status. If the pack is deleted, that acceptance text is lost — the owner should decide whether to commit it.
 
 | ID | Requirement (short) | Status | Where | Honest note |
 |---|---|---|---|---|
@@ -96,7 +98,7 @@ This documentation PR (`docs/v2.6-plan`, base `release/v2.6`). Not done: the RC 
 | H-10 | Fail-closed size cap; header-bound PNG/TIFF; UUID case; 64 MB LRU cache | 🔧 | #60 | Residual: a roster of ≥ 256 entries all at the 256-px bucket exceeds the cap and would thrash; a hand-placed lower-case file on a case-sensitive volume becomes unreachable (not deleted) |
 | H-11 | Measure the wheel; set the entry limit from data | 🔧 **partial** | #57 (not #60) | Signposts + a **headless offscreen CPU** draw-cost table (avatars add ≈ 1.05–1.3× to the plain wheel's cost; machine was loaded; **not on-screen fps**, not a GPU measurement). The entry limit stays **40** because the data do not support a change. Instruments / 60 fps / Intel **not measured** → V-8, v2.7 |
 | H-12 | D-01 passphrase twice | ✅ merged v2.5 | #55 | logic tests; real-phone pairing remains V-1/V-4 |
-| H-13 | Clipboard history sealed at rest | 🔧 **built, JVM-verified; device Keystore unverified** | #61 (`c5a02a8`) | Emulator: file starts `HSF1`, no plaintext, plaintext legacy file sealed in place. The review's two data-risk items are fixed — a **transient Keystore failure no longer overwrites** the history (saves deferred, then merged on recovery) and a **failed migration leaves the plaintext intact, reported and retried** — with failing-`Sealer` tests and four mutation checks. **Those author fixes had no separate re-review. Real-Keystore transient failure is NOT verified.** Follow-up open: `CloudStore.load()` reports "not paired" on **any** exception (a transient Keystore error looks like an unpaired phone; it never auto-overwrites) |
+| H-13 | Clipboard history sealed at rest | 🔧 **built, JVM-verified; device Keystore unverified** | #61 (`c5a02a8`) | Emulator: file starts `HSF1`, no plaintext, plaintext legacy file sealed in place. The review's two data-risk items are fixed — a **transient Keystore failure no longer overwrites** the history (saves deferred, then merged on recovery) and a **failed migration leaves the plaintext intact, reported and retried** — with failing-`Sealer` tests and four mutation checks. **Those author fixes had no separate re-review, and the emulator check above pre-dates them. Real-Keystore transient failure is NOT verified.** Follow-up open: `CloudStore.load()` reports "not paired" on **any** exception (a transient Keystore error looks like an unpaired phone; it never auto-overwrites) |
 | H-14 | Poison-row quarantine + "Retry skipped" | 🔧 | #61 | Review fixed outages/rate limits counting toward quarantine (`RtdbException.isRowFault`). Open nit: quarantined entries for rows later deleted from the inbox are never pruned until "Retry skipped" |
 | H-15 | Android minors (a11y config, SendToMac, stream race, cap sweep, host check, doc pointer) | 🔧 | #61 | **The a11y sub-item is gated on V-3**: only "bound" is proven on the emulator, the background clipboard read with an event-less service is **not verified** and could silently break the feature on real phones. Stream close race is *narrowed, not closed* (~30 s window) |
 | H-16 | Password-leak test inspects bodies, mutation-checked | 🔧 | #61 | covers the literal and URL-encoded password only |
@@ -109,7 +111,7 @@ This documentation PR (`docs/v2.6-plan`, base `release/v2.6`). Not done: the RC 
 H-12 and H-01/04/07 ride on v2.5 (the "I-1…I-4" early items); H-19 and the F-053 docs part are this PR.
 
 ### Review findings that remain open (recorded, not fixed)
-Parser false positives and category-trigger collisions (F-056 §9) · H-05 gaps · H-13 follow-up (`CloudStore.load()`) · H-11/H-17/H-19 as above · **F-053:** the hub shows the **last winner (`history.first`)**, which right after a draw is the winner just announced — the BRD says "previous winner"; reviewer opinion: keep; one-line change if the owner means the one before · **F-053 C-3 deviation:** readout in the roster panel, not Settings · **F-054:** Active (< 24 h) items remain permanent-eligible; `Select all Safe` includes `.notRepo` items (Trash-only); a `*`-ignoring enclosing repo makes everything permanent-eligible (rare; needs a `rev-parse --show-toplevel` sanity check); opening Cleanup auto-rescans and triggers TCC prompts on first open (consider a first-run opt-in); `realTrashItemRoundTrip` touches the real Trash and is skipped by default; stale comment in `ScanCoordinator.executeCleanup`; a weak `groupingAndFilters…` assertion · **F-055:** POST_NOTIFICATIONS denied still enables the service; Stop does not re-sync the switch · **F-057:** pasteboard not cleared after the code hides; "specific children" rules not caught · **F-058:** actions not pinned by SHA, no wrapper validation, `versionCode` not enforced.
+Parser false positives and category-trigger collisions (F-056 §9) · H-05 gaps · H-13 follow-up (`CloudStore.load()`) · H-11/H-17/H-19 as above · **F-053:** the hub shows the **last winner (`history.first`)**, which right after a draw is the winner just announced — the BRD says "previous winner"; reviewer opinion: keep; one-line change if the owner means the one before · **F-053 C-3 deviation:** readout in the roster panel, not Settings · **F-054:** Active (< 24 h) items remain permanent-eligible; `Select all Safe` includes `.notRepo` items (Trash-only); a `*`-ignoring enclosing repo makes everything permanent-eligible (rare; needs a `rev-parse --show-toplevel` sanity check); opening Cleanup auto-rescans and triggers TCC prompts on first open (consider a first-run opt-in); `realTrashItemRoundTrip` touches the real Trash and is skipped by default; stale comment in `ScanCoordinator.executeCleanup`; a weak `groupingAndFilters…` assertion · **F-055:** POST_NOTIFICATIONS denied still enables the service; Stop does not re-sync the switch · **F-057:** "specific children" rules not caught and the probe path differs from real data paths (`clipboard/{uid}/items/…`); Retire leaves that phone's clipboard items; `?auth=` token in the URL; Kotlin `http()` has no total deadline (the pasteboard-clearing gap in the PR body was fixed by the review) · **F-058:** actions not pinned by SHA, no wrapper validation, `versionCode` not enforced.
 
 ## 7. Verification debt — cannot be cleared from an emulator
 

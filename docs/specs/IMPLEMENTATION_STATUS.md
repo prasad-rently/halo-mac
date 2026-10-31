@@ -6,9 +6,9 @@
 >
 > | Item | Status | PR |
 > |---|---|---|
-> | F-055 Android background & sharing | 🔧 emulator-verified service/consent/share target; real multicast, Doze/OEM ⛔ unverified | #62 (stacked on #61) |
+> | F-055 Android background & sharing | 🔧 service/consent/share target emulator-verified on pre-review code only; real multicast, Doze/OEM ⛔ unverified | #62 (stacked on #61) |
 > | F-056 Expenditure on the phone | 🔧 JVM-only; known parser false positives | #58 |
-> | F-057 Cloud setup assistant | 🔧 stubs/loopback only; review in progress | #63 |
+> | F-057 Cloud setup assistant | 🔧 stubs/loopback only; reviewed (10 fixes) | #63 |
 > | F-058 Release engineering | 🔧 CI never run on GitHub | #56 |
 > | Android hardening (H-13/14/15/16/20b/21b) | 🔧 JVM; emulator vs local stand-in; device Keystore unverified | #61 |
 > | Desktop hardening (H-02/03/05/08/09/10/20a/21a) | 🔧 model tests; no GUI session | #60 |

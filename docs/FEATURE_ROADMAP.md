@@ -20,17 +20,17 @@
 | ID | Feature | Status | Effort | Depends On |
 |---|---|---|---|---|
 | [F-001](#f-001--gpu-metrics-dashboard-card) | GPU Metrics Dashboard Card | ✅ Done | 0.5 d | Phase 3 merged |
-| [F-002](#f-002--xpc-helper-privileged-operations) | XPC Helper — Privileged Ops | ✅ Done | 3 d | none |
-| [F-003](#f-003--storekitmit-2-promanager) | StoreKit 2 ProManager | ⏭ Skipped (user) | 3 d | none |
+| [F-002](#f-002--xpc-helper--privileged-operations) | XPC Helper — Privileged Ops | ✅ Done | 3 d | none |
+| [F-003](#f-003--storekit-2-promanager) | StoreKit 2 ProManager | ⏭ Skipped (user) | 3 d | none |
 | [F-004](#f-004--signature-database--real-malware-definitions) | Signature Database | ✅ Done | 3 d | none |
 | [F-005](#f-005--bgscheduler--scheduled-smart-scan) | BGScheduler — Scheduled Smart Scan | ✅ Done | 1 d | none |
 | [F-006](#f-006--sentry-crash-reporting) | Sentry Crash Reporting | ✅ Done | 0.5 d | none |
 | [F-007](#f-007--privacyinfoxcprivacy--app-store-assets) | PrivacyInfo + App Store Assets | ⏭ Skipped (user) | 2 d | F-002, F-003 |
-| [F-008](#f-008--menu-bar-display-styles-bardot-mode) | Menu Bar Display Styles | ✅ Done | 1.5 d | Phase 3 merged |
+| [F-008](#f-008--menu-bar-display-styles-bar--dot-mode) | Menu Bar Display Styles | ✅ Done | 1.5 d | Phase 3 merged |
 | [F-009](#f-009--login-items--real-smappservice-integration) | Login Items — Real SMAppService | ✅ Done | 2 d | none |
 | [F-010](#f-010--applications-deep-uninstall--real-leftover-scan) | Applications Deep Uninstall | ✅ Done | 2.5 d | none |
 | [F-011](#f-011--in-app-alert-history-log) | In-App Alert History Log | ✅ Done | 1 d | F-001, Phase 3 |
-| [F-012](#f-012--maintenance-tasks--xpc-real-execution) | Maintenance Tasks — Real Execution | ✅ Done | 1 d | F-002 |
+| [F-012](#f-012--maintenance-tasks--real-execution) | Maintenance Tasks — Real Execution | ✅ Done | 1 d | F-002 |
 | [F-013](#f-013--icloud-clipboard-sync) | iCloud Clipboard Sync | ⏭ Skipped (user) | 5 d | F-003 |
 | [F-014](#f-014--pdf-health-report-export) | PDF Health Report Export | ✅ Done | 2 d | none |
 | [F-015](#f-015--custom-scan-schedule-ui) | Custom Scan Schedule UI | ✅ Done | 1 d | F-005 |
@@ -72,9 +72,9 @@
 | [F-053](#f-053--lucky-draw-avatars-nfeat-130) | Lucky Draw Avatars (NFeat-130) | 🔧 Emoji / photo / monogram merged in v2.5 (#54; not clicked through, 60 fps unmeasured); **completion C-1…C-4 built on PR #57 (unmerged; hero flight not seen on screen)**; animated + caricature ⛔ await art (v2.7) | ~8–10 d | F-051 |
 | [F-054](#f-054--build-artifact-cleaner-nfeat-131) | Build Artifact Cleaner (NFeat-131) | 🔧 Built on PR #59 (unmerged, reviewed) — **pane never viewed on screen; permanent removal hidden in sandboxed builds; Settings panel not built** | ~7–9 d | BUG-001 |
 | [BUG-001](#bug-001--cleanup-no-rescan-and-stale-cross-category-items) | Cleanup: no rescan + stale cross-category items | 🔧 Fix merged in v2.5 (#53, tests + mutation checks; **not clicked through — T-1 ◆**); v2.6 hardening H-02/03/05 on PR #60 (unmerged) | ~2.5–3 d | none (blocks F-054) |
-| [F-055](#f-055--android-background-receiving--sharing) | Android Background Receiving & Sharing | 🔧 Built on PR #62 (unmerged; stacked on #61) — **emulator-verified service/consent/share target; real multicast, Doze/OEM NOT verified (V-6)** | ~8 d | F-050, F-049 |
+| [F-055](#f-055--android-background-receiving--sharing) | Android Background Receiving & Sharing | 🔧 Built on PR #62 (unmerged; stacked on #61) — **service/consent/share target emulator-verified on the pre-review code only (JVM since); real multicast, Doze/OEM NOT verified (V-6)** | ~8 d | F-050, F-049 |
 | [F-056](#f-056--expenditure-on-the-phone-f-048-mobile-half) | Expenditure on the Phone (F-048 mobile half) | 🔧 Built on PR #58 (unmerged) — **JVM-only; Keystore, Compose screen, device perf NOT verified; known parser false positives** | ~7 d | F-048, F-049 |
-| [F-057](#f-057--cloud-setup-assistant) | Cloud Setup Assistant | 🔧 Built on PR #63 (unmerged; review in progress) — **stubs/loopback only; NOT verified vs real Firebase or on screen** | ~4 d | F-044, F-045 |
+| [F-057](#f-057--cloud-setup-assistant) | Cloud Setup Assistant | 🔧 Built on PR #63 (unmerged; independently reviewed — 10 defects fixed in `0228187`) — **stubs/loopback only; NOT verified vs real Firebase or on screen** | ~4 d | F-044, F-045 |
 | [F-058](#f-058--release-engineering) | Release Engineering (CI, DMG, APK signing) | 🔧 Built on PR #56 (unmerged, reviewed) — **CI workflow never run on GitHub** | ~4 d | none |
 
 > **Status legend:** ✅ Done · 📋 Queued (next up) · 🗓 Planned (user-requested, spec pending discussion) · 💡 Future Idea (unsolicited) · ⏭ Skipped · 🔧 Built on a branch, not yet merged or validated against its ship gate
@@ -192,7 +192,7 @@ Each item names its blocker and what unblocks it (`V2.7-xx` IDs are reserved her
 | V2.7-12…17 | Mobile ports: Similar Photos (P1), Lucky Draw mobile (P2), usage insights (P2), snippets (P2), beautifier/Downloads/drive speed (P3), Android-only auditors (P3) | capacity | `HALO_MOBILE_ROADMAP.md` priorities |
 | V2.7-18…23 | Reply to SMS, MMS, sent-message sync, F-048 AI parsing, Lethe Android AC-1 on a real phone, clipboard images | various | not specified |
 | V2.7-24 | **Open v2.6 items promoted from review:** parser false positives (coordinated Swift + pack + fixture change; make desktop classifier pack-driven), H-05 gaps, H-11 on-screen measurement, H-17 canary, XPC git helper for sandboxed F-054, F-054 Settings panel + Xcode "in use", H-13 `CloudStore.load()`, BUG-001 OQ-4 | review | owner prioritisation |
-| HK-1…5 | `main` ~167 commits behind; stale PRs #1 (open on purpose)/#6/#7; two things called "F-051"; old local installs; worktree/branch sprawl | owner decisions | owner's word — never done by Claude unprompted |
+| HK-1…5 | `main` is 238 commits behind `release/v2.5` (counted 2026-11-01; the pack said ~167 behind v2.4); stale PRs #1 (open on purpose)/#6/#7; two things called "F-051"; old local installs; worktree/branch sprawl | owner decisions | owner's word — never done by Claude unprompted |
 
 ---
 
@@ -3741,7 +3741,7 @@ No mobile row required (governance rule applies to `F-xxx` features).
 
 ## F-055 — Android Background Receiving & Sharing
 
-**Status:** 🔧 Built on PR #62 (unmerged; stacked on #61) — emulator-verified service / consent / share target on API 36; **real multicast and Doze/OEM NOT verified (V-6)** · **Effort:** ~8 d · **Depends on:** F-050, F-049
+**Status:** 🔧 Built on PR #62 (unmerged; stacked on #61) — service / consent / share target emulator-verified on API 36 on the pre-review code (JVM only since); **real multicast and Doze/OEM NOT verified (V-6)** · **Effort:** ~8 d · **Depends on:** F-050, F-049
 **Full spec:** [`docs/specs/F-055-android-background-and-sharing.md`](specs/F-055-android-background-and-sharing.md)
 Opt-in foreground service (`dataSync`, default off, one-tap stop) hosting the HaloShare receiver and clipboard stream; Sharesheet target that only stages items; multicast announce/listen. Closes MR-OS-1/MR-OS-2/MR-DI-4 in code on the PR. **Mobile parity:** Android-only; iOS ❌ deferred (cannot background) — [`HALO_MOBILE_ROADMAP.md`](HALO_MOBILE_ROADMAP.md) §3.
 
@@ -3757,7 +3757,7 @@ Kotlin port of the classifier/parser driven by the same pattern pack as the desk
 
 ## F-057 — Cloud Setup Assistant
 
-**Status:** 🔧 Built on PR #63 (unmerged; independent review in progress) — stubs/loopback only; **NOT verified against real Firebase or on screen (V-2)** · **Effort:** ~4 d · **Depends on:** F-044, F-045
+**Status:** 🔧 Built on PR #63 (unmerged; independently reviewed, 10 defects fixed in `0228187`) — stubs/loopback only; **NOT verified against real Firebase or on screen (V-2)** · **Effort:** ~4 d · **Depends on:** F-044, F-045
 **Full spec:** [`docs/specs/F-057-cloud-setup-assistant.md`](specs/F-057-cloud-setup-assistant.md)
 "Check my database" (per-path write/read/delete probe incl. the `clipboard/` rules defect), 60-second auto-hiding pairing code, Mac Devices last-seen + retire. Carries D-01 (built in v2.5). **Mobile parity:** phone-side check is part of the feature; iOS with the iOS client.
 

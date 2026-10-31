@@ -1150,7 +1150,7 @@ The cases marked **◆** are the ones unit tests and offscreen renders cannot re
 | TC-V26-CLN-03 ◆ | P1 | 20 000-item prune stall measurement (H-02 AC) | Create a 20 000-file cache folder; run Clean All with Instruments → Points of Interest / Hangs | No main-thread stall > 50 ms; record the number (the AC was **not** measured) |
 | TC-V26-CLN-04 ◆ | P2 | Symlinked and `/var` paths reconcile (H-05) | Trash an item reached through a symlinked folder | Listed once; disappears from every category |
 
-### 20.7.3 F-054 Build Artifact Cleaner (desktop; V-8/V-9 related)
+### 20.7.3 F-054 Build Artifact Cleaner (desktop; V-9 related)
 
 | ID | Priority | Title | Steps | Expected |
 |----|----------|-------|-------|----------|
@@ -1205,7 +1205,7 @@ The cases marked **◆** are the ones unit tests and offscreen renders cannot re
 | TC-F57-01 ◆ | P0 | Healthy project | Cloud settings → Check my database (Mac and phone) | All four paths (`meta`, `devices`, `sms`, `clipboard`) pass; no probe node left behind (`_haloCheck_*`) |
 | TC-F57-02 ◆ | P0 | Rules without `clipboard/` | Publish rules that omit `clipboard/` → check | `clipboard` fails with "Publish … `docs/specs/firebase-rules.json`" |
 | TC-F57-03 ◆ | P1 | Open database / wrong URL / Email-Password off | Test mode rules; wrong-region URL; disable Email/Password | Open-rules warning; wrong URL/region message; `OPERATION_NOT_ALLOWED` message — confirm the real status codes match the stubs |
-| TC-F57-04 ◆ | P0 | Pairing code auto-hides | Pair a phone → watch the code | Hides after 60 s; New code regenerates; leaving the pane hides it; the code never appears in the clipboard history or alert log |
+| TC-F57-04 ◆ | P0 | Pairing code auto-hides | Pair a phone → watch the code | Hides after 60 s; New code regenerates; leaving the pane hides it; the code never appears in the clipboard history or alert log; after it hides, ⌘V does not paste the code (pasteboard cleared if still ours) |
 | TC-F57-05 ◆ | P1 | Devices last-seen and Retire | Devices list → Retire a real phone | Last-seen shown (amber if > 7 days); confirmation; only that device's data removed |
 | TC-F57-06 | P1 | Engine tests (unit) | `DatabaseCheckTests`, `DatabaseCheckTest` | Green on both sides; no-sinks audit green |
 

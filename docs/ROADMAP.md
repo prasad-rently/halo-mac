@@ -158,7 +158,7 @@ Built on open, **unmerged** PRs #56–#63 against `release/v2.6`; nothing is rel
 - 🔧 **F-053** completion (non-art) — C-1…C-4 on #57; hero flight not seen on screen; animated/caricatures ⛔ ART
 - 🔧 **F-055** Android background receiving & sharing — #62 (real multicast/Doze not verified)
 - 🔧 **F-056** Expenditure on the phone — #58 (JVM-only; known parser false positives)
-- 🔧 **F-057** Cloud setup assistant — #63 (stubs/loopback only; review in progress)
+- 🔧 **F-057** Cloud setup assistant — #63 (stubs/loopback only; reviewed, 10 fixes)
 - 🔧 **F-058** Release engineering — #56 (CI never run on GitHub)
 
 **v2.7** (blocked or too large — devices, accounts, art, iOS client, MLX, notarisation, HaloShare TLS, mobile ports): see `FEATURE_ROADMAP.md` "v2.7 backlog". Owner verification debt V-1…V-10: `MANUAL_TEST_PLAN.md` §20.6–§20.7.

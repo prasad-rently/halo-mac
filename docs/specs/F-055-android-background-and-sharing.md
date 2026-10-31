@@ -1,6 +1,6 @@
 # F-055 — Android Background Receiving & Sharing
 
-> **Status:** 🔧 **Built on PR #62 (unmerged; stacked on PR #61, head `6d93b85` = #61 merged in). Independently reviewed (8 fixes).** Emulator-verified on API 36 for the service, consent and share-target paths; **real multicast, Doze/OEM behaviour and the background clipboard read are NOT verified** (V-6). Not ✅.
+> **Status:** 🔧 **Built on PR #62 (unmerged; stacked on PR #61, head `6d93b85` = #61 merged in). Independently reviewed (8 fixes).** Emulator-verified on API 36 for the service, consent and share-target paths — **on the pre-review code (`170fa93`/`90c79d1`); the review fixes in `e4966f1` (service start order, consent gate, server lifecycle) and the #61 merge were verified on the JVM only**; **real multicast, Doze/OEM behaviour and the background clipboard read are NOT verified** (V-6). Not ✅.
 > **Extends:** F-050 HaloShare mobile (`android/haloshare`), F-049/F-045 Android app (`android/app`) · **Raised:** 2026-10-28 (v2.6 BRD §7) · **Effort estimate:** ≈ 8 d (Android only)
 > **Closes:** [`F-049-F-050-mobile-requirements.md`](F-049-F-050-mobile-requirements.md) **MR-OS-1** (Sharesheet target), **MR-OS-2** (foreground service on Android), **MR-DI-4** (multicast announce + listen)
 > **Reserved pbxproj IDs:** none — Kotlin only, no `project.pbxproj` change.
@@ -55,8 +55,8 @@ No new exported component without a permission or an intent-filter justification
 
 ## 8. Acceptance (ship gate)
 
-- **AC-1** Service starts only from a user action, is not exported, survives swipe-away, Stop closes the port — *emulator, API 36* ✓ recorded.
-- **AC-2** Accept/Decline notification works; unanswered ⇒ declined; no file names in notifications — *emulator + unit tests*.
+- **AC-1** Service starts only from a user action, is not exported, survives swipe-away, Stop closes the port — *emulator, API 36* ✓ recorded **before** the review fixes (`e4966f1`, which changed `HaloShareService.onStartCommand`, `ReceiverHost` and `Server` start/stop); **not re-run on the current head**.
+- **AC-2** Accept/Decline notification works; unanswered ⇒ declined; no file names in notifications — *emulator (pre-review code) + unit tests* (the consent gate was rewritten in review; `ConsentGateTest` covers it on the JVM only).
 - **AC-3** Sharesheet target stages only `content://` items; nothing sent without a device and a tap — *partly emulator-verified* (the end-to-end Sharesheet → device → send run was not driven).
 - **AC-4** Multicast codec strict; one answer per announcer; lock released — *JVM only*.
 - **AC-5 (owner / device, V-6)** Receiving survives Doze and the owner's OEM battery manager for a realistic idle period — **not verified**.
@@ -95,7 +95,7 @@ Android-only by nature. **iOS: ❌ deferred** — an iPhone cannot hold a backgr
 
 **Not built:** network-change callback; BOOT start; periodic re-announce; a Sharesheet → device → send run end to end; the share-to-device flow beyond staging.
 
-**Verified:** JVM `halocloud` 95 / `haloshare` 70 / `app` 6 tests, both APKs build (mutation checks on multicast reply, own-echo drop, stream reconnect). On an **API 36 emulator**: `dumpsys` shows `isForeground=true types=0x1`; swipe-away leaves the process alive and `/info` answers over an adb-forwarded 53317; a `prepare-upload` raised the Accept/Decline notification and Accept led to a stored file; Stop closes the port; the permission rationale → system dialog → service start flow; a `file://` share staged nothing and a `content://` share staged "1 item". **Those emulator runs pre-date the #61 merge into this branch and were not re-run on `6d93b85`.**
+**Verified:** JVM `halocloud` 95 / `haloshare` 70 / `app` 6 tests at the original two commits, both APKs build (mutation checks on multicast reply, own-echo drop, stream reconnect); on the current head `6d93b85` (after review fixes and the #61 merge) the PR comment reports **`halocloud` 101 / `haloshare` 80 / `app` 7, 0 failures, both APKs build** (JVM only). On an **API 36 emulator** (original commits only): `dumpsys` shows `isForeground=true types=0x1`; swipe-away leaves the process alive and `/info` answers over an adb-forwarded 53317; a `prepare-upload` raised the Accept/Decline notification and Accept led to a stored file; Stop closes the port; the permission rationale → system dialog → service start flow; a `file://` share staged nothing and a `content://` share staged "1 item". **Those emulator runs pre-date both the review fixes (`e4966f1`) and the #61 merge into this branch, and were not re-run on `6d93b85`.**
 
 **NOT verified:** real multicast (emulator NAT, no second device); Doze / OEM battery managers / real-phone service lifetime / Android 14 sticky restart (**V-6**); the Android 15 six-hour timeout; the official LocalSend app or a real Mac over Wi-Fi (**V-10**).
 
