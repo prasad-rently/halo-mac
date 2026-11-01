@@ -48,6 +48,12 @@ class ClipboardHistory(ctx: Context) {
         persist()
     }
 
+    /**
+     * Re-attempts a save that was deferred (store blocked) or a migration that could not seal. Without it the
+     * "will be retried" warning only came true when the next clip happened to arrive — never, if sync is idle.
+     */
+    @Synchronized fun retry() { if (store.warning != null) persist() }
+
     @Synchronized fun clear() { _items.value = emptyList(); store.delete(); _warning.value = null }
 
     /**

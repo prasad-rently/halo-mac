@@ -75,6 +75,8 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
     val syncTick: StateFlow<Int> = SmsSyncRunner.tick
     val history get() = ClipboardHistory.get(ctx).items
     val historyWarning get() = ClipboardHistory.get(ctx).warning
+    /** The storage warning promises a retry; this is what makes it true when no new clip arrives to trigger a save. Off the main thread: it touches the Keystore. */
+    fun retryHistory() { viewModelScope.launch(Dispatchers.IO) { ClipboardHistory.get(ctx).retry() } }
     val clipStatus: StateFlow<String> = ClipboardController.status
 
     init {

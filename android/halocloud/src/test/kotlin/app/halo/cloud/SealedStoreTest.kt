@@ -34,6 +34,7 @@ class SealedStoreTest {
         }
         override fun open(blob: ByteArray): ByteArray {
             failOpen?.let { throw it }
+            if (blob.size <= 12) throw SealCorruptException("blob too short")      // as SecretBox does
             val c = Cipher.getInstance("AES/GCM/NoPadding"); c.init(Cipher.DECRYPT_MODE, SecretKeySpec(keyBytes, "AES"), GCMParameterSpec(128, blob, 0, 12))
             return try { c.doFinal(blob, 12, blob.size - 12) } catch (e: javax.crypto.AEADBadTagException) { throw SealCorruptException("auth failed", e) }
         }
@@ -80,7 +81,7 @@ class SealedStoreTest {
         assertEquals(SealedStore.Outcome.Saved, store.save { "[2]" })
         assertEquals("[2]", SealedFile(f, reset).read())
         // A truncated blob is corrupt too (nothing can be recovered from it).
-        f.writeBytes(SealedFile.MAGIC + byteArrayOf(1, 2, 3)); assertEquals(SealedRead.Corrupt, SealedFile(f, FlakySealer(ByteArray(32) { 9 })).readResult().let { if (it is SealedRead.Unavailable) SealedRead.Corrupt else it })
+        f.writeBytes(SealedFile.MAGIC + byteArrayOf(1, 2, 3)); assertEquals(SealedRead.Corrupt, SealedFile(f, FlakySealer()).readResult())
     }
 
     @Test fun `migration - when sealing fails the plaintext is left exactly as it was, reported, and retried until it works`() {

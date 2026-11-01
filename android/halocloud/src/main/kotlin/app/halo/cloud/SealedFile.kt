@@ -95,7 +95,7 @@ class SealedStore(private val file: SealedFile) {
     /** Human-readable, content-free status for the UI; null when everything is fine. */
     @Volatile var warning: String? = null; private set
 
-    fun load(): String? = absorb(file.readResult())
+    @Synchronized fun load(): String? = absorb(file.readResult())
 
     private fun absorb(r: SealedRead): String? = when (r) {
         is SealedRead.Text -> { blocked = false; plaintextPending = r.migrationFailed; update(); r.text }
@@ -121,5 +121,5 @@ class SealedStore(private val file: SealedFile) {
                          else -> null }
     }
 
-    fun delete() { file.delete(); blocked = false; plaintextPending = false; warning = null }
+    @Synchronized fun delete() { file.delete(); blocked = false; plaintextPending = false; warning = null }
 }
