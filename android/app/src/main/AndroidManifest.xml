@@ -4,6 +4,14 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- F-055. FOREGROUND_SERVICE(+_DATA_SYNC) host the receiver while the app is away; POST_NOTIFICATIONS (API 33+) is
+         requested with an explanation when the user first switches background receiving on. MulticastLock is held
+         only while discovering. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
     <!-- SMS sync (F-044). READ_SMS reads the inbox; RECEIVE_SMS only wakes us when one arrives (the broadcast's
          contents are never used — the provider is the source of truth). The phone-state pair names the SIM lines. -->
     <uses-permission android:name="android.permission.READ_SMS" />
@@ -26,10 +34,18 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- F-055 FR-B3: Sharesheet target for files. Shared items are only STAGED; sending needs a chosen device and a tap. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
             </intent-filter>
         </activity>
 
@@ -46,6 +62,15 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+
+        <!-- F-055 FR-B1: hosts the HaloShare receiver + clipboard stream. Not exported: only this app can start it, and only from a user action. -->
+        <service
+            android:name=".background.HaloShareService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- Accept / Decline buttons on the incoming-file notification. Not exported; reached only by this app's own PendingIntents. -->
+        <receiver android:name=".background.ConsentActionReceiver" android:exported="false" />
 
         <receiver android:name=".cloud.SmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_SMS">
             <intent-filter>

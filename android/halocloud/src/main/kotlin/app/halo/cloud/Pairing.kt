@@ -76,3 +76,27 @@ data class PairingPayload(
         }
     }
 }
+
+/**
+ * H-15: a pairing code is data from outside the phone, and it names the host that the signed-in session's ID token
+ * is sent to (`…/path.json?auth=<token>`). A code pointing somewhere that is not a Firebase database is not
+ * necessarily hostile (people do run emulators), so this only *warns* — the user decides — but a Firebase Realtime
+ * Database always lives under one of the two Google-owned suffixes below.
+ */
+object FirebaseHosts {
+    private val suffixes = listOf(".firebaseio.com", ".firebasedatabase.app")
+
+    /** Matches on a label boundary: `evil-firebaseio.com` and `firebaseio.com.evil.io` do NOT qualify. */
+    fun isFirebaseDatabase(databaseURL: String): Boolean {
+        val host = runCatching { java.net.URI(databaseURL.trim()).host }.getOrNull()?.lowercase() ?: return false
+        return suffixes.any { host.endsWith(it) && host.length > it.length }
+    }
+
+    /** Null when the host looks right; otherwise the text to show next to the pairing confirmation. */
+    fun warning(databaseURL: String): String? {
+        if (isFirebaseDatabase(databaseURL)) return null
+        val host = runCatching { java.net.URI(databaseURL.trim()).host }.getOrNull().orEmpty().ifEmpty { "an unrecognised address" }
+        return "This pairing code points at $host, which is not a Google Firebase database address (*.firebaseio.com or *.firebasedatabase.app). " +
+            "Your sign-in session would be sent there. Continue only if you set that server up yourself; otherwise cancel and generate a new code on your Mac."
+    }
+}

@@ -48,6 +48,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -59,6 +60,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
@@ -148,6 +153,7 @@ fun ShareScreen(vm: AppViewModel) {
     val listen by vm.listen.collectAsStateWithLifecycle()
     val peers by vm.peers.collectAsStateWithLifecycle()
     val selected by vm.selectedPeerId.collectAsStateWithLifecycle()
+    val selectedAlias = peers.firstOrNull { it.id == selected }?.alias
     val scanning by vm.scanning.collectAsStateWithLifecycle()
     val transfer by vm.transfer.collectAsStateWithLifecycle()
     val notice by vm.notice.collectAsStateWithLifecycle()
@@ -161,6 +167,19 @@ fun ShareScreen(vm: AppViewModel) {
     Column(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { focus.clearFocus() } }
         .verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Text("Halo", color = Halo.Text, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+
+        val sharedIn by vm.shared.collectAsStateWithLifecycle()
+        if (sharedIn.isNotEmpty()) HaloCard {
+            Text("${sharedIn.size} item${if (sharedIn.size == 1) "" else "s"} shared to Halo", color = Halo.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("share.sharedTitle"))
+            val labels by vm.sharedLabels.collectAsStateWithLifecycle()
+            if (labels.isNotEmpty()) Text(labels.joinToString(", ") + if (sharedIn.size > labels.size) " and ${sharedIn.size - labels.size} more" else "", color = Halo.Text2, fontSize = 12.sp, modifier = Modifier.testTag("share.sharedNames"))
+            Text(if (selected == null) "Choose a device below, then tap Send. Nothing is sent until you do." else "Tap Send to send to ${selectedAlias ?: "the selected device"}. The other device still has to accept.", color = Halo.Text3, fontSize = 12.sp)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(onClick = { vm.sendShared() }, enabled = selected != null, modifier = Modifier.testTag("share.sendShared")) { Text("Send") }
+                OutlinedButton(onClick = { vm.clearShared() }, modifier = Modifier.testTag("share.discardShared")) { Text("Discard") }
+            }
+        }
 
         HaloCard {
             Text(identity.alias, color = Halo.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("share.alias"))
@@ -308,6 +327,7 @@ fun SettingsScreen(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel
                 Text("Other devices see this name.", color = Halo.Text3, fontSize = 11.sp)
             }
         }
+        BackgroundReceiveCard(vm)
         HaloCard {
             SectionLabel("Receiving")
             Spacer(Modifier.height(8.dp))
@@ -324,5 +344,47 @@ fun SettingsScreen(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel
             Spacer(Modifier.height(4.dp))
             Text("Transfers stay on your Wi-Fi and are not encrypted in transit. Only accept files from people you trust.", color = Halo.Text3, fontSize = 11.sp)
         }
+    }
+}
+
+
+// ── Background receiving (F-055) ───────────────────────────────────────────────────────────────
+
+@Composable
+fun BackgroundReceiveCard(vm: AppViewModel) {
+    val on by vm.backgroundReceive.collectAsStateWithLifecycle()
+    val paused by vm.pausedBySystem.collectAsStateWithLifecycle()
+    val ctx = LocalContext.current
+    var rationale by remember { mutableStateOf(false) }
+    var denied by remember { mutableStateOf(false) }
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        denied = !granted; rationale = false; vm.setBackgroundReceive(true)        // works without it, but the notification is then hidden
+    }
+    fun canNotify() = android.os.Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+    HaloCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Keep receiving in the background", color = Halo.Text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                Text("Off by default. Lets Halo receive files and your Mac's clipboard when the app is closed.", color = Halo.Text3, fontSize = 11.sp)
+            }
+            Switch(checked = on, onCheckedChange = { want ->
+                if (!want) { vm.setBackgroundReceive(false); denied = false }
+                else if (canNotify()) vm.setBackgroundReceive(true) else rationale = true
+            }, modifier = Modifier.testTag("settings.background"))
+        }
+        if (rationale) {
+            Spacer(Modifier.height(8.dp))
+            Text("Android requires a notification while Halo listens, so you can see it is on and stop it. Halo will also use notifications to ask before saving a file when the app is closed. Next: Android asks for notification permission.", color = Halo.Text2, fontSize = 12.sp, modifier = Modifier.testTag("settings.background.rationale"))
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(onClick = { askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS) }, modifier = Modifier.testTag("settings.background.continue")) { Text("Continue") }
+                OutlinedButton(onClick = { rationale = false }) { Text("Not now") }
+            }
+        }
+        if (denied) { Spacer(Modifier.height(6.dp)); Text("Notifications are off, so you won't see the listening notice or be asked about files while Halo is closed (incoming files are declined after 90 seconds). Turn them on in Android settings.", color = Halo.Amber, fontSize = 11.sp) }
+        if (paused) { Spacer(Modifier.height(6.dp)); Text("Android paused background receiving (it limits this kind of service to a few hours a day). Switch it off and on to resume.", color = Halo.Amber, fontSize = 11.sp, modifier = Modifier.testTag("settings.background.paused")) }
+        Spacer(Modifier.height(6.dp))
+        Text("Battery: Halo keeps a connection open while this is on, which costs some battery, and Android's battery saver or your phone maker's app-killer may still stop it. Stop it any time from the notification.", color = Halo.Text3, fontSize = 11.sp)
     }
 }

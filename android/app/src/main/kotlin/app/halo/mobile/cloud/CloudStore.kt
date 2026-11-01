@@ -68,6 +68,8 @@ class CloudPrefs(ctx: Context) {
     var lastSyncAt: Long get() = p.getLong("lastSyncAt", 0); set(v) { p.edit().putLong("lastSyncAt", v).apply() }
     var lastSyncSummary: String get() = p.getString("lastSyncSummary", "") ?: ""; set(v) { p.edit().putString("lastSyncSummary", v).apply() }
     var lastSyncError: String? get() = p.getString("lastSyncError", null); set(v) { p.edit().putString("lastSyncError", v).apply() }
+    /** H-14: rows the last pass gave up on after repeated failures (0 = none). */
+    var quarantinedCount: Int get() = p.getInt("quarantined", 0); set(v) { p.edit().putInt("quarantined", v).apply() }
     var lastReconcileAt: Long get() = p.getLong("lastReconcileAt", 0); set(v) { p.edit().putLong("lastReconcileAt", v).apply() }
 
     fun clearAll() { p.edit().clear().apply() }
@@ -80,6 +82,16 @@ class PrefsSyncState(ctx: Context) : SyncState {
     override fun setHighWater(subscriptionId: Int, dateMs: Long) { p.edit().putLong("hw.$subscriptionId", dateMs).apply() }
     // commit(), not apply(): a cleared mark set and the epoch that replaces it must reach disk together.
     override fun clear() { p.edit().clear().commit() }
+    // H-14 quarantine: failure counters and the parked set live beside the marks and are cleared with them.
+    override fun failures(key: String): Int = p.getInt("fail.$key", 0)
+    override fun setFailures(key: String, count: Int) { p.edit().apply { if (count <= 0) remove("fail.$key") else putInt("fail.$key", count) }.apply() }
+    override fun quarantined(): Set<String> = p.getStringSet("quarantine", emptySet())?.toSet() ?: emptySet()
+    override fun quarantine(key: String) { p.edit().putStringSet("quarantine", quarantined() + key).remove("fail.$key").commit() }
+    override fun clearQuarantine() {
+        val e = p.edit().remove("quarantine")
+        for (k in p.all.keys) if (k.startsWith("fail.")) e.remove(k)
+        e.commit()
+    }
     override fun pairingEpoch(): String? = p.getString("epoch", null)
     override fun setPairingEpoch(epoch: String) { p.edit().putString("epoch", epoch).commit() }
 }
