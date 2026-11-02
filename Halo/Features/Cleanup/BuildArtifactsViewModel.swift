@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 
 // MARK: - F-054 — Build Artifacts pane: roots store + view model
 //
@@ -13,6 +14,19 @@ import SwiftUI
 
 /// User-chosen scan roots, the "never offer" list and the stale threshold. Persisted in
 /// `UserDefaults` (the user's own choices — NFR-4); bookmarks as `Data` for the sandboxed build.
+///
+/// Persisted keys (all in `UserDefaults.standard` unless a test injects a suite):
+///
+/// | key                              | type            | default | meaning                                            |
+/// |----------------------------------|-----------------|---------|----------------------------------------------------|
+/// | `buildArtifactUserRoots`         | `[String]`      | `[]`    | folders the user added with Choose folders…        |
+/// | `buildArtifactRootBookmarks`     | `[String: Data]`| `[:]`   | security-scoped bookmarks per root (sandbox only)  |
+/// | `buildArtifactIgnoredPaths`      | `[String]`      | `[]`    | "Never offer this folder" list; Settings can reset |
+/// | `buildArtifactIncludeHome`       | `Bool`          | `false` | scan the entire home folder (Settings → Cleanup)   |
+/// | `buildArtifactStaleDays`         | `Int`           | `30`    | "stale" threshold, clamped to `staleDaysRange`     |
+///
+/// Every change posts `BuildArtifactRootsStore.didChange`, so an open pane re-reads the threshold
+/// the moment Settings changes it.
 final class BuildArtifactRootsStore: @unchecked Sendable {
     private let defaults: UserDefaults
     private let lock = NSLock()
@@ -24,6 +38,11 @@ final class BuildArtifactRootsStore: @unchecked Sendable {
     static let ignoredKey = "buildArtifactIgnoredPaths"
     static let includeHomeKey = "buildArtifactIncludeHome"
     static let staleDaysKey = "buildArtifactStaleDays"
+    static let staleDaysRange = 1...365
+    static let defaultStaleDays = 30
+    static let didChange = Notification.Name("BuildArtifactRootsStore.didChange")
+
+    private func changed() { NotificationCenter.default.post(name: Self.didChange, object: nil) }
 
     init(defaults: UserDefaults = .standard) { self.defaults = defaults }
 
@@ -31,12 +50,16 @@ final class BuildArtifactRootsStore: @unchecked Sendable {
     var ignoredPaths: Set<String> { Set(defaults.stringArray(forKey: Self.ignoredKey) ?? []) }
     var includeHome: Bool {
         get { defaults.bool(forKey: Self.includeHomeKey) }
-        set { defaults.set(newValue, forKey: Self.includeHomeKey) }
+        set { defaults.set(newValue, forKey: Self.includeHomeKey); changed() }
     }
     var staleDays: Int {
-        get { let v = defaults.integer(forKey: Self.staleDaysKey); return v > 0 ? v : 30 }
-        set { defaults.set(max(1, newValue), forKey: Self.staleDaysKey) }
+        get {
+            let v = defaults.integer(forKey: Self.staleDaysKey)
+            return v > 0 ? Self.clampStaleDays(v) : Self.defaultStaleDays
+        }
+        set { defaults.set(Self.clampStaleDays(newValue), forKey: Self.staleDaysKey); changed() }
     }
+    static func clampStaleDays(_ v: Int) -> Int { min(max(v, staleDaysRange.lowerBound), staleDaysRange.upperBound) }
 
     func addRoot(_ url: URL, sandboxed: Bool) {
         let path = url.standardizedFileURL.path
@@ -63,9 +86,10 @@ final class BuildArtifactRootsStore: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         var s = ignoredPaths; s.insert(path)
         defaults.set(Array(s).sorted(), forKey: Self.ignoredKey)
+        changed()
     }
 
-    func resetIgnoreList() { defaults.removeObject(forKey: Self.ignoredKey) }
+    func resetIgnoreList() { defaults.removeObject(forKey: Self.ignoredKey); changed() }
 
     /// The roots a scan should walk. Unsandboxed: default roots that exist + user roots (+ home when
     /// opted in). Sandboxed: ONLY roots the user granted via `NSOpenPanel` (resolved from their
@@ -122,6 +146,8 @@ final class BuildArtifactsViewModel: ObservableObject {
         /// D-02: the permanent action is offered only when EVERY item in the snapshot is eligible.
         var allPermanentEligible: Bool { !items.isEmpty && items.allSatisfy(\.permanentRemovalEligible) }
         var ineligibleForPermanent: Int { items.filter { !$0.permanentRemovalEligible }.count }
+        var activeCount: Int { items.filter(\.isActive).count }
+        var inUseCount: Int { items.filter(\.isInUse).count }
     }
 
     struct Banner: Equatable { var text: String; var isError: Bool }
@@ -155,6 +181,11 @@ final class BuildArtifactsViewModel: ObservableObject {
 
     private var scanGeneration = 0
     private var scanTask: Task<Void, Never>?
+    /// Ids removed (moved to Trash) while a scan may have been in flight. A scan that sized a
+    /// folder BEFORE it was trashed would otherwise re-list it when it finishes. Reset when a scan
+    /// starts — a scan that begins after the removal cannot find a folder that is gone.
+    private var removedDuringScan: Set<String> = []
+    private var settingsObserver: AnyCancellable?
 
     init(roots: BuildArtifactRootsStore = BuildArtifactRootsStore(),
          sandboxed: Bool = BuildArtifactRemover.isSandboxed,
@@ -168,6 +199,11 @@ final class BuildArtifactsViewModel: ObservableObject {
         self.trash = trash
         self.trashDirectories = trashDirectories ?? BuildArtifactRemover.defaultTrashDirectories()
         self.scanFunction = scan ?? { roots, config in await BuildArtifactsViewModel.defaultScan(roots: roots, config: config) }
+        // Settings → Cleanup changes the stale threshold / ignore list through another store
+        // instance over the same defaults; re-render when it does.
+        settingsObserver = NotificationCenter.default.publisher(for: BuildArtifactRootsStore.didChange)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
     }
 
     /// Project scan + the fixed Xcode (global) folders (D7), as one stream.
@@ -246,17 +282,20 @@ final class BuildArtifactsViewModel: ObservableObject {
         summary = nil
         foldersScanned = 0
         var found: [String: BuildArtifactItem] = [:]
+        removedDuringScan = []
 
         var config = BuildArtifactScanner.Config()
         config.home = home
         config.excludedPaths = BuildArtifactRoots.defaultExcluded(home: home)
         config.ignoredPaths = roots.ignoredPaths
+        config.inUseSignals = { [home] in BuildArtifactInUse.currentSignals(home: home) }
 
         if !needsRoots {
             for await ev in await scanFunction(scanRoots, config) {
                 guard generation == scanGeneration else { return }       // superseded: never land
                 switch ev {
                 case .found(let item):
+                    guard !removedDuringScan.contains(item.id) else { break }   // trashed while this scan ran
                     found[item.id] = item
                     items = found.values.sorted { $0.size > $1.size }
                 case .progress(let n): foldersScanned = n
@@ -266,6 +305,7 @@ final class BuildArtifactsViewModel: ObservableObject {
             }
         }
         guard generation == scanGeneration else { return }
+        for id in removedDuringScan { found[id] = nil }
         items = found.values.sorted { $0.size > $1.size }
         selection = selection.intersection(Set(items.map(\.id)))
         isScanning = false
@@ -280,9 +320,12 @@ final class BuildArtifactsViewModel: ObservableObject {
 
     func selectNone() { selection = [] }
 
-    /// Never selects Caution, Active, or items git could not vouch for in a repo (D5, §5.3.5).
+    /// "Safe" means what it says: Safe class AND positively vouched for (git-ignored, or a fixed
+    /// Xcode folder). An Unverified item — `.notRepo`, nothing but a marker pair behind it — is NOT
+    /// picked here; it stays one click away (checkbox, or Select stale). Never selects Caution,
+    /// Active, In use, or items git could not vouch for in a repo (D5, §5.3.5).
     func selectAllSafe() {
-        selection = Set(visibleItems.filter { $0.regenClass == .safe && $0.isSmartSelectable() }.map(\.id))
+        selection = Set(visibleItems.filter { $0.isVerifiedSafe && $0.isSmartSelectable() }.map(\.id))
     }
 
     func selectStale(now: Date = Date()) {
@@ -356,6 +399,7 @@ final class BuildArtifactsViewModel: ObservableObject {
     /// Only items that actually moved leave the list (FR-U6); failures and refusals stay listed.
     func apply(_ o: BuildArtifactRemover.Outcome, snapshot: ReviewSnapshot, mode: RemovalMode) {
         let moved = Set(o.moved)
+        removedDuringScan.formUnion(moved)
         let movedURLs = snapshot.items.filter { moved.contains($0.id) }.map(\.artifactURL)
         drop(ids: moved)
         if !movedURLs.isEmpty { onRemoved(movedURLs) }
@@ -377,4 +421,55 @@ final class BuildArtifactsViewModel: ObservableObject {
         if parts.isEmpty { parts.append("Nothing was removed.") }
         banner = Banner(text: parts.joined(separator: " "), isError: !problems.isEmpty || !o.leftInTrash.isEmpty)
     }
+}
+
+// MARK: - Settings → Cleanup (model)
+
+/// The UI-free half of Settings → Cleanup: stale threshold, "never offer" list, and the optional
+/// entire-home scan. A thin, clamped, observable view over `BuildArtifactRootsStore` so the rules
+/// (range, sandbox gating, reset) are testable without SwiftUI.
+@MainActor
+final class BuildArtifactSettingsModel: ObservableObject {
+    private let store: BuildArtifactRootsStore
+    let isSandboxed: Bool
+
+    @Published var staleDays: Int {
+        didSet {
+            let c = BuildArtifactRootsStore.clampStaleDays(staleDays)
+            if c != staleDays { staleDays = c; return }
+            store.staleDays = c
+        }
+    }
+    @Published var includeHome: Bool {
+        didSet { if !isSandboxed { store.includeHome = includeHome } else if includeHome { includeHome = false } }
+    }
+    @Published private(set) var ignoredCount: Int
+
+    init(store: BuildArtifactRootsStore = BuildArtifactRootsStore(),
+         sandboxed: Bool = BuildArtifactRemover.isSandboxed) {
+        self.store = store
+        self.isSandboxed = sandboxed
+        self.staleDays = store.staleDays
+        self.includeHome = sandboxed ? false : store.includeHome
+        self.ignoredCount = store.ignoredPaths.count
+    }
+
+    /// In a sandboxed build only folders the user grants are readable; the toggle cannot work there.
+    var includeHomeAvailable: Bool { !isSandboxed }
+
+    /// Forgets every "Never offer this folder" choice. Does not touch any file.
+    func resetIgnoreList() {
+        store.resetIgnoreList()
+        ignoredCount = store.ignoredPaths.count
+    }
+
+    /// Re-read after the pane added to the list while Settings was open.
+    func refresh() { ignoredCount = store.ignoredPaths.count }
+
+    static let includeHomeWarning =
+        "Scans your whole home folder (up to 8 levels deep, 2-minute budget) instead of just your project folders. "
+        + "It is slower, can make macOS ask for access to Documents, Desktop, Pictures and other protected folders, "
+        + "and finds build folders in places you never meant to clean, so expect more Unverified items. "
+        + "Library, Downloads and the Trash are still never scanned, and every removal still goes through the review sheet. "
+        + "Takes effect on the next scan."
 }
