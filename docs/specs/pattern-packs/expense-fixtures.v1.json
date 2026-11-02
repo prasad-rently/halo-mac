@@ -806,13 +806,23 @@
   },
   {
    "id": "fp-delivery-shipped",
-   "sender": "VM-MYNTRA-S",
+   "sender": "VM-MEESHO-S",
    "body": "Your parcel has been shipped. Rs 250 paid via UPI, delivery by Friday",
    "expect": {
     "classifier": "transactional",
     "parse": "notTransaction"
    },
-   "note": "Shipping notice from a header outside nonBankSenders."
+   "note": "Shipping notice from a header outside nonBankSenders (review of PR #65: this fixture used MYNTRA, which IS in nonBankSenders, so it passed on the old code for the wrong reason and never exercised the SHIPPED exclude word)."
+  },
+  {
+   "id": "fp-delivery-dispatched",
+   "sender": "VM-NYKAAI-S",
+   "body": "Your order has been dispatched. Rs 650 paid via UPI",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "notTransaction"
+   },
+   "note": "Same, DISPATCHED. Header outside nonBankSenders, so only the exclude word rejects it."
   },
   {
    "id": "debit-bank-amazon-order",
@@ -1038,6 +1048,211 @@
     "category": "Food & Dining"
    },
    "note": "Control: CAFE became a whole-word trigger, so CAFETERIA is listed as its own substring trigger."
+  },
+  {
+   "id": "ok-balance-label-follows-amount",
+   "sender": "VK-HDFCBK-T",
+   "body": "Acct XX1234 debited Rs.1250.00 Avl Bal Rs.8420.10",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 1250,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "1234",
+    "category": "Other"
+   },
+   "note": "Compact alert where the balance LABEL follows the real amount with no punctuation between ('debited Rs.1250.00 Avl Bal Rs.8420.10'). 'Avl Bal' labels the NEXT figure, so 1250 is the transaction; the trailing-balance form must not drop it. (Regression found in review of the first v2 rule: it read the word after the 1250 as 'Rs 1250 is the balance' and the real debit became unreadable.)"
+  },
+  {
+   "id": "ok-balance-label-follows-amount-sent",
+   "sender": "VK-HDFCBK-T",
+   "body": "Sent Rs.500 Avl Bal Rs.2000",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 500,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": null,
+    "category": "Other"
+   },
+   "note": "Same family, 'Sent' verb."
+  },
+  {
+   "id": "ok-balance-label-follows-amount-colon",
+   "sender": "VK-HDFCBK-T",
+   "body": "Acct XX1234 debited for Rs 500 Avl Bal: Rs 2,000",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 500,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "1234",
+    "category": "Other"
+   },
+   "note": "Same family, colon after the balance label."
+  },
+  {
+   "id": "ok-balance-transfer-fee",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs 500 balance transfer fee debited from A/C XX1234",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 500,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "1234",
+    "category": "Other"
+   },
+   "note": "Control: 'balance' after the figure is part of a fee description, not the clause-closing 'is your available balance' form."
+  },
+  {
+   "id": "fp-balance-only-in-your-account",
+   "sender": "VK-HDFCBK-T",
+   "body": "A/C XX1234 debited today. Rs 5,000.00 is your available balance in your account",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "unreadable"
+   },
+   "note": "Balance-only alert, trailing form closed by 'in your account': still unreadable."
+  },
+  {
+   "id": "ok-balance-word-after-comma-clause",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs 200 debited from A/C XX1234, Rs 9,000 avl bal",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 200,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "1234",
+    "category": "Other"
+   },
+   "note": "Control: the balance figure with its label AFTER it is dropped; the debit stays."
+  },
+  {
+   "id": "ok-customer-name-balaji",
+   "sender": "VK-HDFCBK-T",
+   "body": "Dear Balaji, your A/C XX1234 has been debited by Rs 500",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 500,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "1234",
+    "category": "Other"
+   },
+   "note": "A customer name that starts with BAL ('Balaji', 'Balu') is not a balance word: balance words must be WHOLE words. The 48-char context window made this drop real debits that the old 14-char lookbehind kept."
+  },
+  {
+   "id": "ok-company-limited",
+   "sender": "VK-HDFCBK-T",
+   "body": "Payment to ABC PRIVATE LIMITED of Rs 500 debited from A/C XX1234",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 500,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "1234",
+    "category": "Other"
+   },
+   "note": "'LIMITED' is not the balance word LIMIT."
+  },
+  {
+   "id": "ok-card-purchase-thank-you-at-merchant",
+   "sender": "VK-HDFCBK-T",
+   "body": "Thank you for the payment of Rs 800 at SHOPX using your Card XX1234",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 800,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "1234",
+    "category": "Other"
+   },
+   "note": "A card PURCHASE confirmation that happens to say 'thank you for the payment ... Card'. The bill-payment reject patterns do not cross ' AT <merchant>'."
+  },
+  {
+   "id": "ok-card-payment-to-merchant-received",
+   "sender": "VK-HDFCBK-T",
+   "body": "Your payment of Rs 500 to SWIGGY was received by the merchant. Card XX1234",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 500,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "1234",
+    "category": "Food & Dining"
+   },
+   "note": "A purchase receipt, not a card-bill acknowledgement: the payment goes TO a merchant, so the reject patterns do not fire."
+  },
+  {
+   "id": "cat-cafecoffeeday",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.150 paid to CAFECOFFEEDAY via UPI",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 150,
+    "direction": "debit",
+    "merchant": "CAFECOFFEEDAY",
+    "accountHint": null,
+    "category": "Food & Dining"
+   },
+   "note": "Control: the UPI handle of Cafe Coffee Day used to match the CAFE substring trigger; it keeps its own substring trigger now that CAFE is whole-word."
+  },
+  {
+   "id": "cat-olamoney",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.150 paid to OLAMONEY via UPI",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 150,
+    "direction": "debit",
+    "merchant": "OLAMONEY",
+    "accountHint": null,
+    "category": "Transport"
+   },
+   "note": "Control: OLAMONEY (same reason as OLACABS)."
+  },
+  {
+   "id": "cat-olaelectric",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.150 paid to OLAELECTRIC via UPI",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 150,
+    "direction": "debit",
+    "merchant": "OLAELECTRIC",
+    "accountHint": null,
+    "category": "Transport"
+   },
+   "note": "Control: OLAELECTRIC (same reason as OLACABS)."
+  },
+  {
+   "id": "cat-credclub",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.150 paid to CREDCLUB via UPI",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 150,
+    "direction": "debit",
+    "merchant": "CREDCLUB",
+    "accountHint": null,
+    "category": "Financial"
+   },
+   "note": "Control: CREDCLUB, the CRED merchant's UPI name, keeps filing under Financial."
   }
  ],
  "pipelines": [

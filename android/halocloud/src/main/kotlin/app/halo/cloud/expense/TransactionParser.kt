@@ -76,7 +76,7 @@ object TransactionParser {
     }
 
     /**
-     * An amount is the BALANCE, not the transaction, when (a) a balance word starts a word in the [PatternPack.balanceContextChars]
+     * An amount is the BALANCE, not the transaction, when (a) a balance word (a whole word) sits in the [PatternPack.balanceContextChars]
      * before it - looking back only to the previous sentence boundary and the previous amount, so "Low avl bal alert. Rs 700
      * debited" keeps the 700 - or (b) the text right after it reads "is your available balance". (The old rule looked back a fixed
      * 14 chars, which missed "AVAILABLE BALANCE IN YOUR ACCOUNT IS INR 5,000".)
@@ -93,7 +93,8 @@ object TransactionParser {
         for (w in pack.balancePrefix) {
             var i = upper.indexOf(w, from)
             while (i >= 0 && i + w.length <= loc) {
-                if (i == 0 || !PatternPack.isLetter(upper[i - 1])) return true
+                // A WHOLE word: 'Dear BALAJI' / 'PVT LIMITED' / 'DUES' are not balance words.
+                if ((i == 0 || !PatternPack.isLetter(upper[i - 1])) && (i + w.length >= upper.length || !PatternPack.isLetter(upper[i + w.length]))) return true
                 i = upper.indexOf(w, i + 1)
             }
         }
@@ -101,7 +102,7 @@ object TransactionParser {
         return pack.balanceAfter.matcher(tail).find()
     }
 
-    private const val BALANCE_AFTER_CHARS = 40
+    private const val BALANCE_AFTER_CHARS = 64
 
     /** First non-empty capture group of the first match. */
     private fun firstCapture(p: java.util.regex.Pattern, upper: String): String? {

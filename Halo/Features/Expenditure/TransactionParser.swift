@@ -91,7 +91,7 @@ enum TransactionParser {
         return candidates.min { abs($0.loc - verbLoc) < abs($1.loc - verbLoc) }?.value
     }
 
-    /// An amount is the BALANCE, not the transaction, when (a) a balance word starts a word in the
+    /// An amount is the BALANCE, not the transaction, when (a) a balance word (a whole word) sits in the
     /// `balanceContextChars` before it — looking back only to the previous sentence boundary and the previous amount, so
     /// "Low avl bal alert. Rs 700 debited" keeps the 700 — or (b) the text right after it reads "is your available
     /// balance". (The old rule looked back a fixed 14 chars, which missed "AVAILABLE BALANCE IN YOUR ACCOUNT IS INR 5,000".)
@@ -113,7 +113,10 @@ enum TransactionParser {
                 while scan < loc {
                     let r = upper.range(of: w, options: [], range: NSRange(location: scan, length: loc - scan))
                     if r.location == NSNotFound || r.location + n > loc { break }
-                    if r.location == 0 || !PatternPack.isLetter(upper.character(at: r.location - 1)) { return true }
+                    // A WHOLE word: 'Dear BALAJI' / 'PVT LIMITED' / 'DUES' are not balance words.
+                    let before = r.location == 0 || !PatternPack.isLetter(upper.character(at: r.location - 1))
+                    let after = r.location + n >= upper.length || !PatternPack.isLetter(upper.character(at: r.location + n))
+                    if before && after { return true }
                     scan = r.location + 1
                 }
             }
@@ -124,7 +127,7 @@ enum TransactionParser {
         return pack.balanceAfter.firstMatch(in: tail, range: NSRange(location: 0, length: (tail as NSString).length)) != nil
     }
 
-    private static let balanceAfterChars = 40
+    private static let balanceAfterChars = 64
 
     // MARK: Regex capture helper
 

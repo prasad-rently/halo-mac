@@ -67,6 +67,32 @@ class ExpenseParseHardeningTest {
         assertEquals(300.0, ok("VK-HDFCBK-T", "Debited at GLOBAL MART Rs 300 from A/C XX1234").amount, 0.0)
     }
 
+    // Independent review of PR #65 found these regressions in the first v2 rules; each used to count (v1) and was dropped by v2.0.
+    @Test fun `a balance LABEL that follows the real amount belongs to the next figure, so the real amount is kept`() {
+        for ((b, want) in listOf("Acct XX1234 debited Rs.1250.00 Avl Bal Rs.8420.10" to 1250.0, "Sent Rs.500 Avl Bal Rs.2000" to 500.0,
+            "Acct XX1234 debited for Rs 500 Avl Bal: Rs 2,000" to 500.0, "Withdrawn Rs 500 Balance Rs 2000" to 500.0, "Debited Rs 500 - Bal Rs 2000" to 500.0,
+            "Debited Rs 500 Avl Bal. Rs 2000" to 500.0, "Rs 500 balance transfer fee debited from A/C XX1234" to 500.0, "Rs 200 debited from A/C XX1234, Rs 9,000 avl bal" to 200.0))
+            assertEquals("'$b'", want, ok("VK-HDFCBK-T", b).amount, 0.0)
+        // ...while the clause-closing form is still a balance
+        assertEquals(ParseOutcome.Unreadable, outcome("VK-HDFCBK-T", "A/C XX1234 debited today. Rs 5,000.00 is your available balance in your account"))
+    }
+
+    @Test fun `a customer name or company that merely starts with a balance word does not drop the amount`() {
+        for (b in listOf("Dear Balaji, your A/C XX1234 has been debited by Rs 500", "Dear Balu, Rs 500 debited from A/C XX1234", "Payment to ABC PRIVATE LIMITED of Rs 500 debited from A/C XX1234", "Hi AVLON, Rs 500 debited from XX1234"))
+            assertEquals("'$b'", 500.0, ok("VK-HDFCBK-T", b).amount, 0.0)
+    }
+
+    @Test fun `a card purchase that says thank-you-for-the-payment at a merchant is still a debit`() {
+        assertEquals(800.0, ok("VK-HDFCBK-T", "Thank you for the payment of Rs 800 at SHOPX using your Card XX1234").amount, 0.0)
+        assertEquals(500.0, ok("VK-HDFCBK-T", "Your payment of Rs 500 to SWIGGY was received by the merchant. Card XX1234").amount, 0.0)
+    }
+
+    @Test fun `merchants whose names start with a short trigger keep their category`() {
+        fun cat(m: String?, b: String) = pack.category(m, b, Direction.DEBIT)
+        assertEquals("Food & Dining", cat("CAFECOFFEEDAY", "paid")); assertEquals("Transport", cat("OLAMONEY", "paid"))
+        assertEquals("Transport", cat("OLAELECTRIC", "paid")); assertEquals("Financial", cat("CREDCLUB", "paid"))
+    }
+
     @Test fun `credit-card bill-payment acknowledgements are not transactions, a purchase on the card still is`() {
         for (b in listOf("Payment of Rs 1,200 received towards your credit card XX4321", "We have received your payment of Rs 1,200 towards your ICICI credit card XX4321. Thank you",
             "Thank you for the payment of Rs 8,500 on your SBI Card XX2210", "Payment of Rs.500 posted to your HDFC Bank Credit Card XX1111"))
