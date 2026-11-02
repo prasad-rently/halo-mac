@@ -693,9 +693,11 @@ struct BuildArtifactRemoverTests {
 
     /// End to end through the REAL `FileManager.trashItem` and the real Trash directory list, on a
     /// uniquely named temp folder. Proves `resultingItemURL` is what isInsideTrash expects. Touches the
-    /// user's real Trash only with this one folder, which it removes again. Skipped (not failed) where
-    /// there is no usable Trash — CI users without one, sandboxed runners (`BATrash.isUsable`).
-    @Test(.enabled(if: BATrash.isUsable(BATrash.realDirectories)))
+    /// user's real Trash only with this one folder, which it removes again. OPT-IN: a default test run
+    /// must never touch the real Trash (review of #66), so it runs only with `HALO_TEST_REAL_TRASH=1`
+    /// in the environment AND a usable Trash (`BATrash.isUsable`); otherwise it is skipped, not failed.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["HALO_TEST_REAL_TRASH"] == "1"
+                       && BATrash.isUsable(BATrash.realDirectories)))
     func realTrashItemRoundTrip() {
         let f = BAFixture(); defer { f.cleanup() }
         let unique = "f054-roundtrip-\(UUID().uuidString)"
@@ -1275,6 +1277,52 @@ struct BuildArtifactCatchAllIgnoreTests {
         for p in ["node_modules/", "target", "*.o", "build*", "*build", "/build", ".build", "dist/", "**/node_modules"] {
             #expect(!GitGate.isCatchAllPattern(p), "\(p)")
         }
+    }
+
+    /// Review of #66: `check-ignore -v` exits 0 and names the rule even when the last matching rule is a
+    /// NEGATION — the path is then explicitly NOT ignored. It must never read as verified.
+    @Test func aNegatedRuleIsNotIgnored() {
+        #expect(GitGate.verdict(for: .init(source: ".gitignore", line: 2, pattern: "!build/")) == .notIgnored)
+        #expect(GitGate.verdict(for: .init(source: ".gitignore", line: 2, pattern: "!*")) == .notIgnored)
+        #expect(GitGate.verdict(for: .init(source: ".gitignore", line: 1, pattern: "build/")) == .ignored)
+        #expect(GitGate.verdict(for: .init(source: ".gitignore", line: 1, pattern: "*")) == .catchAllIgnore)
+    }
+
+    @Test(.enabled(if: BuildArtifactGitGateTests.git != nil))
+    func aFolderExplicitlyUnIgnoredByGitIsNeverVerified() async throws {
+        let f = BAFixture(); defer { f.cleanup() }
+        let git = BuildArtifactGitGateTests.git!
+        func g(_ a: [String]) -> Bool { ShellReader.run(git, ["-C", f.url("repo").path] + a, timeout: 20).succeeded }
+        // `build/` is ignored on line 1 and un-ignored on line 2: `git status` shows it as untracked.
+        f.file("repo/Cargo.toml"); f.file("repo/target/x"); f.file("repo/dist/x")
+        try "target/\n!target/\n".write(to: f.url("repo/.gitignore"), atomically: true, encoding: .utf8)
+        #expect(g(["init", "-q"]))
+        #expect(GitGate.inspect(artifactName: "target", project: f.url("repo")) == .notIgnored)
+
+        let r = await baScan(f, roots: [f.root.path], now: baAged)
+        #expect(r.items.filter { $0.artifactURL.path.hasSuffix("repo/target") }.isEmpty,
+                "an explicitly un-ignored, untracked folder is skipped like any other not-ignored one")
+        #expect(r.summary.skippedNotGitIgnored >= 1)
+    }
+
+    /// Positive control for the default re-verification, on a REAL scan result: an untouched, ignored,
+    /// untracked folder passes (so the "modified since the scan" comparison does not trip on timestamp
+    /// precision and silently make permanent removal unreachable), and the same folder fails once a
+    /// build writes into it.
+    @Test(.enabled(if: BuildArtifactGitGateTests.git != nil))
+    func theDefaultReverificationPassesAnUntouchedItemAndRefusesAnEditedOne() async throws {
+        let f = BAFixture(); defer { f.cleanup() }
+        let git = BuildArtifactGitGateTests.git!
+        f.file("repo/Cargo.toml"); f.file("repo/target/x")
+        try "target/\n".write(to: f.url("repo/.gitignore"), atomically: true, encoding: .utf8)
+        #expect(ShellReader.run(git, ["-C", f.url("repo").path, "init", "-q"], timeout: 20).succeeded)
+        let r = await baScan(f, roots: [f.root.path], now: baAged)
+        let item = try #require(r.items.first { $0.artifactURL.path.hasSuffix("repo/target") })
+        #expect(item.permanentRemovalEligible)
+        let verify = BuildArtifactRemover.reverifyPermanentEligible(signals: { .none })
+        #expect(verify(item) == nil, "untouched since the scan: \(verify(item) ?? "")")
+        f.file("repo/target/new-file")                                   // a build adds an entry
+        #expect(verify(item)?.contains("changed after the scan") == true)
     }
 
     /// The review's dotfiles-repo case: the work tree is an enclosing repo whose .gitignore is `*`.

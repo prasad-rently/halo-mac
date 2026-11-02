@@ -462,6 +462,16 @@ enum GitGate {
         return IgnoreRule(source: String(left[r1]), line: line, pattern: String(left[r3]))
     }
 
+    /// What a `check-ignore -v` HIT means. `-v` (unlike `-q`) exits 0 and prints the rule even when
+    /// the last matching rule is a NEGATION (`!build/`) — i.e. the path is explicitly NOT ignored
+    /// (`git status` lists it as untracked, possibly someone's new work). Verified against git 2.56:
+    /// `build/` then `!build/` gives `.gitignore:2:!build/<TAB>build`, exit 0. A negated rule must
+    /// therefore read as "not ignored", exactly as the `-q` form did before `-v` was introduced.
+    static func verdict(for rule: IgnoreRule) -> Verdict {
+        if rule.pattern.hasPrefix("!") { return .notIgnored }
+        return isCatchAllPattern(rule.pattern) ? .catchAllIgnore : .ignored
+    }
+
     /// A pattern with no literal name character in it — only `*`, `?`, `/`, `.`, `!` — ignores
     /// (nearly) everything, so it proves nothing about one folder: `*`, `/*`, `**`, `**/*`, `.*`.
     /// `node_modules/`, `target`, `*.o`, `build*` all carry a literal and are not catch-alls.
@@ -545,7 +555,7 @@ enum GitGate {
         case 0:
             // Cannot say which rule ignored it => cannot call it verified.
             guard let rule = parseCheckIgnoreVerbose(ign.standardOutput) else { return .unavailable }
-            return isCatchAllPattern(rule.pattern) ? .catchAllIgnore : .ignored
+            return verdict(for: rule)
         case 1: return .notIgnored
         default: return .unavailable
         }
