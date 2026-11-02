@@ -83,6 +83,16 @@ class BackgroundControlTest {
         assertFalse(s.enabled.value); assertEquals(BackgroundRefusal.NOTIFICATIONS_OFF, s.refusal.value)
     }
 
+    @Test fun `notifications turned off while the service is already running stop it on the next foreground, and say why`() {
+        val (_, s, c) = rig(); c.requestEnable(Gate(true), false)
+        assertFalse("still allowed: leave it running", c.shouldStopOnForeground(Gate(true), serviceActive = true))
+        assertTrue(s.enabled.value)
+        assertFalse("not running: nothing to stop", c.shouldStopOnForeground(Gate(false), serviceActive = false))
+        assertTrue("running with the notice hidden: stop it", c.shouldStopOnForeground(Gate(false), serviceActive = true))
+        assertFalse(s.enabled.value); assertEquals(BackgroundRefusal.NOTIFICATIONS_OFF, s.refusal.value)
+        assertFalse("already off: no repeat", c.shouldStopOnForeground(Gate(false), serviceActive = true))
+    }
+
     @Test fun `a stale refusal clears itself once the person has fixed notifications`() {
         val (_, s, c) = rig(); s.setRefusal(BackgroundRefusal.NOTIFICATIONS_OFF)
         c.shouldStartOnForeground(Gate(true), false)

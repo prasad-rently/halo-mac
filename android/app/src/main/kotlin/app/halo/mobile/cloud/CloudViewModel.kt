@@ -123,9 +123,18 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The user chose to give up on a profile whose key is gone: forget it, make a fresh key, and show the pairing panel. */
     fun resetLostProfile() {
-        disconnect()
-        runCatching { SecretBox.ensureKey() }
-        _problem.value = null
+        viewModelScope.launch(Dispatchers.IO) {
+            // The confirmation dialog may have been up for a while, and "key lost" can be a Keystore that was not ready: look
+            // again, and never delete a profile that has become readable (or is merely unavailable) in the meantime.
+            when (val r = store.loadResult()) {
+                is ProfileLoad.Loaded -> { CloudRuntime.reset(); val first = _profile.value == null; _profile.value = r.value; _problem.value = null; if (first) startServices(); return@launch }
+                is ProfileLoad.Unavailable -> { _problem.value = ProfileProblem.UNAVAILABLE; return@launch }
+                else -> {}
+            }
+            disconnect()
+            runCatching { SecretBox.ensureKey() }
+            _problem.value = null
+        }
     }
 
     fun dismissNotice() { _notice.value = null }

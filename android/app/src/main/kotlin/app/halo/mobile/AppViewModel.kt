@@ -172,6 +172,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Called when the app comes to the front: re-assert the service the user asked for (if it can still run), and pick up a system pause. */
     fun syncBackgroundState() {
+        if (bgController.shouldStopOnForeground(gate, ReceiverHost.serviceActive)) { HaloShareService.stop(getApplication()); return }
         if (bgController.shouldStartOnForeground(gate, ReceiverHost.serviceActive)) HaloShareService.start(getApplication())
     }
 

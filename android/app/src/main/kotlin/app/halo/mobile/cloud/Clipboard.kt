@@ -63,7 +63,16 @@ class ClipboardHistory(ctx: Context) {
      * The user's explicit "reset" after the secure key was lost: drop the unreadable file, create a fresh key, and save what
      * is held in memory under it. (This is the only place besides pairing that creates a key — see [SecretBox].)
      */
-    @Synchronized fun resetLostKey() { store.delete(); runCatching { SecretBox.ensureKey() }; persist() }
+    @Synchronized fun resetLostKey() {
+        // Re-read first: if the key has come back (a "missing" key can be a Keystore that was not ready), there is nothing to
+        // reset and deleting the file would destroy a history that is readable again. Only a still-lost key is reset.
+        val text = store.load()
+        if (!store.keyLost) {
+            if (text != null) _items.value = (_items.value + parse(text)).distinctBy { it.id }.sortedByDescending { it.atMs }.take(ClipboardSyncEngine.CAP)
+            persist(); return
+        }
+        store.delete(); runCatching { SecretBox.ensureKey() }; persist()
+    }
 
     /**
      * Never replaces a file that could not be read: if Keystore was momentarily unavailable at load, the first
@@ -223,6 +232,11 @@ object ClipboardController {
  */
 class ClipboardAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() { super.onServiceConnected(); ClipboardController.start(this, ClipboardOwner.ACCESSIBILITY) }
+    // The user turned the service off (or Android disconnected it): let go of OUR claim. Without this the claim outlived the
+    // service, so "last owner out closes the stream" never held once this had been connected — the stream and the clipboard
+    // listener stayed open after the foreground service stopped, with nothing alive that needed them.
+    override fun onUnbind(intent: Intent?): Boolean { ClipboardController.release(ClipboardOwner.ACCESSIBILITY); return super.onUnbind(intent) }
+    override fun onDestroy() { ClipboardController.release(ClipboardOwner.ACCESSIBILITY); super.onDestroy() }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) { /* intentionally empty */ }
     override fun onInterrupt() {}
 }

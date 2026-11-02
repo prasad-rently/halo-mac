@@ -171,6 +171,20 @@ class KeyLossTest {
         assertEquals("a retry after recovery reads it", ProfileLoad.Loaded("profile"), b.load { it })
     }
 
+    @Test fun `a successful write leaves no temp file, and a write that cannot be completed leaves the old file intact and no temp behind`() {
+        val (_, sealer) = rig(); val f = blob(); val b = SealedBlobFile(f, sealer)
+        b.write("v1"); assertFalse(File(f.parentFile, f.name + ".tmp").exists())
+        val v1 = f.readBytes()
+        // Something that is not a regular file sits where the temp file must go: the write cannot even begin.
+        val tmpPath = File(f.parentFile, f.name + ".tmp"); tmpPath.mkdir()
+        assertThrows(Exception::class.java) { b.write("v2") }
+        assertArrayEquals("the old profile is untouched (no truncating fallback write)", v1, f.readBytes())
+        tmpPath.delete()
+        b.write("v3"); assertEquals(ProfileLoad.Loaded("v3"), b.load { it })
+        val sf = SealedFile(blob("h.bin"), sealer); sf.write("a"); sf.write("b")
+        assertEquals("b", sf.read()); assertFalse(File(tmp.root, "h.bin.tmp").exists())
+    }
+
     @Test fun `an unreadable profile file is Unavailable, and a failing sealer on write leaves the old file intact`() {
         val (keys, sealer) = rig(); val f = blob(); val b = SealedBlobFile(f, sealer)
         b.write("v1"); val v1 = f.readBytes()

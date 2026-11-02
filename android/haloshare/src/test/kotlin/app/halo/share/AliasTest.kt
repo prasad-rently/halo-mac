@@ -13,6 +13,12 @@ class AliasTest {
             assertEquals("U+${c.code.toString(16)}", "ab", Alias.clean("a${c}b", 40))
     }
 
+    @Test fun `invisible characters cannot make a blank-looking name, but variation selectors and joiners survive`() {
+        for (c in listOf('\u200B', '\u2060', '\u2061', '\u2064', '\uFEFF', '\u00AD')) assertEquals("U+${c.code.toString(16)}", "ab", Alias.clean("a${c}b", 40))
+        assertEquals("", Alias.clean("\u200B\u2060\uFEFF", 40))
+        val heart = "\u2764\uFE0F"; assertEquals(heart, Alias.clean(heart, 40))         // emoji presentation selector is kept
+    }
+
     @Test fun `control characters go, ordinary and joiner-using text stays, length is bounded`() {
         assertEquals("ab", Alias.clean("a\u0007\nb", 40))
         assertEquals("  trimmed".trim(), Alias.clean("  trimmed  ", 40))

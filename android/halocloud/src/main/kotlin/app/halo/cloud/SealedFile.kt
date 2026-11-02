@@ -1,6 +1,9 @@
 package app.halo.cloud
 
 import java.io.File
+import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import javax.crypto.AEADBadTagException
 
 /** Something that can seal and open bytes under a key the file system never sees (on Android: the Keystore). */
@@ -76,9 +79,7 @@ class SealedFile(private val file: File, private val sealer: Sealer) {
 
     fun write(text: String) {
         val out = MAGIC + sealer.seal(text.toByteArray(Charsets.UTF_8))     // may throw: nothing has been touched yet
-        val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeBytes(out)
-        if (!tmp.renameTo(file)) { file.writeBytes(out); tmp.delete() }
+        AtomicFile.replace(file, out)
     }
 
     fun delete() { file.delete(); File(file.parentFile, file.name + ".tmp").delete() }
@@ -212,10 +213,29 @@ class SealedBlobFile(private val file: File, private val sealer: Sealer) {
     /** Seals first (a failing sealer touches nothing), then temp + rename. */
     fun write(text: String) {
         val out = sealer.seal(text.toByteArray(Charsets.UTF_8))
-        val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeBytes(out)
-        if (!tmp.renameTo(file)) { file.writeBytes(out); tmp.delete() }
+        AtomicFile.replace(file, out)
     }
 
     fun delete() { file.delete(); File(file.parentFile, file.name + ".tmp").delete() }
+}
+
+/**
+ * Replace [file] with [bytes] so that a crash or power loss leaves either the old contents or the new, never a truncated
+ * or empty file: write a sibling temp file, **fsync it**, then rename over the target. (Without the fsync a rename can be
+ * persisted before the data, leaving a zero-length file that reads as "Missing" — i.e. "not paired" — after a power loss.)
+ * The previous fallback — `file.writeBytes` straight over the target when the rename failed — could itself truncate the
+ * only copy; there is none now: if the rename cannot be done the old file stays and the exception propagates. The temp
+ * file (ciphertext only) is removed on every failure path.
+ */
+internal object AtomicFile {
+    fun replace(file: File, bytes: ByteArray) {
+        val tmp = File(file.parentFile, file.name + ".tmp")
+        try {
+            FileOutputStream(tmp).use { it.write(bytes); it.flush(); it.fd.sync() }
+            if (!tmp.renameTo(file)) Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        } catch (e: Exception) {
+            tmp.delete()
+            throw e
+        }
+    }
 }

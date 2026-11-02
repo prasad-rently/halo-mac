@@ -111,6 +111,16 @@ class BackgroundController(private val settings: BackgroundSettings) {
         return true
     }
 
+    /**
+     * The app came to the front while the service is running. Notifications can be turned off (app-wide or just the service
+     * channel) AFTER the service started — [onServiceStarting] only checks at start — and a foreground service whose notice is
+     * hidden is exactly what FR-B1 forbids. @return true when the caller must stop the service (the switch is turned off and the refusal recorded).
+     */
+    fun shouldStopOnForeground(gate: NotificationGate, serviceActive: Boolean): Boolean {
+        if (!serviceActive || !settings.enabled.value || gate.canShowPersistentNotice()) return false
+        refuse(); return true
+    }
+
     private fun refuse() { settings.setEnabled(false); settings.setRefusal(BackgroundRefusal.NOTIFICATIONS_OFF) }
 }
 
