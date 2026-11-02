@@ -831,8 +831,9 @@ private final class TempVolume: @unchecked Sendable {
     }
 
     func detach() {
-        if attached { _ = ShellReader.run("/usr/bin/hdiutil", ["detach", mount.path, "-force"], timeout: 60); attached = false }
-        try? FileManager.default.removeItem(at: base)
+        if attached { attached = !ShellReader.run("/usr/bin/hdiutil", ["detach", mount.path, "-force"], timeout: 60).succeeded }
+        // Only when the volume is gone: removing `base` while the image is still mounted would recurse into it.
+        if !attached { try? FileManager.default.removeItem(at: base) }
         CleanupPath.resetKeyCache()
     }
 
@@ -949,6 +950,66 @@ struct CleanupPathVolumeTests {
         let home = URL(fileURLWithPath: NSHomeDirectory())
         let homeViaData = URL(fileURLWithPath: "/System/Volumes/Data" + real(home))
         #expect(CleanupPath.directoryKey(home) == CleanupPath.directoryKey(homeViaData))
+    }
+
+    @Test("A drive swapped for a differently-formatted one at the same mount point is not keyed by the old volume's case flag",
+          .enabled(if: TempVolume.available))
+    @MainActor
+    func remountAtTheSamePathIsRescanned() async throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("halo-remount-\(UUID().uuidString)")
+        let mount = base.appendingPathComponent("mnt")
+        try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
+        func attach(caseSensitive: Bool, image: String) -> Bool {
+            let path = base.appendingPathComponent(image).path
+            guard ShellReader.run("/usr/bin/hdiutil", ["create", "-size", "8m", "-fs", caseSensitive ? "Case-sensitive APFS" : "APFS",
+                                                       "-volname", "HaloT", "-type", "SPARSE", path], timeout: 60).succeeded else { return false }
+            return ShellReader.run("/usr/bin/hdiutil", ["attach", "-mountpoint", mount.path, "-nobrowse", "-noverify", "-noautoopen",
+                                                        path + ".sparseimage"], timeout: 60).succeeded
+        }
+        func detach() -> Bool { ShellReader.run("/usr/bin/hdiutil", ["detach", mount.path, "-force"], timeout: 60).succeeded }
+        var attached = false
+        defer {
+            if attached { attached = !detach() }
+            if !attached { try? FileManager.default.removeItem(at: base) }   // never recurse into a volume that is still mounted
+            CleanupPath.resetKeyCache()
+        }
+        // Other tests (and every scan) clear the key cache too, and the swap takes seconds, so the stale
+        // entry can be wiped before the scan: establish the premise — the old flag IS still cached —
+        // and retry the swap if it was not, rather than let the assertion below pass for the wrong reason.
+        var stale = false
+        for attempt in 0..<4 where !stale {
+            if attempt > 0 {
+                attached = !detach(); try #require(!attached)
+                for f in (try? FileManager.default.contentsOfDirectory(atPath: base.path)) ?? [] where f.hasSuffix(".sparseimage") {
+                    try? FileManager.default.removeItem(at: base.appendingPathComponent(f))
+                }
+            }
+            CleanupPath.resetKeyCache()
+            try #require(attach(caseSensitive: false, image: "ci\(attempt)"))
+            attached = true
+            #expect(CleanupPath.key(mount.appendingPathComponent("A.bin")) == CleanupPath.key(mount.appendingPathComponent("a.bin")))
+            attached = !detach()
+            try #require(!attached)
+            try #require(attach(caseSensitive: true, image: "cs\(attempt)"))
+            attached = true
+            try? Data(repeating: 1, count: 4096).write(to: mount.appendingPathComponent("A.bin"))
+            try? Data(repeating: 2, count: 4096).write(to: mount.appendingPathComponent("a.bin"))
+            // Premise: the old volume's flag is still cached for this mount point, although the two files are distinct.
+            stale = CleanupPath.key(mount.appendingPathComponent("A.bin")) == CleanupPath.key(mount.appendingPathComponent("a.bin"))
+            if !stale, let n = try? FileManager.default.contentsOfDirectory(atPath: mount.path) {
+                for f in n where f.lowercased() == "a.bin" { try? FileManager.default.removeItem(at: mount.appendingPathComponent(f)) }
+            }
+        }
+        try #require(stale, "premise: the previous volume's case flag stays cached across the swap (without a reset)")
+
+        let trash = base.appendingPathComponent("trash")
+        let root = mount.path
+        let coordinator = ScanCoordinator(roots: { $0 == .userCaches ? [root] : [] }, trashDirectories: { [trash] }, trash: { _ in })
+        let vm = CleanupViewModel(coordinator: coordinator, kinds: [.userCaches])
+        await vm.scanAll()
+        let items = (vm.category(for: .userCaches)?.items ?? []).filter { $0.name.lowercased() == "a.bin" }
+        #expect(items.count == 2, "premise: both files of the case-sensitive volume are listed")
+        #expect(Set(items.map(\.key)).count == 2, "two distinct files were given one key — the previous volume's case flag was reused")
     }
 
     @Test("canonicalFirmlink only rewrites real firmlink roots")

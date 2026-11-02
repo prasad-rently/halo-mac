@@ -140,6 +140,9 @@ final class CleanupViewModel: ObservableObject {
     func scanAll() async {
         scanGeneration += 1
         let generation = scanGeneration
+        // A cached directory resolution carries the volume's case flag. A volume ejected and another
+        // mounted at the same path (a re-formatted or swapped external drive) must not inherit it.
+        CleanupPath.resetKeyCache()
         removals = []
         clearOutcome()                     // a banner describes the list it was shown against
         let startedAt = removalSerial
@@ -191,6 +194,7 @@ final class CleanupViewModel: ObservableObject {
 
     /// Re-scan just these categories (after a delete), so sizes are exact without a full rescan.
     private func rescan(kinds: Set<CleanupKind>) async {
+        CleanupPath.resetKeyCache()        // see scanAll()
         for kind in kinds where kind != .browsers {
             let startedAt = removalSerial
             let cat = await coordinator.scanCategory(kind)
