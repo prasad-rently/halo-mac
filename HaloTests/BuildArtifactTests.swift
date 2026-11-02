@@ -941,14 +941,15 @@ struct BuildArtifactsViewModelTests {
         let a = baItem(f.url("proj/a"), project: "a"), b = baItem(f.url("proj/b"), project: "b")
         let calls = CallCounter()
         // Scan 1 already sized both folders and is about to report them (slow stream).
-        let vm = makeVM(f, trash: trash, scan: { _, _ in calls.next(); return baStream([a, b], delayMs: 400) })
+        let vm = makeVM(f, trash: trash, scan: { _, _ in calls.next(); return baStream([a, b], delayMs: 1_500) })
         vm.rescan()
-        try? await Task.sleep(nanoseconds: 100_000_000)
+        for _ in 0..<300 where !vm.isScanning { try? await Task.sleep(nanoseconds: 10_000_000) }   // scan really running
         #expect(vm.isScanning)
         vm.review = BuildArtifactsViewModel.ReviewSnapshot(items: [a])
         await vm.confirm(.trash)
         #expect(!f.exists("proj/a"), "a was moved to the (fake) Trash while the scan was running")
-        try? await Task.sleep(nanoseconds: 800_000_000)
+        #expect(vm.isScanning, "the removal finished well inside the scan's delay, so the scan was still in flight")
+        for _ in 0..<600 where vm.isScanning { try? await Task.sleep(nanoseconds: 10_000_000) }
         #expect(!vm.isScanning)
         #expect(vm.items.map(\.projectName) == ["b"], "the scan re-listed a row that is already in the Trash: \(vm.items.map(\.projectName))")
     }
