@@ -59,6 +59,7 @@ class ConsentGate(
             onPending(offer)
         }
         var decision = ConsentDecision.DECLINE
+        var forced = false          // interrupted / failed: whatever was tapped meanwhile, the answer is no
         var shownAt = -1L
         try {
             while (true) {
@@ -68,10 +69,15 @@ class ConsentGate(
                 if (background && clock() - shownAt >= backgroundTimeoutMs) break        // nobody answered: the safe answer is no
                 try { decision = mine.get(pollMs, TimeUnit.MILLISECONDS); break } catch (e: TimeoutException) { /* poll again */ }
             }
-        } catch (e: InterruptedException) { Thread.currentThread().interrupt()           // the server is stopping
-        } catch (e: Exception) { decision = ConsentDecision.DECLINE }
+        } catch (e: InterruptedException) { Thread.currentThread().interrupt(); forced = true           // the server is stopping
+        } catch (e: Exception) { forced = true }
         finally {
             synchronized(lock) {
+                // Settle the prompt under the same lock [resolve] takes. After this line a late tap can no longer complete
+                // the future, so [resolve]'s "applied" and the decision returned here can never disagree: a tap that
+                // landed before this point is honoured (and reported applied); one after it is reported expired.
+                mine.complete(ConsentDecision.DECLINE)
+                decision = if (forced) ConsentDecision.DECLINE else mine.getNow(ConsentDecision.DECLINE)
                 if (future === mine) { future = null; currentId = 0; onPending(null); clearPrompt() }
                 if (decision != ConsentDecision.ACCEPT) {
                     val now = clock()
@@ -84,7 +90,11 @@ class ConsentGate(
         return decision
     }
 
-    /** Answer the open prompt. With [id], only if that is still the prompt being shown. Returns whether it applied. */
+    /**
+     * Answer the open prompt. With [id], only if that is still the prompt being shown.
+     * Returns whether it applied; **false means expired** (no prompt, a different prompt, or one that already timed out /
+     * was declined) — the caller should say so rather than imply the tap did something.
+     */
     fun resolve(decision: ConsentDecision, id: Long? = null): Boolean = synchronized(lock) {
         val f = future ?: return false
         if (id != null && id != currentId) return false

@@ -112,4 +112,42 @@ class ConsentGateTest {
         assertTrue(gate.resolve(ConsentDecision.ACCEPT, secondId)); assertTrue(d2.await(5, TimeUnit.SECONDS)); assertEquals(ConsentDecision.ACCEPT, o2.get())
         assertFalse("nothing pending: a late tap is a no-op", gate.resolve(ConsentDecision.ACCEPT, secondId))
     }
+
+    // ── a tap that arrives as the prompt times out (follow-up item 5) ───────────────────────────
+
+    @Test fun `an Accept that lands as the background timeout fires is never reported applied while the decision is DECLINE`() {
+        // Deterministic version of the window: the tap lands inside the very clock read that decides the timeout.
+        repeat(2) { variant ->
+            val gateRef = AtomicReference<ConsentGate>(); val shownId = AtomicReference<Long?>(null)
+            val applied = AtomicReference<Boolean?>(null)
+            var now = 0L
+            val clock = { val t = now; now += 100
+                if (t >= 300 && applied.get() == null && shownId.get() != null) applied.set(gateRef.get().resolve(ConsentDecision.ACCEPT, shownId.get()))   // the tap, mid-decision
+                t }
+            val gate = ConsentGate(backgroundTimeoutMs = 300, coolOffMs = 0, pollMs = 5, clock = clock); gateRef.set(gate)
+            val decision = gate.ask(offer("10.1.1.$variant"), { false }, { }, { id -> shownId.set(id) }, { })
+            assertTrue("the tap was delivered", applied.get() != null)
+            assertEquals("resolve() and the returned decision must agree (applied=${applied.get()}, decision=$decision)", applied.get() == true, decision == ConsentDecision.ACCEPT)
+        }
+    }
+
+    @Test fun `an Accept after the prompt has already timed out reports expired, not applied`() {
+        val shown = AtomicReference<Long?>(null)
+        val gate = ConsentGate(backgroundTimeoutMs = 120, coolOffMs = 0, pollMs = 10)
+        assertEquals(ConsentDecision.DECLINE, gate.ask(offer(), { false }, { }, { id -> shown.set(id) }, { }))
+        assertFalse("the late Accept is expired", gate.resolve(ConsentDecision.ACCEPT, shown.get()))
+        assertFalse("with or without the id", gate.resolve(ConsentDecision.ACCEPT))
+        assertFalse(gate.isPending)
+    }
+
+    @Test fun `a prompt answered in time still returns exactly what was tapped`() {
+        val gate = ConsentGate(backgroundTimeoutMs = 60_000, coolOffMs = 0, pollMs = 10); val p = Probe()
+        for (d in ConsentDecision.values()) {
+            val out = AtomicReference<ConsentDecision?>(null); val done = CountDownLatch(1)
+            gate.askAsync(offer(), p, { true }, out, done)
+            assertTrue(waitUntil { gate.isPending })
+            assertTrue("applied", gate.resolve(d)); assertTrue(done.await(5, TimeUnit.SECONDS))
+            assertEquals(d, out.get())
+        }
+    }
 }
