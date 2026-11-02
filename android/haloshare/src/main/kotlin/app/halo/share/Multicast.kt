@@ -28,7 +28,7 @@ object MulticastCodec {
         if (info.fingerprint.isBlank() || info.fingerprint.length > 128 || info.fingerprint == ownFingerprint) return null
         if (info.port !in 1..65535) return null
         if (info.protocol != "http" && info.protocol != "https") return null
-        val alias = info.alias.filter { !it.isISOControl() }.trim().take(MAX_ALIAS)
+        val alias = Alias.clean(info.alias, MAX_ALIAS)
         if (alias.isEmpty()) return null
         return info.copy(alias = alias)
     }
@@ -42,16 +42,66 @@ interface DatagramTransport : AutoCloseable {
     class Received(val bytes: ByteArray, val length: Int, val host: String)
 }
 
-/** Real UDP multicast on every usable IPv4 interface. The caller must hold Android's MulticastLock (see MulticastScope in :app). */
-class UdpMulticastTransport(private val port: Int = HaloShare.DEFAULT_PORT, private val group: String = HaloShare.MULTICAST_GROUP) : DatagramTransport {
-    private val addr = InetAddress.getByName(group)
-    private val socket = MulticastSocket(port).apply {
-        reuseAddress = true
-        for (nif in runCatching { NetworkInterface.getNetworkInterfaces()?.toList() }.getOrNull().orEmpty()) {
-            if (!nif.isUp || nif.isLoopback || !nif.supportsMulticast()) continue
-            runCatching { joinGroup(java.net.InetSocketAddress(addr, port), nif) }
-        }
+/** What the interface chooser needs to know about one network interface (a plain value so the choice is testable without real NICs). */
+data class IfaceCandidate(val name: String, val up: Boolean, val loopback: Boolean, val multicast: Boolean, val hasIpv4: Boolean)
+
+object MulticastInterfaces {
+    /**
+     * The interface to pin multicast to, or null for "no pin — use the platform default" (the pre-F-055-follow-up
+     * behaviour). [preferred] is the name the caller got from the OS for the Wi-Fi network (on Android,
+     * `ConnectivityManager.getLinkProperties(wifiNetwork).interfaceName`). It is honoured only if that interface is
+     * actually usable for IPv4 multicast; anything else falls back rather than failing discovery.
+     */
+    fun choose(candidates: List<IfaceCandidate>, preferred: String?): String? {
+        if (preferred.isNullOrBlank()) return null
+        return candidates.firstOrNull { it.name == preferred && it.up && !it.loopback && it.multicast && it.hasIpv4 }?.name
     }
+
+    fun systemCandidates(): List<Pair<IfaceCandidate, NetworkInterface>> =
+        runCatching { NetworkInterface.getNetworkInterfaces()?.toList() }.getOrNull().orEmpty().mapNotNull { nif ->
+            runCatching {
+                IfaceCandidate(nif.name, nif.isUp, nif.isLoopback, nif.supportsMulticast(), nif.inetAddresses.toList().any { it is java.net.Inet4Address }) to nif
+            }.getOrNull()
+        }
+}
+
+/**
+ * Real UDP multicast. The caller must hold Android's MulticastLock (see MulticastScope in :app).
+ *
+ * [preferredInterface] pins both the outgoing interface and the group membership to one NIC (the Wi-Fi one). Without
+ * it, on a phone that is on Wi-Fi *and* has a VPN / mobile data / a tethering interface up, the announce can leave on
+ * the wrong one and never reach the LAN. If the preferred interface is missing or unusable, or pinning throws, this
+ * silently falls back to joining every usable IPv4 interface and the platform's default send interface.
+ */
+class UdpMulticastTransport(
+    private val port: Int = HaloShare.DEFAULT_PORT,
+    private val group: String = HaloShare.MULTICAST_GROUP,
+    preferredInterface: String? = null,
+) : DatagramTransport {
+    private val addr = InetAddress.getByName(group)
+    /** The interface name multicast is pinned to, or null when it is not (default routing). */
+    val pinnedInterface: String?
+    private val socket = MulticastSocket(port)
+
+    init {
+        socket.reuseAddress = true
+        val all = MulticastInterfaces.systemCandidates()
+        val pin = MulticastInterfaces.choose(all.map { it.first }, preferredInterface)
+        val pinnedNif = pin?.let { name -> all.firstOrNull { it.first.name == name }?.second }
+        var pinned: String? = null
+        if (pinnedNif != null) {
+            val ok = runCatching { socket.networkInterface = pinnedNif; socket.joinGroup(java.net.InetSocketAddress(addr, port), pinnedNif) }.isSuccess
+            if (ok) pinned = pinnedNif.name
+        }
+        if (pinned == null) {
+            for ((c, nif) in all) {
+                if (!c.up || c.loopback || !c.multicast) continue
+                runCatching { socket.joinGroup(java.net.InetSocketAddress(addr, port), nif) }
+            }
+        }
+        pinnedInterface = pinned
+    }
+
     override fun send(bytes: ByteArray) { socket.send(DatagramPacket(bytes, bytes.size, addr, port)) }
     override fun receive(timeoutMs: Int): DatagramTransport.Received? {
         val buf = ByteArray(MulticastCodec.MAX_DATAGRAM + 1)
@@ -81,5 +131,83 @@ class MulticastDiscovery(private val me: DeviceInfo, private val windowMs: Long 
             if (info.fingerprint !in found && found.size < MulticastCodec.MAX_PEERS) { val peer = Peer(info, r.host); found[info.fingerprint] = peer; onFound(peer) }
         }
         return found.values.toList()
+    }
+}
+
+/** The Android MulticastLock, abstracted so "held only while a window runs" is testable on the JVM. */
+interface MulticastLockHandle {
+    fun acquire()
+    fun release()
+    val isHeld: Boolean
+}
+
+object MulticastWindow {
+    /**
+     * One bounded window: take the lock, announce / listen / answer, release the lock in `finally` — whatever happens
+     * (the transport failing to open, an exception mid-window). Never throws: if multicast is unavailable the caller
+     * gets an empty list and its other discovery paths carry on.
+     */
+    fun run(me: DeviceInfo, windowMs: Long, lock: MulticastLockHandle, transport: () -> DatagramTransport,
+            onFound: (Peer) -> Unit = {}, isCancelled: () -> Boolean = { false }): List<Peer> =
+        try {
+            lock.acquire()
+            transport().use { MulticastDiscovery(me, windowMs).run(it, onFound, isCancelled) }
+        } catch (e: Exception) { emptyList() }
+        finally { if (lock.isHeld) runCatching { lock.release() } }
+}
+
+/**
+ * Re-announces this device on the multicast group every [intervalMs] while it is idle, so a peer that joined the network
+ * after our last announcement (or missed it) can still find a phone that has been sitting in the background service.
+ *
+ * Bounded by construction: one window at a time (fixed *delay*, never a backlog), each window itself bounded by
+ * [MulticastWindow]'s `windowMs` and holding the lock only for that long, skipped while a transfer or consent prompt is
+ * active ([isIdle]), and [runNow] is rate-limited to [minGapMs]. [announce] is the whole window (lock + discovery).
+ */
+class PeriodicAnnouncer(
+    private val intervalMs: Long,
+    private val isIdle: () -> Boolean,
+    private val announce: () -> Unit,
+    private val minGapMs: Long = 10_000,
+    private val clock: () -> Long = System::currentTimeMillis,
+    private val newExecutor: () -> java.util.concurrent.ScheduledExecutorService = {
+        java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "haloshare-announce").apply { isDaemon = true } }
+    },
+) {
+    private val lock = Any()
+    private var executor: java.util.concurrent.ScheduledExecutorService? = null
+    private var stopped = true
+    private var lastRunAt = Long.MIN_VALUE / 2
+    private var windows = 0
+    /** How many windows have actually run. For tests / diagnostics. */
+    val windowsRun: Int get() = synchronized(lock) { windows }
+
+    fun start() {
+        synchronized(lock) {
+            if (!stopped) return
+            stopped = false
+            val ex = newExecutor(); executor = ex
+            ex.scheduleWithFixedDelay({ tick() }, intervalMs, intervalMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        }
+    }
+
+    fun stop() { synchronized(lock) { stopped = true; executor?.shutdownNow(); executor = null } }
+
+    /** An extra window now (e.g. the network changed), subject to the idle rule and [minGapMs]. */
+    fun runNow() {
+        val ex = synchronized(lock) { if (stopped) return; executor } ?: return
+        try { ex.execute { tick(requireGap = true) } } catch (e: java.util.concurrent.RejectedExecutionException) { /* stopped meanwhile */ }
+    }
+
+    /** One scheduling decision. @return true if a window ran. */
+    internal fun tick(requireGap: Boolean = false): Boolean {
+        synchronized(lock) {
+            if (stopped) return false
+            if (requireGap && clock() - lastRunAt < minGapMs) return false
+        }
+        if (!isIdle()) return false
+        synchronized(lock) { if (stopped) return false; lastRunAt = clock(); windows++ }
+        try { announce() } catch (e: Exception) { /* a failed window is just a missed window */ }
+        return true
     }
 }

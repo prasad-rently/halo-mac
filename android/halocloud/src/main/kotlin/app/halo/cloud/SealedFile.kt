@@ -1,6 +1,9 @@
 package app.halo.cloud
 
 import java.io.File
+import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import javax.crypto.AEADBadTagException
 
 /** Something that can seal and open bytes under a key the file system never sees (on Android: the Keystore). */
@@ -18,6 +21,14 @@ interface Sealer {
 /** The blob is not authentic under the current key: its contents are unrecoverable, so replacing it loses nothing. */
 class SealCorruptException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
+/**
+ * The key that sealed this data can never be used again (the Keystore entry is gone, or unrecoverable/invalidated).
+ * Unlike [SealCorruptException] this says nothing about the *blob* — it is intact, just unreadable by anyone — so it is
+ * never "safe to replace" silently: the user is told, and explicitly resets. Unlike a transient failure, retrying
+ * will not help (but costs nothing, so callers still re-check).
+ */
+class SealKeyUnusableException(message: String, cause: Throwable? = null) : Exception(message, cause)
+
 /** What reading a [SealedFile] found. The distinction between [Corrupt] and [Unavailable] is the data-safety rule (H-13 review). */
 sealed interface SealedRead {
     /** [migrated]: a legacy plaintext file was found and has been sealed. [migrationFailed]: it was found but could not be sealed (yet) — it is still on disk as plaintext and sealing is retried on the next write/read. */
@@ -28,6 +39,8 @@ sealed interface SealedRead {
     object Corrupt : SealedRead
     /** Could not read or open right now. The file is intact — **do not overwrite it.** */
     data class Unavailable(val reason: String) : SealedRead
+    /** The file is intact but its key is permanently gone ([SealKeyUnusableException]). **Do not overwrite it silently** — surface it and let the user reset. */
+    object KeyUnusable : SealedRead
 }
 
 /**
@@ -55,6 +68,7 @@ class SealedFile(private val file: File, private val sealer: Sealer) {
             return SealedRead.Text(text, migrated = sealed, migrationFailed = !sealed)
         }
         return try { SealedRead.Text(sealer.open(bytes.copyOfRange(MAGIC.size, bytes.size)).toString(Charsets.UTF_8)) }
+        catch (e: SealKeyUnusableException) { SealedRead.KeyUnusable }
         catch (e: SealCorruptException) { SealedRead.Corrupt }
         catch (e: AEADBadTagException) { SealedRead.Corrupt }
         catch (e: Exception) { SealedRead.Unavailable("open failed: ${e.javaClass.simpleName}") }
@@ -65,9 +79,7 @@ class SealedFile(private val file: File, private val sealer: Sealer) {
 
     fun write(text: String) {
         val out = MAGIC + sealer.seal(text.toByteArray(Charsets.UTF_8))     // may throw: nothing has been touched yet
-        val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeBytes(out)
-        if (!tmp.renameTo(file)) { file.writeBytes(out); tmp.delete() }
+        AtomicFile.replace(file, out)
     }
 
     fun delete() { file.delete(); File(file.parentFile, file.name + ".tmp").delete() }
@@ -91,6 +103,8 @@ class SealedStore(private val file: SealedFile) {
     enum class Outcome { Saved, Deferred, Failed }
 
     @Volatile var blocked = false; private set
+    /** The file's key is permanently gone: nothing on disk can be read again and the user has to reset (see [warning]). Implies [blocked]. */
+    @Volatile var keyLost = false; private set
     @Volatile var plaintextPending = false; private set
     /** Human-readable, content-free status for the UI; null when everything is fine. */
     @Volatile var warning: String? = null; private set
@@ -98,9 +112,10 @@ class SealedStore(private val file: SealedFile) {
     @Synchronized fun load(): String? = absorb(file.readResult())
 
     private fun absorb(r: SealedRead): String? = when (r) {
-        is SealedRead.Text -> { blocked = false; plaintextPending = r.migrationFailed; update(); r.text }
-        SealedRead.Missing, SealedRead.Corrupt -> { blocked = false; plaintextPending = false; update(); null }
-        is SealedRead.Unavailable -> { blocked = true; update(); null }
+        is SealedRead.Text -> { blocked = false; keyLost = false; plaintextPending = r.migrationFailed; update(); r.text }
+        SealedRead.Missing, SealedRead.Corrupt -> { blocked = false; keyLost = false; plaintextPending = false; update(); null }
+        is SealedRead.Unavailable -> { blocked = true; keyLost = false; update(); null }
+        SealedRead.KeyUnusable -> { blocked = true; keyLost = true; update(); null }
     }
 
     /** [produce] gets the text currently on disk when the store was blocked (so it can merge), else null. */
@@ -108,7 +123,7 @@ class SealedStore(private val file: SealedFile) {
         var disk: String? = null
         if (blocked) {
             val r = file.readResult()
-            if (r is SealedRead.Unavailable) { update(); return Outcome.Deferred }
+            if (r is SealedRead.Unavailable || r is SealedRead.KeyUnusable) { absorb(r); return Outcome.Deferred }
             disk = absorb(r)
         }
         return try { file.write(produce(disk)); plaintextPending = false; update(); Outcome.Saved }
@@ -116,10 +131,111 @@ class SealedStore(private val file: SealedFile) {
     }
 
     private fun update() {
-        warning = when { blocked -> "Clipboard history is temporarily unreadable (Android's secure storage is busy). Nothing was lost; it will be retried."
+        warning = when { keyLost -> "Clipboard history can't be unlocked: this phone's secure key was lost, so the saved history is unreadable. New clips are only held in memory until you reset the history."
+                         blocked -> "Clipboard history is temporarily unreadable (Android's secure storage is busy). Nothing was lost; it will be retried."
                          plaintextPending -> "Clipboard history could not be sealed yet; it will be retried."
                          else -> null }
     }
 
-    @Synchronized fun delete() { file.delete(); blocked = false; plaintextPending = false; warning = null }
+    @Synchronized fun delete() { file.delete(); blocked = false; keyLost = false; plaintextPending = false; warning = null }
+}
+
+
+/**
+ * Keystore failure triage. A permanent failure ([java.security.UnrecoverableKeyException], or Android's
+ * `KeyPermanentlyInvalidatedException`, matched by name so this module stays Android-free) means the key is gone for
+ * good; anything else (`KeyStoreException`, provider/IPC errors…) is treated as transient and retried.
+ */
+object Keystore {
+    fun isPermanentKeyFailure(t: Throwable): Boolean =
+        generateSequence(t) { it.cause }.take(8).any { it is java.security.UnrecoverableKeyException || it.javaClass.name == "android.security.keystore.KeyPermanentlyInvalidatedException" }
+}
+
+/** A key store as the policy sees it: read, create, delete. On Android: the AndroidKeyStore entry. */
+interface KeyAccess<K : Any> {
+    /** The key, or null if there is none. May throw. */
+    fun get(): K?
+    fun generate(): K
+    fun delete()
+}
+
+/**
+ * When a key may be created. The rule (H-13 follow-up): **sealing and opening never create a key.** Silently making a
+ * new one whenever `get()` returned null orphaned every blob sealed under the old key — they would then fail
+ * authentication and look "corrupt", i.e. replaceable. A key is created only by [ensure], which the pairing flow and an
+ * explicit user reset call.
+ */
+class KeyPolicy<K : Any>(private val access: KeyAccess<K>) {
+    /** For seal and open. Throws [SealKeyUnusableException] for a missing/permanently unusable key, the original exception for a transient one. */
+    fun use(): K {
+        val k = try { access.get() } catch (e: Exception) {
+            if (Keystore.isPermanentKeyFailure(e)) throw SealKeyUnusableException("the secure key is permanently unusable", e) else throw e
+        }
+        return k ?: throw SealKeyUnusableException("the secure key is missing")
+    }
+
+    /** Make sure a usable key exists, creating one if there is none or the old one is permanently unusable (nothing sealed under it can be read anyway). A transient failure is rethrown — never answered with a new key. */
+    fun ensure(): K {
+        val existing = try { access.get() } catch (e: Exception) {
+            if (!Keystore.isPermanentKeyFailure(e)) throw e
+            access.delete(); null
+        }
+        return existing ?: access.generate()
+    }
+}
+
+/** What loading a sealed profile found (the pairing profile is a raw sealed blob, no magic header). */
+sealed interface ProfileLoad<out T> {
+    data class Loaded<T>(val value: T) : ProfileLoad<T>
+    /** No file: not paired. */
+    object Missing : ProfileLoad<Nothing>
+    /** Authentic-decryption failed or the content is unparsable: unrecoverable, so pairing again (which replaces it) loses nothing. */
+    object Corrupt : ProfileLoad<Nothing>
+    /** Could not open it right now (a Keystore hiccup, an I/O error). The file is intact: show "temporarily unavailable — will retry" and **never overwrite it**. */
+    data class Unavailable(val reason: String) : ProfileLoad<Nothing>
+    /** The key is permanently gone: say so and offer "reset and pair again"; do not pretend it is merely "not paired". */
+    object KeyLost : ProfileLoad<Nothing>
+}
+
+/** A sealed file with no magic header (the on-disk format of `cloud-profile.bin`, unchanged), with the same Unavailable/Corrupt/KeyLost triage as [SealedFile]. */
+class SealedBlobFile(private val file: File, private val sealer: Sealer) {
+    fun <T> load(parse: (String) -> T): ProfileLoad<T> {
+        val bytes = try { if (file.exists()) file.readBytes() else return ProfileLoad.Missing } catch (e: Exception) { return ProfileLoad.Unavailable("read failed: ${e.javaClass.simpleName}") }
+        if (bytes.isEmpty()) return ProfileLoad.Missing
+        val plain = try { sealer.open(bytes) }
+        catch (e: SealKeyUnusableException) { return ProfileLoad.KeyLost }
+        catch (e: SealCorruptException) { return ProfileLoad.Corrupt }
+        catch (e: AEADBadTagException) { return ProfileLoad.Corrupt }
+        catch (e: Exception) { return ProfileLoad.Unavailable("open failed: ${e.javaClass.simpleName}") }
+        return try { ProfileLoad.Loaded(parse(plain.toString(Charsets.UTF_8))) } catch (e: Exception) { ProfileLoad.Corrupt }
+    }
+
+    /** Seals first (a failing sealer touches nothing), then temp + rename. */
+    fun write(text: String) {
+        val out = sealer.seal(text.toByteArray(Charsets.UTF_8))
+        AtomicFile.replace(file, out)
+    }
+
+    fun delete() { file.delete(); File(file.parentFile, file.name + ".tmp").delete() }
+}
+
+/**
+ * Replace [file] with [bytes] so that a crash or power loss leaves either the old contents or the new, never a truncated
+ * or empty file: write a sibling temp file, **fsync it**, then rename over the target. (Without the fsync a rename can be
+ * persisted before the data, leaving a zero-length file that reads as "Missing" — i.e. "not paired" — after a power loss.)
+ * The previous fallback — `file.writeBytes` straight over the target when the rename failed — could itself truncate the
+ * only copy; there is none now: if the rename cannot be done the old file stays and the exception propagates. The temp
+ * file (ciphertext only) is removed on every failure path.
+ */
+internal object AtomicFile {
+    fun replace(file: File, bytes: ByteArray) {
+        val tmp = File(file.parentFile, file.name + ".tmp")
+        try {
+            FileOutputStream(tmp).use { it.write(bytes); it.flush(); it.fd.sync() }
+            if (!tmp.renameTo(file)) Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        } catch (e: Exception) {
+            tmp.delete()
+            throw e
+        }
+    }
 }
