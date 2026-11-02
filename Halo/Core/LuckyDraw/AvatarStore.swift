@@ -373,7 +373,8 @@ enum ImageHeaderProbe {
         /// Neither a PNG nor a TIFF signature — the caller falls back to ImageIO's own properties.
         case notPNGOrTIFF
         /// A PNG/TIFF signature, but a header that cannot be read to a width and height
-        /// (truncated, BigTIFF, absurd IFD). Fail closed.
+        /// (truncated, absurd IFD), or a BigTIFF — whose 64-bit offsets this probe deliberately does
+        /// not parse, and which has no business being a roster photo. Fail closed.
         case malformed
         case size(width: Int, height: Int)
     }
@@ -385,6 +386,11 @@ enum ImageHeaderProbe {
         let little = b[0] == 0x49 && b[1] == 0x49 && b[2] == 0x2A && b[3] == 0
         let big = b[0] == 0x4D && b[1] == 0x4D && b[2] == 0 && b[3] == 0x2A
         if little || big { return tiff(read, littleEndian: little, head: b) }
+        // BigTIFF: "II" 2B 00 / "MM" 00 2B. Not parsed, so it cannot be size-checked from its header
+        // — and an unchecked declared size is exactly the hole this probe exists to close.
+        let bigTIFFLittle = b[0] == 0x49 && b[1] == 0x49 && b[2] == 0x2B && b[3] == 0
+        let bigTIFFBig = b[0] == 0x4D && b[1] == 0x4D && b[2] == 0 && b[3] == 0x2B
+        if bigTIFFLittle || bigTIFFBig { return .malformed }
         return .notPNGOrTIFF
     }
 
