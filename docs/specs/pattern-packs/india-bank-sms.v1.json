@@ -1,14 +1,14 @@
 {
   "$schema": "./pattern-pack.schema.md",
   "id": "india-bank-sms",
-  "version": 1,
+  "version": 2,
   "locale": "en-IN",
   "currency": "INR",
   "description": "India bank/UPI SMS classification + transaction-parse pattern pack. Data-driven port of the Hamza reference (~/CW/Hamza: SmsClassifier.kt, TransactionParser.kt). Used by F-044 (categorization) and F-048 (expenditure parsing). All matching is case-insensitive on the uppercased body/sender unless noted.",
   "source": "Hamza (com.example.hamza) — verified against real device inbox Apr–Jun 2026",
 
   "tuning": {
-    "balanceLookbehindChars": 14,
+    "balanceContextChars": 48,
     "dedupWindowMs": 120000,
     "personalSenderDigitsMin": 7,
     "personalSenderDigitsMax": 15,
@@ -71,29 +71,39 @@
       "IS DUE", "DUE ON", "PAYMENT DUE", "TOTAL DUE", "MIN AMT", "MINIMUM AMOUNT",
       "WILL BE DEBITED", "WILL BE DEDUCTED", "WILL BE AUTO", "WILL BE CREDITED",
       "TO BE DEBITED", "TO BE DEDUCTED",
-      "INITIATED", "REQUESTED", "PLEASE PAY", "PAY NOW", "OVERDUE", "PAYABLE", "REMINDER"
+      "INITIATED", "REQUESTED", "PLEASE PAY", "PAY NOW", "OVERDUE", "PAYABLE", "REMINDER",
+      "DELIVERED", "OUT FOR DELIVERY", "SHIPPED", "DISPATCHED"
     ],
-    "excludeWordsNote": "Actual E-Mandate/UPI-Mandate/auto-debit EXECUTIONS carry a 'debited'/'sent' verb (no 'will be') and ARE counted — only the future announcements above are skipped.",
+    "excludeWordsNote": "v2: DELIVERED / OUT FOR DELIVERY / SHIPPED / DISPATCHED - an order/delivery notice that mentions UPI or 'paid' is not a spend (F-048 11.5 'delivery/service all correctly excluded'); bare DELIVERY is deliberately NOT here ('paid for delivery fee' is a real spend). Actual E-Mandate/UPI-Mandate/auto-debit EXECUTIONS carry a 'debited'/'sent' verb (no 'will be') and ARE counted — only the future announcements above are skipped.",
     "nonBankSenders": ["AIRTEL", "JIO", "PAYTM", "PHONEPE", "PHONPE", "MOBIKW", "FREECH", "AMAZON", "FLIPKART", "FKRT", "SWIGGY", "ZOMATO", "EKART", "MYNTRA", "INDANE", "HPGAS", "BHARATGAS", "BHRTGS", "IRCTC", "POLBAZ", "POLICYB", "NETFLIX"],
     "nonBankSendersNote": "Matched on SENDER only — a merchant named in the body ('spent at ZOMATO') from a bank sender still counts.",
+    "rejectPatterns": [
+      "\\bPAYMENT\\b(?:(?!\\bAT\\b|\\bTO\\s+(?!YOUR\\b|THE\\b|CREDIT\\b|CARD\\b))[\\s\\S]){0,80}\\b(?:RECEIVED|POSTED)\\b(?:(?!\\bAT\\b|\\bTO\\s+(?!YOUR\\b|THE\\b|CREDIT\\b|CARD\\b))[\\s\\S]){0,80}\\bCARD\\b",
+      "\\b(?:RECEIVED|ACKNOWLEDGED)\\b[\\s\\S]{0,40}\\bPAYMENT\\b(?:(?!\\bAT\\b|\\bTO\\s+(?!YOUR\\b|THE\\b|CREDIT\\b|CARD\\b))[\\s\\S]){0,80}\\bCARD\\b",
+      "\\bTHANK(?:S| YOU)\\b[\\s\\S]{0,40}\\bPAYMENT\\b(?:(?!\\bAT\\b|\\bTO\\s+(?!YOUR\\b|THE\\b|CREDIT\\b|CARD\\b))[\\s\\S]){0,80}\\bCARD\\b"
+    ],
+    "rejectPatternsNote": "v2: regexes over the UPPERCASED body; a match = NotTransaction. These are credit-card BILL PAYMENT acknowledgements ('Payment of Rs 12,400 received towards your credit card'): the card's purchases are already counted one by one, so counting the bill payment as well double-counts the spend. Bounded repeats only - no unbounded backtracking. The gap between PAYMENT and CARD may not cross ' AT ' or ' TO <merchant>' (so 'Thank you for the payment of Rs 800 AT SHOPX using your Card' and 'payment of Rs 500 TO SWIGGY was received ... Card' are purchases, not bill-payment receipts); ' TO YOUR/THE/CREDIT/CARD' is still allowed. A purchase ON a card ('spent on HDFC Credit Card at AMAZON') has no payment+received wording and is still a debit.",
     "promoWords": ["OFFER", "DISCOUNT", "SALE", "% OFF", "SHOP NOW", "BUY NOW", "ORDER NOW", "COUPON", "PROMO", "CONGRATULATIONS", "WINNER", "PRIZE", "LUCKY", "APPLY NOW", "PRE-APPROVED", "PREAPPROVED", "LOAN OFFER", "CLAIM", "REWARD POINTS", "VOUCHER", "UNSUBSCRIBE", "T&C", "CLICK HERE", "LIMITED TIME", "HURRY", "EXCITING"],
     "promoWordsNote": "Bare 'HTTP'/'WWW.' intentionally EXCLUDED from parser rejects — bank debit alerts carry fraud-report URLs; rejecting them dropped real UPI 'Sent' debits.",
     "balancePrefix": ["BAL", "BALANCE", "AVBL", "AVAILABLE", "AVL", "AVAIL", "LIMIT", "OUTSTANDING", "DUE"],
+    "balanceClauseBoundaryRegex": "(?<!BAL)(?<!AVL)(?<!AVBL)(?<!AVAIL)\\.\\s|[\\n\\r;]",
+    "balanceAfterRegex": "^(?:/-)?[\\s:\\-]*(?:(?:IS|AS|ARE)\\s+)?(?:(?:YOUR|THE|CURRENT|NET|CLOSING|AVAILABLE|AVL|AVBL|AVAIL)\\s+)*BAL(?:ANCE)?\\b(?![\\s:\\-]*(?:IS\\s+)?(?:(?:RS|INR|\u20b9)\\.?\\s*)?\\d)(?!\\.\\s*(?:RS|INR|\u20b9)\\.?\\s*\\d)(?=\\s*(?:$|[.,;!)\\n\\r]|IN\\s+(?:YOUR|THE)\\b))",
+    "balanceNote": "v2 (replaces the old fixed 14-char lookbehind, which missed 'AVAILABLE BALANCE IN YOUR ACCOUNT IS INR 5,000' and wrongly dropped a real amount after 'LOW AVL BAL ALERT.'). An amount is a BALANCE, not the transaction, when (a) a balancePrefix word STARTS a word within the balanceContextChars before it, looking back only to the previous sentence boundary (balanceClauseBoundaryRegex) and the previous amount; or (b) the text right after it (<= 64 chars) matches balanceAfterRegex ('Rs 5,000 is your available balance'). The trailing form only fires when the balance word CLOSES the clause (end of text, punctuation, or 'in your account'): when another figure follows it ('debited Rs 500 Avl Bal Rs 2,000') the word labels THAT figure and the 500 is the transaction; 'Rs 500 balance transfer fee' is not a balance either. A balance word only counts when it is a WHOLE word, so 'Dear BALAJI' and 'PVT LIMITED' do not drop the amount. If every amount is a balance the message is Unreadable (a verb with no usable amount, spec D5), never a debit of the balance.",
     "accountRegex": "(?:X|x|\\*){2,}\\s*(\\d{3,4})|(?:A/C|AC|ACCT|CARD)[^\\d]{0,6}(?:X|x|\\*)*(\\d{3,4})",
     "merchantRegex": "(?:\\bat\\s+|\\bto\\s+|info[:\\-]\\s*)([A-Za-z0-9][A-Za-z0-9 &._'-]{2,30}?)(?=\\s+(?:on|via|ref|for|dated|\\.|,|$))"
   },
 
   "categories": {
-    "note": "F-048 §12 spend-category rules (added for F-056 so desktop and phone share ONE copy). Evaluated in order over UPPERCASE(merchant + ' ' + body); first rule with any trigger as a substring wins. A credit is always 'Income' (checked before these rules); no match is 'Other'; the pipeline sets 'Transfers' for a detected self-transfer. The UI legend is these names plus Income, Transfers, Other.",
+    "note": "F-048 §12 spend-category rules (added for F-056 so desktop and phone share ONE copy). Evaluated in order over UPPERCASE(merchant + ' ' + body); first rule with any trigger as a substring, or any wordTrigger as a WHOLE WORD (not inside a longer run of A-Z letters), wins. v2: the short, ambiguous triggers (CAFE, DTH, ACT, OLA, EMI, LIC, SIP, CRED) moved to wordTriggers - CRED matched inside CREDITED, LIC inside PUBLIC, OLA inside COLA, SIP inside GOSSIP; OLACABS, OLAMONEY, OLAELECTRIC, CAFETERIA, CAFECOFFEEDAY and CREDCLUB are listed as substrings so the real merchants they used to match still do. A credit is always 'Income' (checked before these rules); no match is 'Other'; the pipeline sets 'Transfers' for a detected self-transfer. The UI legend is these names plus Income, Transfers, Other.",
     "rules": [
-      { "category": "Food & Dining", "triggers": ["ZOMATO", "SWIGGY", "RESTAURANT", "CAFE", "EATCLUB", "DOMINO", "MCDONALD", "KFC"] },
+      { "category": "Food & Dining", "triggers": ["ZOMATO", "SWIGGY", "RESTAURANT", "CAFETERIA", "CAFECOFFEEDAY", "EATCLUB", "DOMINO", "MCDONALD", "KFC"], "wordTriggers": ["CAFE"] },
       { "category": "Groceries", "triggers": ["BIGBASKET", "BLINKIT", "ZEPTO", "DMART", "SUPERMARKET", "GROFERS", "JIOMART"] },
       { "category": "Shopping", "triggers": ["AMAZON", "FLIPKART", "MYNTRA", "AJIO", "MEESHO", "NYKAA", "RETAIL"] },
-      { "category": "Bills & Utilities", "triggers": ["ELECTRICITY", "INDANE", "HPGAS", "BHARATGAS", "BROADBAND", "RECHARGE", "DTH", "WATER BILL", "GAS BILL", "AIRTEL", "JIO", "ACT ", "BSNL"] },
-      { "category": "Transport", "triggers": ["UBER", "OLA", "RAPIDO", "IRCTC", "FUEL", "INDIAN OIL", "IOCL", "BPCL", "HPCL", "METRO", "FASTAG", "PETROL"] },
+      { "category": "Bills & Utilities", "triggers": ["ELECTRICITY", "INDANE", "HPGAS", "BHARATGAS", "BROADBAND", "RECHARGE", "WATER BILL", "GAS BILL", "AIRTEL", "JIO", "BSNL"], "wordTriggers": ["DTH", "ACT"] },
+      { "category": "Transport", "triggers": ["UBER", "OLACABS", "OLAMONEY", "OLAELECTRIC", "RAPIDO", "IRCTC", "FUEL", "INDIAN OIL", "IOCL", "BPCL", "HPCL", "METRO", "FASTAG", "PETROL"], "wordTriggers": ["OLA"] },
       { "category": "Entertainment", "triggers": ["NETFLIX", "SPOTIFY", "PRIME", "HOTSTAR", "BOOKMYSHOW", "JIOCINEMA", "SONYLIV"] },
       { "category": "Health", "triggers": ["PHARMEASY", "APOLLO", "HOSPITAL", "PHARMACY", "1MG", "NETMEDS", "MEDPLUS"] },
-      { "category": "Financial", "triggers": ["EMI", "LIC", "INSURANCE", "MUTUAL FUND", "SIP", "CRED", "ZERODHA", "GROWW"] },
+      { "category": "Financial", "triggers": ["INSURANCE", "MUTUAL FUND", "CREDCLUB", "ZERODHA", "GROWW"], "wordTriggers": ["EMI", "LIC", "SIP", "CRED"] },
       { "category": "Transfers", "triggers": ["UPI", "IMPS", "NEFT", "RTGS"] }
     ]
   },
@@ -103,7 +113,7 @@
     "2. Reject if sender matches any nonBankSenders.",
     "3. Reject if body contains any excludeWords or promoWords.",
     "4. direction: earliest of debitWords (expense) vs creditWords (income); none => NotTransaction.",
-    "5. amount: amountRegex.findAll; drop any whose <=balanceLookbehindChars-char lookbehind contains a balancePrefix; among the rest pick the one NEAREST the direction verb. None => Unreadable.",
+    "5. amount: amountRegex.findAll; drop any that is a balance (a whole-word balancePrefix inside the balanceContextChars before it, bounded by the previous sentence boundary / previous amount, or the balanceAfterRegex trailing form); among the rest pick the one NEAREST the direction verb. None => Unreadable.",
     "6. extras: accountRegex tail (last 3–4 digits), merchantRegex (best-effort, nullable).",
     "7. post: markSelfTransfers (same day + same amount debit+credit => isTransfer, excluded from totals); dedupNearDuplicates (same amount+direction within dedupWindowMs).",
     "8. overrides precedence: per-message force-include/exclude > exclude-sender-core > automatic."

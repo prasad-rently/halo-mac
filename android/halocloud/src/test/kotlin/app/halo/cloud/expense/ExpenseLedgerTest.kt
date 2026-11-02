@@ -179,12 +179,35 @@ class ExpenseLedgerTest {
         assertEquals(listOf("Health" to 200.0), ledger().month(YearMonth.of(2026, 6)).byCategory)
     }
 
+    private val packText get() = File(System.getProperty("halo.expenseFixtures")!!).parentFile.resolve("india-bank-sms.v1.json").readText()
+    /** The shipped pack's JSON with its `version` replaced - stands in for the pack an older/newer build shipped. */
+    private fun packAtVersion(v: Int) = PatternPack.parse(packText.replaceFirst(Regex("\"version\": \\d+"), "\"version\": $v"))
+
     @Test fun `rows parsed under a different pack version are discarded and rescanned, overrides are kept`() {
         val l = ledger(); ExpenseIngest(FakeSmsSource(inbox), l, clock = { now }).run(); l.exclude("1_$june")
-        val bumped = PatternPack.parse(File(System.getProperty("halo.expenseFixtures")!!).parentFile.resolve("india-bank-sms.v1.json").readText().replaceFirst("\"version\": 1", "\"version\": 2"))
+        val bumped = packAtVersion(PatternPack.indiaDefault.version + 1)
         val l2 = ExpenseLedger(file, sealer, bumped, utc)
         assertEquals(0, l2.transactionCount()); assertNull(l2.highWater(1))
         assertTrue("1_$june" in l2.overrides().excludedIds)
+    }
+
+    // The parser rules changed (balance/card-payment/delivery/whole-word categories), so the shipped pack moved to v2. A phone that
+    // already holds a ledger parsed under v1 would otherwise keep its false positives forever: the high-water mark means those rows are
+    // never re-read. This is what makes the upgrade rescan, with the user's overrides surviving.
+    @Test fun `a ledger written under the previous pack version (1) is rescanned by the shipped pack and the user's overrides survive`() {
+        assertTrue("the shipped pack must be newer than the v1 that parsed the old rows", PatternPack.indiaDefault.version > 1)
+        val old = ExpenseLedger(file, sealer, packAtVersion(1), utc)
+        ExpenseIngest(FakeSmsSource(inbox), old, clock = { now }).run()
+        old.exclude("1_$june"); old.setCategory("6_${june + 300_000}", "Health")
+        assertTrue(old.transactionCount() > 0)
+
+        val upgraded = ExpenseLedger(file, sealer, PatternPack.indiaDefault, utc)
+        assertEquals("derived rows from the old rules are dropped", 0, upgraded.transactionCount())
+        assertNull("so the inbox is read again from the start", upgraded.highWater(1))
+        assertTrue("1_$june" in upgraded.overrides().excludedIds)
+        assertEquals("Health", upgraded.overrides().categoryById["6_${june + 300_000}"])
+        ExpenseIngest(FakeSmsSource(inbox), upgraded, clock = { now }).run()
+        assertTrue("and the rescan repopulates under the new rules", upgraded.transactionCount() > 0)
     }
 
     @Test fun `resetScan forgets derived rows but not the user's overrides`() {

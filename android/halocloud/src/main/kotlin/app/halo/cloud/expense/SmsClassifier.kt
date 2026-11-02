@@ -5,8 +5,9 @@ package app.halo.cloud.expense
  * service -> promotional -> DLT suffix -> uncategorized, with the keyword lists read from the pattern pack
  * (docs/specs/pattern-packs/india-bank-sms.v1.json, `classifier`).
  *
- * NOTE (see expense-fixtures.v1.json): the desktop's `SmsClassifier.swift` is a *compact* hard-coded port
- * with shorter lists, so the two can classify an edge message differently. The fixtures record where.
+ * The desktop's `SmsClassifier.swift` reads the very same `classifier` section of the pack (it used to be a compact
+ * hard-coded port with shorter lists, which made two fixtures classify differently), so the two cannot diverge on a
+ * keyword list any more; `expense-fixtures.v1.json` holds both to the same `expect.classifier`.
  */
 object SmsClassifier {
     fun classify(sender: String, body: String, pack: PatternPack = PatternPack.indiaDefault): SmsCategory {
