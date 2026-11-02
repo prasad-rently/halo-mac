@@ -23,6 +23,7 @@ object TransactionParser {
         if (pack.nonBankSenders.any { sender.contains(it) }) return ParseOutcome.NotTransaction
         if (pack.excludeWords.any { upper.contains(it) }) return ParseOutcome.NotTransaction
         if (pack.promoWords.any { upper.contains(it) }) return ParseOutcome.NotTransaction
+        if (pack.rejectPatterns.any { it.matcher(upper).find() }) return ParseOutcome.NotTransaction
 
         // 4. Direction — earliest debit vs credit verb wins.
         val (direction, verbLoc) = earliestVerb(upper, pack) ?: return ParseOutcome.NotTransaction
@@ -61,18 +62,46 @@ object TransactionParser {
         val m = pack.amount.matcher(upper)
         var best: Double? = null
         var bestDist = Int.MAX_VALUE
+        var prevEnd = 0
         while (m.find()) {
-            val loc = m.start()
-            // Drop balance amounts: look back up to N chars for a balance prefix.
-            val backLen = minOf(pack.balanceLookbehindChars, loc)
-            val back = upper.substring(loc - backLen, loc)
-            if (pack.balancePrefix.any { back.contains(it) }) continue
+            val loc = m.start(); val end = m.end()
+            val isBalance = isBalanceAmount(upper, loc, end, prevEnd, pack)
+            prevEnd = end
+            if (isBalance) continue
             val v = m.group(1).replace(",", "").toDoubleOrNull() ?: continue
             val d = abs(loc - verbLoc)
             if (d < bestDist) { bestDist = d; best = v }        // strict <: on a tie the earlier match wins, as min() does
         }
         return best
     }
+
+    /**
+     * An amount is the BALANCE, not the transaction, when (a) a balance word starts a word in the [PatternPack.balanceContextChars]
+     * before it - looking back only to the previous sentence boundary and the previous amount, so "Low avl bal alert. Rs 700
+     * debited" keeps the 700 - or (b) the text right after it reads "is your available balance". (The old rule looked back a fixed
+     * 14 chars, which missed "AVAILABLE BALANCE IN YOUR ACCOUNT IS INR 5,000".)
+     */
+    private fun isBalanceAmount(upper: String, loc: Int, end: Int, prevEnd: Int, pack: PatternPack): Boolean {
+        var from = maxOf(prevEnd, loc - pack.balanceContextChars, 0)
+        if (from < loc) {
+            val seg = upper.substring(from, loc)
+            val b = pack.balanceClauseBoundary.matcher(seg)
+            var cut = -1
+            while (b.find()) cut = b.end()
+            if (cut >= 0) from += cut
+        }
+        for (w in pack.balancePrefix) {
+            var i = upper.indexOf(w, from)
+            while (i >= 0 && i + w.length <= loc) {
+                if (i == 0 || !PatternPack.isLetter(upper[i - 1])) return true
+                i = upper.indexOf(w, i + 1)
+            }
+        }
+        val tail = upper.substring(end, minOf(upper.length, end + BALANCE_AFTER_CHARS))
+        return pack.balanceAfter.matcher(tail).find()
+    }
+
+    private const val BALANCE_AFTER_CHARS = 40
 
     /** First non-empty capture group of the first match. */
     private fun firstCapture(p: java.util.regex.Pattern, upper: String): String? {

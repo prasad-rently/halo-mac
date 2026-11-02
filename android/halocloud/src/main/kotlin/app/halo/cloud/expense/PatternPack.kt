@@ -17,7 +17,13 @@ import java.util.regex.Pattern
 // this package touches the network: amounts are sensitive and cloud sync of derived data is a v2.7 decision.
 
 /** One §12 spend-category rule: first rule with any trigger as a substring of UPPER(merchant + " " + body) wins. */
-data class CategoryRule(val category: String, val triggers: List<String>)
+data class CategoryRule(
+    val category: String,
+    /** Substring triggers. */
+    val triggers: List<String>,
+    /** Whole-word triggers (v2): must not sit inside a longer run of A-Z letters, so CRED does not match CREDITED. */
+    val wordTriggers: List<String> = emptyList(),
+)
 
 /** The pack's classifier section (F-044 §7.4). */
 data class ClassifierRules(
@@ -38,7 +44,7 @@ class PatternPack(
     val id: String,
     val version: Int,
     val currency: String,
-    val balanceLookbehindChars: Int,
+    val balanceContextChars: Int,
     val dedupWindowMs: Long,
     val amount: Pattern,
     val account: Pattern,
@@ -46,9 +52,15 @@ class PatternPack(
     val debitWords: List<String>,
     val creditWords: List<String>,
     val excludeWords: List<String>,
+    /** Regexes over the UPPERCASED body; a hit means NotTransaction (credit-card bill-payment acknowledgements). */
+    val rejectPatterns: List<Pattern>,
     val promoWords: List<String>,
     val nonBankSenders: List<String>,
     val balancePrefix: List<String>,
+    /** Where a "sentence" ends when looking back from an amount for a balance word. */
+    val balanceClauseBoundary: Pattern,
+    /** Matched at the start of the text right after an amount: "is your available balance". */
+    val balanceAfter: Pattern,
     val categories: List<CategoryRule>,
     val classifier: ClassifierRules,
 ) {
@@ -59,7 +71,7 @@ class PatternPack(
     fun category(merchant: String?, body: String, direction: Direction): String {
         if (direction == Direction.CREDIT) return "Income"
         val hay = ((merchant ?: "") + " " + body).uppercase()
-        for (rule in categories) if (rule.triggers.any { hay.contains(it) }) return rule.category
+        for (rule in categories) if (rule.triggers.any { hay.contains(it) } || rule.wordTriggers.any { containsWord(hay, it) }) return rule.category
         return "Other"
     }
 
@@ -67,6 +79,22 @@ class PatternPack(
     val allCategoryNames: List<String> get() = categories.map { it.category }.filter { it != "Transfers" } + listOf("Income", "Transfers", "Other")
 
     companion object {
+        /** A-Z letters only: the boundary test for word triggers and balance words (the text is already uppercased). */
+        internal fun isLetter(c: Char) = c in 'A'..'Z'
+
+        /** True when [word] occurs in [hay] with no A-Z letter immediately before or after it. */
+        fun containsWord(hay: String, word: String): Boolean {
+            var from = 0
+            while (true) {
+                val i = hay.indexOf(word, from)
+                if (i < 0) return false
+                val before = i == 0 || !isLetter(hay[i - 1])
+                val after = i + word.length >= hay.length || !isLetter(hay[i + word.length])
+                if (before && after) return true
+                from = i + 1
+            }
+        }
+
         const val RESOURCE = "/india-bank-sms.v1.json"
 
         /** The pack that ships with the app, read from the one shared file. */
@@ -86,13 +114,13 @@ class PatternPack(
             val c = root["classifier"]!!.jsonObject
             val p = root["parser"]!!.jsonObject
             val cats = root["categories"]!!.jsonObject["rules"]!!.jsonArray.map {
-                val o = it.jsonObject; CategoryRule(o.str("category"), o.list("triggers"))
+                val o = it.jsonObject; CategoryRule(o.str("category"), o.list("triggers"), if (o["wordTriggers"] == null) emptyList() else o.list("wordTriggers"))
             }
             return PatternPack(
                 id = root.str("id"),
                 version = (root["version"] as JsonPrimitive).int,
                 currency = root.str("currency"),
-                balanceLookbehindChars = tuning["balanceLookbehindChars"]!!.jsonPrimitive.int,
+                balanceContextChars = tuning["balanceContextChars"]!!.jsonPrimitive.int,
                 dedupWindowMs = tuning["dedupWindowMs"]!!.jsonPrimitive.long,
                 // The pack's regexes are written case-tolerant ("at"/"to"/"x"); the parser runs them over the
                 // UPPERCASED body, exactly as the desktop does with its uppercased copies of the same patterns.
@@ -102,9 +130,12 @@ class PatternPack(
                 debitWords = p.list("debitWords"),
                 creditWords = p.list("creditWords"),
                 excludeWords = p.list("excludeWords"),
+                rejectPatterns = p.list("rejectPatterns").map { Pattern.compile(it) },
                 promoWords = p.list("promoWords"),
                 nonBankSenders = p.list("nonBankSenders"),
                 balancePrefix = p.list("balancePrefix"),
+                balanceClauseBoundary = Pattern.compile(p.str("balanceClauseBoundaryRegex")),
+                balanceAfter = Pattern.compile(p.str("balanceAfterRegex")),
                 categories = cats,
                 classifier = ClassifierRules(
                     otpKeywords = c.list("otpKeywords"),

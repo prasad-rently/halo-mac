@@ -23,6 +23,9 @@ enum TransactionParser {
         if pack.nonBankSenders.contains(where: { sender.contains($0) }) { return .notTransaction }
         if pack.excludeWords.contains(where: { upper.contains($0) }) { return .notTransaction }
         if pack.promoWords.contains(where: { upper.contains($0) }) { return .notTransaction }
+        // Credit-card bill-payment acknowledgements (pack v2): the card's purchases are already counted one by one.
+        let whole = NSRange(location: 0, length: upper.length)
+        if pack.rejectPatterns.contains(where: { $0.firstMatch(in: upper as String, range: whole) != nil }) { return .notTransaction }
 
         // 4. Direction — earliest debit vs credit verb wins.
         guard let (direction, verbLoc) = earliestVerb(in: upper, pack: pack) else {
@@ -35,8 +38,8 @@ enum TransactionParser {
         }
 
         // 6. Extras (best-effort).
-        let account = firstCapture(pack.accountRegex, in: upper)
-        let merchant = firstCapture(pack.merchantRegex, in: upper)?.trimmingCharacters(in: .whitespaces)
+        let account = firstCapture(pack.account, in: upper)
+        let merchant = firstCapture(pack.merchant, in: upper)?.trimmingCharacters(in: .whitespaces)
 
         var confidence = 0.6
         if account != nil { confidence += 0.2 }
@@ -70,30 +73,62 @@ enum TransactionParser {
     // MARK: Amount
 
     private static func nearestAmount(in upper: NSString, verbLoc: Int, pack: PatternPack) -> Double? {
-        guard let re = try? NSRegularExpression(pattern: pack.amountRegex) else { return nil }
         let full = NSRange(location: 0, length: upper.length)
         var candidates: [(value: Double, loc: Int)] = []
+        var prevEnd = 0
 
-        re.enumerateMatches(in: upper as String, range: full) { m, _, _ in
+        pack.amount.enumerateMatches(in: upper as String, range: full) { m, _, _ in
             guard let m, m.numberOfRanges > 1 else { return }
-            let matchLoc = m.range.location
-            // Drop balance amounts: look back up to N chars for a balance prefix.
-            let backLen = min(pack.balanceLookbehindChars, matchLoc)
-            let back = upper.substring(with: NSRange(location: matchLoc - backLen, length: backLen))
-            if pack.balancePrefix.contains(where: { back.contains($0) }) { return }
-
+            let loc = m.range.location, end = loc + m.range.length
+            let isBalance = isBalanceAmount(upper, loc: loc, end: end, prevEnd: prevEnd, pack: pack)
+            prevEnd = end
+            if isBalance { return }
             let numStr = upper.substring(with: m.range(at: 1)).replacingOccurrences(of: ",", with: "")
-            if let v = Double(numStr) { candidates.append((v, matchLoc)) }
+            if let v = Double(numStr) { candidates.append((v, loc)) }
         }
         guard !candidates.isEmpty else { return nil }
-        // Nearest to the direction verb.
+        // Nearest to the direction verb (first wins a tie, like the phone).
         return candidates.min { abs($0.loc - verbLoc) < abs($1.loc - verbLoc) }?.value
     }
 
+    /// An amount is the BALANCE, not the transaction, when (a) a balance word starts a word in the
+    /// `balanceContextChars` before it — looking back only to the previous sentence boundary and the previous amount, so
+    /// "Low avl bal alert. Rs 700 debited" keeps the 700 — or (b) the text right after it reads "is your available
+    /// balance". (The old rule looked back a fixed 14 chars, which missed "AVAILABLE BALANCE IN YOUR ACCOUNT IS INR 5,000".)
+    private static func isBalanceAmount(_ upper: NSString, loc: Int, end: Int, prevEnd: Int, pack: PatternPack) -> Bool {
+        var from = max(prevEnd, loc - pack.balanceContextChars, 0)
+        if from < loc {
+            let seg = upper.substring(with: NSRange(location: from, length: loc - from))
+            let segRange = NSRange(location: 0, length: (seg as NSString).length)
+            var cut = -1
+            pack.balanceClauseBoundary.enumerateMatches(in: seg, range: segRange) { m, _, _ in
+                if let m { cut = m.range.location + m.range.length }
+            }
+            if cut >= 0 { from += cut }
+        }
+        if from < loc {
+            for w in pack.balancePrefix {
+                let n = w.utf16.count
+                var scan = from
+                while scan < loc {
+                    let r = upper.range(of: w, options: [], range: NSRange(location: scan, length: loc - scan))
+                    if r.location == NSNotFound || r.location + n > loc { break }
+                    if r.location == 0 || !PatternPack.isLetter(upper.character(at: r.location - 1)) { return true }
+                    scan = r.location + 1
+                }
+            }
+        }
+        let tailLen = min(balanceAfterChars, upper.length - end)
+        guard tailLen > 0 else { return false }
+        let tail = upper.substring(with: NSRange(location: end, length: tailLen))
+        return pack.balanceAfter.firstMatch(in: tail, range: NSRange(location: 0, length: (tail as NSString).length)) != nil
+    }
+
+    private static let balanceAfterChars = 40
+
     // MARK: Regex capture helper
 
-    private static func firstCapture(_ pattern: String, in upper: NSString) -> String? {
-        guard let re = try? NSRegularExpression(pattern: pattern) else { return nil }
+    private static func firstCapture(_ re: NSRegularExpression, in upper: NSString) -> String? {
         let full = NSRange(location: 0, length: upper.length)
         guard let m = re.firstMatch(in: upper as String, range: full) else { return nil }
         // Return the first non-empty capture group.

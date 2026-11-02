@@ -123,6 +123,7 @@
 		000000000000000000008094 /* NetworkTrafficMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008093 /* NetworkTrafficMonitor.swift */; };
 		000000000000000000008096 /* NetworkTrafficSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008095 /* NetworkTrafficSection.swift */; };
 		000000000000000000008098 /* tracker-domains.json in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008097 /* tracker-domains.json */; };
+		000000000000000000008296 /* india-bank-sms.v1.json in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008295 /* india-bank-sms.v1.json */; };
 		000000000000000000008104 /* AppUsageTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008103 /* AppUsageTracker.swift */; };
 		000000000000000000008106 /* AppUsageInsightsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008105 /* AppUsageInsightsSection.swift */; };
 		000000000000000000008114 /* MemoryTrendTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000008113 /* MemoryTrendTracker.swift */; };
@@ -418,6 +419,7 @@
 		000000000000000000008087 /* privacy-patterns.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Halo/Resources/privacy-patterns.json"; sourceTree = "<group>"; };
 		000000000000000000008093 /* NetworkTrafficMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/Scanner/NetworkTrafficMonitor.swift; sourceTree = "<group>"; };
 		000000000000000000008095 /* NetworkTrafficSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Performance/NetworkTrafficSection.swift; sourceTree = "<group>"; };
+		000000000000000000008295 /* india-bank-sms.v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = "india-bank-sms.v1.json"; path = "docs/specs/pattern-packs/india-bank-sms.v1.json"; sourceTree = SOURCE_ROOT; };
 		000000000000000000008097 /* tracker-domains.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Halo/Resources/tracker-domains.json"; sourceTree = "<group>"; };
 		000000000000000000008103 /* AppUsageTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Core/AppUsageTracker.swift; sourceTree = "<group>"; };
 		000000000000000000008105 /* AppUsageInsightsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Halo/Features/Dashboard/AppUsageInsightsSection.swift; sourceTree = "<group>"; };
@@ -719,6 +721,7 @@
 				000000000000000000001058 /* PrivacyInfo.xcprivacy */,
 				000000000000000000004001 /* signatures.json */,
 				000000000000000000008097 /* tracker-domains.json */,
+				000000000000000000008295 /* india-bank-sms.v1.json */,
 				000000000000000000008087 /* privacy-patterns.json */,
 				000000000000000000009001 /* GetHealthScoreIntent.swift */,
 				000000000000000000009003 /* GetCPUUsageIntent.swift */,
@@ -1166,6 +1169,7 @@
 				000000000000000000001059 /* PrivacyInfo.xcprivacy in Resources */,
 				000000000000000000004002 /* signatures.json in Resources */,
 				000000000000000000008098 /* tracker-domains.json in Resources */,
+				000000000000000000008296 /* india-bank-sms.v1.json in Resources */,
 				000000000000000000008088 /* privacy-patterns.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -22,7 +22,7 @@ import java.time.ZoneId
  * The cross-language contract (F-056 FR-E1/E2): docs/specs/pattern-packs/expense-fixtures.v1.json, whose `expect`
  * blocks were recorded from the REAL Swift desktop implementation (HaloTests ExpenseFixtureTests re-checks it).
  * This Kotlin port must agree on parse / amount / direction / merchant / account / category, and on every
- * pipeline outcome. The ONE place it may legitimately differ is `expect.classifierKotlin` — see that field's note.
+ * pipeline outcome; there is no per-platform override.
  */
 class ExpenseFixtureTest {
     private val pack = PatternPack.indiaDefault
@@ -37,7 +37,7 @@ class ExpenseFixtureTest {
             val m = e.jsonObject; val id = m.s("id")!!; val x = m["expect"]!!.jsonObject
             val sender = m.s("sender")!!; val body = m.s("body")!!
             val cls = SmsClassifier.classify(sender, body, pack).wire
-            val wantCls = x.s("classifierKotlin") ?: x.s("classifier")
+            val wantCls = x.s("classifier")
             if (cls != wantCls) bad += "classifier $id: got $cls want $wantCls"
 
             val r = TransactionParser.parse(sender, body, id, 0L, pack)
@@ -61,12 +61,13 @@ class ExpenseFixtureTest {
         assertTrue("Kotlin disagrees with the Swift-recorded fixtures:\n" + bad.joinToString("\n"), bad.isEmpty())
     }
 
-    @Test fun `classifierKotlin divergences never create or hide a transaction - the parser rejects the message either way`() {
-        val diverging = root["messages"]!!.jsonArray.map { it.jsonObject }.filter { it["expect"]!!.jsonObject.s("classifierKotlin") != null }
-        assertTrue("at least the two known divergences", diverging.size >= 2)
-        for (m in diverging) {
-            val x = m["expect"]!!.jsonObject
-            assertEquals("${m.s("id")}: a message the classifiers disagree on must not be a transaction on either side", "notTransaction", x.s("parse"))
+    @Test fun `there are no per-platform expectations - desktop and phone are held to the same expect block`() {
+        // The desktop classifier used to be a compact hard-coded port, so two fixtures carried an `expect.classifierKotlin`
+        // override. Both platforms now read the classifier lists from the pack; an override creeping back in would let the
+        // two drift again without either test noticing.
+        for (e in root["messages"]!!.jsonArray) {
+            val m = e.jsonObject
+            assertTrue("${m.s("id")}: no classifierKotlin override - fix the divergence instead", m["expect"]!!.jsonObject["classifierKotlin"] == null)
         }
     }
 

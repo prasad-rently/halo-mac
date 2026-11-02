@@ -1,7 +1,7 @@
 {
  "id": "expense-fixtures",
  "version": 1,
- "description": "Cross-language contract for F-048/F-056: bank/UPI/card SMS -> expected classification and parse. 'expect' was produced by running the REAL Swift desktop TransactionParser / SmsClassifier / PatternPack.category (HaloTests ExpenseFixtureTests re-checks it); the Kotlin port (android/halocloud ExpenseFixtureTest) must agree. The one sanctioned difference is expect.classifierKotlin: the Kotlin classifier is pack-driven (full classifier lists) while the desktop's is a compact hard-coded port, so two messages classify differently; the Kotlin test insists every such message is a notTransaction on the parse side, so a classifier divergence can never create or hide a transaction. Where the desktop does something questionable it is recorded as-is with a 'note' - fix desktop and fixture together, never one alone. All messages are synthetic (no real account data).",
+ "description": "Cross-language contract for F-048/F-056: bank/UPI/card SMS -> expected classification and parse. The desktop (Halo/Features/Expenditure, HaloTests ExpenseFixtures) and the phone (android/halocloud ExpenseFixtureTest) both read the SAME rules from india-bank-sms.v1.json, and both must produce exactly the 'expect' blocks below - there is no per-platform override. Expectations follow the spec (F-048, F-044 7.4), not whichever implementation was written first; a message that was once recorded as a known quirk is now fixed and its note says what changed. All messages are synthetic (no real account data).",
  "pack": "india-bank-sms.v1.json",
  "messages": [
   {
@@ -473,11 +473,10 @@
    "sender": "VK-ICICIB-T",
    "body": "Refund of Rs 899 initiated for order. Reference 3345",
    "expect": {
-    "classifier": "service",
-    "classifierKotlin": "transactional",
+    "classifier": "transactional",
     "parse": "notTransaction"
    },
-   "note": "Desktop classifier says service (ORDER). The pack's broader transactionalStrong list has REFUND, so a pack-driven classifier says transactional; the parser then rejects it (INITIATED). Pipeline result is identical, so the Kotlin test pins pipeline behaviour for it. The Kotlin port classifies it from the pack (transactional, via REFUND) and the Swift desktop from its compact lists (service): see expect.classifierKotlin. Harmless - it is not a transaction either way."
+   "note": "Classified transactional by the pack (REFUND is in transactionalStrong); the parser then rejects it (INITIATED is an exclude word), so it is not a transaction. Desktop and phone now read the same classifier lists from the pack (F-044 7.4), so they agree."
   },
   {
    "id": "fp-nonbank-amazon",
@@ -503,14 +502,9 @@
    "body": "Your order has been delivered. Rs 799 paid via UPI",
    "expect": {
     "classifier": "transactional",
-    "parse": "ok",
-    "amount": 799,
-    "direction": "debit",
-    "merchant": null,
-    "accountHint": null,
-    "category": "Transfers"
+    "parse": "notTransaction"
    },
-   "note": "DESKTOP QUIRK (false positive): an Amazon delivery notice from a DLT header that is not in nonBankSenders (AMZNIN vs AMAZON) and mentions UPI/'paid' is classified Transactional and parsed as a Rs 799 debit."
+   "note": "A delivery notice from a DLT header that is not in nonBankSenders (AMZNIN vs AMAZON) that also mentions UPI/'paid'. The classifier keeps its spec order (transactional before service, F-048 11.2) so it is transactional, but the parser rejects delivery notices (DELIVERED / OUT FOR DELIVERY / SHIPPED / DISPATCHED are exclude words, F-048 11.5 'delivery/service all correctly excluded'). Previously parsed as a Rs 799 debit."
   },
   {
    "id": "fp-personal-sender",
@@ -532,11 +526,10 @@
    "sender": "VM-AIRTEL-S",
    "body": "Recharge of Rs 299 successful. Validity 28 days",
    "expect": {
-    "classifier": "service",
-    "classifierKotlin": "promotional",
+    "classifier": "promotional",
     "parse": "notTransaction"
    },
-   "note": "Classifier divergence (non-transactional both ways): the pack's promoKeywords include RECHARGE so the pack-driven Kotlin classifier says promotional; the Swift desktop's compact promo list lacks it, so it falls to the -S DLT suffix and says service. See expect.classifierKotlin. Neither feeds the expense pipeline."
+   "note": "Classified promotional by the pack (RECHARGE is in promoKeywords). Not a transaction either way (the sender AIRTEL is also a non-bank sender)."
   },
   {
    "id": "fp-nonmoney-debited",
@@ -577,14 +570,9 @@
    "body": "Payment of Rs 12,400 received towards your HDFC Bank Credit Card XX9981. Thank you",
    "expect": {
     "classifier": "transactional",
-    "parse": "ok",
-    "amount": 12400,
-    "direction": "debit",
-    "merchant": null,
-    "accountHint": "9981",
-    "category": "Financial"
+    "parse": "notTransaction"
    },
-   "note": "DESKTOP QUIRK: 'Payment of Rs 12,400 received towards your credit card' is a debit - 'PAYMENT OF' is a debit verb and appears before 'RECEIVED'. It is the user paying their card bill, so a debit is defensible, but it is a settled bill and not a purchase."
+   "note": "A card issuer acknowledging that the user paid their card bill. The purchases on the card were already counted one by one, so counting the bill payment again would double the spend; the account debit that funded it is its own message. The parser rejects it (rejectPatterns). Previously parsed as a Rs 12,400 debit."
   },
   {
    "id": "edge-inr-lowercase",
@@ -710,6 +698,346 @@
     "classifier": "uncategorized",
     "parse": "notTransaction"
    }
+  },
+  {
+   "id": "fp-balance-only-available-balance",
+   "sender": "VK-HDFCBK-T",
+   "body": "Your A/C XX1234 has been debited. Available balance in your account is INR 5,000.00",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "unreadable"
+   },
+   "note": "Balance-only alert: a debit verb, but the only figure is the balance. It must not be counted as the debit amount (spec D5/D6: no usable amount = unreadable). 'AVAILABLE BALANCE IN YOUR ACCOUNT IS ' puts the balance word 20+ chars before the figure, further than the old 14-char lookbehind."
+  },
+  {
+   "id": "fp-balance-only-avl-bal-after-txn",
+   "sender": "VK-ICICIB-T",
+   "body": "Dear customer, A/C XX4521 was debited on 12-Jun. Avl bal after txn: Rs. 14,200.50",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "unreadable"
+   },
+   "note": "Same family: the balance is the only figure and follows a phrase longer than 14 chars."
+  },
+  {
+   "id": "fp-balance-only-trailing",
+   "sender": "VK-SBIINB-T",
+   "body": "A/C XX1234 debited today. Rs 5,000.00 is your available balance",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "unreadable"
+   },
+   "note": "The balance word FOLLOWS the figure ('Rs 5,000.00 is your available balance'); a lookbehind alone cannot see it."
+  },
+  {
+   "id": "ok-balance-word-in-earlier-sentence",
+   "sender": "VK-HDFCBK-T",
+   "body": "Low avl bal alert. Rs 700 debited from A/C XX1234 at SHOPX on 10-06",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 700,
+    "direction": "debit",
+    "merchant": "SHOPX",
+    "accountHint": "1234",
+    "category": "Other"
+   },
+   "note": "Control: a balance word in an EARLIER sentence must not drop the real amount - the balance context stops at the sentence boundary."
+  },
+  {
+   "id": "ok-balance-figure-then-amount",
+   "sender": "VK-HDFCBK-T",
+   "body": "Avl bal Rs 9,000 Rs 200 debited from A/C XX1234",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 200,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "1234",
+    "category": "Other"
+   },
+   "note": "Control: the balance context also stops at the previous amount, so the balance word that belongs to Rs 9,000 does not drop Rs 200."
+  },
+  {
+   "id": "fp-credit-card-payment-received-2",
+   "sender": "VK-ICICIB-T",
+   "body": "We have received your payment of Rs 1,200 towards your ICICI credit card XX4321. Thank you",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "notTransaction"
+   },
+   "note": "Another phrasing of the card-bill payment acknowledgement."
+  },
+  {
+   "id": "fp-credit-card-payment-thank-you",
+   "sender": "VK-SBIINB-S",
+   "body": "Thank you for the payment of Rs 8,500 on your SBI Card XX2210",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "notTransaction"
+   },
+   "note": "Card-bill payment acknowledgement without the word 'received'."
+  },
+  {
+   "id": "debit-credit-card-spend",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs 1,200 spent on HDFC Bank Credit Card XX4321 at AMAZON on 12-Jun-26.",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 1200,
+    "direction": "debit",
+    "merchant": "AMAZON",
+    "accountHint": "4321",
+    "category": "Shopping"
+   },
+   "note": "Control: a purchase on a credit card is still a debit."
+  },
+  {
+   "id": "fp-delivery-out-for-delivery",
+   "sender": "AX-FLPKRT-S",
+   "body": "Your order is out for delivery. Rs 499 paid via UPI",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "notTransaction"
+   },
+   "note": "Delivery notice from a header outside nonBankSenders."
+  },
+  {
+   "id": "fp-delivery-shipped",
+   "sender": "VM-MYNTRA-S",
+   "body": "Your parcel has been shipped. Rs 250 paid via UPI, delivery by Friday",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "notTransaction"
+   },
+   "note": "Shipping notice from a header outside nonBankSenders."
+  },
+  {
+   "id": "debit-bank-amazon-order",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.799 debited from A/C XX1234 for AMAZON order via UPI",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 799,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "1234",
+    "category": "Shopping"
+   },
+   "note": "Control: the bank's own debit alert for an order is a real debit (the delivery rejects only match delivery notices)."
+  },
+  {
+   "id": "debit-delivery-fee",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs 40 paid for delivery fee to SWIGGY via UPI",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 40,
+    "direction": "debit",
+    "merchant": "SWIGGY",
+    "accountHint": null,
+    "category": "Food & Dining"
+   },
+   "note": "Control: the bare word DELIVERY (a fee) is not a delivery notice - only DELIVERED / OUT FOR DELIVERY / SHIPPED / DISPATCHED are."
+  },
+  {
+   "id": "cat-credited-to-is-not-cred",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.500 debited from A/C XX1234 and credited to A/C XX9999 IMPS",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 500,
+    "direction": "debit",
+    "merchant": null,
+    "accountHint": "1234",
+    "category": "Transfers"
+   },
+   "note": "The CRED trigger used to match inside 'CREDITED' and file this as Financial. Short triggers now match whole words."
+  },
+  {
+   "id": "cat-lic-in-public",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.300 spent at PUBLIC LIBRARY on card XX4521",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 300,
+    "direction": "debit",
+    "merchant": "PUBLIC LIBRARY",
+    "accountHint": "4521",
+    "category": "Other"
+   },
+   "note": "LIC matched inside PUBLIC."
+  },
+  {
+   "id": "cat-ola-in-cola",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.60 spent at COLA POINT on card XX4521",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 60,
+    "direction": "debit",
+    "merchant": "COLA POINT",
+    "accountHint": "4521",
+    "category": "Other"
+   },
+   "note": "OLA matched inside COLA."
+  },
+  {
+   "id": "cat-sip-in-gossip",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.90 spent at GOSSIP CORNER on card XX4521",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 90,
+    "direction": "debit",
+    "merchant": "GOSSIP CORNER",
+    "accountHint": "4521",
+    "category": "Other"
+   },
+   "note": "SIP matched inside GOSSIP."
+  },
+  {
+   "id": "cat-cafe-in-decafe",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.150 spent at DECAFE ROASTERS on card XX4521",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 150,
+    "direction": "debit",
+    "merchant": "DECAFE ROASTERS",
+    "accountHint": "4521",
+    "category": "Other"
+   },
+   "note": "CAFE matched inside DECAFE."
+  },
+  {
+   "id": "cat-cred-word",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.499 paid to CRED via UPI",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 499,
+    "direction": "debit",
+    "merchant": "CRED",
+    "accountHint": null,
+    "category": "Financial"
+   },
+   "note": "Control: the CRED merchant as a whole word still files under Financial."
+  },
+  {
+   "id": "cat-ola-word",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.120 paid to OLA via UPI",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 120,
+    "direction": "debit",
+    "merchant": "OLA",
+    "accountHint": null,
+    "category": "Transport"
+   },
+   "note": "Control: OLA as a whole word still files under Transport."
+  },
+  {
+   "id": "cat-cafe-word",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.250 spent at CAFE COFFEE DAY on card XX4521",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 250,
+    "direction": "debit",
+    "merchant": "CAFE COFFEE DAY",
+    "accountHint": "4521",
+    "category": "Food & Dining"
+   },
+   "note": "Control: CAFE as a whole word still files under Food & Dining."
+  },
+  {
+   "id": "cat-olacabs-substring",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.210 paid to OLACABS via UPI",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 210,
+    "direction": "debit",
+    "merchant": "OLACABS",
+    "accountHint": null,
+    "category": "Transport"
+   },
+   "note": "Control: a real merchant name that merely starts with a short trigger keeps its own substring trigger."
+  },
+  {
+   "id": "cat-emi-in-premium",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.700 spent at PREMIUM MART on card XX4521",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 700,
+    "direction": "debit",
+    "merchant": "PREMIUM MART",
+    "accountHint": "4521",
+    "category": "Other"
+   },
+   "note": "EMI matched inside PREMIUM."
+  },
+  {
+   "id": "cat-act-in-react",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.999 spent at REACT BOOKS on card XX4521",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 999,
+    "direction": "debit",
+    "merchant": "REACT BOOKS",
+    "accountHint": "4521",
+    "category": "Other"
+   },
+   "note": "The old 'ACT ' (trailing-space) trigger matched inside REACT."
+  },
+  {
+   "id": "cat-act-word",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.999 paid to ACT FIBERNET via UPI",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 999,
+    "direction": "debit",
+    "merchant": "ACT FIBERNET",
+    "accountHint": null,
+    "category": "Bills & Utilities"
+   },
+   "note": "Control: ACT as a whole word still files under Bills & Utilities."
+  },
+  {
+   "id": "cat-cafeteria",
+   "sender": "VK-HDFCBK-T",
+   "body": "Rs.80 spent at OFFICE CAFETERIA on card XX4521",
+   "expect": {
+    "classifier": "transactional",
+    "parse": "ok",
+    "amount": 80,
+    "direction": "debit",
+    "merchant": "OFFICE CAFETERIA",
+    "accountHint": "4521",
+    "category": "Food & Dining"
+   },
+   "note": "Control: CAFE became a whole-word trigger, so CAFETERIA is listed as its own substring trigger."
   }
  ],
  "pipelines": [
