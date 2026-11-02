@@ -6,7 +6,10 @@ import android.os.Build
 import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import app.halo.mobile.background.BackgroundPrefs
+import app.halo.mobile.background.AndroidNotificationGate
+import app.halo.mobile.background.BackgroundController
+import app.halo.mobile.background.BackgroundRefusal
+import app.halo.mobile.background.BackgroundSettings
 import app.halo.mobile.background.HaloShareService
 import app.halo.mobile.background.ReceiverHost
 import app.halo.share.CancelToken
@@ -70,11 +73,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val listen: StateFlow<ListenState> = ReceiverHost.listen
     val pendingOffer: StateFlow<IncomingOffer?> = ReceiverHost.offer
 
-    private val bg = BackgroundPrefs(app)
-    private val _backgroundReceive = MutableStateFlow(bg.enabled)
-    val backgroundReceive: StateFlow<Boolean> = _backgroundReceive.asStateFlow()
-    private val _pausedBySystem = MutableStateFlow(bg.pausedBySystem)
-    val pausedBySystem: StateFlow<Boolean> = _pausedBySystem.asStateFlow()
+    // The switch observes the same process-wide settings the service and the notification's Stop button write to, so a Stop
+    // from the shade flips the switch immediately.
+    private val bgSettings = BackgroundSettings.get(app)
+    private val bgController = BackgroundController(bgSettings)
+    private val gate get() = AndroidNotificationGate(getApplication())
+    val backgroundReceive: StateFlow<Boolean> = bgSettings.enabled
+    val pausedBySystem: StateFlow<Boolean> = bgSettings.pausedBySystem
+    /** Non-null when enabling was refused (or undone) because Android would hide the persistent notification. */
+    val backgroundRefusal: StateFlow<BackgroundRefusal?> = bgSettings.refusal
 
     /** Files handed to us by the Sharesheet, waiting for the person to pick a device (F-055 FR-B3). */
     private val _shared = MutableStateFlow<List<Uri>>(emptyList())
@@ -146,15 +153,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── Background receiving (F-055 FR-B1/B2) ─────────────────────────────────────────────────
 
-    fun setBackgroundReceive(on: Boolean) {
-        bg.enabled = on; _backgroundReceive.value = on
-        if (on) { bg.pausedBySystem = false; _pausedBySystem.value = false; HaloShareService.start(getApplication()) } else HaloShareService.stop(getApplication())
+    /**
+     * The switch was turned on. FR-B1 needs the persistent notification, so this does NOT enable when it can't be shown:
+     * NEEDS_PERMISSION ⇒ the UI explains and asks, then calls [onNotificationPermissionResult]; REFUSED ⇒ nothing enabled
+     * ([backgroundRefusal] says why).
+     */
+    fun requestBackgroundReceive(): BackgroundController.Enable {
+        val r = bgController.requestEnable(gate, AndroidNotificationGate.canAskForPermission(getApplication()))
+        if (r == BackgroundController.Enable.STARTED) HaloShareService.start(getApplication())
+        return r
     }
 
-    /** Called when the app comes to the front: re-assert the service the user asked for, and pick up a system pause. */
+    fun onNotificationPermissionResult() {
+        if (bgController.onPermissionResult(gate) == BackgroundController.Enable.STARTED) HaloShareService.start(getApplication())
+    }
+
+    fun disableBackgroundReceive() { bgController.disable(); HaloShareService.stop(getApplication()) }
+
+    /** Called when the app comes to the front: re-assert the service the user asked for (if it can still run), and pick up a system pause. */
     fun syncBackgroundState() {
-        _backgroundReceive.value = bg.enabled; _pausedBySystem.value = bg.pausedBySystem
-        if (bg.enabled && !bg.pausedBySystem && !ReceiverHost.serviceActive) HaloShareService.start(getApplication())
+        if (bgController.shouldStartOnForeground(gate, ReceiverHost.serviceActive)) HaloShareService.start(getApplication())
     }
 
     // ── Sharesheet (F-055 FR-B3) ──────────────────────────────────────────────────────────────

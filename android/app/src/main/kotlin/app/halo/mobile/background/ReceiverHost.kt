@@ -26,14 +26,6 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.io.File
 
-/** F-055: user choices for background receiving. Default OFF — nothing runs in the background until the user says so (FR-B2). */
-class BackgroundPrefs(ctx: Context) {
-    private val p = ctx.applicationContext.getSharedPreferences("halo.background", Context.MODE_PRIVATE)
-    var enabled: Boolean get() = p.getBoolean("keepReceiving", false); set(v) { p.edit().putBoolean("keepReceiving", v).apply() }
-    /** Set when Android ended the service (e.g. the Android 15 six-hour `dataSync` limit) so the UI can say so. */
-    var pausedBySystem: Boolean get() = p.getBoolean("pausedBySystem", false); set(v) { p.edit().putBoolean("pausedBySystem", v).apply() }
-}
-
 /** The identity store HaloShare uses, reachable without a ViewModel (the service has none). */
 object HaloIdentity {
     fun store(ctx: Context): KeyValueStore {
@@ -57,6 +49,8 @@ object HaloIdentity {
  */
 object ReceiverHost {
     const val BACKGROUND_CONSENT_MS = 90_000L
+    /** A restart's bind can arrive before the old socket is released; wait for it this long rather than report "couldn't listen". */
+    const val BIND_RETRY_MS = 3_000L
 
     private val _listen = MutableStateFlow<ListenState>(ListenState.Stopped)
     val listen: StateFlow<ListenState> = _listen
@@ -93,7 +87,7 @@ object ReceiverHost {
             Thread({
                 try {
                     synchronized(lock) { if (server !== s) return@Thread }          // stopped before we even got going
-                    val port = s.start(HaloShare.DEFAULT_PORT)
+                    val port = s.start(HaloShare.DEFAULT_PORT, bindRetryMs = BIND_RETRY_MS)
                     // stop() ran while the socket was binding and could not see it: close it rather than leave a port
                     // open that nothing owns (and that Stop can no longer reach).
                     synchronized(lock) { if (server !== s) { s.stop(); return@Thread }; _listen.value = ListenState.Listening(port) }
@@ -112,13 +106,25 @@ object ReceiverHost {
 
     fun restart(ctx: Context, identity: DeviceIdentity) { if (_listen.value is ListenState.Listening) { stop(ctx); start(ctx, identity) } }
 
+    /** Listening, no transfer in flight and no consent prompt open — the only moments it is harmless to rebind or announce. */
+    fun isIdle(): Boolean = server?.let { it.sessionCount == 0 } == true && _listen.value is ListenState.Listening && !gate.isPending
+
+    /**
+     * The network changed: re-bind the receiver so it is serving on the new network — but never while a transfer or a consent
+     * prompt is live (that would cut it off for no reason the user can see). @return whether it restarted.
+     */
+    fun restartIfIdle(ctx: Context): Boolean {
+        if (!isIdle()) return false
+        restart(ctx, HaloIdentity.load(ctx)); return true
+    }
+
     /** Called on a server thread; blocks until the person answers. One prompt at a time — see [ConsentGate]. */
     private fun askConsent(app: Context, offer: IncomingOffer): ConsentDecision =
         gate.ask(offer, isVisible = { uiVisible }, onPending = { _offer.value = it },
             showPrompt = { id -> Notifications.showOffer(app, offer, id) }, clearPrompt = { Notifications.clearOffer(app) })
 
     /** [id] (from a notification button) makes a stale tap on an old prompt a no-op rather than an answer to a newer one. */
-    fun resolve(decision: ConsentDecision, id: Long? = null) { gate.resolve(decision, id) }
+    fun resolve(decision: ConsentDecision, id: Long? = null): Boolean = gate.resolve(decision, id)
 }
 
 /** Notification plumbing for the service and the background consent prompt. */
@@ -153,7 +159,7 @@ object Notifications {
     }
 
     /** The sender's self-chosen name is untrusted text from the LAN: strip control characters and bound it. */
-    internal fun safeAlias(alias: String): String = alias.filter { !it.isISOControl() }.trim().take(40).ifEmpty { "A device" }
+    internal fun safeAlias(alias: String): String = app.halo.share.Alias.clean(alias, 40).ifEmpty { "A device" }
 
     /**
      * Sender and size only — never file names: a notification can be mirrored or shown on a lock screen. The lock-screen
@@ -186,9 +192,15 @@ class ConsentActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getLongExtra(EXTRA_ID, -1L).takeIf { it >= 0 } ?: return       // no id ⇒ not one of ours
         when (intent.action) {
-            ACTION_ACCEPT -> ReceiverHost.resolve(ConsentDecision.ACCEPT, id)
+            ACTION_ACCEPT -> if (!ReceiverHost.resolve(ConsentDecision.ACCEPT, id)) tellExpired(context)
             ACTION_DECLINE -> ReceiverHost.resolve(ConsentDecision.DECLINE, id)
         }
     }
+    /** The prompt already timed out (and was declined) or was replaced: say so, instead of letting the tap look like it worked. Nothing was saved. */
+    private fun tellExpired(ctx: Context) {
+        Notifications.clearOffer(ctx)
+        runCatching { android.widget.Toast.makeText(ctx.applicationContext, "That request has expired — nothing was saved. Ask the sender to send again.", android.widget.Toast.LENGTH_LONG).show() }
+    }
+
     companion object { const val ACTION_ACCEPT = "app.halo.mobile.CONSENT_ACCEPT"; const val ACTION_DECLINE = "app.halo.mobile.CONSENT_DECLINE"; const val EXTRA_ID = "offerId" }
 }

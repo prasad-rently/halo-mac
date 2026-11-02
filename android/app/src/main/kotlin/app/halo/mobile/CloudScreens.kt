@@ -54,6 +54,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.halo.mobile.cloud.ClipItem
 import app.halo.mobile.cloud.CloudViewModel
+import app.halo.mobile.cloud.ProfileProblem
 import app.halo.mobile.cloud.LineUi
 import app.halo.cloud.PairingConfirmation
 import app.halo.mobile.cloud.PairUi
@@ -137,6 +138,7 @@ private val SMS_PERMISSIONS = arrayOf(Manifest.permission.READ_SMS, Manifest.per
 @Composable
 fun SmsScreen(vm: CloudViewModel) {
     val profile by vm.profile.collectAsStateWithLifecycle()
+    val problem by vm.profileProblem.collectAsStateWithLifecycle()
     val enabled by vm.smsEnabled.collectAsStateWithLifecycle()
     val lines by vm.lines.collectAsStateWithLifecycle()
     val syncing by vm.syncing.collectAsStateWithLifecycle()
@@ -153,7 +155,7 @@ fun SmsScreen(vm: CloudViewModel) {
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         canRead = granted(Manifest.permission.READ_SMS); canSeeSims = granted(Manifest.permission.READ_PHONE_STATE)
-        if (profile != null) vm.refreshLines()
+        if (profile != null) vm.refreshLines() else if (problem != null) vm.refreshProfile()
     }
     var allow by remember { mutableStateOf(vm.prefs.allow.joinToString(", ")) }
     var deny by remember { mutableStateOf(vm.prefs.deny.joinToString(", ")) }
@@ -161,7 +163,8 @@ fun SmsScreen(vm: CloudViewModel) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("SMS", color = Halo.Text, fontSize = 34.sp, fontWeight = FontWeight.Bold)
         if (profile == null) {
-            PairingPanel(vm, "Pair this phone with your Mac to sync your text messages to the Halo console. Everything is encrypted on the phone before it leaves.")
+            if (problem != null) ProfileProblemCard(vm, problem!!)
+            else PairingPanel(vm, "Pair this phone with your Mac to sync your text messages to the Halo console. Everything is encrypted on the phone before it leaves.")
             return@Column
         }
         warning?.let { HaloCard { Row(verticalAlignment = Alignment.Top) { Icon(Icons.Filled.Warning, null, tint = Halo.Amber, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(it, color = Halo.Amber, fontSize = 12.sp) } } }
@@ -261,6 +264,8 @@ private fun LineCard(l: LineUi, vm: CloudViewModel) {
 @Composable
 fun ClipboardScreen(vm: CloudViewModel) {
     val profile by vm.profile.collectAsStateWithLifecycle()
+    val problem by vm.profileProblem.collectAsStateWithLifecycle()
+    val historyKeyLost by vm.historyKeyLost.collectAsStateWithLifecycle()
     val enabled by vm.clipEnabled.collectAsStateWithLifecycle()
     val filter by vm.clipFilter.collectAsStateWithLifecycle()
     val history by vm.history.collectAsStateWithLifecycle()
@@ -270,12 +275,13 @@ fun ClipboardScreen(vm: CloudViewModel) {
     val ctx = LocalContext.current
     var accessibility by remember { mutableStateOf(vm.accessibilityEnabled()) }
     var confirmPurge by remember { mutableStateOf(false) }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { accessibility = vm.accessibilityEnabled(); vm.retryHistory() }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { accessibility = vm.accessibilityEnabled(); vm.retryHistory(); if (profile == null && problem != null) vm.refreshProfile() }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Clipboard", color = Halo.Text, fontSize = 34.sp, fontWeight = FontWeight.Bold)
         if (profile == null) {
-            PairingPanel(vm, "Pair this phone with your Mac to share your clipboard between them. Copies are encrypted before they leave.")
+            if (problem != null) ProfileProblemCard(vm, problem!!)
+            else PairingPanel(vm, "Pair this phone with your Mac to share your clipboard between them. Copies are encrypted before they leave.")
             return@Column
         }
         HaloCard {
@@ -325,6 +331,7 @@ fun ClipboardScreen(vm: CloudViewModel) {
                 if (history.isNotEmpty()) TextButton(onClick = { confirmPurge = true }) { Icon(Icons.Filled.Delete, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Purge synced") }
             }
             historyWarning?.let { Text(it, color = Halo.Amber, fontSize = 12.sp, modifier = Modifier.testTag("clip.storageWarning")) }
+            if (historyKeyLost) OutlinedButton(onClick = vm::resetHistory, modifier = Modifier.testTag("clip.resetHistory")) { Text("Reset clipboard history") }
             if (history.isEmpty()) HaloCard { Text("Nothing synced yet.", color = Halo.Text3, fontSize = 13.sp) }
             history.take(50).forEach { ClipRow(it) { vm.copy(it) } }
         }
@@ -355,12 +362,14 @@ private fun ClipRow(item: ClipItem, onCopy: () -> Unit) {
 @Composable
 fun CloudSettingsCard(vm: CloudViewModel) {
     val profile by vm.profile.collectAsStateWithLifecycle()
+    val problem by vm.profileProblem.collectAsStateWithLifecycle()
     var name by remember { mutableStateOf(vm.deviceName) }
     var confirm by remember { mutableStateOf(false) }
     HaloCard {
         SectionLabel("Halo cloud"); Spacer(Modifier.height(8.dp))
         val p = profile
-        if (p == null) Text("Not paired. Pair from the SMS or Clipboard tab.", color = Halo.Text3, fontSize = 13.sp)
+        if (p == null && problem != null) ProfileProblemCard(vm, problem!!)
+        else if (p == null) Text("Not paired. Pair from the SMS or Clipboard tab.", color = Halo.Text3, fontSize = 13.sp)
         else {
             Text("Connected to ${p.config.projectID}", color = Halo.Green, fontSize = 13.sp, modifier = Modifier.testTag("settings.cloud"))
             Text("Signed in as ${p.auth.email}", color = Halo.Text3, fontSize = 11.sp)
@@ -376,6 +385,47 @@ fun CloudSettingsCard(vm: CloudViewModel) {
         title = { Text("Disconnect this phone?", color = Halo.Text) },
         text = { Text("SMS and clipboard sync stop. You can pair again any time with a new code from your Mac.", color = Halo.Text2) },
         confirmButton = { Button(onClick = { vm.disconnect(); confirm = false }) { Text("Disconnect") } },
+        dismissButton = { OutlinedButton(onClick = { confirm = false }) { Text("Cancel") } },
+    )
+}
+
+
+/**
+ * Shown instead of the pairing panel when a saved connection exists but cannot be opened. Pairing again would
+ * overwrite it, so while the failure may be temporary the only action is "Try again" (and the screen retries on resume).
+ */
+@Composable
+fun ProfileProblemCard(vm: CloudViewModel, problem: ProfileProblem) {
+    var confirm by remember { mutableStateOf(false) }
+    HaloCard {
+        Row(verticalAlignment = Alignment.Top) {
+            Icon(Icons.Filled.Warning, null, tint = Halo.Amber, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
+            Column {
+                when (problem) {
+                    ProfileProblem.UNAVAILABLE -> {
+                        Text("Cloud profile temporarily unavailable — will retry.", color = Halo.Amber, fontSize = 13.sp, modifier = Modifier.testTag("cloud.profileUnavailable"))
+                        Text("Android's secure storage isn't answering right now. Your pairing is safe and nothing was changed; Halo tries again whenever you open this screen.", color = Halo.Text3, fontSize = 11.sp)
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(onClick = vm::refreshProfile, modifier = Modifier.testTag("cloud.profileRetry")) { Text("Try again") }
+                    }
+                    ProfileProblem.KEY_LOST -> {
+                        Text("This phone's saved Halo connection can't be unlocked.", color = Halo.Amber, fontSize = 13.sp, modifier = Modifier.testTag("cloud.profileKeyLost"))
+                        Text("The secure key that protected it was lost (this can happen after a system reset of the phone's key store). The connection can't be recovered; pair again with a new code from your Mac. Nothing in your cloud data is deleted.", color = Halo.Text3, fontSize = 11.sp)
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedButton(onClick = vm::refreshProfile) { Text("Try again") }
+                            Button(onClick = { confirm = true }, modifier = Modifier.testTag("cloud.profileReset")) { Text("Reset and pair again") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (confirm) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { confirm = false }, containerColor = Halo.Background,
+        title = { Text("Forget the unreadable connection?", color = Halo.Text) },
+        text = { Text("This removes the saved connection from this phone so you can pair again. It cannot be undone, but it could not be opened anyway.", color = Halo.Text2) },
+        confirmButton = { Button(onClick = { vm.resetLostProfile(); confirm = false }) { Text("Reset") } },
         dismissButton = { OutlinedButton(onClick = { confirm = false }) { Text("Cancel") } },
     )
 }

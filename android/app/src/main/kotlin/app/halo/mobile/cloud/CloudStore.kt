@@ -4,6 +4,8 @@ import android.content.Context
 import android.os.Build
 import app.halo.cloud.CloudAuthCredential
 import app.halo.cloud.FirebaseConfig
+import app.halo.cloud.ProfileLoad
+import app.halo.cloud.SealedBlobFile
 import app.halo.cloud.SyncState
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -29,16 +31,23 @@ data class CloudProfile(
 private val json = Json { ignoreUnknownKeys = true }
 
 class CloudStore(private val ctx: Context) {
-    private val file get() = File(ctx.filesDir, "cloud-profile.bin")
+    private val blob get() = SealedBlobFile(File(ctx.filesDir, "cloud-profile.bin"), SecretBox)
     private val prefs get() = ctx.getSharedPreferences("halo.cloud.identity", Context.MODE_PRIVATE)
 
-    fun load(): CloudProfile? = try {
-        if (!file.exists()) null else json.decodeFromString(CloudProfile.serializer(), String(SecretBox.open(file.readBytes()), Charsets.UTF_8))
-    } catch (e: Exception) { null }       // an unreadable profile (Keystore reset, corrupt file) means "not paired"
+    /**
+     * What is on disk, with the reason when it is not a usable profile. "Not paired" ([ProfileLoad.Missing] / [ProfileLoad.Corrupt])
+     * is distinct from a Keystore that is momentarily unavailable ([ProfileLoad.Unavailable] — keep the file, retry, never
+     * overwrite) and from a key that is gone for good ([ProfileLoad.KeyLost] — tell the user, offer a reset).
+     */
+    fun loadResult(): ProfileLoad<CloudProfile> = blob.load { json.decodeFromString(CloudProfile.serializer(), it) }
 
-    fun save(p: CloudProfile) { file.writeBytes(SecretBox.seal(json.encodeToString(CloudProfile.serializer(), p).toByteArray(Charsets.UTF_8))) }
+    /** The profile, or null for anything else — use [loadResult] when the difference matters. */
+    fun load(): CloudProfile? = (loadResult() as? ProfileLoad.Loaded)?.value
 
-    fun clear() { file.delete() }
+    /** Pairing creates the Keystore key if there is none (sealing never does — see [SecretBox]). Temp + rename, sealed before any file is touched. */
+    fun save(p: CloudProfile) { SecretBox.ensureKey(); blob.write(json.encodeToString(CloudProfile.serializer(), p)) }
+
+    fun clear() { blob.delete() }
 
     /** Stable across re-pairing so this phone's lines and messages stay under one `deviceId` in the cloud. */
     val deviceId: String get() = prefs.getString("deviceId", null) ?: UUID.randomUUID().toString().also { prefs.edit().putString("deviceId", it).apply() }

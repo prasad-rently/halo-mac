@@ -34,7 +34,7 @@ object SmsSyncRunner {
         _running.value = true
         try {
             val session = try { CloudRuntime.session(ctx) } catch (e: Exception) { return finish(prefs, SyncReport.fromFailure(e)) }
-                ?: return finish(prefs, SyncReport(error = "This phone isn't paired yet."))
+                ?: return finish(prefs, SyncReport(error = CloudRuntime.unpairedMessage(ctx, "This phone isn't paired yet.")))
             val engine = SmsSyncEngine(
                 rtdb = session.rtdb, crypto = session.crypto, deviceId = session.deviceId, deviceName = session.deviceName,
                 source = AndroidSmsSource(ctx, prefs), state = PrefsSyncState(ctx),
@@ -57,7 +57,7 @@ object SmsSyncRunner {
         // Everything here can throw (sign-in over a bad network, READ_SMS revoked since the screen opened), and the
         // caller is a bare viewModelScope.launch — an escaped exception would take the whole app down.
         return try {
-            val session = CloudRuntime.session(ctx) ?: return SyncReport(error = "This phone isn't paired yet.")
+            val session = CloudRuntime.session(ctx) ?: return SyncReport(error = CloudRuntime.unpairedMessage(ctx, "This phone isn't paired yet."))
             prefs.backfillDays = days
             SmsSyncEngine(session.rtdb, session.crypto, session.deviceId, session.deviceName, AndroidSmsSource(ctx, prefs), PrefsSyncState(ctx), pairingEpoch = session.profile.epoch).extendBackfill(days)
             run(ctx)
@@ -70,7 +70,7 @@ object SmsSyncRunner {
     @Synchronized fun retrySkipped(ctx: Context): SyncReport {
         val prefs = CloudPrefs(ctx)
         return try {
-            val session = CloudRuntime.session(ctx) ?: return SyncReport(error = "This phone isn't paired yet.")
+            val session = CloudRuntime.session(ctx) ?: return SyncReport(error = CloudRuntime.unpairedMessage(ctx, "This phone isn't paired yet."))
             SmsSyncEngine(session.rtdb, session.crypto, session.deviceId, session.deviceName, AndroidSmsSource(ctx, prefs), PrefsSyncState(ctx), pairingEpoch = session.profile.epoch).retryQuarantined()
             prefs.quarantinedCount = 0
             run(ctx)

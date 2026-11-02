@@ -12,6 +12,7 @@ import app.halo.cloud.FirebaseRtdbClient
 import app.halo.cloud.KeyCheck
 import app.halo.cloud.PairingConfirmation
 import app.halo.cloud.PairingPayload
+import app.halo.cloud.ProfileLoad
 import app.halo.cloud.SimLine
 import app.halo.cloud.SmsSyncEngine
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,15 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import java.util.Base64
+
+/** Why a paired phone shows no profile. */
+enum class ProfileProblem { UNAVAILABLE, KEY_LOST }
+
+private fun problemOf(r: ProfileLoad<*>): ProfileProblem? = when (r) {
+    is ProfileLoad.Unavailable -> ProfileProblem.UNAVAILABLE
+    ProfileLoad.KeyLost -> ProfileProblem.KEY_LOST
+    else -> null
+}
 
 sealed interface PairUi {
     object Idle : PairUi
@@ -45,8 +55,13 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
     private val store = CloudStore(app)
     val prefs = CloudPrefs(app)
 
-    private val _profile = MutableStateFlow(store.load())
+    private val initialLoad = store.loadResult()
+    private val _profile = MutableStateFlow((initialLoad as? ProfileLoad.Loaded)?.value)
     val profile: StateFlow<CloudProfile?> = _profile.asStateFlow()
+
+    /** Why there is no profile when the phone may well be paired: the saved connection can't be opened right now / ever again. Null = simply not paired (or fine). */
+    private val _problem = MutableStateFlow(problemOf(initialLoad))
+    val profileProblem: StateFlow<ProfileProblem?> = _problem.asStateFlow()
 
     private val _pair = MutableStateFlow<PairUi>(PairUi.Idle)
     val pair: StateFlow<PairUi> = _pair.asStateFlow()
@@ -75,15 +90,42 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
     val syncTick: StateFlow<Int> = SmsSyncRunner.tick
     val history get() = ClipboardHistory.get(ctx).items
     val historyWarning get() = ClipboardHistory.get(ctx).warning
+    val historyKeyLost get() = ClipboardHistory.get(ctx).keyLost
+    /** The explicit reset after the history's secure key was lost (Keystore work: off the main thread). */
+    fun resetHistory() { viewModelScope.launch(Dispatchers.IO) { ClipboardHistory.get(ctx).resetLostKey() } }
     /** The storage warning promises a retry; this is what makes it true when no new clip arrives to trigger a save. Off the main thread: it touches the Keystore. */
     fun retryHistory() { viewModelScope.launch(Dispatchers.IO) { ClipboardHistory.get(ctx).retry() } }
     val clipStatus: StateFlow<String> = ClipboardController.status
 
-    init {
-        if (_profile.value != null) {
-            if (prefs.smsEnabled) SyncScheduler.schedulePeriodic(ctx)
-            if (prefs.clipboardEnabled) ClipboardController.start(ctx)
+    init { if (_profile.value != null) startServices() }
+
+    private fun startServices() {
+        if (prefs.smsEnabled) SyncScheduler.schedulePeriodic(ctx)
+        if (prefs.clipboardEnabled) ClipboardController.start(ctx)
+    }
+
+    /**
+     * Re-read the saved connection. Called on resume and from "Try again" while [profileProblem] is showing: a Keystore that
+     * was busy a moment ago usually is not now. Never writes anything — an unreadable profile is only ever replaced by the
+     * user pairing again after [resetLostProfile].
+     */
+    fun refreshProfile() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val r = store.loadResult()
+            if (r is ProfileLoad.Loaded) {
+                CloudRuntime.reset()
+                val first = _profile.value == null
+                _profile.value = r.value; _problem.value = null
+                if (first) startServices()
+            } else if (_profile.value == null) _problem.value = problemOf(r)
         }
+    }
+
+    /** The user chose to give up on a profile whose key is gone: forget it, make a fresh key, and show the pairing panel. */
+    fun resetLostProfile() {
+        disconnect()
+        runCatching { SecretBox.ensureKey() }
+        _problem.value = null
     }
 
     fun dismissNotice() { _notice.value = null }
@@ -92,6 +134,7 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The desktop's pairing code (base64 of the payload JSON), pasted or scanned. */
     fun submitCode(raw: String) {
+        if (_problem.value != null) { _pair.value = PairUi.Failed("This phone has a saved connection that can't be opened right now. Try again, or reset it first."); return }
         val text = raw.filterNot { it.isWhitespace() }
         if (text.isEmpty()) { _pair.value = PairUi.Failed("Paste the pairing code from your Mac first."); return }
         val payload = try { PairingPayload.decode(text) } catch (e: Exception) { _pair.value = PairUi.Failed("That doesn't look like a Halo pairing code."); return }
@@ -163,7 +206,7 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
         val profile = CloudProfile(payload.firebaseConfig, payload.auth, payload.saltBase64, payload.iterations, Base64.getEncoder().encodeToString(key), epoch = java.util.UUID.randomUUID().toString())
         store.save(profile); CloudRuntime.reset()
         pending = null
-        _profile.value = profile; _pair.value = PairUi.Idle
+        _profile.value = profile; _problem.value = null; _pair.value = PairUi.Idle
     }
 
     fun disconnect() {

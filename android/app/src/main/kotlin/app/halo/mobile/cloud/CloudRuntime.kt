@@ -4,6 +4,7 @@ import android.content.Context
 import app.halo.cloud.AuthEndpoints
 import app.halo.cloud.CryptoService
 import app.halo.cloud.FirebaseRtdbClient
+import app.halo.cloud.ProfileLoad
 import app.halo.mobile.BuildConfig
 import java.util.Base64
 
@@ -40,7 +41,13 @@ object CloudRuntime {
     @Synchronized fun session(ctx: Context): CloudSession? {
         val app = ctx.applicationContext
         val store = CloudStore(app)
-        val profile = store.load() ?: run { cached = null; cachedFor = null; return null }
+        val profile = when (val r = store.loadResult()) {
+            is ProfileLoad.Loaded -> r.value
+            // The file is intact but cannot be opened right now. A session we already hold is still valid; do not drop it
+            // (and never treat this as "not paired").
+            is ProfileLoad.Unavailable -> return cached
+            else -> { cached = null; cachedFor = null; return null }
+        }
         cached?.let { if (cachedFor == profile) return it }
         val client = newRtdbClient(profile)
         client.signIn()
@@ -50,4 +57,17 @@ object CloudRuntime {
     }
 
     @Synchronized fun reset() { cached = null; cachedFor = null }
+
+    /**
+     * What to say when [session] returned null. "Not paired" is only true when it is: a Keystore that is momentarily
+     * unavailable, or a key that is gone, are different situations with different next steps.
+     */
+    fun unpairedMessage(ctx: Context, notPaired: String): String = when (CloudStore(ctx.applicationContext).loadResult()) {
+        is ProfileLoad.Unavailable -> PROFILE_UNAVAILABLE
+        ProfileLoad.KeyLost -> PROFILE_KEY_LOST
+        else -> notPaired
+    }
+
+    const val PROFILE_UNAVAILABLE = "Cloud profile temporarily unavailable — will retry."
+    const val PROFILE_KEY_LOST = "This phone's saved Halo connection can't be unlocked (its secure key was lost). Open Settings in Halo and pair again."
 }

@@ -354,13 +354,14 @@ fun SettingsScreen(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel
 fun BackgroundReceiveCard(vm: AppViewModel) {
     val on by vm.backgroundReceive.collectAsStateWithLifecycle()
     val paused by vm.pausedBySystem.collectAsStateWithLifecycle()
+    val refusal by vm.backgroundRefusal.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     var rationale by remember { mutableStateOf(false) }
-    var denied by remember { mutableStateOf(false) }
-    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        denied = !granted; rationale = false; vm.setBackgroundReceive(true)        // works without it, but the notification is then hidden
+    // FR-B1: the persistent notification is required. A denial does NOT enable receiving; the switch stays off and the
+    // refusal banner (driven by the settings, so it also explains a refusal made while the app was closed) says why.
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
+        rationale = false; vm.onNotificationPermissionResult()
     }
-    fun canNotify() = android.os.Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
     HaloCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -369,8 +370,8 @@ fun BackgroundReceiveCard(vm: AppViewModel) {
                 Text("Off by default. Lets Halo receive files and your Mac's clipboard when the app is closed.", color = Halo.Text3, fontSize = 11.sp)
             }
             Switch(checked = on, onCheckedChange = { want ->
-                if (!want) { vm.setBackgroundReceive(false); denied = false }
-                else if (canNotify()) vm.setBackgroundReceive(true) else rationale = true
+                if (!want) { vm.disableBackgroundReceive(); rationale = false }
+                else if (vm.requestBackgroundReceive() == app.halo.mobile.background.BackgroundController.Enable.NEEDS_PERMISSION) rationale = true
             }, modifier = Modifier.testTag("settings.background"))
         }
         if (rationale) {
@@ -382,7 +383,14 @@ fun BackgroundReceiveCard(vm: AppViewModel) {
                 OutlinedButton(onClick = { rationale = false }) { Text("Not now") }
             }
         }
-        if (denied) { Spacer(Modifier.height(6.dp)); Text("Notifications are off, so you won't see the listening notice or be asked about files while Halo is closed (incoming files are declined after 90 seconds). Turn them on in Android settings.", color = Halo.Amber, fontSize = 11.sp) }
+        if (refusal != null) {
+            Spacer(Modifier.height(6.dp))
+            Text("Background receiving is off: Android is hiding Halo's notifications, and Halo must show one while it listens so you can see it is on and stop it. Turn notifications on for Halo, then switch this on again.", color = Halo.Amber, fontSize = 12.sp, modifier = Modifier.testTag("settings.background.refused"))
+            Spacer(Modifier.height(6.dp))
+            OutlinedButton(onClick = {
+                ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            }, modifier = Modifier.testTag("settings.background.openSettings")) { Text("Open notification settings") }
+        }
         if (paused) { Spacer(Modifier.height(6.dp)); Text("Android paused background receiving (it limits this kind of service to a few hours a day). Switch it off and on to resume.", color = Halo.Amber, fontSize = 11.sp, modifier = Modifier.testTag("settings.background.paused")) }
         Spacer(Modifier.height(6.dp))
         Text("Battery: Halo keeps a connection open while this is on, which costs some battery, and Android's battery saver or your phone maker's app-killer may still stop it. Stop it any time from the notification.", color = Halo.Text3, fontSize = 11.sp)
