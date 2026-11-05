@@ -18,6 +18,8 @@ struct ShareView: View {
                 VStack(spacing: HaloLayout.sectionSpacing) {
                     thisDevice
                     noticeBanner
+                    // At accessibility text sizes a pinned bar would swallow the screen: it scrolls instead.
+                    if typeSize.isAccessibilitySize { sendCard }
                     nearby
                     received
                     #if DEBUG
@@ -34,10 +36,11 @@ struct ShareView: View {
             .scrollDismissesKeyboard(.interactively)
             // The primary action stays on screen: target + "Choose files" + transfer progress.
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                sendCard
-                    .padding(.horizontal, HaloLayout.screenPadding).padding(.top, 8).padding(.bottom, 6)
-                    .background(LinearGradient(colors: [Color.haloBackground.opacity(0), Color.haloBackground.opacity(0.95)],
-                                               startPoint: .top, endPoint: .center))
+                if !typeSize.isAccessibilitySize {
+                    sendCard
+                        .padding(.horizontal, HaloLayout.screenPadding).padding(.top, 8).padding(.bottom, 6)
+                        .background(Color.haloBackground)
+                }
             }
             .navigationTitle(HaloStrings.Share.title)
             .navigationBarTitleDisplayMode(.inline)

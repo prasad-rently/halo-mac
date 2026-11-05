@@ -301,6 +301,16 @@ final class AppModel: ObservableObject {
     }
 
     #if DEBUG
+    /// Developer aid for screenshots: forces the transfer card into a state (`-debugTransfer sending|finished|failed`).
+    func debugSetTransfer(_ name: String) {
+        switch name {
+        case "sending": transfer = .sending(fileName: "quarterly-report.pdf", sent: 18_400_000, total: 41_000_000, overallSent: 18_400_000, overallTotal: 41_000_000)
+        case "finished": transfer = .finished("Sent quarterly-report.pdf to Gokul's Mac.")
+        case "failed": transfer = .failed("Couldn't reach Gokul's Mac. Check you're on the same Wi-Fi.")
+        default: break
+        }
+    }
+
     /// Developer aid: makes a throw-away file of `megabytes` of non-text bytes and sends it to the
     /// selected peer, so the send path can be exercised without driving the system file picker.
     func sendTestFile(megabytes: Int = 5) {

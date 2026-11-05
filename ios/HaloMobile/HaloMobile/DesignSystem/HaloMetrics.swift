@@ -34,6 +34,8 @@ struct HaloRing: View {
                 }
             }
             .padding(lineWidth + 6)
+            // The ring has a fixed size, so its centre text stops growing at xxxLarge (the text beside it keeps scaling).
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         }
         .frame(width: size, height: size)
         .accessibilityElement(children: .ignore)
@@ -82,6 +84,17 @@ struct HaloMetricTile: View {
     var tint: Color = .haloAccent
     var spark: [Double]?
     var action: (() -> Void)?
+
+    init(title: String, value: String, unit: String? = nil, subtitle: String? = nil, icon: String,
+         tint: Color = .haloAccent, spark: [Double]? = nil, action: (() -> Void)? = nil) {
+        self.title = title; self.value = value; self.unit = unit; self.subtitle = subtitle
+        self.icon = icon; self.tint = tint; self.spark = spark; self.action = action
+    }
+
+    /// Source-compatible with the cloud workstream's `HaloMetricTile(title:value:icon:color:)`.
+    init(title: String, value: String, icon: String, color: Color) {
+        self.init(title: title, value: value, icon: icon, tint: color)
+    }
 
     var body: some View {
         if let action {

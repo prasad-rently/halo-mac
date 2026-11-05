@@ -22,6 +22,7 @@
 		98E5D5078285675CEA71C48A /* HaloControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9A066471CFE963A8698EE7A /* HaloControls.swift */; };
 		A10EC2CBE64784DB201B88F1 /* HaloShareKit in Frameworks */ = {isa = PBXBuildFile; productRef = DFEB075606558C71F77FF59E /* HaloShareKit */; };
 		A5A0E2C679CA1E7E38C675AA /* CloudIntegrationPoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B55DF8427BD6A2DF8A96B20 /* CloudIntegrationPoints.swift */; };
+		B52046C45D2452882366546D /* HaloExtras.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD41EC240281418CF90CCEAA /* HaloExtras.swift */; };
 		DA8DC50E9371B4B70AC851E1 /* HaloLists.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE297380EFC0BFDA9226E2EA /* HaloLists.swift */; };
 		F4B954ECF9935CD4A57125C4 /* Strings.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE6EC6A97F20F6991B15CC10 /* Strings.swift */; };
 		FF7D19840EB470BCAEAC89F9 /* HaloMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E93A6A6CB6F20AA3E81A6A3 /* HaloMetrics.swift */; };
@@ -46,6 +47,7 @@
 		B249AA74AD1B5F351251DFBA /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		B91486ED73CB005AB1921E6A /* HaloShareKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HaloShareKit; path = ../HaloShareKit; sourceTree = SOURCE_ROOT; };
 		BC897746546A565038F844B8 /* HaloCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloCard.swift; sourceTree = "<group>"; };
+		BD41EC240281418CF90CCEAA /* HaloExtras.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloExtras.swift; sourceTree = "<group>"; };
 		CC3E8B356819F61716797B58 /* HaloInfoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloInfoSheet.swift; sourceTree = "<group>"; };
 		DE297380EFC0BFDA9226E2EA /* HaloLists.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloLists.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -93,6 +95,7 @@
 			children = (
 				BC897746546A565038F844B8 /* HaloCard.swift */,
 				A9A066471CFE963A8698EE7A /* HaloControls.swift */,
+				BD41EC240281418CF90CCEAA /* HaloExtras.swift */,
 				CC3E8B356819F61716797B58 /* HaloInfoSheet.swift */,
 				DE297380EFC0BFDA9226E2EA /* HaloLists.swift */,
 				7E93A6A6CB6F20AA3E81A6A3 /* HaloMetrics.swift */,
@@ -221,6 +224,7 @@
 				01CD8F4657AA375AD7A87646 /* DebugLaunch.swift in Sources */,
 				67B1CD3FFFD2D09B6C957145 /* HaloCard.swift in Sources */,
 				98E5D5078285675CEA71C48A /* HaloControls.swift in Sources */,
+				B52046C45D2452882366546D /* HaloExtras.swift in Sources */,
 				31025093DEF0FF87DC265FDB /* HaloInfoSheet.swift in Sources */,
 				DA8DC50E9371B4B70AC851E1 /* HaloLists.swift in Sources */,
 				FF7D19840EB470BCAEAC89F9 /* HaloMetrics.swift in Sources */,

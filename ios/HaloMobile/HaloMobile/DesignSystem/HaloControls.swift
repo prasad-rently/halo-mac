@@ -9,11 +9,19 @@ struct HaloPrimaryButton: View {
     var icon: String?
     var isLoading = false
     var fullWidth = true
+    var enabledOverride = true
     let action: () -> Void
-    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.isEnabled) private var envEnabled
+    private var isEnabled: Bool { envEnabled && enabledOverride }
 
     init(_ title: String, icon: String? = nil, isLoading: Bool = false, fullWidth: Bool = true, action: @escaping () -> Void) {
         self.title = title; self.icon = icon; self.isLoading = isLoading; self.fullWidth = fullWidth; self.action = action
+    }
+
+    /// Labelled form used by the cloud screens (`HaloPrimaryButton(title:icon:enabled:action:)`).
+    init(title: String, icon: String? = nil, enabled: Bool = true, isLoading: Bool = false, action: @escaping () -> Void) {
+        self.init(title, icon: icon, isLoading: isLoading, action: action)
+        self.enabledOverride = enabled
     }
 
     var body: some View {
@@ -38,7 +46,7 @@ struct HaloPrimaryButton: View {
             .opacity(isEnabled ? 1 : 0.4)
         }
         .buttonStyle(HaloPressStyle())
-        .disabled(isLoading)
+        .disabled(isLoading || !enabledOverride)
     }
 }
 
@@ -82,6 +90,15 @@ struct HaloIconButton: View {
     let action: () -> Void
     @Environment(\.isEnabled) private var isEnabled
 
+    init(icon: String, label: String, tint: Color = .haloText2, filled: Bool = false, action: @escaping () -> Void) {
+        self.icon = icon; self.label = label; self.tint = tint; self.filled = filled; self.action = action
+    }
+
+    /// Source-compatible with the cloud workstream's `HaloIconButton(icon:label:color:action:)`.
+    init(icon: String, label: String, color: Color, action: @escaping () -> Void) {
+        self.init(icon: icon, label: label, tint: color, action: action)
+    }
+
     var body: some View {
         Button { HaloHaptics.tap(); action() } label: {
             Image(systemName: icon)
@@ -104,9 +121,17 @@ struct HaloIconButton: View {
 struct HaloChip: View {
     var text: String
     var icon: String?
-    var tint: Color = .haloAccent
-    var isSelected = true
+    var tint: Color
+    var isSelected: Bool
     var action: (() -> Void)?
+
+    /// Neutral by default (grey); pass `tint` for a coloured / selected filter chip.
+    init(text: String, icon: String? = nil, tint: Color = .haloText2, isSelected: Bool = true, action: (() -> Void)? = nil) {
+        self.text = text; self.icon = icon; self.tint = tint; self.isSelected = isSelected; self.action = action
+    }
+
+    /// Source-compatible with the cloud workstream's `HaloChip(text:icon:color:)`.
+    init(text: String, icon: String? = nil, color: Color) { self.init(text: text, icon: icon, tint: color) }
 
     var body: some View {
         if let action {
@@ -139,15 +164,23 @@ struct HaloStatusBadge: View {
     var text: String
     var state: HaloState
     var showsIcon = true
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     init(_ text: String, _ state: HaloState = .neutral, showsIcon: Bool = true) {
         self.text = text; self.state = state; self.showsIcon = showsIcon
     }
 
+    /// Source-compatible with the cloud workstream's `HaloStatusBadge(text:level:)`.
+    enum Level {
+        case good, warn, bad, idle
+        var state: HaloState { switch self { case .good: return .ok; case .warn: return .warning; case .bad: return .error; case .idle: return .neutral } }
+    }
+    init(text: String, level: Level) { self.init(text, level.state) }
+
     var body: some View {
         HStack(spacing: 5) {
             if showsIcon { Image(systemName: state.symbol).font(.system(.caption2).weight(.bold)).accessibilityHidden(true) }
-            Text(text).font(HaloFont.micro).lineLimit(1)
+            Text(text).font(HaloFont.micro).lineLimit(typeSize.isAccessibilitySize ? 4 : 1)
         }
         .padding(.horizontal, 9).padding(.vertical, 4)
         .foregroundColor(state.color)

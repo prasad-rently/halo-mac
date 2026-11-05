@@ -47,22 +47,26 @@ struct HomeView: View {
     private var statusCard: some View {
         let s = summary
         return HaloCard(accentTop: s.state.color, padding: 16) {
-            HStack(spacing: 16) {
+            let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 14))
+                                                      : AnyLayout(HStackLayout(spacing: 16))
+            layout {
                 HaloRing(progress: s.progress, tint: s.state.color, value: s.value, caption: s.caption, size: 112)
                 VStack(alignment: .leading, spacing: 8) {
                     Text(model.identity.alias).font(HaloFont.title).foregroundColor(.haloText)
-                        .lineLimit(2).minimumScaleFactor(0.8)
+                        .lineLimit(3).minimumScaleFactor(0.8)
                     serviceRow(HaloStrings.Home.shareService, shareBadge)
                     cloudServiceRow
                 }
-                Spacer(minLength: 0)
+                if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
             }
         }
         .accessibilityIdentifier("home.status")
     }
 
     private func serviceRow(_ name: String, _ badge: HaloStatusBadge) -> some View {
-        HStack(spacing: 6) {
+        let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                                                  : AnyLayout(HStackLayout(spacing: 6))
+        return layout {
             Text(name).font(HaloFont.caption).foregroundColor(.haloText2)
             badge
         }
@@ -110,10 +114,10 @@ struct HomeView: View {
 
     private var metricGrid: some View {
         LazyVGrid(columns: columns, spacing: HaloLayout.cardSpacing) {
-            HaloMetricTile(title: HaloStrings.Home.nearby, value: "\(model.peers.count)", unit: HaloStrings.Home.nearbyUnit,
+            HaloMetricTile(title: HaloStrings.Home.nearby, value: "\(model.peers.count)", unit: model.peers.count == 1 ? HaloStrings.Home.nearbyUnitOne : HaloStrings.Home.nearbyUnit,
                            icon: "dot.radiowaves.left.and.right", tint: .haloGreen) { router.openShareAndScan() }
                 .accessibilityIdentifier("home.tile.nearby")
-            HaloMetricTile(title: HaloStrings.Home.received, value: "\(model.inbox.count)", unit: HaloStrings.Home.receivedUnit,
+            HaloMetricTile(title: HaloStrings.Home.received, value: "\(model.inbox.count)", unit: model.inbox.count == 1 ? HaloStrings.Home.receivedUnitOne : HaloStrings.Home.receivedUnit,
                            icon: "tray.and.arrow.down.fill", tint: .haloAccent) { router.openInbox() }
                 .accessibilityIdentifier("home.tile.received")
         }

@@ -15,7 +15,7 @@ struct ConsentSheet: View {
                     Text("\(offer.sender.alias) wants to send you")
                         .font(HaloFont.title).foregroundColor(.haloText).multilineTextAlignment(.center)
                     HStack(spacing: 8) {
-                        HaloChip(text: "\(offer.files.count) file\(offer.files.count == 1 ? "" : "s")", icon: "doc.on.doc")
+                        HaloChip(text: "\(offer.files.count) file\(offer.files.count == 1 ? "" : "s")", icon: "doc.on.doc", tint: .haloAccent)
                         HaloChip(text: Bytes.string(offer.totalBytes), icon: "scalemass", tint: .haloCyan)
                     }
                     Text("from \(offer.senderAddress)").font(HaloFont.mono).foregroundColor(.haloText3)

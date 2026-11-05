@@ -55,6 +55,7 @@ struct SettingsView: View {
                         .submitLabel(.done)
                         .accessibilityIdentifier("settings.alias")
                         .onSubmit { model.setAlias(alias) }
+                    Image(systemName: "pencil").font(.system(.footnote)).foregroundColor(.haloText3).accessibilityHidden(true)
                 }
                 .padding(.horizontal, 14).padding(.vertical, 10)
                 .frame(minHeight: 56)
@@ -83,11 +84,9 @@ struct SettingsView: View {
             HaloSectionHeader(HaloStrings.Settings.about, onInfo: { showAboutInfo = true })
             HaloCard(padding: 0) {
                 VStack(spacing: 0) {
-                    HaloListRow(icon: "arrow.left.arrow.right", tint: .haloAccent, title: HaloStrings.Settings.protocolLabel) {
-                        HStack(spacing: 6) {
-                            Text(HaloStrings.Settings.protocolValue).font(HaloFont.caption).foregroundColor(.haloText2)
-                            HaloStatusBadge(HaloStrings.Settings.notEncrypted, .warning)
-                        }
+                    HaloListRow(icon: "arrow.left.arrow.right", tint: .haloAccent, title: HaloStrings.Settings.protocolLabel,
+                                subtitle: HaloStrings.Settings.protocolValue) {
+                        HaloStatusBadge(HaloStrings.Settings.notEncrypted, .warning)
                     }
                     HaloRowDivider()
                     HaloListRow(icon: "touchid", tint: .haloText2, title: HaloStrings.Settings.fingerprint) {

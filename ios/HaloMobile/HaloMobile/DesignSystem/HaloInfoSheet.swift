@@ -31,9 +31,9 @@ struct HaloInfoPoint: Identifiable {
     }
 }
 
-/// Where the explanations go so primary screens stay glanceable. Honest limits ("Viewer only on
-/// iPhone", "not encrypted in transit") belong here — they are moved, never deleted.
-struct HaloInfoSheet: View {
+/// The sheet page itself. Where the explanations go so primary screens stay glanceable. Honest limits
+/// ("Viewer only on iPhone", "not encrypted in transit") belong here — they are moved, never deleted.
+struct HaloInfoSheetPage: View {
     var title: String
     var icon: String = "info.circle.fill"
     var summary: String?
@@ -78,12 +78,51 @@ struct HaloInfoSheet: View {
 extension View {
     /// `.haloInfoSheet(isPresented: $show, title: …, points: […])`
     func haloInfoSheet(isPresented: Binding<Bool>, title: String, summary: String? = nil, points: [HaloInfoPoint]) -> some View {
-        sheet(isPresented: isPresented) { HaloInfoSheet(title: title, summary: summary, points: points) }
+        sheet(isPresented: isPresented) { HaloInfoSheetPage(title: title, summary: summary, points: points) }
+    }
+}
+
+/// An (i) button that opens a bottom sheet with custom content — `HaloInfoSheet(title: "Cloud") { InfoLine(...) }`.
+/// (Same shape as the cloud workstream's shim, so deleting the shim is a no-op for call sites.)
+struct HaloInfoSheet<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+    @State private var shown = false
+
+    var body: some View {
+        HaloInfoButton(title: title) { shown = true }
+            .sheet(isPresented: $shown) {
+                NavigationStack {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) { content }
+                            .padding(HaloLayout.screenPadding).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .haloScreen()
+                    .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { shown = false } } }
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(.dark)
+            }
+    }
+}
+
+/// One icon + sentence line for use inside `HaloInfoSheet { … }`.
+struct InfoLine: View {
+    let icon: String
+    let text: String
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon).foregroundColor(.haloAccent).frame(width: 22).accessibilityHidden(true)
+            Text(text).font(HaloFont.body).foregroundColor(.haloText2).fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 
 #Preview("Info sheet") {
-    HaloInfoSheet(title: "Receiving", summary: "Halo listens while it is open.", points: [
+    HaloInfoSheetPage(title: "Receiving", summary: "Halo listens while it is open.", points: [
         HaloInfoPoint("hand.raised.fill", .haloGreen, "You decide", "Nothing is saved until you accept."),
         HaloInfoPoint("wifi", .haloAmber, "Wi-Fi only", "Transfers are not encrypted in transit."),
     ])
