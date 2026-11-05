@@ -12,7 +12,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { HaloTheme { HaloApp(vm, cloud) } }
+        // Debug only: `--ez gallery true` shows every design-system component on one screen (android/DESIGN.md).
+        val gallery = BuildConfig.DEBUG && intent?.getBooleanExtra("gallery", false) == true
+        setContent { HaloTheme { if (gallery) app.halo.mobile.design.HaloDesignGallery(extra = { DeviceTilesSample() }) else HaloApp(vm, cloud) } }
         debugPairing(intent)
         if (savedInstanceState == null) handleShare(intent)      // a rotation re-delivers the original intent: don't re-stage what was already sent or discarded
     }
