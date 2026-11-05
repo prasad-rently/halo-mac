@@ -87,36 +87,78 @@ final class ShareExtensionModel: ObservableObject {
     @Published var phase: Phase = .staging
 }
 
+/// The compact sheet inside the share sheet, in Halo's dark card style. It cannot list devices
+/// (it has no networking), so the one big button hands over to the app, where the device grid
+/// and the Send button are.
 struct ShareExtensionView: View {
     @ObservedObject var model: ShareExtensionModel
     let onOpenHalo: () -> Void
     let onDone: () -> Void
     let onCancel: () -> Void
 
+    private let accent = Color(red: 0.31, green: 0.49, blue: 1)
+    private let surface = Color(red: 13/255, green: 18/255, blue: 32/255)
+    private let amber = Color(red: 0.96, green: 0.65, blue: 0.14)
+
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "arrow.up.arrow.down.circle.fill")
-                .font(.system(size: 44)).foregroundColor(Color(red: 0.31, green: 0.49, blue: 1))
+        VStack(spacing: 14) {
+            HStack(spacing: 10) {
+                Image(systemName: "arrow.up.arrow.down.circle.fill").font(.system(size: 28)).foregroundColor(accent)
+                Text("HaloShare").font(.system(size: 20, weight: .bold)).foregroundColor(.white)
+                Spacer()
+                Button(action: onCancel) { Image(systemName: "xmark.circle.fill").font(.system(size: 24)).foregroundColor(.white.opacity(0.4)) }
+                    .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Close")
+            }
             switch model.phase {
             case .staging:
-                ProgressView().tint(.white)
-                Text("Getting your items ready…").foregroundColor(.white)
+                card {
+                    HStack(spacing: 10) { ProgressView().tint(.white); Text("Preparing").foregroundColor(.white) }
+                }
             case .done(let staged, let problems):
-                Text(staged == 1 ? "1 item is ready in Halo" : "\(staged) items are ready in Halo")
-                    .font(.headline).foregroundColor(.white).accessibilityIdentifier("shareext.done")
-                Text("Nothing has been sent yet. Open Halo, choose a device and tap Send.")
-                    .font(.footnote).foregroundColor(.white.opacity(0.7)).multilineTextAlignment(.center)
-                ForEach(problems, id: \.self) { Text("• \($0)").font(.footnote).foregroundColor(.orange) }
-                Button("Open Halo", action: onOpenHalo).buttonStyle(.borderedProminent).accessibilityIdentifier("shareext.open")
-                Button("Done", action: onDone).accessibilityIdentifier("shareext.close")
+                card {
+                    HStack(spacing: 10) {
+                        Image(systemName: "tray.full.fill").foregroundColor(accent)
+                        Text(staged == 1 ? "1 item" : "\(staged) items").font(.system(size: 17, weight: .semibold)).foregroundColor(.white)
+                            .accessibilityIdentifier("shareext.done")
+                        Spacer()
+                        chip("Not sent yet", amber)
+                    }
+                }
+                ForEach(problems, id: \.self) { Text($0).font(.system(size: 12)).foregroundColor(amber).frame(maxWidth: .infinity, alignment: .leading) }
+                Spacer(minLength: 0)
+                Button(action: onOpenHalo) {
+                    Label("Choose device", systemImage: "paperplane.fill")
+                        .font(.system(size: 17, weight: .semibold)).foregroundColor(.white)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .background(RoundedRectangle(cornerRadius: 14)
+                            .fill(LinearGradient(colors: [accent, Color(red: 0.48, green: 0.37, blue: 0.65)], startPoint: .leading, endPoint: .trailing)))
+                }
+                .accessibilityIdentifier("shareext.open")
+                Button("Done", action: onDone).foregroundColor(.white.opacity(0.6)).frame(minHeight: 44).accessibilityIdentifier("shareext.close")
             case .failed(let why):
-                Text("Couldn't hand this to HaloShare").font(.headline).foregroundColor(.white)
-                Text(why).font(.footnote).foregroundColor(.white.opacity(0.7)).multilineTextAlignment(.center)
-                Button("Close", action: onCancel).buttonStyle(.borderedProminent).accessibilityIdentifier("shareext.close")
+                card {
+                    HStack(spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundColor(amber)
+                        Text(why).font(.system(size: 13)).foregroundColor(.white)
+                    }
+                }
+                Spacer(minLength: 0)
+                Button("Close", action: onCancel).foregroundColor(.white).frame(minHeight: 44).accessibilityIdentifier("shareext.close")
             }
         }
-        .padding(24)
+        .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(red: 8/255, green: 12/255, blue: 20/255))
+    }
+
+    private func card<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        content().padding(14).frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 14).fill(surface))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.08), lineWidth: 1))
+    }
+
+    private func chip(_ text: String, _ tint: Color) -> some View {
+        Text(text).font(.system(size: 11, weight: .semibold)).foregroundColor(tint)
+            .padding(.horizontal, 9).padding(.vertical, 4).background(Capsule().fill(tint.opacity(0.14)))
     }
 }

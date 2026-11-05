@@ -12,11 +12,11 @@ struct InboxView: View {
                 if model.inbox.isEmpty {
                     VStack(spacing: 10) {
                         Image(systemName: "tray").font(.system(size: 36)).foregroundColor(.haloText3)
-                        Text("Nothing received yet").font(.system(size: 15, weight: .medium)).foregroundColor(.haloText2)
-                        Text("Files sent to this device appear here, and in the Files app under On My iPhone → Halo → Received.")
-                            .font(.system(size: 12)).foregroundColor(.haloText3).multilineTextAlignment(.center)
-                        Text("Receiving works while Halo is open.")
-                            .font(.system(size: 12)).foregroundColor(.haloText3)
+                        Text(ShareStrings.noFiles).font(.system(size: 15, weight: .medium)).foregroundColor(.haloText2)
+                        HStack(spacing: 4) {
+                            HaloChip(text: ShareStrings.receivingChip, systemImage: "antenna.radiowaves.left.and.right", tint: .haloGreen)
+                            HaloInfoButton(title: ShareStrings.receivingInfoTitle, message: ShareStrings.receivingInfo)
+                        }
                     }
                     .padding(32)
                     // A scrollable root so the empty state never collapses (the AI Assistant tab bug, again).

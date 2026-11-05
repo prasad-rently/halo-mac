@@ -13,8 +13,10 @@
 		34A0B964345A27F2E12A2B17 /* HaloMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 182A1E12BDB9FE5A73C25AC8 /* HaloMobileApp.swift */; };
 		404D6F98AD0EF392C688CB22 /* InboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F41F59B24229F0A4D662A093 /* InboxView.swift */; };
 		442262120895469DEB94F173 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93B0F07C4895D59D750C7C70 /* AppModel.swift */; };
+		53B87B22C865E9521DDF2332 /* DesignShim.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BB8B977C6095C26352C8F51 /* DesignShim.swift */; };
 		64073DFE008EE29E41C34E36 /* ConsentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E55985030C0D0EBC8D706D8 /* ConsentSheet.swift */; };
 		6853429BBDDE184DA27EFAE2 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EA6992BDDCF94A0FA48E68 /* Theme.swift */; };
+		772C65252F7415AF1F80B444 /* ShareStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6F606D088C2C7CC3D40AF36 /* ShareStrings.swift */; };
 		8BD47983099EE93FF3D64850 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55018C3FC87971067CD81FED /* SettingsView.swift */; };
 		8BDC8E5FC7B322333F9B4674 /* HaloShareStaging in Frameworks */ = {isa = PBXBuildFile; productRef = AC023C49291AD8EDCCAEE3A8 /* HaloShareStaging */; };
 		996783D8C6585B1FE523CF86 /* HaloShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F6060EFD89DC8E2EC3A272C3 /* HaloShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -64,6 +66,7 @@
 		182A1E12BDB9FE5A73C25AC8 /* HaloMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloMobileApp.swift; sourceTree = "<group>"; };
 		318D66E81F5AA39E93CBDF9F /* HaloMobileTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = HaloMobileTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		55018C3FC87971067CD81FED /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		5BB8B977C6095C26352C8F51 /* DesignShim.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignShim.swift; sourceTree = "<group>"; };
 		7337079CB29AACABBC8B2F83 /* AppModelOutboxTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelOutboxTests.swift; sourceTree = "<group>"; };
 		73F0B4F6EF269C3630C4B83A /* HaloMobile.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HaloMobile.entitlements; sourceTree = "<group>"; };
 		81BFCD2E539CD24EE1C78B58 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -74,6 +77,7 @@
 		9E55985030C0D0EBC8D706D8 /* ConsentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsentSheet.swift; sourceTree = "<group>"; };
 		B46A12422332DB04AABC6ED2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		B91486ED73CB005AB1921E6A /* HaloShareKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HaloShareKit; path = ../HaloShareKit; sourceTree = SOURCE_ROOT; };
+		E6F606D088C2C7CC3D40AF36 /* ShareStrings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareStrings.swift; sourceTree = "<group>"; };
 		EB0EA900828451B70C45B72C /* PlatformSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformSupport.swift; sourceTree = "<group>"; };
 		F41F59B24229F0A4D662A093 /* InboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxView.swift; sourceTree = "<group>"; };
 		F6060EFD89DC8E2EC3A272C3 /* HaloShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = HaloShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -114,6 +118,7 @@
 			children = (
 				93B0F07C4895D59D750C7C70 /* AppModel.swift */,
 				9E55985030C0D0EBC8D706D8 /* ConsentSheet.swift */,
+				5BB8B977C6095C26352C8F51 /* DesignShim.swift */,
 				73F0B4F6EF269C3630C4B83A /* HaloMobile.entitlements */,
 				182A1E12BDB9FE5A73C25AC8 /* HaloMobileApp.swift */,
 				F41F59B24229F0A4D662A093 /* InboxView.swift */,
@@ -121,6 +126,7 @@
 				EB0EA900828451B70C45B72C /* PlatformSupport.swift */,
 				0C84E2B3BC875BEBB6978209 /* SendSheet.swift */,
 				55018C3FC87971067CD81FED /* SettingsView.swift */,
+				E6F606D088C2C7CC3D40AF36 /* ShareStrings.swift */,
 				0D7DE55334AF56B261BA2545 /* ShareView.swift */,
 				11EA6992BDDCF94A0FA48E68 /* Theme.swift */,
 			);
@@ -295,11 +301,13 @@
 			files = (
 				442262120895469DEB94F173 /* AppModel.swift in Sources */,
 				64073DFE008EE29E41C34E36 /* ConsentSheet.swift in Sources */,
+				53B87B22C865E9521DDF2332 /* DesignShim.swift in Sources */,
 				34A0B964345A27F2E12A2B17 /* HaloMobileApp.swift in Sources */,
 				404D6F98AD0EF392C688CB22 /* InboxView.swift in Sources */,
 				03A54D9F1DCEE14743C72D15 /* PlatformSupport.swift in Sources */,
 				18DBC4F2C06D59B4193CCFAF /* SendSheet.swift in Sources */,
 				8BD47983099EE93FF3D64850 /* SettingsView.swift in Sources */,
+				772C65252F7415AF1F80B444 /* ShareStrings.swift in Sources */,
 				C3490B34E25DA1F1A7449ACD /* ShareView.swift in Sources */,
 				6853429BBDDE184DA27EFAE2 /* Theme.swift in Sources */,
 			);

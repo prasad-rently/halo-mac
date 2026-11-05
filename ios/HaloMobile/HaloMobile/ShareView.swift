@@ -140,8 +140,6 @@ struct ShareView: View {
                     .disabled(model.manualAddress.trimmingCharacters(in: .whitespaces).isEmpty)
                     .accessibilityIdentifier("share.addAddress")
             }
-            Text("For networks that block discovery. Use the address shown on the other device. Addresses you add are remembered and checked on every scan.")
-                .font(.system(size: 11)).foregroundColor(.haloText3).frame(maxWidth: .infinity, alignment: .leading)
             if !model.recentAddresses.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -172,23 +170,20 @@ struct ShareView: View {
 
     @ViewBuilder private var outboxCard: some View {
         if let outbox = model.outbox {
-            VStack(spacing: 8) {
-                SectionLabel("Ready to send")
+            Button { model.showSendSheet = true } label: {
                 HaloCard {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Label("\(outbox.files.count) item\(outbox.files.count == 1 ? "" : "s") · \(Bytes.string(outbox.totalBytes))",
-                              systemImage: "tray.full").font(.system(size: 13, weight: .medium)).foregroundColor(.haloText)
-                        Text("\(outbox.title). Not sent yet — choose a device and tap Send.")
-                            .font(.system(size: 12)).foregroundColor(.haloText3)
-                        if model.otherStagedBatchCount > 0 {
-                            Text("\(model.otherStagedBatchCount) more shared batch\(model.otherStagedBatchCount == 1 ? "" : "es") waiting.")
-                                .font(.system(size: 11)).foregroundColor(.haloAmber)
-                        }
-                        Button { model.showSendSheet = true } label: { Label("Review & send", systemImage: "paperplane") }
-                            .buttonStyle(.borderedProminent).accessibilityIdentifier("share.reviewOutbox")
+                    HStack(spacing: 10) {
+                        Image(systemName: "tray.full").foregroundColor(.haloAccent)
+                        Text("\(outbox.files.count) · \(Bytes.string(outbox.totalBytes))").font(.system(size: 14, weight: .semibold)).foregroundColor(.haloText)
+                        HaloChip(text: ShareStrings.notSentYet, tint: .haloAmber)
+                        if model.otherStagedBatchCount > 0 { HaloChip(text: "+\(model.otherStagedBatchCount)", tint: .haloText2) }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundColor(.haloText3)
                     }
                 }
             }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("share.reviewOutbox")
         }
     }
 
@@ -199,16 +194,13 @@ struct ShareView: View {
             SectionLabel("Send")
             HaloCard {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Pick what to send, then choose a device and tap Send. You can also share to HaloShare from any app's share sheet.")
-                        .font(.system(size: 13)).foregroundColor(.haloText2)
-
                     HStack(spacing: 10) {
-                        Button { picking = true } label: { Label("Files…", systemImage: "doc.badge.plus") }
+                        Button { picking = true } label: { Label("Files", systemImage: "doc.badge.plus") }
                             .buttonStyle(.borderedProminent)
                             .accessibilityIdentifier("share.chooseFiles")
 
                         PhotosPicker(selection: $photoSelection, maxSelectionCount: 25, matching: .any(of: [.images, .videos])) {
-                            Label("Photos…", systemImage: "photo.on.rectangle")
+                            Label("Photos", systemImage: "photo.on.rectangle")
                         }
                         .buttonStyle(.bordered)
                         .accessibilityIdentifier("share.choosePhotos")

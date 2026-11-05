@@ -18,23 +18,24 @@ struct SettingsView: View {
 
                 Section("HaloShare") {
                     LabeledContent("Status") { Text(statusText).foregroundColor(.haloText2) }
-                    LabeledContent("Saved to") { Text("Files → On My iPhone → Halo → Received").foregroundColor(.haloText2).multilineTextAlignment(.trailing) }
+                    LabeledContent("Saved to") { Text("Files › Halo › Received").foregroundColor(.haloText2) }
                     LabeledContent("Local Network") {
                         Text(localNetworkText).foregroundColor(model.localNetwork == .denied ? .haloAmber : .haloText2)
                     }
                     .accessibilityIdentifier("settings.localNetwork")
                     if model.localNetwork == .denied {
-                        Button("Open Settings to allow it") { model.openSystemSettings() }
+                        Button("Open Settings") { model.openSystemSettings() }
                     }
                     LabeledContent("Share from other apps") {
-                        Text(model.staging == nil ? "Unavailable in this build" : "On").foregroundColor(model.staging == nil ? .haloAmber : .haloText2)
+                        Text(model.staging == nil ? "Unavailable" : "On").foregroundColor(model.staging == nil ? .haloAmber : .haloText2)
                     }
-                    // Honest limits (F-050 D8). iOS suspends apps; nothing below pretends otherwise.
-                    Text("Receiving works while Halo is open. iOS doesn't let apps listen in the background, so keep Halo open to receive. If you leave Halo mid-transfer it gets a short moment to finish and notifies you if it couldn't.")
-                        .font(.system(size: 11)).foregroundColor(.haloText3)
-                        .accessibilityIdentifier("settings.receivingCopy")
-                    Text("Nothing is saved until you accept. Files never overwrite each other. Items shared from other apps wait in Halo until you choose a device and tap Send.")
-                        .font(.system(size: 11)).foregroundColor(.haloText3)
+                    // Honest limits (F-050 D8) behind an (i): iOS suspends apps; nothing pretends otherwise.
+                    HStack {
+                        HaloChip(text: ShareStrings.receivingChip, systemImage: "antenna.radiowaves.left.and.right", tint: .haloGreen)
+                            .accessibilityIdentifier("settings.receivingCopy")
+                        HaloInfoButton(title: ShareStrings.receivingInfoTitle, message: ShareStrings.receivingInfo + "\n\n" + ShareStrings.safetyInfo)
+                        Spacer()
+                    }
                 }
 
                 Section("About HaloShare") {
@@ -58,7 +59,7 @@ struct SettingsView: View {
         if !model.localNetworkExplained { return "Not asked yet" }
         switch model.localNetwork {
         case .granted: return "Allowed"
-        case .denied: return "Off — devices can't be found"
+        case .denied: return "Off"
         case .undetermined: return "Checking…"
         }
     }
