@@ -213,38 +213,7 @@ struct ShareView: View {
         }
     }
 
-    // MARK: Cloud features (MR-SH-3)
+    // MARK: Cloud (replaces the MR-SH-3 "Not yet" rows — the cloud layer now exists)
 
-    private var cloudFeatures: some View {
-        VStack(spacing: 8) {
-            SectionLabel("Coming with the Halo cloud foundation")
-            HaloCard {
-                VStack(alignment: .leading, spacing: 10) {
-                    blockedRow("message", "SMS sync", "Android only")
-                    Divider().overlay(Color.haloBorder)
-                    blockedRow("doc.on.clipboard", "Clipboard sync", "Phone ↔ Mac")
-                    Divider().overlay(Color.haloBorder)
-                    blockedRow("qrcode.viewfinder", "Pair with your Mac", "Scan a QR to connect your Firebase")
-                    Text("These need the shared cloud layer (F-044) that hasn't been built yet. HaloShare doesn't — it works today.")
-                        .font(.system(size: 11)).foregroundColor(.haloText3)
-                }
-            }
-            .opacity(0.8)
-        }
-        .accessibilityIdentifier("share.cloudFeatures")
-    }
-
-    private func blockedRow(_ symbol: String, _ title: String, _ subtitle: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol).foregroundColor(.haloText3).frame(width: 24)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.system(size: 14, weight: .medium)).foregroundColor(.haloText2)
-                Text(subtitle).font(.system(size: 11)).foregroundColor(.haloText3)
-            }
-            Spacer()
-            Text("Not yet").font(.system(size: 10, weight: .semibold)).foregroundColor(.haloAmber)
-                .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(Capsule().fill(Color.haloAmber.opacity(0.14)))
-        }
-    }
+    private var cloudFeatures: some View { CloudStatusCard() }
 }

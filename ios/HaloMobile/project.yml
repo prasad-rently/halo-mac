@@ -12,6 +12,8 @@ settings:
 packages:
   HaloShareKit:
     path: ../HaloShareKit
+  HaloCloudKit:
+    path: ../HaloCloudKit
 targets:
   HaloMobile:
     type: application
@@ -21,6 +23,8 @@ targets:
     dependencies:
       - package: HaloShareKit
         product: HaloShareKit
+      - package: HaloCloudKit
+        product: HaloCloudKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.halo.mobile
@@ -45,15 +49,31 @@ targets:
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         # iOS shows this the first time the app touches the LAN (HTTP scan / receiving).
+        NSCameraUsageDescription: Halo uses the camera only to scan the pairing QR code shown on your Mac.
         NSLocalNetworkUsageDescription: Halo uses your local network to find nearby devices and send or receive files with them. Nothing leaves your network.
         # HaloShare talks plain HTTP to peers on the LAN (requirements MD1). IP addresses are
         # exempt from ATS already; this makes the intent explicit.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+  HaloMobileUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: HaloMobileUITests
+    dependencies:
+      - target: HaloMobile
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.halo.mobile.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: HaloMobile
 schemes:
   HaloMobile:
     build:
       targets:
         HaloMobile: all
+    test:
+      targets:
+        - HaloMobileUITests
     run:
       config: Debug

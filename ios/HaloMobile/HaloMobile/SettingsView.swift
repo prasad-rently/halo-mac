@@ -3,11 +3,25 @@ import HaloShareKit
 
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var cloud: CloudModel
     @State private var alias = ""
+    @State private var path: [CloudRoute] = []
+    enum CloudRoute: Hashable { case setup }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Form {
+                Section {
+                    NavigationLink(value: CloudRoute.setup) {
+                        HStack {
+                            Label(CloudStrings.cloud, systemImage: cloud.isPaired ? "icloud.fill" : "icloud")
+                            Spacer()
+                            Text(cloud.isPaired ? "Paired" : CloudStrings.notPaired).font(.system(size: 12)).foregroundColor(cloud.isPaired ? .haloGreen : .haloText3)
+                        }
+                    }
+                    .accessibilityIdentifier("settings.cloud")
+                }
+
                 Section("This device") {
                     TextField("Name", text: $alias)
                         .accessibilityIdentifier("settings.alias")
@@ -35,7 +49,9 @@ struct SettingsView: View {
             .scrollContentBackground(.hidden)
             .background(Color.haloBackground)
             .navigationTitle("Settings")
-            .onAppear { alias = model.identity.alias }
+            .navigationDestination(for: CloudRoute.self) { _ in CloudSetupView() }
+            .onAppear { alias = model.identity.alias; if cloud.wantsSetup { path = [.setup]; cloud.wantsSetup = false } }
+            .onChange(of: cloud.wantsSetup) { want in if want { path = [.setup]; cloud.wantsSetup = false } }
             .onDisappear { if alias != model.identity.alias { model.setAlias(alias) } }
         }
     }
