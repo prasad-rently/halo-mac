@@ -76,7 +76,7 @@ struct HaloListRow<Trailing: View>: View {
             Spacer(minLength: 8)
             trailing
             if showsChevron {
-                Image(systemName: "chevron.right").font(.system(.caption).weight(.semibold))
+                Image(systemName: "chevron.forward").font(.system(.caption).weight(.semibold))
                     .foregroundColor(.haloText3).accessibilityHidden(true)
             }
         }
