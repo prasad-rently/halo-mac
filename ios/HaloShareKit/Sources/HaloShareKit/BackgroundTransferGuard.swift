@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Seams
 
 /// `UIApplication.beginBackgroundTask`, behind a protocol so the policy is testable.
-public protocol BackgroundTaskProviding: AnyObject {
+@MainActor public protocol BackgroundTaskProviding: AnyObject {
     /// Returns a token, or `nil` if the system refused. `expiration` runs (on the main actor)
     /// when the system is about to suspend the app.
     func beginTask(name: String, expiration: @escaping @MainActor () -> Void) -> Int?
@@ -11,7 +11,7 @@ public protocol BackgroundTaskProviding: AnyObject {
 }
 
 /// Posts the local "come back and finish" notification. Its text must not carry file names.
-public protocol InterruptionNotifying: AnyObject {
+@MainActor public protocol InterruptionNotifying: AnyObject {
     func notifyInterrupted(_ work: Set<BackgroundTransferGuard.Work>)
 }
 
