@@ -40,6 +40,7 @@ object SmsSyncRunner {
                 source = AndroidSmsSource(ctx, prefs), state = PrefsSyncState(ctx),
                 filter = { SenderFilter(prefs.allow, prefs.deny) }, backfillDays = { prefs.backfillDays },
                 pairingEpoch = session.profile.epoch,
+                syncSent = { prefs.syncSent },
             )
             var report = try { engine.sync() } catch (e: Exception) { SyncReport.fromFailure(e) }
             if (report.error == null && (forceReconcile || System.currentTimeMillis() - prefs.lastReconcileAt > RECONCILE_EVERY_MS)) {
@@ -77,6 +78,22 @@ object SmsSyncRunner {
         } catch (e: Exception) { SyncReport.fromFailure(e) }
     }
 
+    /**
+     * The user turned "Also sync messages I send" off and confirmed removing what was already uploaded. Sync is switched
+     * off FIRST (by the caller), and this is @Synchronized with [run], so a pass that was mid-flight finishes before the
+     * delete and none can start a sent upload after it. Inbox messages are not touched.
+     */
+    @Synchronized fun removeSent(ctx: Context): SyncReport {
+        val prefs = CloudPrefs(ctx)
+        if (prefs.syncSent) return SyncReport(error = "Sent-message sync is on — turn it off before removing what was uploaded.")
+        return try {
+            val session = CloudRuntime.session(ctx) ?: return SyncReport(error = CloudRuntime.unpairedMessage(ctx, "This phone isn't paired yet."))
+            SmsSyncEngine(session.rtdb, session.crypto, session.deviceId, session.deviceName, AndroidSmsSource(ctx, prefs), PrefsSyncState(ctx), pairingEpoch = session.profile.epoch).removeAllSent()
+            _tick.value = _tick.value + 1
+            SyncReport()
+        } catch (e: Exception) { SyncReport.fromFailure(e) }
+    }
+
     private fun finish(prefs: CloudPrefs, r: SyncReport): SyncReport {
         // A pass that died before reading the inbox says nothing new about quarantine, so keep the last known count.
         if (r.error == null) prefs.quarantinedCount = r.quarantined
@@ -84,6 +101,7 @@ object SmsSyncRunner {
         prefs.lastSyncError = r.error ?: if (r.failed > 0) "${r.failed} message(s) couldn't be uploaded — will retry." else null
         prefs.lastSyncSummary = buildString {
             append("${r.uploaded} uploaded")
+            if (r.uploadedSent > 0) append(", ${r.uploadedSent} sent")
             if (r.skippedByFilter > 0) append(", ${r.skippedByFilter} filtered")
             if (r.skippedDisabledLines > 0) append(", ${r.skippedDisabledLines} line(s) off")
             if (r.removedFromCloud > 0) append(", ${r.removedFromCloud} removed")

@@ -81,6 +81,8 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _smsEnabled = MutableStateFlow(prefs.smsEnabled)
     val smsEnabled: StateFlow<Boolean> = _smsEnabled.asStateFlow()
+    private val _syncSent = MutableStateFlow(prefs.syncSent)
+    val syncSent: StateFlow<Boolean> = _syncSent.asStateFlow()
     private val _clipEnabled = MutableStateFlow(prefs.clipboardEnabled)
     val clipEnabled: StateFlow<Boolean> = _clipEnabled.asStateFlow()
     private val _clipFilter = MutableStateFlow(prefs.clipboardFilter)
@@ -221,7 +223,7 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
     fun disconnect() {
         SyncScheduler.cancelAll(ctx); ClipboardController.stop()
         store.clear(); prefs.clearAll(); PrefsSyncState(ctx).clear(); ClipboardHistory.get(ctx).clear(); CloudRuntime.reset()
-        _profile.value = null; _lines.value = emptyList(); _smsEnabled.value = false; _clipEnabled.value = false; pending = null; _pair.value = PairUi.Idle; _warning.value = null
+        _profile.value = null; _lines.value = emptyList(); _smsEnabled.value = false; _syncSent.value = false; _clipEnabled.value = false; pending = null; _pair.value = PairUi.Idle; _warning.value = null
     }
 
     var deviceName: String get() = store.deviceName; set(v) { store.deviceName = v; CloudRuntime.reset() }
@@ -231,6 +233,25 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
     fun setSmsEnabled(on: Boolean) {
         prefs.smsEnabled = on; _smsEnabled.value = on
         if (on) { SyncScheduler.schedulePeriodic(ctx); syncNow() } else SyncScheduler.cancelAll(ctx)
+    }
+
+    /** "Also sync messages I send": the user's explicit opt-in (the screen confirms first). Takes effect on the very next pass. */
+    fun enableSentSync() {
+        prefs.syncSent = true; _syncSent.value = true
+        syncNow()
+    }
+
+    /**
+     * Turning it off stops new uploads at once. [removeUploaded] is the second, separately-confirmed choice: also delete the
+     * sent messages already in the cloud (the Mac's copies go with them). Declining leaves them there.
+     */
+    fun disableSentSync(removeUploaded: Boolean) {
+        prefs.syncSent = false; _syncSent.value = false
+        if (!removeUploaded) { _notice.value = "Sent messages will no longer be uploaded. The ones already synced stay on your Mac until you remove them."; return }
+        viewModelScope.launch(Dispatchers.IO) {
+            val r = SmsSyncRunner.removeSent(ctx)
+            _notice.value = r.error ?: "Sent messages removed from the cloud. New ones are no longer uploaded."
+        }
     }
 
     fun syncNow(reconcile: Boolean = false) {
