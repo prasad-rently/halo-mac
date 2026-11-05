@@ -27,6 +27,8 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Halo uses the camera only to scan the pairing QR code shown on your Mac.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Halo uses your local network to find nearby devices and send or receive files with them. Nothing leaves your network.</string>
 	<key>UIApplicationSceneManifest</key>

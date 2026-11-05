@@ -3,7 +3,8 @@
 | Path | What |
 |---|---|
 | `HaloShareKit/` | SwiftPM package: the HaloShare (LocalSend v2) peer — server, client, discovery — plus `halosharecli`. 56 tests. |
-| `HaloMobile/` | The SwiftUI app (Share / Inbox / Settings). Generated from `project.yml` by [XcodeGen](https://github.com/yonaskolb/XcodeGen). |
+| `HaloCloudKit/` | SwiftPM package: the iPhone as a cloud client (F-049 iOS) — pairing, Keychain profile, Firebase RTDB REST+SSE, encrypted SMS **viewer** and clipboard engines, "Check my database". No UIKit. |
+| `HaloMobile/` | The SwiftUI app (Share / Inbox / Messages / Clipboard / Settings). Generated from `project.yml` by [XcodeGen](https://github.com/yonaskolb/XcodeGen). |
 
 Contract: [`docs/HALOSHARE_PROTOCOL.md`](../docs/HALOSHARE_PROTOCOL.md) · Requirements: [`docs/specs/F-049-F-050-mobile-requirements.md`](../docs/specs/F-049-F-050-mobile-requirements.md)
 
@@ -13,6 +14,18 @@ Contract: [`docs/HALOSHARE_PROTOCOL.md`](../docs/HALOSHARE_PROTOCOL.md) · Requi
 cd ios/HaloShareKit && swift test          # 56 tests — loopback, raw sockets, curl, discovery
 swift build && .build/debug/halosharecli --help
 ```
+
+## HaloCloudKit
+
+```bash
+cd ios/HaloCloudKit && /usr/bin/swift test        # use Xcode's swift (the swiftly 5.6 toolchain can't read tools-version 5.9)
+./scripts/e2e-kotlin-ios.sh                       # real Kotlin engines <-> this package, through android/tools/fake-firebase.py
+./scripts/demo-standin.sh 19400                   # seed the stand-in for a Simulator walkthrough; prints where the pairing code is
+```
+
+The Keychain needs a *signed* app: an unsigned simulator build (`CODE_SIGNING_ALLOWED=NO`) fails pairing with
+`Keychain write failed (-34018)` (errSecMissingEntitlement) — by design it stores nothing and says so. Build with
+`CODE_SIGN_IDENTITY="-" CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO` to try cloud pairing in the Simulator.
 
 ## Build the app (simulator)
 

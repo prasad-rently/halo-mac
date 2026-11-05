@@ -17,6 +17,7 @@ public struct SmsSnapshot: Sendable {
     /// Rows whose ciphertext did not open under our key (wrong passphrase / a different key / tampered).
     public var undecryptableCount = 0
     public var connection: SyncConnection = .connecting
+    public init() {}
 
     public var threads: [SMSThread] { SMSThread.group(Array(messages.values)) }
 }

@@ -35,9 +35,15 @@ class IosInteropE2E {
         System.getenv("HALO_E2E_PASSPHRASE")!!, Base64.getDecoder().decode(System.getenv("HALO_E2E_SALT_B64")!!), System.getenv("HALO_E2E_ITERATIONS")!!.toInt())
 
     private class Src : SmsSource {
+        private val demo = System.getenv("HALO_E2E_DEMO") == "1"
         val rows = listOf(
             1 to SmsRecord(9001, "VM-HDFCBK", "Rs 500.00 debited from a/c XX1234. Avl bal Rs 9,500.", 1_799_996_400_000, 77, 1, read = false, seen = true),
             2 to SmsRecord(9002, "+91 98765 43210", "Kotlin says hi ✅ café / ok", 1_799_998_200_000, 78, 2, read = true, seen = true),
+        ) + if (!demo) emptyList() else listOf(
+            // Extra rows for the Simulator walkthrough only (HALO_E2E_DEMO=1); the e2e assertions use the two above.
+            1 to SmsRecord(9003, "AX-AXISBK", "482913 is the OTP for your Axis transaction. Do not share.", 1_799_999_000_000, 79, 1, read = false, seen = true),
+            1 to SmsRecord(9004, "VM-HDFCBK", "Rs 1,250.00 debited via UPI. Avl bal Rs 8,250.", 1_799_999_500_000, 77, 1, read = false, seen = true),
+            2 to SmsRecord(9005, "Amazon", "Your order has shipped and will arrive tomorrow.", 1_799_999_700_000, 80, 2, read = true, seen = true),
         )
         override fun lines() = listOf(SimLine(1, "Airtel", "+919876543210", "Personal"), SimLine(2, "Jio", "", "Work"))
         override fun inbox(subscriptionId: Int, sinceMs: Long) = rows.filter { it.first == subscriptionId && it.second.dateMs >= sinceMs }.map { it.second }
@@ -47,8 +53,9 @@ class IosInteropE2E {
     @Test fun publishFromKotlin() {
         assumeTrue(port != null && mode == "publish")
         val db = client(); val crypto = crypto()
+        val demo = System.getenv("HALO_E2E_DEMO") == "1"
         val report = SmsSyncEngine(db, crypto, "kotlin-dev", "Pixel (Kotlin engine)", Src(), MemorySyncState(), clock = { 1_800_000_000_000 }).sync()
-        assertTrue(report.ok); assertEquals(2, report.uploaded)
+        assertTrue(report.ok); assertEquals(if (demo) 5 else 2, report.uploaded)
         val clip = ClipboardSyncEngine(db, crypto, "kotlin-dev", "Pixel (Kotlin engine)").publish("hello from Kotlin ✨ https://example.com/x?y=1")
         assertEquals(ClipboardSyncEngine.Publish.Sent, clip)
     }
