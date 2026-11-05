@@ -16,9 +16,13 @@ final class SmsViewerEngineTests: XCTestCase {
         return (db, crypto, n)
     }
 
-    func firstSnapshot(_ e: SmsViewerEngine, until: @escaping (SmsSnapshot) -> Bool) async -> SmsSnapshot? {
-        for await s in e.snapshots() where until(s) { return s }
-        return nil
+    /// First snapshot satisfying `until`, or nil after `timeout` — a regression fails fast instead of hanging the suite.
+    func firstSnapshot(_ e: SmsViewerEngine, timeout: TimeInterval = 5, until: @escaping @Sendable (SmsSnapshot) -> Bool) async -> SmsSnapshot? {
+        let box = Box<SmsSnapshot>()
+        let t = Task { for await s in e.snapshots() where until(s) { box.set(s); return } }
+        _ = await eventually(timeout: timeout) { box.get() != nil }
+        t.cancel()
+        return box.get()
     }
 
     func testViewerShowsDecryptedThreadsGroupedByLineAndContact() async throws {
@@ -161,15 +165,18 @@ final class ClipboardSyncEngineTests: XCTestCase {
         await db.seed("clipboard/u/items/A", ClipboardEnvelope(itemId: "A", deviceId: "iphone-1", deviceName: "iPhone", kind: "text", contentEnc: try c.encrypt("mine"), createdAtMs: 1).node())
         await db.seed("clipboard/u/items/B", ClipboardEnvelope(itemId: "B", deviceId: "mac", deviceName: "Mac", kind: "code", contentEnc: try c.encrypt("let x = 1"), language: "swift", createdAtMs: 2000).node())
         await db.seed("clipboard/u/items/C", ClipboardEnvelope(itemId: "C", deviceId: "mac", deviceName: "Mac", kind: "text", contentEnc: "v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==", createdAtMs: 3).node())
-        var clips: [RemoteClip] = [], bad = 0
-        for await ev in e.incoming() {
+        let clipBox = Box<[RemoteClip]>(); clipBox.set([]); let badBox = Counter()
+        let t = Task { for await ev in e.incoming() {
             switch ev {
-            case .item(let c): clips.append(c)
-            case .undecryptable: bad += 1
+            case .item(let c): clipBox.set(clipBox.get()! + [c])
+            case .undecryptable: badBox.bump()
             default: break
             }
-            if clips.count == 1 && bad == 1 { break }
-        }
+        } }
+        _ = await eventually { clipBox.get()!.count >= 1 && badBox.value >= 1 }
+        try await Task.sleep(nanoseconds: 150_000_000)      // long enough for a wrongly-delivered echo to show up
+        t.cancel()
+        let clips = clipBox.get()!, bad = badBox.value
         XCTAssertEqual(clips.map(\.text), ["let x = 1"]); XCTAssertEqual(clips[0].language, "swift"); XCTAssertEqual(clips[0].createdAt.timeIntervalSince1970, 2)
         XCTAssertEqual(bad, 1, "a clip sealed under another key is reported, never shown")
     }
@@ -228,4 +235,19 @@ final class Box<T>: @unchecked Sendable {
     private let l = NSLock(); private var v: T?
     func set(_ x: T) { l.withLock { v = x } }
     func get() -> T? { l.withLock { v } }
+}
+
+final class OTPCodeTests: XCTestCase {
+    func testExtractsTheCodeFromOTPMessages() {
+        XCTAssertEqual(OTPCode.extract(from: "998231 is the OTP for your transaction. Do not share."), "998231")
+        XCTAssertEqual(OTPCode.extract(from: "Your verification code is 4821. Valid for 10 minutes."), "4821")
+        XCTAssertEqual(OTPCode.extract(from: "Use 123456 as your login code"), "123456")
+    }
+    func testNoCodeWhenItIsNotAnOTPMessageOrTheNumberIsSomethingElse() {
+        XCTAssertNil(OTPCode.extract(from: "Rs 500.00 debited from a/c XX1234. Avl bal Rs 9,500."), "a bank alert is not an OTP")
+        XCTAssertNil(OTPCode.extract(from: "See you at 7 ✅"))
+        XCTAssertNil(OTPCode.extract(from: "Your OTP is sent to +919876543210"), "a phone number is not a code")
+        XCTAssertNil(OTPCode.extract(from: "OTP request id 123456789012"), "a long number is not a 4-8 digit code")
+        XCTAssertNil(OTPCode.extract(from: "OTP: pay Rs 5000 now"), "an amount is not a code")
+    }
 }
