@@ -51,8 +51,15 @@ final class ExpenditureViewModel: ObservableObject {
     // MARK: Parse
 
     private func reparse() {
-        let messages = client.threads.flatMap(\.messages)
-        result = TransactionPipeline.run(messages: messages, pack: pack, overrides: store.overrides)
+        result = TransactionPipeline.run(messages: Self.pipelineInput(from: client.threads), pack: pack, overrides: store.overrides)
+    }
+
+    /// What the expenditure pipeline may read: RECEIVED messages only. The console shows both sides of a
+    /// conversation once the phone opts in to syncing sent messages; the user's own texts are not bank alerts
+    /// and must never reach the parser or the ledger. (`TransactionPipeline.run` re-checks this itself —
+    /// two independent guards, each with its own test.)
+    static func pipelineInput(from threads: [SMSThread]) -> [SMSMessage] {
+        threads.flatMap(\.messages).filter { $0.direction == .received }
     }
 
     // MARK: Overrides (D9)

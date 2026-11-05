@@ -6,6 +6,7 @@
     "Consumed by BOTH sides: Swift (HaloTests/WireContractTests.swift) decodes every `node` the way the desktop does and must produce `expect`; the Kotlin engine test (H-20b) must reproduce every `node` and decrypt to `expect`.",
     "Ciphertext uses a random nonce per write, so a comparator must NEVER compare `*Enc` values byte for byte: mask every field whose name ends in `Enc`, compare the rest exactly, and compare the decrypted `*Enc` values to `expect`.",
     "Key derivation: PBKDF2-HMAC-SHA256(passphrase, base64decode(saltBase64), iterations) -> AES-256-GCM, envelope `v1:` + base64(nonce|ciphertext|tag).",
+    "`sent` (sent-message sync, opt-in on the phone): the user's own outgoing SMS, written under `sms/{uid}/{deviceId}/sent/` — a SIBLING of `messages`, never inside it, so a Mac that predates sent-sync (which observes `messages` only) cannot show one as received. Same node shape as a message with `type` 2; `addressEnc` is the RECIPIENT (the contact), and `threadKey` is the hash the same contact's inbox rows get, so both sides share one thread.",
     "Regenerate only when a wire field intentionally changes, in BOTH Swift and Kotlin in the same change."
   ],
   "crypto": {
@@ -19,6 +20,7 @@
     "device": "devices/{uid}/{deviceId}",
     "line": "sms/{uid}/{deviceId}/lines/{subscriptionId}",
     "message": "sms/{uid}/{deviceId}/messages/{smsId}_{dateMs}",
+    "sent": "sms/{uid}/{deviceId}/sent/{smsId}_{dateMs}",
     "clipboard": "clipboard/{uid}/items/{itemId}"
   },
   "device": {
@@ -116,6 +118,32 @@
         "dateMs": 1799998200000,
         "subscriptionId": 1,
         "read": true
+      }
+    }
+  ],
+  "sent": [
+    {
+      "key": "4203_1799999000000",
+      "node": {
+        "addressEnc": "v1:yIdb92/2akIaUx1RVMYU8o1KdNmKcY8XPIXr9vrRFymyUcCFPwBOo6uxcQ==",
+        "bodyEnc": "v1:WGkj4iX6tyOCOXCqkDJyWCJFczp3927zZBd2qoPFDdjh/yp/V5S/DLdCX/PieMr7hhJYxwSvmHdn/4XOkUWwWJocU63LeyN0bjgLVoU=",
+        "threadKey": "d50baa465765868b9ad41d3ec8e27345fcafb3ecf95f210364c72bdcb554f821",
+        "threadId": 78,
+        "subscriptionId": 1,
+        "date": 1799999000000,
+        "type": 2,
+        "read": true,
+        "seen": true,
+        "syncedAt": 1800000000000,
+        "schema": 1
+      },
+      "expect": {
+        "address": "+91 98765 43210",
+        "body": "Paid you Rs 500 via UPI — received? ✅ (café)",
+        "dateMs": 1799999000000,
+        "subscriptionId": 1,
+        "read": true,
+        "direction": "sent"
       }
     }
   ],
