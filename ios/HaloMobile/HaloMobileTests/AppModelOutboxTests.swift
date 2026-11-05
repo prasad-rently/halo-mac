@@ -206,6 +206,26 @@ final class OutboxTests: XCTestCase {
         XCTAssertNotNil(rig.model.outbox, "the selection survives, so the person can send again")
     }
 
+    /// Closing the send sheet mid-send leaves the Share tab's pickers reachable. Picking again used
+    /// to replace the selection, which cleaned up the old one — deleting the staged copy (and ending
+    /// the security scope) under an upload that was still reading it.
+    func testPickingWhileASendIsInFlightCannotReplaceTheSelectionUnderIt() async throws {
+        let rig = try await Rig.make(consentDelay: 30)
+        let batch = try rig.stage()
+        rig.model.loadStagedShares()
+        rig.model.sendOutbox(to: rig.peerID)
+        try await waitUntil { rig.model.transfer.isBusy }
+
+        let other = FileManager.default.temporaryDirectory.appendingPathComponent("other-\(UUID().uuidString).bin")
+        try Data(repeating: 1, count: 64).write(to: other)
+        rig.model.queue(pickedFiles: [other])
+        rig.model.queueTestFile(megabytes: 1)
+
+        XCTAssertEqual(rig.model.outbox?.source, .sharedFromApp(batchID: batch.id), "the in-flight selection is untouched")
+        XCTAssertTrue(rig.model.transfer.isBusy, "and the transfer is not reset to idle")
+        XCTAssertEqual(rig.staging.pendingBatches().count, 1, "its staged copy is still on disk")
+    }
+
     func testLeavingWithNothingInFlightRequestsNoBackgroundTask() async throws {
         let rig = try await Rig.make()
         rig.model.didEnterBackground()

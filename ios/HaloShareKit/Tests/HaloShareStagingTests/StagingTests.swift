@@ -35,6 +35,12 @@ struct StagedFileNameTests {
         #expect(StagedFileName.sanitize("") == "file")
     }
 
+    @Test("Bidi overrides, zero-width and BOM characters cannot disguise an extension")
+    func bidi() {
+        #expect(StagedFileName.sanitize("invoice-\u{202E}gpj.exe") == "invoice-gpj.exe")
+        #expect(StagedFileName.sanitize("a\u{200B}b\u{2066}c\u{FEFF}.txt") == "abc.txt")
+    }
+
     @Test("Long names are shortened but keep their extension")
     func long() {
         let n = StagedFileName.sanitize(String(repeating: "x", count: 400) + ".jpeg", maxLength: 50)
@@ -235,6 +241,127 @@ struct StagingStoreTests {
         #expect(pending.count == 1)
         #expect(pending[0].items.count == 1, "capped at maxItems; ghost and traversal items dropped")
         #expect(pending[0].items[0].size == 10, "size comes from the disk, not the manifest")
+    }
+
+    // The test above only *looks* like it exercises id/size validation: its extra items sit behind
+    // `maxItems: 1`, so the cap alone drops them. These run with a cap that lets every tampered item
+    // reach the per-item checks.
+    @Test("Tampered items are rejected by validation, not just by the item cap")
+    func tamperedManifestPerItem() throws {
+        let s = store()                                              // default limits: 25 items
+        let b = try s.makeBatchBuilder(); try b.addFile(copying: makeFile("ok.bin", bytes: 10))
+        let batch = try #require(try b.commit())
+        var evil = batch
+        evil.items.append(StagedItem(id: "../..", fileName: "x", size: 1, mimeType: "a/b", kind: .file))
+        evil.items.append(StagedItem(id: UUID().uuidString, fileName: "ghost", size: 1, mimeType: "a/b", kind: .file))
+        evil.items.append(StagedItem(id: batch.items[0].id, fileName: "dup", size: 1, mimeType: "a/b", kind: .file))
+        let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601
+        try enc.encode(evil).write(to: s.root.appendingPathComponent("\(batch.id)/manifest.json"))
+        let pending = s.pendingBatches()
+        #expect(pending.first?.items.count == 1, "traversal id, missing file and duplicate id are all dropped")
+    }
+
+    @Test("The disk, not the manifest, decides what exceeds the item and batch caps")
+    func tamperedSizesVersusCaps() throws {
+        let s = store(StagingLimits(maxItems: 5, maxItemBytes: 100, maxBatchBytes: 150))
+        let big = try makeFile("a.bin", bytes: 90), big2 = try makeFile("b.bin", bytes: 90)
+        // Stage under generous limits, then re-open under strict ones with a manifest that lies small.
+        let loose = ShareStagingStore(root: s.root, limits: StagingLimits(maxItems: 5, maxItemBytes: 1000, maxBatchBytes: 1000))
+        let b = try loose.makeBatchBuilder()
+        try b.addFile(copying: big); try b.addFile(copying: big2)
+        var batch = try #require(try b.commit())
+        for i in batch.items.indices { batch.items[i].size = 1 }
+        let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601
+        try enc.encode(batch).write(to: s.root.appendingPathComponent("\(batch.id)/manifest.json"))
+        let pending = s.pendingBatches()
+        #expect(pending.first?.items.count == 1, "90 + 90 > 150: the second is refused although the manifest claims 1 byte each")
+        #expect(pending.first?.totalBytes == 90)
+    }
+
+    @Test("A symlink planted in a batch is never offered for sending")
+    func plantedSymlink() throws {
+        let fm = FileManager.default
+        let s = store()
+        let secret = try makeFile("secret.db", bytes: 5000)
+        let b = try s.makeBatchBuilder()
+        try b.addFile(copying: makeFile("keep.txt", bytes: 10))
+        let victim = try b.addFile(copying: makeFile("victim.txt", bytes: 10))
+        let batch = try #require(try b.commit())
+        let planted = s.root.appendingPathComponent("\(batch.id)/files/\(victim.id)/\(victim.fileName)")
+        try fm.removeItem(at: planted)
+        try fm.createSymbolicLink(at: planted, withDestinationURL: secret)
+
+        let pending = try #require(s.pendingBatches().first)
+        #expect(pending.items.count == 1, "only the genuine file survives")
+        #expect(pending.items.allSatisfy { $0.fileName == "keep.txt" })
+        #expect(s.fileURL(for: victim, in: batch) == nil)
+    }
+
+    @Test("A symlinked item directory or batch directory cannot lead outside the batch")
+    func symlinkedDirectories() throws {
+        let fm = FileManager.default
+        let s = store()
+        let outside = tempDir("outside")
+        try Data(repeating: 1, count: 20).write(to: outside.appendingPathComponent("x.txt"))
+        let b = try s.makeBatchBuilder()
+        let item = try b.addFile(copying: makeFile("x.txt", bytes: 10))
+        let batch = try #require(try b.commit())
+        // item directory -> a directory outside containing a same-named file
+        let itemDir = s.root.appendingPathComponent("\(batch.id)/files/\(item.id)")
+        try fm.removeItem(at: itemDir)
+        try fm.createSymbolicLink(at: itemDir, withDestinationURL: outside)
+        #expect(s.fileURL(for: item, in: batch) == nil)
+        #expect(s.pendingBatches().isEmpty)
+
+        // a whole batch directory that is a symlink to a directory holding a valid batch
+        let alt = ShareStagingStore(root: outside)
+        let b3 = try alt.makeBatchBuilder(); try b3.addText("hi")
+        let altBatch = try #require(try b3.commit())
+        try fm.createSymbolicLink(at: s.root.appendingPathComponent(UUID().uuidString),
+                                  withDestinationURL: outside.appendingPathComponent(altBatch.id))
+        #expect(s.pendingBatches().isEmpty, "a symlinked batch directory is not a batch")
+    }
+
+    @Test("A source symlink and the staging area itself are refused as sources")
+    func refusedSources() throws {
+        let fm = FileManager.default
+        let s = store()
+        let target = try makeFile("t.bin", bytes: 10)
+        let link = target.deletingLastPathComponent().appendingPathComponent("l.bin")
+        try fm.createSymbolicLink(at: link, withDestinationURL: target)
+        let b = try s.makeBatchBuilder()
+        #expect(throws: StagingRejection.self) { try b.addFile(copying: link) }
+
+        // stage something, then try to stage a file *from inside* the staging root
+        let b1 = try s.makeBatchBuilder(); let it = try b1.addFile(copying: target)
+        let committed = try #require(try b1.commit())
+        let inside = try #require(s.fileURL(for: it, in: committed))
+        let b2 = try s.makeBatchBuilder()
+        #expect(throws: StagingRejection.self) { try b2.addFile(copying: inside) }
+
+        // a protected root (the app group container) is refused too
+        let container = tempDir("container")
+        let guarded = ShareStagingStore(root: container.appendingPathComponent("ShareStaging"), protectedRoots: [container])
+        let priv = try makeFile("private.db", bytes: 10, in: container)
+        let b3 = try guarded.makeBatchBuilder()
+        #expect(throws: StagingRejection.self) { try b3.addFile(copying: priv) }
+    }
+
+    @Test("A manifest dated in the future, or absurdly large, is not kept alive")
+    func futureAndOversizedManifest() throws {
+        let s = store()
+        let b = try s.makeBatchBuilder(); try b.addText("x")
+        let batch = try #require(try b.commit())
+        let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601
+        var future = batch; future.createdAt = Date(timeIntervalSinceNow: 10 * 365 * 86400)
+        try enc.encode(future).write(to: s.root.appendingPathComponent("\(batch.id)/manifest.json"))
+        #expect(s.pendingBatches(now: Date(timeIntervalSinceNow: 30 * 86400)).isEmpty, "never expiring is not an option")
+
+        let b2 = try s.makeBatchBuilder(); try b2.addText("y")
+        let batch2 = try #require(try b2.commit())
+        let huge = Data(repeating: 0x20, count: ShareStagingStore.maxManifestBytes + 10)
+        try (try enc.encode(batch2) + huge).write(to: s.root.appendingPathComponent("\(batch2.id)/manifest.json"))
+        #expect(s.pendingBatches().isEmpty)
     }
 
     @Test("A corrupt manifest is cleaned up rather than listed")

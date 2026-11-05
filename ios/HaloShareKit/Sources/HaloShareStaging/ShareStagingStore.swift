@@ -22,11 +22,18 @@ public final class ShareStagingStore: @unchecked Sendable {
 
     public let root: URL
     public let limits: StagingLimits
+    /// Directories whose contents may never be *staged* (the App Group container the app keeps its
+    /// own state in). A host app can hand the extension any file URL the extension can read; the
+    /// extension's reach includes this container, so it is refused as a source.
+    public let protectedRoots: [URL]
     private let fm: FileManager
+    /// Upper bound for a manifest: 25 items is ~6 KB, so anything near this is not ours.
+    static let maxManifestBytes = 1 << 20
 
-    public init(root: URL, limits: StagingLimits = .default, fileManager: FileManager = .default) {
+    public init(root: URL, limits: StagingLimits = .default, protectedRoots: [URL] = [], fileManager: FileManager = .default) {
         self.root = root
         self.limits = limits
+        self.protectedRoots = protectedRoots
         self.fm = fileManager
     }
 
@@ -34,7 +41,8 @@ public final class ShareStagingStore: @unchecked Sendable {
     /// (an unsigned build on a device, or a profile without the group).
     public static func appGroup(identifier: String = appGroupIdentifier, limits: StagingLimits = .default) -> ShareStagingStore? {
         guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier) else { return nil }
-        return ShareStagingStore(root: container.appendingPathComponent("ShareStaging", isDirectory: true), limits: limits)
+        return ShareStagingStore(root: container.appendingPathComponent("ShareStaging", isDirectory: true), limits: limits,
+                                 protectedRoots: [container])
     }
 
     // MARK: Writing
@@ -61,7 +69,7 @@ public final class ShareStagingStore: @unchecked Sendable {
                 continue
             }
             guard Self.isSafeID(name) else { continue }              // not ours; leave it alone
-            guard let batch = load(batchDirectory: dir, id: name) else { try? fm.removeItem(at: dir); continue }
+            guard let batch = load(batchDirectory: dir, id: name, now: now) else { try? fm.removeItem(at: dir); continue }
             if now.timeIntervalSince(batch.createdAt) > limits.batchLifetime { try? fm.removeItem(at: dir); continue }
             batches.append(batch)
         }
@@ -76,9 +84,29 @@ public final class ShareStagingStore: @unchecked Sendable {
             .appendingPathComponent("files", isDirectory: true)
             .appendingPathComponent(item.id, isDirectory: true)
             .appendingPathComponent(name)
-        var isDir: ObjCBool = false
-        guard fm.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue else { return nil }
-        return url
+        return isConfinedRegularFile(url, batchID: batch.id) ? url : nil
+    }
+
+    /// A *regular file* (not a symlink, not a directory) whose real path is inside its batch
+    /// directory. The container is writable by anything signed with the same group, and the send
+    /// path later opens whatever this returns — a symlink planted in a batch would otherwise make
+    /// the app upload a file from outside staging (its own `Application Support`, say). Following
+    /// symlinks was the old behaviour: `fileSizeKey` of a link is the length of its *path*, and
+    /// `uploadTask(fromFile:)` reads the target.
+    func isConfinedRegularFile(_ url: URL, batchID: String) -> Bool {
+        guard let v = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
+              v.isSymbolicLink != true, v.isRegularFile == true else { return false }
+        let base = root.resolvingSymlinksInPath().appendingPathComponent(batchID, isDirectory: true).path + "/"
+        return url.resolvingSymlinksInPath().path.hasPrefix(base)
+    }
+
+    /// True when `url` is, or lies inside, the staging directory or a protected root.
+    func isProtectedSource(_ url: URL) -> Bool {
+        let real = url.resolvingSymlinksInPath().path
+        return ([root] + protectedRoots).contains { r in
+            let p = r.resolvingSymlinksInPath().path
+            return real == p || real.hasPrefix(p + "/")
+        }
     }
 
     /// Deletes a batch (after a send, or when the user discards it).
@@ -100,10 +128,15 @@ public final class ShareStagingStore: @unchecked Sendable {
         !s.isEmpty && s.count <= 64 && s.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }
     }
 
-    private func load(batchDirectory dir: URL, id: String) -> StagedBatch? {
-        guard let data = try? Data(contentsOf: dir.appendingPathComponent("manifest.json")) else { return nil }
+    private func load(batchDirectory dir: URL, id: String, now: Date) -> StagedBatch? {
+        let manifest = dir.appendingPathComponent("manifest.json")
+        guard isConfinedRegularFile(manifest, batchID: id),
+              let size = (try? manifest.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size <= Self.maxManifestBytes,
+              let data = try? Data(contentsOf: manifest) else { return nil }
         let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
         guard var batch = try? decoder.decode(StagedBatch.self, from: data), batch.version == 1 else { return nil }
+        // A batch dated in the future would never reach its 24 h expiry.
+        guard batch.createdAt <= now.addingTimeInterval(300) else { return nil }
         batch.id = id
         var seen = Set<String>()
         var valid: [StagedItem] = []
@@ -156,6 +189,8 @@ public final class BatchBuilder: @unchecked Sendable {
         let displayName = StagedFileName.sanitize(suggestedName ?? source.lastPathComponent, maxLength: store.limits.maxNameLength)
         let values = try? source.resourceValues(forKeys: [.fileSizeKey, .isDirectoryKey, .isRegularFileKey])
         if values?.isDirectory == true { throw StagingRejection.folder(name: displayName) }
+        // Never stage the staging area itself or the app's own container, whoever asks.
+        if store.isProtectedSource(source) { throw StagingRejection.unreadable(displayName) }
         guard values?.isRegularFile == true, let size = values?.fileSize else { throw StagingRejection.unreadable(displayName) }
         let bytes = Int64(size)
 

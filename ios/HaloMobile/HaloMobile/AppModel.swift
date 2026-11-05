@@ -105,6 +105,10 @@ final class AppModel: ObservableObject {
     private var consentContinuation: CheckedContinuation<ConsentDecision, Never>?
     private var sendTask: Task<Void, Never>?
     private var scanTask: Task<Void, Never>?
+    /// Bumped whenever a scan starts or is stopped. A scan that finishes (or reports a peer) for an
+    /// older generation is ignored — otherwise a scan cancelled by a network change would, a moment
+    /// later, put the *old* network's devices back into the list it had just cleared.
+    private var scanGeneration = 0
     private(set) var client: HaloShareClient
 
     let receiveDirectory: URL
@@ -339,15 +343,17 @@ final class AppModel: ObservableObject {
         guard !isScanning else { return }
         isScanning = true
         notice = nil
+        scanGeneration += 1
+        let generation = scanGeneration
         let client = self.client
         let remembered = addressBook.addresses
         scanTask = Task { [weak self] in
             async let manual: [Peer] = Self.probe(addresses: remembered, with: client)
             let found = await SubnetScanner(client: client).scan { peer in
-                Task { @MainActor in self?.merge(peer) }
+                Task { @MainActor in if self?.scanGeneration == generation { self?.merge(peer) } }
             }
             let pinned = await manual
-            guard let self else { return }
+            guard let self, self.scanGeneration == generation else { return }
             for p in found + pinned { self.merge(p) }
             self.isScanning = false
             if self.peers.isEmpty {
@@ -376,7 +382,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func stopScan() { scanTask?.cancel(); isScanning = false }
+    func stopScan() { scanGeneration += 1; scanTask?.cancel(); isScanning = false }
 
     private func merge(_ peer: Peer) { directory.merge(peer); objectWillChange.send() }
 
@@ -442,6 +448,9 @@ final class AppModel: ObservableObject {
     /// disk at send time) — nothing is copied, nothing is read into memory.
     func queue(pickedFiles urls: [URL]) {
         guard !urls.isEmpty else { return }
+        // A selection can't be replaced under a running send: `present` cleans up the old one,
+        // which deletes the very files (and ends the security scope) the upload is reading.
+        guard !transfer.isBusy else { notice = "Wait for the current transfer to finish."; return }
         let access = SecurityScopedAccess()
         access.begin(urls)
         do {
@@ -457,6 +466,7 @@ final class AppModel: ObservableObject {
     /// a private temp folder; `PickedMedia` never builds a `Data`.
     func queue(photos items: [PhotosPickerItem]) {
         guard !items.isEmpty else { return }
+        guard !transfer.isBusy else { notice = "Wait for the current transfer to finish."; return }
         Task { [weak self] in
             var files: [OutgoingFile] = []
             var dirs: [URL] = []
@@ -469,6 +479,12 @@ final class AppModel: ObservableObject {
                 } catch { failed += 1 }
             }
             guard let self else { return }
+            // Loading a photo can take a while; a send may have started in the meantime.
+            guard !self.transfer.isBusy else {
+                dirs.forEach { try? FileManager.default.removeItem(at: $0) }
+                self.notice = "Wait for the current transfer to finish."
+                return
+            }
             if files.isEmpty {
                 self.notice = "Couldn't read the selected \(items.count == 1 ? "item" : "items")."
             } else {
@@ -615,6 +631,7 @@ final class AppModel: ObservableObject {
     /// Developer aid: lines up a throw-away file of `megabytes` of non-text bytes, so the device
     /// picker and send path can be exercised without driving the system file picker.
     func queueTestFile(megabytes: Int = 5) {
+        guard !transfer.isBusy else { return }
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("halo-test-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent("halo-test-\(megabytes)MB.bin")

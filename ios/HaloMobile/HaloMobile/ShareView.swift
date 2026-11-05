@@ -197,12 +197,14 @@ struct ShareView: View {
                     HStack(spacing: 10) {
                         Button { picking = true } label: { Label("Files", systemImage: "doc.badge.plus") }
                             .buttonStyle(.borderedProminent)
+                            .disabled(model.transfer.isBusy)
                             .accessibilityIdentifier("share.chooseFiles")
 
                         PhotosPicker(selection: $photoSelection, maxSelectionCount: 25, matching: .any(of: [.images, .videos])) {
                             Label("Photos", systemImage: "photo.on.rectangle")
                         }
                         .buttonStyle(.bordered)
+                        .disabled(model.transfer.isBusy)
                         .accessibilityIdentifier("share.choosePhotos")
 
                         #if DEBUG

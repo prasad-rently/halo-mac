@@ -25,7 +25,7 @@ struct ConsentSheet: View {
                     ForEach(offer.files.prefix(50), id: \.id) { file in
                         HStack {
                             Image(systemName: "doc").foregroundColor(.haloText3)
-                            Text(file.fileName).font(.system(size: 13)).foregroundColor(.haloText).lineLimit(1)
+                            Text(SafeFileName.relativePath(file.fileName) ?? "file").font(.system(size: 13)).foregroundColor(.haloText).lineLimit(1)
                             Spacer()
                             Text(Bytes.string(file.size)).font(.system(size: 11)).foregroundColor(.haloText3)
                         }
