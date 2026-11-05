@@ -421,7 +421,7 @@ private fun ClipCard(item: ClipItem, onCopy: () -> Unit, onSend: () -> Unit, onT
 // ── Settings block ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-fun CloudSettingsCard(vm: CloudViewModel) {
+fun CloudSettingsCard(vm: CloudViewModel, onCheckDatabase: () -> Unit = {}) {
     val profile by vm.profile.collectAsStateWithLifecycle()
     val problem by vm.profileProblem.collectAsStateWithLifecycle()
     var name by remember { mutableStateOf(vm.deviceName) }
@@ -446,6 +446,8 @@ fun CloudSettingsCard(vm: CloudViewModel) {
                 HaloGhostButton("Disconnect", { confirm = true }, Modifier.testTag("settings.disconnect"), tint = HaloColors.Red)
                 HaloInfoButton(HaloCopy.INFO_DISCONNECT)
             }
+            Spacer(Modifier.height(4.dp))
+            HaloListRow(HaloCopy.CHECK_DB, subtitle = HaloCopy.CHECK_DB_SUB, icon = Icons.Filled.Check, onClick = onCheckDatabase, modifier = Modifier.testTag("settings.checkDatabase"))
         }
     }
     if (confirm) androidx.compose.material3.AlertDialog(

@@ -75,6 +75,7 @@ import java.text.DateFormat
 import java.util.Date
 
 private const val SUB_SPEND = "spend"
+private const val SUB_DBCHECK = "dbcheck"
 
 @Composable
 fun HaloApp(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel) {
@@ -113,16 +114,17 @@ fun HaloApp(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel) {
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             if (tools.isOpen) ToolsHost(tools)
+            else if (subScreen == SUB_DBCHECK) HaloSubScreen("Database", { subScreen = null }, backTag = "dbcheck.back") { DatabaseCheckScreen(cloud) }
             else if (subScreen == SUB_SPEND) HaloSubScreen("Spending", { subScreen = null }, backTag = "spend.back") { app.halo.mobile.expense.ExpenseScreen() }
             else when (dest) {
-                HaloDestination.Home -> HomeScreen(vm, cloud, ::go, extraMore = listOf(
+                HaloDestination.Home -> HomeScreen(vm, cloud, ::go, onCheckDatabase = { subScreen = SUB_DBCHECK }, extraMore = listOf(
                     MoreEntry("Tools", "Transform · Code Image · Speed Test · Photos", Icons.Filled.Build, "home.more.tools") { tools.openHub() },
                     MoreEntry("Spend", "This month from bank SMS, on this phone", Icons.Filled.CheckCircle, "home.more.spend") { subScreen = SUB_SPEND },
                 ))
                 HaloDestination.Messages -> SmsScreen(cloud)
                 HaloDestination.Clipboard -> ClipboardScreen(cloud)
                 HaloDestination.Share -> ShareScreen(vm)
-                HaloDestination.Settings -> SettingsScreen(vm, cloud)
+                HaloDestination.Settings -> SettingsScreen(vm, cloud, onCheckDatabase = { subScreen = SUB_DBCHECK })
             }
         }
     }
@@ -318,13 +320,13 @@ private fun DeviceTile(peer: Peer, selected: Boolean, modifier: Modifier, onClic
 // ── Settings ───────────────────────────────────────────────────────────────────────────────────
 
 @Composable
-fun SettingsScreen(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel) {
+fun SettingsScreen(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel, onCheckDatabase: () -> Unit = {}) {
     val identity by vm.identity.collectAsStateWithLifecycle()
     val listen by vm.listen.collectAsStateWithLifecycle()
     var alias by remember(identity.alias) { mutableStateOf(identity.alias) }
 
     HaloScreen(HaloCopy.SETTINGS_TITLE) {
-        CloudSettingsCard(cloud)
+        CloudSettingsCard(cloud, onCheckDatabase)
 
         HaloCard {
             HaloSectionHeader("This device")

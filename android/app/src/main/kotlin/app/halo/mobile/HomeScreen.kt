@@ -66,7 +66,7 @@ enum class HaloDestination { Home, Messages, Clipboard, Share, Settings }
 data class MoreEntry(val title: String, val subtitle: String, val icon: ImageVector, val tag: String, val onClick: () -> Unit)
 
 @Composable
-fun HomeScreen(vm: AppViewModel, cloud: CloudViewModel, go: (HaloDestination) -> Unit, extraMore: List<MoreEntry> = emptyList()) {
+fun HomeScreen(vm: AppViewModel, cloud: CloudViewModel, go: (HaloDestination) -> Unit, extraMore: List<MoreEntry> = emptyList(), onCheckDatabase: () -> Unit = {}) {
     val identity by vm.identity.collectAsStateWithLifecycle()
     val profile by cloud.profile.collectAsStateWithLifecycle()
     val problem by cloud.profileProblem.collectAsStateWithLifecycle()
@@ -150,7 +150,7 @@ fun HomeScreen(vm: AppViewModel, cloud: CloudViewModel, go: (HaloDestination) ->
             QuickAction(HaloCopy.QA_SEND_CLIPBOARD, Icons.Filled.Send, "home.sendClipboard") { if (clipOn) cloud.sendClipboardNow() else go(HaloDestination.Clipboard) }
             QuickAction(HaloCopy.QA_SEND_FILE, Icons.Filled.Share, "home.sendFile") { go(HaloDestination.Share) }
             QuickAction(HaloCopy.QA_SCAN, Icons.Filled.Search, "home.scan") { vm.scan(); go(HaloDestination.Share) }
-            QuickAction(HaloCopy.QA_CHECK, Icons.Filled.Check, "home.check") { if (profile != null) cloud.syncNow(reconcile = true) else go(HaloDestination.Messages) }
+            QuickAction(HaloCopy.QA_CHECK, Icons.Filled.Check, "home.check") { if (profile != null) onCheckDatabase() else go(HaloDestination.Messages) }
         }
         (notice ?: syncNotice)?.let { Text(it, style = HaloType.Caption, color = HaloColors.Text2, modifier = Modifier.testTag("home.notice")) }
 

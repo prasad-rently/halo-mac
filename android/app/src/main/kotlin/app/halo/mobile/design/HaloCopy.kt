@@ -11,7 +11,8 @@ object HaloCopy {
     // Home
     const val HOME_TITLE = "Halo"
     const val QUICK_ACTIONS = "Quick actions"; const val RECENT = "Recent activity"; const val MORE = "More"
-    const val QA_SEND_CLIPBOARD = "Send clipboard"; const val QA_SEND_FILE = "Send file"; const val QA_SCAN = "Scan nearby"; const val QA_CHECK = "Check sync"
+    const val QA_SEND_CLIPBOARD = "Send clipboard"; const val QA_SEND_FILE = "Send file"; const val QA_SCAN = "Scan nearby"; const val QA_CHECK = "Check database"
+    const val CHECK_DB = "Check my database"; const val CHECK_DB_SUB = "Can this phone read and write?"
     const val TILE_MESSAGES = "Messages today"; const val TILE_CLIPBOARD = "Clipboard items"; const val TILE_NEARBY = "Nearby devices"; const val TILE_LAST_SYNC = "Last sync"
     const val NO_ACTIVITY = "Nothing yet"; const val NO_ACTIVITY_SUB = "Sync or send something and it shows up here."
     const val CONNECT_TO_MAC = "Connect to Mac"
