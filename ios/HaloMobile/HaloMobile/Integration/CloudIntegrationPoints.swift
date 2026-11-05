@@ -27,6 +27,9 @@ final class AppRouter: ObservableObject {
     /// Share starts a Wi-Fi scan when it appears with this set.
     @Published var scanOnShare = false
 
+    /// Opens the send sheet for whatever is waiting in the outbox (Share Extension / pickers).
+    /// The router only switches to Share; the sheet itself is driven by `AppModel.showSendSheet`.
+    func openShare() { tab = .share }
     func openInbox() { showInbox = true; tab = .share }
     func openShareAndScan() { scanOnShare = true; tab = .share }
 }
@@ -69,10 +72,20 @@ struct HomeActivity: Identifiable, Equatable {
     }
 }
 
+/// Items lined up to send but not sent yet (Share Extension / file picker / photo picker).
+/// Only counts and bytes cross this boundary — never file names.
+struct HomePendingShare: Equatable {
+    var itemCount: Int
+    var totalBytes: Int64
+    /// Further staged batches waiting behind the one in the outbox.
+    var moreBatches: Int
+}
+
 /// The one object the cloud workstream writes to and Home reads from.
 @MainActor
 final class HomeBridge: ObservableObject {
     @Published var snapshot: HomeCloudSnapshot = .notSetUp
+    @Published var pendingShare: HomePendingShare?
     @Published var extraQuickActions: [HomeQuickAction] = []
     @Published private(set) var activity: [HomeActivity] = []
 

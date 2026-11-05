@@ -79,6 +79,26 @@ struct SettingsView: View {
                     HaloListRow(icon: "folder.fill", tint: .haloAccent, title: HaloStrings.Settings.savedTo) {
                         Text(HaloStrings.Settings.savedToValue).font(HaloFont.caption).foregroundColor(.haloText2)
                     }
+                    HaloRowDivider()
+                    HaloListRow(icon: "wifi", tint: localNetworkState.color, title: ShareStrings.localNetwork) {
+                        if model.localNetwork == .denied {
+                            HaloSecondaryButton(HaloStrings.Share.openSettings, fullWidth: false) { model.openSystemSettings() }
+                                .accessibilityIdentifier("settings.localNetwork.open")
+                        } else {
+                            HaloStatusBadge(localNetworkText, localNetworkState)
+                        }
+                    }
+                    .accessibilityIdentifier("settings.localNetwork")
+                    HaloRowDivider()
+                    HaloListRow(icon: "square.and.arrow.up.on.square", tint: model.staging == nil ? .haloAmber : .haloGreen,
+                                title: HaloStrings.Settings.shareFromApps) {
+                        HaloStatusBadge(model.staging == nil ? "Unavailable" : "On", model.staging == nil ? .warning : .ok)
+                    }
+                    .accessibilityIdentifier("settings.shareExtension")
+                    HaloRowDivider()
+                    // Honest limit (F-050 D8): iOS suspends apps, so Halo receives while it is open. The detail is behind the (i).
+                    HaloListRow(icon: "app.badge", tint: .haloGreen, title: ShareStrings.receivingChip)
+                        .accessibilityIdentifier("settings.receivingCopy")
                 }
             }
         }
@@ -99,6 +119,24 @@ struct SettingsView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var localNetworkState: HaloState {
+        if !model.localNetworkExplained { return .neutral }
+        switch model.localNetwork {
+        case .granted: return .ok
+        case .denied: return .warning
+        case .undetermined: return .neutral
+        }
+    }
+
+    private var localNetworkText: String {
+        if !model.localNetworkExplained { return "Not asked yet" }
+        switch model.localNetwork {
+        case .granted: return "Allowed"
+        case .denied: return "Off"
+        case .undetermined: return "Checking…"
         }
     }
 

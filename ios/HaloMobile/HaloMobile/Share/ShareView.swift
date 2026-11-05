@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 import UniformTypeIdentifiers
 import HaloShareKit
 
@@ -8,6 +9,7 @@ struct ShareView: View {
     @EnvironmentObject var router: AppRouter
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var picking = false
+    @State private var photoSelection: [PhotosPickerItem] = []
     @State private var showAddSheet = false
     @State private var showReceivingInfo = false
     @State private var showDiscoveryInfo = false
@@ -18,16 +20,16 @@ struct ShareView: View {
                 VStack(spacing: HaloLayout.sectionSpacing) {
                     thisDevice
                     noticeBanner
+                    localNetworkStatus
+                    outboxCard
                     // At accessibility text sizes a pinned bar would swallow the screen: it scrolls instead.
                     if typeSize.isAccessibilitySize { sendCard }
                     nearby
                     received
                     #if DEBUG
-                    HaloSecondaryButton(HaloStrings.Share.sendTest, icon: "hammer") {
-                        model.dismissTransferResult(); model.sendTestFile()
-                    }
-                    .disabled(model.selectedPeer == nil || model.transfer.isBusy)
-                    .accessibilityIdentifier("share.sendTest")
+                    HaloSecondaryButton(HaloStrings.Share.sendTest, icon: "hammer") { model.queueTestFile() }
+                        .disabled(model.transfer.isBusy)
+                        .accessibilityIdentifier("share.sendTest")
                     #endif
                 }
                 .padding(HaloLayout.screenPadding)
@@ -45,8 +47,14 @@ struct ShareView: View {
             .navigationTitle(HaloStrings.Share.title)
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(isPresented: $router.showInbox) { InboxView() }
+            // Picking only lines files up; the send happens from the sheet, after a device is chosen there.
             .fileImporter(isPresented: $picking, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
-                if case .success(let urls) = result, !urls.isEmpty { model.send(urls) }
+                if case .success(let urls) = result { model.queue(pickedFiles: urls) }
+            }
+            .onChange(of: photoSelection) { items in
+                guard !items.isEmpty else { return }
+                model.queue(photos: items)
+                photoSelection = []
             }
             .sheet(isPresented: $showAddSheet) { AddAddressSheet().environmentObject(model) }
             .haloInfoSheet(isPresented: $showReceivingInfo, title: HaloStrings.Info.receivingTitle,
@@ -123,6 +131,38 @@ struct ShareView: View {
         }
     }
 
+    // MARK: Local Network (MR-SH-4 / MR-DI-5)
+
+    @ViewBuilder private var localNetworkStatus: some View {
+        if !model.localNetworkExplained { LocalNetworkExplainer() }
+        else if model.localNetwork == .denied { LocalNetworkDeniedCard() }
+    }
+
+    // MARK: Outbox — lined up, not sent
+
+    @ViewBuilder private var outboxCard: some View {
+        if let outbox = model.outbox {
+            Button { HaloHaptics.tap(); model.showSendSheet = true } label: {
+                HaloCard(accentTop: .haloAmber, padding: 12) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "tray.full.fill").foregroundColor(.haloAmber).accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(outbox.files.count) · \(Bytes.string(outbox.totalBytes))").font(HaloFont.headline).foregroundColor(.haloText)
+                            Text(outbox.title).font(HaloFont.caption).foregroundColor(.haloText2).lineLimit(1)
+                        }
+                        Spacer(minLength: 8)
+                        if model.otherStagedBatchCount > 0 { HaloChip(text: "+\(model.otherStagedBatchCount)", tint: .haloText2) }
+                        HaloStatusBadge(ShareStrings.notSentYet, .warning)
+                        Image(systemName: "chevron.right").font(.system(.footnote)).foregroundColor(.haloText3).accessibilityHidden(true)
+                    }
+                }
+            }
+            .buttonStyle(HaloPressStyle())
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("share.reviewOutbox")
+        }
+    }
+
     // MARK: Nearby (radar + device grid)
 
     private var columns: [GridItem] {
@@ -157,9 +197,10 @@ struct ShareView: View {
 
             LazyVGrid(columns: columns, spacing: HaloLayout.cardSpacing) {
                 ForEach(model.peers) { peer in
-                    DeviceTile(peer: peer, isSelected: model.selectedPeerID == peer.id) {
+                    // Devices are chosen in the send sheet, for the items lined up — never pre-selected here.
+                    DeviceTile(peer: peer, isSelected: false) {
                         HaloHaptics.selection()
-                        model.selectedPeerID = peer.id
+                        if model.outbox != nil { model.showSendSheet = true } else { model.notice = HaloStrings.Share.pickItemsFirst }
                     }
                     .accessibilityIdentifier("share.peer.\(peer.alias)")
                 }
@@ -185,7 +226,7 @@ struct ShareView: View {
             VStack(alignment: .leading, spacing: 14) {
                 switch model.transfer {
                 case .idle:
-                    targetRow
+                    EmptyView()
                 case .sending(let name, let sent, let total, let overallSent, let overallTotal):
                     sendingRow(name: name, sent: sent, total: total, overallSent: overallSent, overallTotal: overallTotal)
                 case .finished(let message):
@@ -195,12 +236,26 @@ struct ShareView: View {
                 }
 
                 if !model.transfer.isBusy {
-                    HaloPrimaryButton(HaloStrings.Share.chooseFiles, icon: "doc.badge.plus") {
-                        model.dismissTransferResult(); picking = true
-                    }
-                    .disabled(model.selectedPeer == nil)
-                    .accessibilityIdentifier("share.chooseFiles")
+                    // Picking lines items up; the device is chosen in the send sheet that follows.
+                    HStack(spacing: 10) {
+                        HaloPrimaryButton(HaloStrings.Share.files, icon: "doc.badge.plus") {
+                            model.dismissTransferResult(); picking = true
+                        }
+                        .accessibilityIdentifier("share.chooseFiles")
 
+                        PhotosPicker(selection: $photoSelection, maxSelectionCount: 25, matching: .any(of: [.images, .videos])) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "photo.on.rectangle").font(.system(.subheadline).weight(.semibold))
+                                Text(HaloStrings.Share.photos).font(HaloFont.bodyMedium).lineLimit(1)
+                            }
+                            .foregroundColor(.haloText)
+                            .padding(.horizontal, 16).padding(.vertical, 10)
+                            .frame(maxWidth: .infinity, minHeight: 52)
+                            .overlay(RoundedRectangle(cornerRadius: HaloLayout.controlRadius + 2, style: .continuous).stroke(Color.haloBorder2, lineWidth: 1))
+                        }
+                        .buttonStyle(HaloPressStyle())
+                        .accessibilityIdentifier("share.choosePhotos")
+                    }
                 }
             }
         }
@@ -213,27 +268,6 @@ struct ShareView: View {
         case .failed: return .haloRed
         case .idle: return nil
         }
-    }
-
-    private var targetRow: some View {
-        HStack(spacing: 12) {
-            if let peer = model.selectedPeer {
-                Image(systemName: DeviceTile.icon(for: peer)).foregroundColor(.haloAccent)
-                    .frame(width: 36, height: 36)
-                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.haloAccent.opacity(0.14)))
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(HaloStrings.Share.sendTo.uppercased()).font(HaloFont.section).tracking(1.2).foregroundColor(.haloText3)
-                    Text(peer.alias).font(HaloFont.headline).foregroundColor(.haloText).lineLimit(2)
-                }
-            } else {
-                Image(systemName: "hand.point.up.left").foregroundColor(.haloText3)
-                    .frame(width: 36, height: 36).accessibilityHidden(true)
-                Text(HaloStrings.Share.chooseDeviceFirst).font(HaloFont.bodyMedium).foregroundColor(.haloText2)
-            }
-            Spacer(minLength: 0)
-        }
-        .accessibilityElement(children: .combine)
     }
 
     private func sendingRow(name: String, sent: Int64, total: Int64, overallSent: Int64, overallTotal: Int64) -> some View {
@@ -291,6 +325,10 @@ struct DeviceTile: View {
     let isSelected: Bool
     let action: () -> Void
 
+    static func address(of peer: Peer) -> String {
+        peer.port == Int(HaloShare.defaultPort) ? peer.host : "\(peer.host):\(peer.port)"
+    }
+
     static func icon(for peer: Peer) -> String {
         switch peer.info.deviceType {
         case "desktop": return "desktopcomputer"
@@ -318,7 +356,8 @@ struct DeviceTile: View {
                     Text(peer.alias).font(HaloFont.headline).foregroundColor(.haloText).lineLimit(2)
                     Text(peer.info.deviceModel ?? peer.info.deviceType ?? "device")
                         .font(HaloFont.caption).foregroundColor(.haloText2).lineLimit(1)
-                    Text(peer.host).font(HaloFont.mono).foregroundColor(.haloText3).lineLimit(1).minimumScaleFactor(0.7)
+                    // The address is shown on purpose: a fingerprint is only a claim, the host is where it was actually reached.
+                    Text(Self.address(of: peer)).font(HaloFont.mono).foregroundColor(.haloText3).lineLimit(1).minimumScaleFactor(0.7)
                 }
             }
             .padding(12)
@@ -329,7 +368,7 @@ struct DeviceTile: View {
                 .stroke(isSelected ? Color.haloAccent.opacity(0.6) : Color.haloBorder, lineWidth: isSelected ? 1.5 : 1))
         }
         .buttonStyle(HaloPressStyle())
-        .accessibilityLabel("\(peer.alias), \(peer.info.deviceModel ?? peer.info.deviceType ?? "device")")
+        .accessibilityLabel("\(peer.alias), \(peer.info.deviceModel ?? peer.info.deviceType ?? "device"), \(Self.address(of: peer))")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -381,6 +420,17 @@ struct AddAddressSheet: View {
                 HaloPrimaryButton(HaloStrings.Share.addAction, icon: "plus") { model.addManualPeer(); focused = false }
                     .disabled(model.manualAddress.trimmingCharacters(in: .whitespaces).isEmpty)
                     .accessibilityIdentifier("share.addAddress")
+                if !model.recentAddresses.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(model.recentAddresses, id: \.self) { address in
+                                HaloChip(text: address, icon: "clock.arrow.circlepath", tint: .haloAccent, isSelected: false) { model.addManualPeer(address: address) }
+                                    .contextMenu { Button("Forget", role: .destructive) { model.forgetAddress(address) } }
+                                    .accessibilityIdentifier("share.recent.\(address)")
+                            }
+                        }
+                    }
+                }
                 if let notice = model.notice {
                     Label(notice, systemImage: "exclamationmark.circle.fill").font(HaloFont.caption).foregroundColor(.haloAmber)
                         .accessibilityIdentifier("share.notice")
@@ -404,7 +454,8 @@ struct AddAddressSheet: View {
 enum ShareInfo {
     static let receiving: [HaloInfoPoint] = [
         HaloInfoPoint("hand.raised.fill", .haloGreen, "You decide", "Nothing is saved until you accept. Files never overwrite each other."),
-        HaloInfoPoint("app.badge", .haloAmber, "Keep Halo open", "iPhone can't listen in the background, so Halo receives only while it is open."),
+        HaloInfoPoint("app.badge", .haloAmber, "Keep Halo open", ShareStrings.receivingInfo),
+        HaloInfoPoint("tray.full", .haloAccent, "Nothing sent by itself", "Items shared from other apps wait in Halo until you choose a device and tap Send."),
         HaloInfoPoint("wifi.exclamationmark", .haloAmber, "Not encrypted in transit", "Transfers stay on your Wi-Fi but are sent as plain HTTP. Only accept files from people you trust."),
         HaloInfoPoint("folder.fill", .haloAccent, "Where files go", "Received files are saved to Halo → Received, visible in the Files app."),
     ]

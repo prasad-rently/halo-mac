@@ -13,6 +13,7 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: HaloLayout.sectionSpacing) {
+                    pendingShareBanner
                     statusCard
                     metricGrid
                     if bridge.snapshot.isConfigured { cloudTiles } else { setupCloudCard }
@@ -23,6 +24,39 @@ struct HomeView: View {
             }
             .haloScreen()
             .navigationTitle(HaloStrings.Home.title)
+        }
+    }
+
+    // MARK: Waiting to send
+
+    /// Items from the Share Extension / pickers that are lined up but not sent. One tap reopens the
+    /// send sheet; nothing is sent until a device is chosen there.
+    @ViewBuilder private var pendingShareBanner: some View {
+        if let pending = bridge.pendingShare {
+            Button {
+                HaloHaptics.tap()
+                router.openShare(); model.showSendSheet = true
+            } label: {
+                HaloCard(accentTop: .haloAmber, padding: 12) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "tray.full.fill").font(.system(.title3).weight(.semibold)).foregroundColor(.haloAmber)
+                            .frame(width: 44, height: 44)
+                            .background(Circle().fill(Color.haloAmber.opacity(0.14)))
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(HaloStrings.Home.waitingTitle(pending.itemCount)).font(HaloFont.headline).foregroundColor(.haloText)
+                            Text(pending.moreBatches > 0 ? "\(Bytes.string(pending.totalBytes)) · +\(pending.moreBatches)" : Bytes.string(pending.totalBytes))
+                                .font(HaloFont.caption).foregroundColor(.haloText2)
+                        }
+                        Spacer(minLength: 8)
+                        HaloStatusBadge(HaloStrings.Home.chooseDevice, .warning)
+                        Image(systemName: "chevron.right").font(.system(.footnote)).foregroundColor(.haloText3).accessibilityHidden(true)
+                    }
+                }
+            }
+            .buttonStyle(HaloPressStyle())
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("home.waitingToSend")
         }
     }
 
@@ -157,7 +191,12 @@ struct HomeView: View {
     // MARK: Quick actions
 
     private var actions: [HomeQuickAction] {
-        [
+        let waiting: [HomeQuickAction] = bridge.pendingShare.map { p in
+            [HomeQuickAction(id: "waiting", title: HaloStrings.Home.sendWaiting(p.itemCount), icon: "paperplane.fill", tint: .haloAmber) {
+                router.openShare(); model.showSendSheet = true
+            }]
+        } ?? []
+        return waiting + [
             HomeQuickAction(id: "scan", title: HaloStrings.Home.scanNearby, icon: "dot.radiowaves.left.and.right", tint: .haloGreen) { router.openShareAndScan() },
             HomeQuickAction(id: "send", title: HaloStrings.Home.chooseFiles, icon: "doc.badge.plus", tint: .haloAccent) { router.tab = .share },
             HomeQuickAction(id: "inbox", title: HaloStrings.Home.openInbox, icon: "tray.and.arrow.down.fill", tint: .haloCyan) { router.openInbox() },

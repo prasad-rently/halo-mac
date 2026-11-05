@@ -29,7 +29,7 @@ struct ConsentSheet: View {
                             if i > 0 { HaloRowDivider(inset: 14) }
                             HStack(spacing: 10) {
                                 Image(systemName: "doc").foregroundColor(.haloText3).accessibilityHidden(true)
-                                Text(file.fileName).font(HaloFont.body).foregroundColor(.haloText).lineLimit(2)
+                                Text(SafeFileName.relativePath(file.fileName) ?? "file").font(HaloFont.body).foregroundColor(.haloText).lineLimit(2)
                                 Spacer(minLength: 8)
                                 Text(Bytes.string(file.size)).font(HaloFont.caption).foregroundColor(.haloText2).fixedSize()
                             }

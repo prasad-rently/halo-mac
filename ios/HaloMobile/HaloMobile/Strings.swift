@@ -38,6 +38,9 @@ enum HaloStrings {
         static let ringSynced = "Synced"
         static let ringProblem = "Problem"
         static let lastTransfer = "Last transfer"
+        static let chooseDevice = "Choose device"
+        static func waitingTitle(_ n: Int) -> String { n == 1 ? "1 item waiting to send" : "\(n) items waiting to send" }
+        static func sendWaiting(_ n: Int) -> String { n == 1 ? "Send 1 item" : "Send \(n) items" }
     }
 
     enum Share {
@@ -52,6 +55,11 @@ enum HaloStrings {
         static let addByAddress = "Add by address"
         static let addTile = "Add"
         static let chooseFiles = "Choose files"
+        static let files = "Files"
+        static let allow = "Allow"
+        static let openSettings = "Settings"
+        static let photos = "Photos"
+        static let pickItemsFirst = "Choose files or photos first, then pick who gets them."
         static let chooseDeviceFirst = "Pick a device first"
         static let sendTo = "Send to"
         static let sending = "Sending"
@@ -82,7 +90,8 @@ enum HaloStrings {
         static let receiving = "Receiving"
         static let status = "Status"
         static let savedTo = "Saved to"
-        static let savedToValue = "Halo → Received"
+        static let savedToValue = "Files › Halo › Received"
+        static let shareFromApps = "Share from other apps"
         static let about = "About HaloShare"
         static let protocolLabel = "Protocol"
         static let protocolValue = "LocalSend v2 · HTTP"

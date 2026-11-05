@@ -28,7 +28,7 @@ struct ClipboardView: View {
                 }
             }
             .sheet(item: Binding(get: { pending.map { Pending(text: $0) } }, set: { pending = $0?.text })) { p in
-                SendSheet(text: p.text) { cloud.send(p.text); pending = nil } cancel: { pending = nil }
+                ClipboardSendSheet(text: p.text) { cloud.send(p.text); pending = nil } cancel: { pending = nil }
                     .presentationDetents([.medium])
             }
             .confirmationDialog("Delete every synced clipboard item from your cloud?", isPresented: $purgeAsk, titleVisibility: .visible) {
@@ -135,7 +135,7 @@ struct ClipboardView: View {
     }
 }
 
-private struct SendSheet: View {
+private struct ClipboardSendSheet: View {
     // A sheet is presented above the root view, so the app-wide PrivacyShield overlay does not cover it: hide the text
     // here too whenever the app is not active (app-switcher snapshot).
     @Environment(\.scenePhase) private var scenePhase

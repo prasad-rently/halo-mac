@@ -21,7 +21,7 @@ enum DebugLaunch {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { model.debugSetTransfer(t) }
         }
         if d.bool(forKey: "debugSendTest") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { model.sendTestFile(megabytes: 40) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { model.queueTestFile(megabytes: 40) }
         }
     }
 }

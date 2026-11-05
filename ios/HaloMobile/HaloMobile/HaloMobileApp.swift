@@ -20,21 +20,27 @@ struct HaloMobileApp: App {
                 .preferredColorScheme(.dark)
                 .tint(.haloAccent)
                 // iOS can't host a listener while suspended (requirements MR-OS-2): listen while
-                // the app is active, stop cleanly when it is not.
+                // the app is active. Leaving mid-transfer asks iOS for a short grace period first
+                // (D8); the model stops the listener once nothing is in flight.
                 .onChange(of: scenePhase) { phase in
                     switch phase {
-                    case .active: model.startServer(); cloud.startSync()
-                    case .background: model.stopServer(); cloud.stopSync()
+                    case .active: model.didBecomeActive(); cloud.startSync()
+                    case .background: model.didEnterBackground(); cloud.stopSync()
                     default: break
                     }
                 }
-                // App-switcher snapshots must not show message bodies or OTPs: cover the UI whenever not active.
+                // App-switcher snapshots must not show message bodies, OTPs or file names: cover the UI whenever not active.
                 .overlay { if scenePhase != .active { PrivacyShield() } }
                 .onAppear {
-                    model.startServer(); cloud.startSync()
+                    model.didBecomeActive(); cloud.startSync()
                     #if DEBUG
                     DebugLaunch.apply(model: model, router: router)
                     #endif
+                }
+                // halomobile://share (the Share Extension's "Open Halo"). The URL carries no data —
+                // the staged items are read from the App Group container, never from the URL.
+                .onOpenURL { url in
+                    if url.scheme == "halomobile", url.host == "share" { model.loadStagedShares() }
                 }
         }
     }
@@ -70,10 +76,16 @@ struct RootView: View {
             ConsentSheet(offer: pending.offer)
                 .interactiveDismissDisabled()      // declining must be an explicit act
         }
+        // Not-yet-sent items (Share Extension / pickers) wait in the outbox; the send sheet is reachable from every tab.
+        .sheet(isPresented: $model.showSendSheet) {
+            SendSheet().environmentObject(model).environmentObject(router)
+        }
         // Empty states in Messages/Clipboard ask for Settings → Cloud.
         .onChange(of: cloud.wantsSetup) { want in if want { router.tab = .settings } }
         // Cloud → Home dashboard (status ring, tiles, quick actions, activity).
         .modifier(CloudHomeBridge())
+        // Items waiting to be sent (Share Extension / pickers) → Home banner + quick action.
+        .modifier(ShareHomeBridge())
         // Last transfer → Home's Recent activity.
         .onChange(of: model.transfer) { state in
             switch state {

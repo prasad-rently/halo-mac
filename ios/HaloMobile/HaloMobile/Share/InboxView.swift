@@ -1,8 +1,11 @@
 import SwiftUI
+import QuickLook
 
 /// Compact row for a received file: type icon, name, size · time, share button.
 struct InboxRow: View {
     let item: InboxItem
+    /// Tapping the row opens it (Quick Look); `nil` for the compact preview on Share, where the row is static.
+    var onOpen: (() -> Void)?
 
     var body: some View {
         HaloListRow(icon: Self.icon(for: item), tint: Self.tint(for: item), title: item.name,
@@ -13,7 +16,11 @@ struct InboxRow: View {
                     .frame(width: HaloLayout.minTarget, height: HaloLayout.minTarget)
             }
             .accessibilityLabel("\(HaloStrings.Inbox.shareFile) \(item.name)")
+            .accessibilityIdentifier("inbox.share.\(item.name)")
         }
+        .contentShape(Rectangle())
+        .onTapGesture { onOpen?() }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("inbox.item.\(item.name)")
     }
 
@@ -39,9 +46,11 @@ struct InboxRow: View {
     }
 }
 
-/// Full list of received files. Pushed from Share (and Home); swipe to delete, share button per row.
+/// Full list of received files. Pushed from Share (and Home): tap to open (Quick Look), share button per row, swipe to delete (with confirmation).
 struct InboxView: View {
     @EnvironmentObject var model: AppModel
+    @State private var preview: URL?
+    @State private var pendingDelete: InboxItem?
 
     var body: some View {
         Group {
@@ -55,15 +64,22 @@ struct InboxView: View {
             } else {
                 List {
                     ForEach(model.inbox) { item in
-                        InboxRow(item: item)
+                        InboxRow(item: item) { preview = item.url }
+                            .accessibilityAction(named: "Open") { preview = item.url }
                             .background(Color.haloSurface2)
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.haloBorder, lineWidth: 1))
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                             .listRowInsets(EdgeInsets(top: 4, leading: HaloLayout.screenPadding, bottom: 4, trailing: HaloLayout.screenPadding))
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) { pendingDelete = item } label: { Label("Delete", systemImage: "trash") }
+                            }
+                            .contextMenu {
+                                Button { preview = item.url } label: { Label("Open", systemImage: "eye") }
+                                Button(role: .destructive) { pendingDelete = item } label: { Label("Delete", systemImage: "trash") }
+                            }
                     }
-                    .onDelete { offsets in offsets.map { model.inbox[$0] }.forEach(model.deleteInboxItem) }
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
@@ -73,5 +89,14 @@ struct InboxView: View {
         .navigationTitle(HaloStrings.Inbox.title)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { model.refreshInbox() }
+        .quickLookPreview($preview)
+        // Deletion is permanent on iOS (there is no Trash for an app's own files), so it always asks.
+        .confirmationDialog("Delete this file?", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+                            titleVisibility: .visible, presenting: pendingDelete) { item in
+            Button("Delete \(item.name)", role: .destructive) { model.deleteInboxItem(item); pendingDelete = nil }
+            Button("Keep", role: .cancel) { pendingDelete = nil }
+        } message: { _ in
+            Text("It will be removed from this device. This can't be undone.")
+        }
     }
 }
