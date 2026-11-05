@@ -17,19 +17,21 @@ data class Token(val start: Int, val end: Int, val type: TokenType)
  * per character in java.util.regex and overflows the stack on a long string literal.
  */
 object SyntaxHighlighter {
-    private const val DQ = "\"[^\"\\\\\\n]*(?:\\\\.[^\"\\\\\\n]*)*\""
-    private const val SQ = "'[^'\\\\\\n]*(?:\\\\.[^'\\\\\\n]*)*'"
-    private const val BT = "`[^`\\\\]*(?:\\\\[\\s\\S][^`\\\\]*)*`"
+    // Possessive (`*+`) on purpose: with the plain `(?:\\.[^"\\\n]*)*` group java.util.regex recurses once per escape sequence and a
+    // string with ~10k escapes (a minified JSON blob, a long \n-joined literal) threw StackOverflowError — an Error, which killed the app.
+    private const val DQ = "\"[^\"\\\\\\n]*+(?:\\\\.[^\"\\\\\\n]*+)*+\""
+    private const val SQ = "'[^'\\\\\\n]*+(?:\\\\.[^'\\\\\\n]*+)*+'"
+    private const val BT = "`[^`\\\\]*+(?:\\\\[\\s\\S][^`\\\\]*+)*+`"
 
     private fun commentsAndStrings(lang: CodeLanguage): Pattern {
         val parts = mutableListOf<String>()
         val slashSlash = lang in setOf(CodeLanguage.SWIFT, CodeLanguage.JAVASCRIPT, CodeLanguage.TYPESCRIPT, CodeLanguage.GO, CodeLanguage.RUST, CodeLanguage.JAVA)
-        if (lang == CodeLanguage.HTML || lang == CodeLanguage.XML) parts += "<!--[\\s\\S]*?-->"
+        if (lang == CodeLanguage.HTML || lang == CodeLanguage.XML) parts += "<!--[\\s\\S]*?(?:-->|\\z)"
         if (slashSlash) parts += "//[^\\n]*"      // not for CSS/JSON: `url(http://x)` and "http://x" are not comments
-        if (slashSlash || lang == CodeLanguage.CSS || lang == CodeLanguage.SQL) parts += "/\\*[\\s\\S]*?\\*/"
+        if (slashSlash || lang == CodeLanguage.CSS || lang == CodeLanguage.SQL) parts += "/\\*[\\s\\S]*?(?:\\*/|\\z)"
         if (lang == CodeLanguage.SQL) parts += "--[^\\n]*"
         if (lang == CodeLanguage.PYTHON || lang == CodeLanguage.BASH || lang == CodeLanguage.RUBY) parts += "#[^\\n]*"
-        if (lang == CodeLanguage.PYTHON) { parts += "\"\"\"[\\s\\S]*?\"\"\""; parts += "'''[\\s\\S]*?'''" }
+        if (lang == CodeLanguage.PYTHON) { parts += "\"\"\"[\\s\\S]*?(?:\"\"\"|\\z)"; parts += "'''[\\s\\S]*?(?:'''|\\z)" }
         parts += DQ; parts += SQ
         if (lang != CodeLanguage.JSON) parts += BT
         return Pattern.compile(parts.joinToString("|"))
@@ -37,7 +39,7 @@ object SyntaxHighlighter {
 
     private val cache = HashMap<CodeLanguage, Pattern>()
     private val keywordCache = HashMap<CodeLanguage, Pattern?>()
-    private val NUMBER = Pattern.compile("\\b\\d+\\.?\\d*([eE][+-]?\\d+)?\\b")
+    private val NUMBER = Pattern.compile("\\b\\d+(?:\\.\\d*)?([eE][+-]?\\d+)?\\b")
     private val HEX = Pattern.compile("\\b0[xX][0-9a-fA-F]+\\b")
     private val FUNCTION = Pattern.compile("\\b([a-zA-Z_]\\w*)\\s*(?=\\()")
     private val TYPE = Pattern.compile("\\b[A-Z][a-zA-Z0-9]*\\b")
@@ -46,7 +48,7 @@ object SyntaxHighlighter {
     private val HTML_ATTR = Pattern.compile("\\b[a-zA-Z\\-]+(?==)")
     private val CSS_SELECTOR = Pattern.compile("[.#][a-zA-Z][a-zA-Z0-9_\\-]*")
     private val CSS_PROP = Pattern.compile("[a-zA-Z\\-]+(?=\\s*:)")
-    private val JSON_KEY = Pattern.compile("\"[^\"\\\\\\n]*(?:\\\\.[^\"\\\\\\n]*)*\"\\s*(?=:)")
+    private val JSON_KEY = Pattern.compile("$DQ\\s*(?=:)")
 
     @Synchronized private fun pattern(lang: CodeLanguage) = cache.getOrPut(lang) { commentsAndStrings(lang) }
     @Synchronized private fun keywords(lang: CodeLanguage): Pattern? = keywordCache.getOrPut(lang) {

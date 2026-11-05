@@ -152,11 +152,16 @@ class HttpStatusException(val status: Int) : IOException("HTTP $status")
  * [allowCleartext] — which exists for the loopback server in the tests and is never set by the app.
  */
 class HttpSpeedTransport(private val allowCleartext: Boolean = false, private val userAgent: String = "Halo-Mobile/1.0") : SpeedTransport {
+    private companion object { const val MAX_DOWNLOAD_BYTES = 40_000_000L }
+
     private fun open(url: String, timeoutMs: Int): HttpURLConnection {
         require(url.startsWith("https://") || (allowCleartext && url.startsWith("http://"))) { "speed test endpoints must be https" }
         return (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = timeoutMs; readTimeout = timeoutMs; useCaches = false
             setRequestProperty("User-Agent", userAgent); setRequestProperty("Cache-Control", "no-cache")
+            // Without this Android's HttpURLConnection silently asks for gzip and inflates the body, so a compressible response
+            // would be counted at its inflated size and the figure would be wrong. Cloudflare's __down is incompressible today; this keeps it true.
+            setRequestProperty("Accept-Encoding", "identity")
         }
     }
 
@@ -167,10 +172,11 @@ class HttpSpeedTransport(private val allowCleartext: Boolean = false, private va
             c.instanceFollowRedirects = false          // a 3xx is a complete round trip; following it would time two hosts
             c.responseCode
             return true
-        } finally { c.inputStream?.let { runCatching { it.close() } } ; runCatching { c.errorStream?.close() } }
+        } finally { runCatching { c.inputStream.close() }; runCatching { c.errorStream?.close() } }   // not disconnect(): keeping the socket pooled is what makes the warm-up useful
     }
 
     override fun download(url: String, chunkBytes: Int, timeoutMs: Int, onBytes: (Int) -> Boolean): Long {
+        val maxBytes = MAX_DOWNLOAD_BYTES
         val c = open(url, timeoutMs)
         try {
             c.requestMethod = "GET"
@@ -182,6 +188,7 @@ class HttpSpeedTransport(private val allowCleartext: Boolean = false, private va
                     val n = s.read(buf); if (n < 0) break
                     total += n
                     if (!onBytes(n)) break
+                    if (total > maxBytes) break          // the host is hard-coded, but never read an unbounded body on someone's data plan
                 }
             }
             return total

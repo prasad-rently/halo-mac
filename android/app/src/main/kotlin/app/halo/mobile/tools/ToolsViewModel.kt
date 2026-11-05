@@ -38,7 +38,7 @@ class ToolsViewModel(app: Application) : AndroidViewModel(app) {
     fun open(id: String) { isOpen = true; toolId = id }
     /** One step back: tool -> hub list -> closed. */
     fun back() { if (toolId != null) toolId = null else close() }
-    fun close() { isOpen = false; toolId = null; transform.clear(); beautifier.clear() }
+    fun close() { isOpen = false; toolId = null; transform.clear(); beautifier.clear(); speed.cancel() }      // leaving Tools must not leave a ~30 MB transfer running behind the screen
 
     /** "Transform…" on a clipboard-history item: open the transform tool with that text loaded. */
     fun transformText(text: String) { transform.load(text); open("transform") }

@@ -42,6 +42,15 @@ class ToolsGuardsTest {
         for ((n, s) in sources) assertFalse("$n must not read the clipboard in an effect", Regex("""LaunchedEffect[^\n]*\{[^}]*ToolsClipboard\.read""").containsMatchIn(s))
     }
 
+    @Test fun aSensitiveCopyIsNotLeftForTheClipboardSyncToPublish() {
+        // A generated password copied while "Clipboard sync" is on must not be uploaded by Halo's own clipboard listener (review of #74).
+        assertTrue("sensitive copies go through ClipboardController.copySensitive", sources.getValue("ToolsClipboard.kt").contains("ClipboardController.copySensitive("))
+        val ctl = File(dir.parentFile, "cloud/Clipboard.kt").readText()
+        val onLocalCopy = ctl.substringAfter("fun onLocalCopy(").substringBefore("fun readClipboard(")
+        assertTrue("onLocalCopy must honour EXTRA_IS_SENSITIVE", onLocalCopy.contains("isMarkedSensitive"))
+        assertTrue(ctl.substringAfter("fun copySensitive(").substringBefore("fun purge(").contains("suppressEcho"))
+    }
+
     @Test fun onlyTheClipboardHelperTouchesTheClipboardManager() {
         for ((n, s) in sources) if (n != "ToolsClipboard.kt") assertFalse("$n uses ClipboardManager directly", s.contains("ClipboardManager"))
     }

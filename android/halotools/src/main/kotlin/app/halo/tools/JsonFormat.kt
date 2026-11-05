@@ -38,8 +38,29 @@ object JsonFormat {
         }
     }
 
+    /**
+     * Nesting limit. The printers and [validate] recurse once per level, so an input such as `[[[[…` 5,000 deep used to die with a
+     * StackOverflowError (an Error, not an Exception: it crashed the app), and the indentation of a very deep document is
+     * quadratic in memory. Real JSON is a few levels deep; Python's own json module gives up at ~1,000.
+     */
+    const val MAX_DEPTH = 200
+
+    /** One linear pass over the raw text, so it also protects the parser. Brackets inside strings don't count. */
+    private fun checkDepth(text: String) {
+        var depth = 0; var inString = false; var escaped = false
+        for (c in text) {
+            if (inString) { if (escaped) escaped = false else if (c == '\\') escaped = true else if (c == '"') inString = false; continue }
+            when (c) {
+                '"' -> inString = true
+                '[', '{' -> if (++depth > MAX_DEPTH) throw InvalidJson("it's nested more than $MAX_DEPTH levels deep")
+                ']', '}' -> if (depth > 0) depth--
+            }
+        }
+    }
+
     // The message never quotes the input: it can be a password or token the user pasted.
     fun parse(text: String): JsonElement {
+        checkDepth(text)
         val e = try { parser.parseToJsonElement(text) } catch (e: Exception) { throw InvalidJson("it doesn't parse") }
         validate(e)
         return e

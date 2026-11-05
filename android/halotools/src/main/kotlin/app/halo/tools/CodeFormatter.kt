@@ -14,6 +14,11 @@ sealed interface FormatResult {
  * Every formatter is idempotent — formatting its own output is a no-op — which the tests pin.
  */
 object CodeFormatter {
+    /**
+     * Deepest level that is still indented further. Nesting deeper than this is formatted as if it were at this depth: `<a>` x 60,000
+     * would otherwise build ~3.6 GB of leading spaces (OutOfMemoryError on the main thread) for output nobody could read anyway.
+     */
+    internal const val MAX_INDENT_DEPTH = 64
     private val brace = setOf(CodeLanguage.JAVASCRIPT, CodeLanguage.TYPESCRIPT)
 
     fun supports(lang: CodeLanguage): Boolean = lang == CodeLanguage.JSON || lang == CodeLanguage.XML || lang == CodeLanguage.HTML || lang == CodeLanguage.CSS || lang in brace
@@ -114,7 +119,7 @@ internal object MarkupFormatter {
     fun format(src: String, html: Boolean, indent: Int): String {
         val toks = tokenize(src, html)
         val lines = ArrayList<String>(); var depth = 0
-        fun line(s: String) { lines += " ".repeat(depth * indent) + s }
+        fun line(s: String) { lines += " ".repeat(minOf(depth, CodeFormatter.MAX_INDENT_DEPTH) * indent) + s }
         fun collapse(s: String) = s.trim().split(Regex("\\s+")).joinToString(" ")
         var i = 0
         while (i < toks.size) {
@@ -128,7 +133,7 @@ internal object MarkupFormatter {
                     else {
                         val n1 = toks.getOrNull(i + 1); val n2 = toks.getOrNull(i + 2)
                         if (n1 is T.Raw && n2 is T.Close && n2.name == t.name) {
-                            if (t.name == "pre" || t.name == "textarea") lines += " ".repeat(depth * indent) + tidyTag(t.raw) + n1.s + n2.raw      // whitespace is content here
+                            if (t.name == "pre" || t.name == "textarea") lines += " ".repeat(minOf(depth, CodeFormatter.MAX_INDENT_DEPTH) * indent) + tidyTag(t.raw) + n1.s + n2.raw      // whitespace is content here
                             else {
                                 line(tidyTag(t.raw)); depth++
                                 dedent(n1.s).forEach { l -> if (l.isEmpty()) lines += "" else line(l) }
@@ -163,8 +168,11 @@ internal object CssFormatter {
         data class Rule(val prelude: String, val body: List<Item>) : Item
     }
 
+    private const val MAX_NEST = 100
+
     private class Parser(val s: String) {
         var i = 0
+        private var nesting = 0
 
         fun items(top: Boolean): List<Item> {
             val out = ArrayList<Item>(); val buf = StringBuilder()
@@ -185,7 +193,8 @@ internal object CssFormatter {
                     }
                     c == ',' -> { buf.append(", "); i++ }
                     c == ';' -> { flushDecl(); i++ }
-                    c == '{' -> { i++; val prelude = buf.toString().trim(); buf.setLength(0); out += Item.Rule(prelude, items(false)) }
+                    // Past MAX_NEST a `{` is just text: both this parser and emit() recurse per level, so `{{{{…` 10,000 deep overflowed the stack.
+                    c == '{' && nesting < MAX_NEST -> { i++; val prelude = buf.toString().trim(); buf.setLength(0); nesting++; val body = items(false); nesting--; out += Item.Rule(prelude, body) }
                     c == '}' -> { flushDecl(); i++; if (!top) return out }     // a stray `}` at top level is dropped, not echoed
                     else -> { put(c); i++ }
                 }
@@ -224,7 +233,7 @@ internal object CssFormatter {
         val items = Parser(src).items(top = true)
         val out = ArrayList<String>()
         fun emit(items: List<Item>, depth: Int) {
-            val pad = " ".repeat(depth * indent)
+            val pad = " ".repeat(minOf(depth, CodeFormatter.MAX_INDENT_DEPTH) * indent)
             items.forEachIndexed { idx, it ->
                 when (it) {
                     is Item.Comment -> it.s.split('\n').forEachIndexed { n, l -> out += if (n == 0) pad + l.trim() else pad + " " + l.trim() }
@@ -269,7 +278,7 @@ internal object BraceFormatter {
         val pad = " ".repeat(indent)
         fun newline() { while (out.isNotEmpty() && out.last() == ' ') out.setLength(out.length - 1); if (out.isNotEmpty() && out.last() != '\n') out.append('\n'); lineStart = true; space = false }
         fun emit(t: String, glue: Boolean = false) {
-            if (lineStart) { repeat(depth) { out.append(pad) }; lineStart = false }
+            if (lineStart) { repeat(minOf(depth, CodeFormatter.MAX_INDENT_DEPTH)) { out.append(pad) }; lineStart = false }
             else if (space && !glue) out.append(' ')
             out.append(t); space = false
         }
@@ -339,8 +348,8 @@ internal object BraceFormatter {
         var j = from; while (j < src.length && src[j].isWhitespace()) j++
         if (j >= src.length) return false
         if (src[j] in ")],;.") return true
-        val w = src.substring(j).takeWhile { it.isLetter() }
-        return w in CONTINUES
+        var e = j; while (e < src.length && e - j <= 8 && src[e].isLetter()) e++      // longest keyword is "finally"; never copy the rest of the file
+        return src.substring(j, e) in CONTINUES
     }
 
     /** A `/` starts a regex literal after an operator/opening punctuation or a keyword such as `return`, never after an operand. */

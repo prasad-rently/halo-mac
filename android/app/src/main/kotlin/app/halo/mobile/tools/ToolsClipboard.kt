@@ -1,13 +1,8 @@
 package app.halo.mobile.tools
 
-import android.content.ClipData
-import android.content.ClipDescription
-import android.content.ClipboardManager
 import android.content.Context
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.os.PersistableBundle
 import app.halo.mobile.cloud.ClipItem
 import app.halo.mobile.cloud.ClipboardController
 import app.halo.mobile.cloud.CloudPrefs
@@ -29,9 +24,7 @@ internal object ToolsClipboard {
             ClipboardController.copyToClipboard(ctx, ClipItem("tool-" + System.nanoTime(), text, "text", "This phone", System.currentTimeMillis(), received = false))
             return
         }
-        val clip = ClipData.newPlainText("Halo", text)
-        if (Build.VERSION.SDK_INT >= 33) clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
-        ctx.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(clip)
+        ClipboardController.copySensitive(ctx, text)
     }
 
     /** [done] is invoked on the main thread with a content-free outcome ("Sent to your Mac."). */

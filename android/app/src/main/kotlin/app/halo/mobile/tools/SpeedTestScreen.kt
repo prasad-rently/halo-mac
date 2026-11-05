@@ -20,6 +20,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,7 +65,9 @@ fun SpeedTestScreen() {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { net = vm.networkState() }       // re-read on every return to the screen: Wi-Fi -> mobile data changes the answer
     val phase = speed.phase
     // The test takes tens of seconds and a sleeping screen would pause it: hold the screen on only while it runs.
-    LocalView.current.keepScreenOn = phase is ToolsViewModel.SpeedPhase.Running
+    val view = LocalView.current
+    view.keepScreenOn = phase is ToolsViewModel.SpeedPhase.Running
+    DisposableEffect(view) { onDispose { view.keepScreenOn = false } }       // leaving the screen mid-test must not leave the display held on
     val plan = remember { SpeedPlan() }
     val gate = SpeedTestGate.decide(net, plan)
 

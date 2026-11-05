@@ -3,9 +3,11 @@ package app.halo.mobile.cloud
 import android.accessibilityservice.AccessibilityService
 import android.app.Activity
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
@@ -172,8 +174,28 @@ object ClipboardController {
     fun onLocalCopy(ctx: Context) {
         val app = ctx.applicationContext
         if (!CloudPrefs(app).clipboardEnabled) return
+        if (isMarkedSensitive(app)) return          // a password manager / Halo's own generator said "don't keep or share this" (Android 13+ flag)
         val text = readClipboard(app) ?: return
         publishText(app, text)
+    }
+
+    /** True when the current clip carries `ClipDescription.EXTRA_IS_SENSITIVE` (API 33+). Older Android has no such flag, so false. */
+    private fun isMarkedSensitive(ctx: Context): Boolean {
+        if (Build.VERSION.SDK_INT < 33) return false
+        return try { ctx.getSystemService(ClipboardManager::class.java)?.primaryClipDescription?.extras?.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE, false) == true }
+        catch (e: SecurityException) { false }
+    }
+
+    /**
+     * Put a secret (a generated password) on the clipboard WITHOUT letting Halo's own clipboard sync pick it up: the echo is
+     * suppressed like [copyToClipboard]'s, and the clip is flagged sensitive so Android 13+ hides it from the preview/suggestions
+     * and [onLocalCopy] skips it. Sending it to the Mac stays an explicit, separate tap.
+     */
+    fun copySensitive(ctx: Context, text: String) {
+        engine?.suppressEcho(text)
+        val clip = ClipData.newPlainText("Halo", text)
+        if (Build.VERSION.SDK_INT >= 33) clip.description.extras = android.os.PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
+        ctx.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(clip)
     }
 
     /** Null when the clipboard is empty or Android won't let a background process read it (10+). */
