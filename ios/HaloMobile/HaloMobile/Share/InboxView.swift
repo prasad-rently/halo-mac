@@ -88,7 +88,7 @@ struct InboxView: View {
         .haloScreen()
         .navigationTitle(HaloStrings.Inbox.title)
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { model.refreshInbox() }
+        .onAppear { model.refreshInbox(); model.markInboxSeen() }
         .quickLookPreview($preview)
         // Deletion is permanent on iOS (there is no Trash for an app's own files), so it always asks.
         .confirmationDialog("Delete this file?", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),

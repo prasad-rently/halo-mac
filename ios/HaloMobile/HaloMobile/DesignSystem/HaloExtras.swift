@@ -5,6 +5,7 @@ import SwiftUI
 /// Short-lived confirmation pill: `.toast($model.toast)` — set the binding to a string, it clears itself.
 struct ToastModifier: ViewModifier {
     @Binding var text: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func body(content: Content) -> some View {
         content.overlay(alignment: .bottom) {
             if let text {
@@ -12,11 +13,14 @@ struct ToastModifier: ViewModifier {
                     .padding(.horizontal, 16).padding(.vertical, 10)
                     .background(Capsule().fill(Color.haloSurface2)).overlay(Capsule().stroke(Color.haloBorder2))
                     .padding(.bottom, 12).transition(.opacity)
-                    .task(id: text) { try? await Task.sleep(nanoseconds: 1_600_000_000); withAnimation { self.text = nil } }
+                    .task(id: text) {
+                        try? await Task.sleep(nanoseconds: 1_600_000_000)
+                        if reduceMotion { self.text = nil } else { withAnimation { self.text = nil } }
+                    }
                     .accessibilityAddTraits(.isStaticText)
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: text)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: text)
     }
 }
 

@@ -73,10 +73,9 @@ struct ShareView: View {
                 #endif
             }
             .onChange(of: router.scanOnShare) { _ in consumeScanRequest() }
-            .onChange(of: model.peers.count) { _ in
-                // A manually-added device landed: close the sheet.
-                if showAddSheet { showAddSheet = false }
-            }
+            // Close the add sheet only when a *new* device was added by hand — not when a background scan
+            // changes the list, and not when the address was already known (that gets a notice instead).
+            .onChange(of: model.manualAddCount) { _ in showAddSheet = false }
         }
     }
 

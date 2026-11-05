@@ -84,6 +84,15 @@ final class AppModel: ObservableObject {
     @Published private(set) var transfer: TransferState = .idle
     @Published var manualAddress = ""
     @Published private(set) var recentAddresses: [String] = []
+    /// Bumped each time a *new* device is added by hand — the add sheet closes on it.
+    @Published private(set) var manualAddCount = 0
+    private var inboxSeenKey: String { "haloshare.inboxSeenAt" }
+    /// Received files newer than the last time the person opened the inbox (Share tab badge).
+    var unreadInboxCount: Int {
+        let seen = defaults.object(forKey: inboxSeenKey) as? Date ?? .distantPast
+        return inbox.filter { $0.date > seen }.count
+    }
+    func markInboxSeen() { defaults.set(Date(), forKey: inboxSeenKey); objectWillChange.send() }
 
     // Outbox (picker / photos / Share Extension) — F-050 D7
     @Published private(set) var outbox: OutboxSelection? { didSet { refreshStagedBatchCount() } }
@@ -426,12 +435,17 @@ final class AppModel: ObservableObject {
             if let peer = await client.probe(host: host, port: port, timeout: 4) {
                 guard let self else { return }
                 switch self.directory.mergeOutcome(peer) {
-                case .added, .updated:
+                case .added:
                     self.addressBook.remember(normal)
                     self.recentAddresses = self.addressBook.addresses
-                    self.selectedPeerID = peer.id
                     self.manualAddress = ""
                     self.notice = "Found \(peer.alias)."
+                    self.manualAddCount += 1
+                case .updated:
+                    // Already in the list: say so, and leave the sheet open (it is not a new device).
+                    self.addressBook.remember(normal)
+                    self.recentAddresses = self.addressBook.addresses
+                    self.notice = "\(peer.alias) is already in your list."
                 case .ignoredSelf:
                     self.notice = "That's this device."
                 case .ignoredConflict(let existingHost):

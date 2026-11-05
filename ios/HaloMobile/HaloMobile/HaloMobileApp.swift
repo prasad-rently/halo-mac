@@ -66,6 +66,7 @@ struct RootView: View {
                 .tag(AppTab.clipboard)
             ShareView()
                 .tabItem { Label(HaloStrings.Tab.share, systemImage: "arrow.up.arrow.down.circle.fill") }
+                .badge(model.unreadInboxCount)
                 .tag(AppTab.share)
             SettingsView()
                 .tabItem { Label(HaloStrings.Tab.settings, systemImage: "gearshape.fill") }
