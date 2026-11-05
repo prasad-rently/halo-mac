@@ -4,17 +4,20 @@ import HaloShareKit
 /// Settings — grouped cards. Long explanations are behind (i) sheets, not on the surface.
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var cloud: CloudModel
+    @State private var path: [CloudRoute] = []
+    enum CloudRoute: Hashable { case setup }
     @State private var alias = ""
     @State private var showDeviceInfo = false
     @State private var showReceivingInfo = false
     @State private var showAboutInfo = false
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
                 VStack(spacing: HaloLayout.sectionSpacing) {
                     thisDevice
-                    CloudSettingsSection()
+                    CloudSettingsSection(openSetup: { path = [.setup] })
                     receiving
                     about
                 }
@@ -24,7 +27,9 @@ struct SettingsView: View {
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle(HaloStrings.Settings.title)
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear { alias = model.identity.alias }
+            .navigationDestination(for: CloudRoute.self) { _ in CloudSetupView() }
+            .onAppear { alias = model.identity.alias; if cloud.wantsSetup { path = [.setup]; cloud.wantsSetup = false } }
+            .onChange(of: cloud.wantsSetup) { want in if want { path = [.setup]; cloud.wantsSetup = false } }
             .onDisappear { if alias != model.identity.alias { model.setAlias(alias) } }
             .haloInfoSheet(isPresented: $showDeviceInfo, title: HaloStrings.Info.deviceTitle, points: [
                 HaloInfoPoint("person.wave.2.fill", .haloAccent, "Shown to others", "Other devices see this name when you send or receive."),
