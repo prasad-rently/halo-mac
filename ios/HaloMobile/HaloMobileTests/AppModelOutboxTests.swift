@@ -166,6 +166,20 @@ final class OutboxTests: XCTestCase {
         XCTAssertEqual(rig.model.otherStagedBatchCount, 0)
     }
 
+    /// SwiftUI reads `otherStagedBatchCount` from a view body. It must be a cached value, not a
+    /// directory listing: a batch staged *behind the model's back* is not seen by a read, only by the
+    /// next refresh (foreground / outbox change). If this were computed, the read would see it at once.
+    func testOtherStagedBatchCountIsCachedNotReadFromDiskDuringRender() async throws {
+        let rig = try await Rig.make()
+        try rig.stage("one.bin")
+        rig.model.loadStagedShares()
+        XCTAssertEqual(rig.model.otherStagedBatchCount, 0)
+        try rig.stage("two.bin")                                   // arrives while the first is in the outbox
+        XCTAssertEqual(rig.model.otherStagedBatchCount, 0, "a render must not hit the disk")
+        rig.model.loadStagedShares()                               // the foreground hook refreshes it
+        XCTAssertEqual(rig.model.otherStagedBatchCount, 1)
+    }
+
     // MARK: Inbox
 
     func testInboxDeleteOnlyReachesFilesInsideTheReceiveFolder() async throws {
