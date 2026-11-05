@@ -4,61 +4,61 @@ import HaloShareKit
 /// MR-RX-2: nothing is written until the person says yes. Shows who, how many, how big, and names.
 struct ConsentSheet: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.scenePhase) private var scenePhase
     let offer: IncomingOffer
 
     var body: some View {
-        VStack(spacing: 18) {
-            Image(systemName: "arrow.down.circle.fill").font(.system(size: 40)).foregroundColor(.haloAccent)
-            VStack(spacing: 4) {
-                Text("\(offer.sender.alias) wants to send you")
-                    .font(.system(size: 17, weight: .semibold)).foregroundColor(.haloText)
-                    .multilineTextAlignment(.center)
-                Text("\(offer.files.count) file\(offer.files.count == 1 ? "" : "s") · \(Bytes.string(offer.totalBytes))")
-                    .font(.system(size: 14)).foregroundColor(.haloText2)
-                Text("from \(offer.senderAddress)").font(.system(size: 11)).foregroundColor(.haloText3)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("consent.summary")
+        ScrollView {
+            VStack(spacing: 16) {
+                Image(systemName: "arrow.down.circle.fill").font(.system(size: 40)).foregroundColor(.haloAccent)
+                    .accessibilityHidden(true)
+                VStack(spacing: 6) {
+                    Text("\(offer.sender.alias) wants to send you")
+                        .font(HaloFont.title).foregroundColor(.haloText).multilineTextAlignment(.center)
+                    HStack(spacing: 8) {
+                        HaloChip(text: "\(offer.files.count) file\(offer.files.count == 1 ? "" : "s")", icon: "doc.on.doc", tint: .haloAccent)
+                        HaloChip(text: Bytes.string(offer.totalBytes), icon: "scalemass", tint: .haloCyan)
+                    }
+                    Text("from \(offer.senderAddress)").font(HaloFont.mono).foregroundColor(.haloText3)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("consent.summary")
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(offer.files.prefix(50), id: \.id) { file in
-                        HStack {
-                            Image(systemName: "doc").foregroundColor(.haloText3)
-                            Text(file.fileName).font(.system(size: 13)).foregroundColor(.haloText).lineLimit(1)
-                            Spacer()
-                            Text(Bytes.string(file.size)).font(.system(size: 11)).foregroundColor(.haloText3)
+                HaloCard(padding: 0) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(offer.files.prefix(50).enumerated()), id: \.element.id) { i, file in
+                            if i > 0 { HaloRowDivider(inset: 14) }
+                            HStack(spacing: 10) {
+                                Image(systemName: "doc").foregroundColor(.haloText3).accessibilityHidden(true)
+                                Text(SafeFileName.relativePath(file.fileName) ?? "file").font(HaloFont.body).foregroundColor(.haloText).lineLimit(2)
+                                Spacer(minLength: 8)
+                                Text(Bytes.string(file.size)).font(HaloFont.caption).foregroundColor(.haloText2).fixedSize()
+                            }
+                            .padding(.horizontal, 14).padding(.vertical, 10)
+                        }
+                        if offer.files.count > 50 {
+                            Text("and \(offer.files.count - 50) \(HaloStrings.Consent.moreFiles)")
+                                .font(HaloFont.caption).foregroundColor(.haloText3).padding(10)
                         }
                     }
-                    if offer.files.count > 50 {
-                        Text("and \(offer.files.count - 50) more…").font(.system(size: 12)).foregroundColor(.haloText3)
-                    }
                 }
-                .padding(12)
+
+                HStack(spacing: 12) {
+                    HaloSecondaryButton(HaloStrings.Consent.decline, icon: "xmark") { model.resolveConsent(.decline) }
+                        .accessibilityIdentifier("consent.decline")
+                    HaloPrimaryButton(HaloStrings.Consent.accept, icon: "checkmark") { model.resolveConsent(.accept) }
+                        .accessibilityIdentifier("consent.accept")
+                }
+
+                Text(HaloStrings.Consent.footer).font(HaloFont.caption).foregroundColor(.haloText3)
             }
-            .frame(maxHeight: 220)
-            .background(RoundedRectangle(cornerRadius: 12).fill(Color.haloSurface))
-
-            HStack(spacing: 12) {
-                Button(role: .cancel) { model.resolveConsent(.decline) } label: {
-                    Text("Decline").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("consent.decline")
-
-                Button { model.resolveConsent(.accept) } label: {
-                    Text("Accept").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .accessibilityIdentifier("consent.accept")
-            }
-            .controlSize(.large)
-
-            Text("Only accept from people you know. Files are saved to Halo's Received folder.")
-                .font(.system(size: 11)).foregroundColor(.haloText3).multilineTextAlignment(.center)
+            .padding(22)
         }
-        .padding(22)
         .presentationDetents([.medium, .large])
-        .background(Color.haloBackground.ignoresSafeArea())
+        .presentationDragIndicator(.visible)
+        .haloScreen()
+        // A sheet sits above the root view, so the app-wide PrivacyShield does not cover it: hide the sender
+        // and file names whenever the app is not active (app-switcher snapshot).
+        .overlay { if scenePhase != .active { PrivacyShield() } }
     }
 }
