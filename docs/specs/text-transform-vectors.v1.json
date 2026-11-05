@@ -1,0 +1,423 @@
+{
+  "version": 1,
+  "about": "Input -> expected pairs for the deterministic text transforms, produced by running the desktop action scripts (see android/tools/gen-transform-vectors.py). Consumed by halotools' TransformVectorsTest; a Swift/desktop consumer is not applicable because the desktop logic is shell, not Swift.",
+  "generated": {
+    "python": "Python 3.15.0",
+    "locale": "C (LC_ALL=C; a GUI app has no LANG)",
+    "shell": "/bin/zsh -c",
+    "source": "Halo/Core/Actions/ActionLibrary.swift @ origin/release/v2.6"
+  },
+  "comparison": "expected null means the desktop action reported a failure (and left the clipboard untouched). expected has ONE trailing newline removed where the script ends in `echo ... | pbcopy`; count_words expected is the script's stdout report (its 'Characters' is wc -c = BYTES, equal to code points for these ASCII cases and compared as bytes).",
+  "knownDivergences": [
+    "format/minify JSON: number tokens are kept verbatim on the phone; Python re-renders floats (1E5 -> 100000.0). Cases here use only numbers that print identically.",
+    "uppercase/lowercase: desktop `tr` is ASCII-only; the phone is Unicode-aware (straSSe). Cases here are ASCII.",
+    "count_words: phone also reports Unicode characters and bytes; desktop 'Characters' is bytes.",
+    "base64_decode: phone also accepts URL-safe alphabet and missing padding; macOS base64 does not.",
+    "generate UUID: phone and macOS uuidgen are both upper-case v4; random so asserted by shape only."
+  ],
+  "knownDesktopBugs": [
+    "zsh's builtin echo interprets backslash escapes. Every script that ends `echo \"$RESULT\" | pbcopy` (Format JSON, Sort, Dedup, Count) corrupts text containing \\n, \\t, \\uXXXX, \\\\ before it reaches the clipboard. The phone implements the intended semantic."
+  ],
+  "properties": {
+    "uuid": "^[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$",
+    "password": "^[A-Za-z0-9]{20}$"
+  },
+  "cases": [
+    {
+      "id": "format_json-00",
+      "transform": "format_json",
+      "input": "{\"b\":1,\"a\":[1,2,{\"c\":null}],\"d\":\"x\"}",
+      "expected": "{\n    \"b\": 1,\n    \"a\": [\n        1,\n        2,\n        {\n            \"c\": null\n        }\n    ],\n    \"d\": \"x\"\n}"
+    },
+    {
+      "id": "format_json-01",
+      "transform": "format_json",
+      "input": "[]",
+      "expected": "[]"
+    },
+    {
+      "id": "format_json-02",
+      "transform": "format_json",
+      "input": "{}",
+      "expected": "{}"
+    },
+    {
+      "id": "format_json-03",
+      "transform": "format_json",
+      "input": "{\"k\":\"café ☃ 😀\"}",
+      "expected": "{\n    \"k\": \"caf\\u00e9 \\u2603 \\ud83d\\ude00\"\n}"
+    },
+    {
+      "id": "format_json-04",
+      "transform": "format_json",
+      "input": "{\"a\":\"line\\nbreak \\\"quoted\\\" \\\\ back\\t\"}",
+      "expected": "{\n    \"a\": \"line\\nbreak \\\"quoted\\\" \\\\ back\\t\"\n}"
+    },
+    {
+      "id": "format_json-05",
+      "transform": "format_json",
+      "input": "{\"n\":[1,-2,3.5,0.25,100,true,false,null],\"e\":{},\"l\":[]}",
+      "expected": "{\n    \"n\": [\n        1,\n        -2,\n        3.5,\n        0.25,\n        100,\n        true,\n        false,\n        null\n    ],\n    \"e\": {},\n    \"l\": []\n}"
+    },
+    {
+      "id": "format_json-06",
+      "transform": "format_json",
+      "input": "{\"a\":1,\"a\":2,\"b\":3}",
+      "expected": "{\n    \"a\": 2,\n    \"b\": 3\n}"
+    },
+    {
+      "id": "format_json-07",
+      "transform": "format_json",
+      "input": "42",
+      "expected": "42"
+    },
+    {
+      "id": "format_json-08",
+      "transform": "format_json",
+      "input": "\"s\"",
+      "expected": "\"s\""
+    },
+    {
+      "id": "minify_json-09",
+      "transform": "minify_json",
+      "input": "{\n  \"b\": 1,\n  \"a\": [1, 2, {\"c\": null}]\n}",
+      "expected": "{\"b\":1,\"a\":[1,2,{\"c\":null}]}"
+    },
+    {
+      "id": "minify_json-10",
+      "transform": "minify_json",
+      "input": "{\"k\":\"café 😀\"}",
+      "expected": "{\"k\":\"caf\\u00e9 \\ud83d\\ude00\"}"
+    },
+    {
+      "id": "minify_json-11",
+      "transform": "minify_json",
+      "input": "[ ]",
+      "expected": "[]"
+    },
+    {
+      "id": "count_words-12",
+      "transform": "count_words",
+      "input": "hello world",
+      "expected": "Words:      2\nCharacters: 11\nLines:      1"
+    },
+    {
+      "id": "count_words-13",
+      "transform": "count_words",
+      "input": "one\ntwo three\n\nfour",
+      "expected": "Words:      4\nCharacters: 19\nLines:      4"
+    },
+    {
+      "id": "count_words-14",
+      "transform": "count_words",
+      "input": "  spaced   out\ttabs  ",
+      "expected": "Words:      3\nCharacters: 21\nLines:      1"
+    },
+    {
+      "id": "count_words-15",
+      "transform": "count_words",
+      "input": "trailing newlines\n\n\n",
+      "expected": "Words:      2\nCharacters: 17\nLines:      1"
+    },
+    {
+      "id": "count_words-16",
+      "transform": "count_words",
+      "input": "a",
+      "expected": "Words:      1\nCharacters: 1\nLines:      1"
+    },
+    {
+      "id": "count_words-17",
+      "transform": "count_words",
+      "input": "café",
+      "expected": "Words:      1\nCharacters: 5\nLines:      1"
+    },
+    {
+      "id": "sort_lines-18",
+      "transform": "sort_lines",
+      "input": "pear\napple\nbanana",
+      "expected": "apple\nbanana\npear"
+    },
+    {
+      "id": "sort_lines-19",
+      "transform": "sort_lines",
+      "input": "b\nB\na\nA\n10\n9\n_x",
+      "expected": "10\n9\nA\nB\n_x\na\nb"
+    },
+    {
+      "id": "sort_lines-20",
+      "transform": "sort_lines",
+      "input": "z\nz\na",
+      "expected": "a\nz\nz"
+    },
+    {
+      "id": "sort_lines-21",
+      "transform": "sort_lines",
+      "input": "single",
+      "expected": "single"
+    },
+    {
+      "id": "sort_lines-22",
+      "transform": "sort_lines",
+      "input": "😀\n～\nz",
+      "expected": "z\n～\n😀"
+    },
+    {
+      "id": "format_json-23",
+      "transform": "format_json",
+      "input": "{bad json",
+      "expected": null
+    },
+    {
+      "id": "format_json-24",
+      "transform": "format_json",
+      "input": "{\"a\":1,}",
+      "expected": null
+    },
+    {
+      "id": "minify_json-25",
+      "transform": "minify_json",
+      "input": "not json",
+      "expected": null
+    },
+    {
+      "id": "sort_lines-26",
+      "transform": "sort_lines",
+      "input": "éclair\nzebra\nApple\nemoji 😀\nplain",
+      "expected": "Apple\nemoji 😀\nplain\nzebra\néclair"
+    },
+    {
+      "id": "url_encode-27",
+      "transform": "url_encode",
+      "input": "hello world & friends=100%",
+      "expected": "hello%20world%20%26%20friends%3D100%25"
+    },
+    {
+      "id": "url_encode-28",
+      "transform": "url_encode",
+      "input": "a/b/c?d=e f",
+      "expected": "a/b/c%3Fd%3De%20f"
+    },
+    {
+      "id": "url_encode-29",
+      "transform": "url_encode",
+      "input": "  trimmed  ",
+      "expected": "trimmed"
+    },
+    {
+      "id": "url_encode-30",
+      "transform": "url_encode",
+      "input": "café ☃ 😀",
+      "expected": "caf%C3%A9%20%E2%98%83%20%F0%9F%98%80"
+    },
+    {
+      "id": "url_encode-31",
+      "transform": "url_encode",
+      "input": "keep-_.~ and /slash",
+      "expected": "keep-_.~%20and%20/slash"
+    },
+    {
+      "id": "url_encode-32",
+      "transform": "url_encode",
+      "input": "plus+sign",
+      "expected": "plus%2Bsign"
+    },
+    {
+      "id": "url_decode-33",
+      "transform": "url_decode",
+      "input": "hello%20world%20%26%20friends%3D100%25",
+      "expected": "hello world & friends=100%"
+    },
+    {
+      "id": "url_decode-34",
+      "transform": "url_decode",
+      "input": "caf%C3%A9%20%E2%98%83%20%F0%9F%98%80",
+      "expected": "café ☃ 😀"
+    },
+    {
+      "id": "url_decode-35",
+      "transform": "url_decode",
+      "input": "a+b%2",
+      "expected": "a+b%2"
+    },
+    {
+      "id": "url_decode-36",
+      "transform": "url_decode",
+      "input": "100%",
+      "expected": "100%"
+    },
+    {
+      "id": "url_decode-37",
+      "transform": "url_decode",
+      "input": "%zz%41",
+      "expected": "%zzA"
+    },
+    {
+      "id": "base64_encode-38",
+      "transform": "base64_encode",
+      "input": "hello",
+      "expected": "aGVsbG8="
+    },
+    {
+      "id": "base64_encode-39",
+      "transform": "base64_encode",
+      "input": "hello world!",
+      "expected": "aGVsbG8gd29ybGQh"
+    },
+    {
+      "id": "base64_encode-40",
+      "transform": "base64_encode",
+      "input": "café 😀",
+      "expected": "Y2Fmw6kg8J+YgA=="
+    },
+    {
+      "id": "base64_encode-41",
+      "transform": "base64_encode",
+      "input": "a",
+      "expected": "YQ=="
+    },
+    {
+      "id": "base64_encode-42",
+      "transform": "base64_encode",
+      "input": "ab",
+      "expected": "YWI="
+    },
+    {
+      "id": "base64_encode-43",
+      "transform": "base64_encode",
+      "input": "two\nlines",
+      "expected": "dHdvCmxpbmVz"
+    },
+    {
+      "id": "base64_decode-44",
+      "transform": "base64_decode",
+      "input": "aGVsbG8=",
+      "expected": "hello"
+    },
+    {
+      "id": "base64_decode-45",
+      "transform": "base64_decode",
+      "input": "aGVsbG8gd29ybGQh",
+      "expected": "hello world!"
+    },
+    {
+      "id": "base64_decode-46",
+      "transform": "base64_decode",
+      "input": "!!!not base64!!!",
+      "expected": null
+    },
+    {
+      "id": "base64_decode-47",
+      "transform": "base64_decode",
+      "input": "Y2Fmw6kg8J+YgA==",
+      "expected": "café 😀"
+    },
+    {
+      "id": "base64_decode-48",
+      "transform": "base64_decode",
+      "input": "YQ==",
+      "expected": "a"
+    },
+    {
+      "id": "uppercase-49",
+      "transform": "uppercase",
+      "input": "Hello World 123",
+      "expected": "HELLO WORLD 123"
+    },
+    {
+      "id": "uppercase-50",
+      "transform": "uppercase",
+      "input": "already UPPER",
+      "expected": "ALREADY UPPER"
+    },
+    {
+      "id": "lowercase-51",
+      "transform": "lowercase",
+      "input": "Hello World 123",
+      "expected": "hello world 123"
+    },
+    {
+      "id": "lowercase-52",
+      "transform": "lowercase",
+      "input": "ALREADY lower",
+      "expected": "already lower"
+    },
+    {
+      "id": "dedup_lines-53",
+      "transform": "dedup_lines",
+      "input": "a\nb\na\nc\nb",
+      "expected": "a\nb\nc"
+    },
+    {
+      "id": "dedup_lines-54",
+      "transform": "dedup_lines",
+      "input": "x\nx\nx",
+      "expected": "x"
+    },
+    {
+      "id": "dedup_lines-55",
+      "transform": "dedup_lines",
+      "input": "a\n\nb\n\nc",
+      "expected": "a\n\nb\nc"
+    },
+    {
+      "id": "dedup_lines-56",
+      "transform": "dedup_lines",
+      "input": "unique\nlines\nonly",
+      "expected": "unique\nlines\nonly"
+    },
+    {
+      "id": "strip_formatting-57",
+      "transform": "strip_formatting",
+      "input": "plain text stays",
+      "expected": "plain text stays"
+    },
+    {
+      "id": "strip_formatting-58",
+      "transform": "strip_formatting",
+      "input": "keeps\nlines  and   spaces",
+      "expected": "keeps\nlines  and   spaces"
+    },
+    {
+      "id": "sha256-59",
+      "transform": "sha256",
+      "input": "hello",
+      "expected": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    },
+    {
+      "id": "sha256-60",
+      "transform": "sha256",
+      "input": "café 😀",
+      "expected": "043764df773ac7ceea6175e1498893e6ee33e79885288417cc1d75cba6094827"
+    },
+    {
+      "id": "sha256-61",
+      "transform": "sha256",
+      "input": "two\nlines",
+      "expected": "edc8c1284585d703bec48f34f842bd911200142ddd602264c77df65168abae1d"
+    },
+    {
+      "id": "sha256-62",
+      "transform": "sha256",
+      "input": "abc",
+      "expected": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    },
+    {
+      "id": "sha256-trailing-newline",
+      "transform": "sha256",
+      "input": "hello\n",
+      "expected": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    },
+    {
+      "id": "base64_encode-trailing-newline",
+      "transform": "base64_encode",
+      "input": "hello\n\n",
+      "expected": "aGVsbG8="
+    },
+    {
+      "id": "count_words-trailing-newline",
+      "transform": "count_words",
+      "input": "x y\n",
+      "expected": "Words:      2\nCharacters: 3\nLines:      1"
+    }
+  ]
+}
