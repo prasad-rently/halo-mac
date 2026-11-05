@@ -39,6 +39,7 @@ kotlin { jvmToolchain(17) }
 dependencies {
     implementation(project(":haloshare"))
     implementation(project(":halocloud"))
+    implementation(project(":halophotos"))
 
     implementation("androidx.core:core-ktx:1.17.0")
     // Background SMS sync: survives process death, honours the network constraint, backs off on failure (F-044 D8).
