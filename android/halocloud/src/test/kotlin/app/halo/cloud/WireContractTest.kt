@@ -13,6 +13,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -46,10 +47,12 @@ class WireContractTest {
     private fun JsonObject.s(k: String) = getValue(k).jsonPrimitive.content
     private fun JsonObject.l(k: String) = getValue(k).jsonPrimitive.content.toLong()
 
-    private class Source(val lines: List<SimLine>, val rows: List<SmsRecord>) : SmsSource {
+    private class Source(val lines: List<SimLine>, val rows: List<SmsRecord>, val sentRows: List<SentSmsRecord> = emptyList()) : SmsSource {
         override fun lines() = lines
         override fun inbox(subscriptionId: Int, sinceMs: Long) = rows.filter { it.subscriptionId == subscriptionId && it.dateMs >= sinceMs }
         override fun allMessageIds() = rows.map { SmsWire.messageId(it) }.toSet()
+        override fun sent(subscriptionId: Int, sinceMs: Long) = sentRows.filter { it.subscriptionId == subscriptionId && it.dateMs >= sinceMs }
+        override fun allSentMessageIds() = sentRows.map { SmsWire.sentMessageId(it) }.toSet()
     }
 
     /** `*Enc` fields replaced by what they open to; the only comparable form of a randomly-nonced ciphertext. */
@@ -75,7 +78,12 @@ class WireContractTest {
             SmsRecord(m.s("key").substringBefore('_').toLong(), e.s("address"), e.s("body"), e.l("dateMs"), n.l("threadId"), e.s("subscriptionId").toInt(),
                 read = n.getValue("read").jsonPrimitive.booleanOrNull!!, seen = n.getValue("seen").jsonPrimitive.booleanOrNull!!, serviceCenter = (n["serviceCenter"] as? JsonPrimitive)?.content)
         }
-        SmsSyncEngine(db, crypto, deviceId, "Pixel 8", Source(simLines, rows), MemorySyncState(), { SenderFilter() }, { 90 }, { nowMs }).sync()
+        val sentRows = fx.arr("sent").map { m ->
+            val n = m.getValue("node").jsonObject; val e = m.getValue("expect").jsonObject
+            SentSmsRecord(m.s("key").substringBefore('_').toLong(), e.s("address"), e.s("body"), e.l("dateMs"), n.l("threadId"), e.s("subscriptionId").toInt(),
+                read = n.getValue("read").jsonPrimitive.booleanOrNull!!, seen = n.getValue("seen").jsonPrimitive.booleanOrNull!!)
+        }
+        SmsSyncEngine(db, crypto, deviceId, "Pixel 8", Source(simLines, rows, sentRows), MemorySyncState(), { SenderFilter() }, { 90 }, { nowMs }, syncSent = { true }).sync()
         return db
     }
 
@@ -89,6 +97,20 @@ class WireContractTest {
             assertTrue("line ${l.s("key")} must carry the H-21 change signal", H21_FIELDS.all { it in got })
         }
         for (m in fx.arr("messages")) sameNode("message ${m.s("key")}", m.getValue("node").jsonObject, db.dump("sms/$uid/$deviceId/messages/${m.s("key")}") as JsonObject)
+        // Sent messages: the sibling `sent` node, never `messages` (an older Mac observes `messages` only).
+        assertTrue("the fixture must carry a sent entry", fx.arr("sent").isNotEmpty())
+        for (m in fx.arr("sent")) {
+            sameNode("sent ${m.s("key")}", m.getValue("node").jsonObject, db.dump("sms/$uid/$deviceId/sent/${m.s("key")}") as JsonObject)
+            assertEquals("a sent row is type 2", "2", m.getValue("node").jsonObject.s("type"))
+            assertNull("a sent row must never be written under messages/", db.dump("sms/$uid/$deviceId/messages/${m.s("key")}"))
+        }
+        assertEquals("only the fixture's messages are under messages/", fx.arr("messages").map { it.s("key") }.toSet(), (db.dump("sms/$uid/$deviceId/messages") as JsonObject).keys)
+    }
+
+    @Test fun `producer - a sent row shares its thread key with the same contact's inbox rows`() {
+        val sentNode = fx.arr("sent").first().getValue("node").jsonObject
+        val sameContact = fx.arr("messages").first { it.getValue("expect").jsonObject.s("address") == fx.arr("sent").first().getValue("expect").jsonObject.s("address") }
+        assertEquals(sameContact.getValue("node").jsonObject.s("threadKey"), sentNode.s("threadKey"))
     }
 
     @Test fun `producer - ClipboardEnvelope writes the fixture's clipboard nodes, and the engine's own item has the same field set`() {
@@ -107,6 +129,10 @@ class WireContractTest {
     @Test fun `consumer - every fixture ciphertext opens under the fixture's key to its expected plaintext, and clipboard nodes parse`() {
         for (l in fx.arr("lines")) assertEquals(l.getValue("expect").jsonObject.s("ownNumber"), crypto.decrypt(l.getValue("node").jsonObject.s("ownNumberEnc")))
         for (m in fx.arr("messages")) {
+            val n = m.getValue("node").jsonObject; val e = m.getValue("expect").jsonObject
+            assertEquals(e.s("address"), crypto.decrypt(n.s("addressEnc"))); assertEquals(e.s("body"), crypto.decrypt(n.s("bodyEnc")))
+        }
+        for (m in fx.arr("sent")) {
             val n = m.getValue("node").jsonObject; val e = m.getValue("expect").jsonObject
             assertEquals(e.s("address"), crypto.decrypt(n.s("addressEnc"))); assertEquals(e.s("body"), crypto.decrypt(n.s("bodyEnc")))
         }
