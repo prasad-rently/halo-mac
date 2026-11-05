@@ -49,6 +49,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,6 +83,16 @@ fun HaloApp(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel) {
     // MR-OS-3: keep the screen (and so the connection) awake for the length of a transfer.
     val view = LocalView.current
     view.keepScreenOn = transfer.isBusy || offer != null
+
+    // Message text (and one-time codes) are on screen while Messages is open. FLAG_SECURE blanks the Recents thumbnail and
+    // blocks screen capture/casting there, the same job iOS's privacy shield does when the app goes to the app switcher.
+    // Release builds only, so debug screenshots (adb screencap) keep working; other tabs are unaffected.
+    val window = remember(view) { var c = view.context; while (c is android.content.ContextWrapper && c !is android.app.Activity) c = c.baseContext; (c as? android.app.Activity)?.window }
+    DisposableEffect(window, dest) {
+        val secure = !BuildConfig.DEBUG && dest == HaloDestination.Messages
+        if (secure) window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        onDispose { if (secure) window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE) }
+    }
 
     // Five destinations (Material guidance: 3-5). Tools and everything else that doesn't earn a slot lives under Home -> More.
     Scaffold(
@@ -139,9 +150,22 @@ fun HaloApp(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel) {
     }
 }
 
+/**
+ * Five labels share the bar width, so at system font scale 2.0 "Messages"/"Clipboard"/"Settings" were cut mid-word ("Messa", "Clipbo",
+ * seen on an emulator). Bottom-bar labels are capped at 1.3x (the Material guidance for nav bars); the icon stays and every other
+ * text in the app still scales fully.
+ */
+@Composable
+private fun NavLabel(text: String) {
+    val d = androidx.compose.ui.platform.LocalDensity.current
+    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(d.density, d.fontScale.coerceAtMost(1.3f))) {
+        Text(text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+    }
+}
+
 @Composable
 private fun androidx.compose.foundation.layout.RowScope.NavItem(selected: Boolean, onClick: () -> Unit, colors: androidx.compose.material3.NavigationBarItemColors, label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tag: String) =
-    NavigationBarItem(selected = selected, onClick = onClick, colors = colors, label = { Text(label, maxLines = 1) }, icon = { Icon(icon, null) }, modifier = Modifier.testTag(tag))
+    NavigationBarItem(selected = selected, onClick = onClick, colors = colors, label = { NavLabel(label) }, icon = { Icon(icon, null) }, modifier = Modifier.testTag(tag))
 
 // ── Share ──────────────────────────────────────────────────────────────────────────────────────
 

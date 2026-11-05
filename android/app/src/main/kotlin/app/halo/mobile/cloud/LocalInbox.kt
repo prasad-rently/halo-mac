@@ -23,4 +23,9 @@ object LocalInbox {
         }
         out
     } catch (_: SecurityException) { emptyList() } catch (_: RuntimeException) { emptyList() }
+
+    /** How many inbox messages arrived since [sinceMs]. Reads only the row ids: no sender, no body is loaded just to be counted. Blocking: call off the main thread. */
+    fun countSince(ctx: Context, sinceMs: Long): Int = try {
+        ctx.contentResolver.query(Telephony.Sms.Inbox.CONTENT_URI, arrayOf(Telephony.Sms._ID), "${Telephony.Sms.DATE} >= ?", arrayOf(sinceMs.toString()), null)?.use { it.count } ?: 0
+    } catch (_: SecurityException) { 0 } catch (_: RuntimeException) { 0 }
 }

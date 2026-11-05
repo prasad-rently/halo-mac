@@ -42,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -109,7 +110,8 @@ fun HaloListRow(
 /** Circle with a one-letter monogram — avatars for threads and devices. */
 @Composable
 fun HaloAvatar(name: String, modifier: Modifier = Modifier, tint: Color = HaloColors.Accent, size: androidx.compose.ui.unit.Dp = 40.dp) {
-    Box(modifier.size(size).clip(CircleShape).background(tint.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+    // Decorative monogram: TalkBack would read a bare "A" before every row's real text.
+    Box(modifier.size(size).clip(CircleShape).background(tint.copy(alpha = 0.18f)).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
         Text(name.trim().take(1).uppercase().ifEmpty { "?" }, color = tint, fontWeight = FontWeight.Bold, fontSize = (size.value * 0.42f).sp)
     }
 }

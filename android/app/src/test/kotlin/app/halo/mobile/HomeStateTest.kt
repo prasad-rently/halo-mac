@@ -23,6 +23,12 @@ class HomeStateTest {
         assertEquals(CloudHealth.NEVER, health(last = 0L))
         assertEquals(CloudHealth.SYNCING, health(syncing = true, err = "boom"))
     }
+    @Test fun `priority order between the lower states`() {
+        assertEquals(CloudHealth.NOT_PAIRED, health(paired = false, syncing = true))        // not paired outranks a stale syncing flag
+        assertEquals(CloudHealth.OFF, health(sms = false, clip = false, err = "old error", q = 3))   // nothing enabled: a stale error is not "Sync error"
+        assertEquals(CloudHealth.WARNING, health(last = 0L, q = 1))                          // skipped messages beat "ready, never synced"
+        assertEquals(CloudHealth.ERROR, health(err = "x", last = 0L))
+    }
     @Test fun `clipboard only still counts as on`() = assertEquals(CloudHealth.OK, health(sms = false, clip = true))
 
     @Test fun `relative time`() {
@@ -41,6 +47,7 @@ class HomeStateTest {
         assertNull(OtpCode.find("Your code is 12"))                            // too short
         assertNull(OtpCode.find("code: 1234567890123"))                        // too long: a phone/account number
         assertNull(OtpCode.find("Your PIN balance is 1,234.56"))
+        assertNull(OtpCode.find("Your balance code is 1234.56"))              // a decimal amount, not a code
     }
 
     @Test fun `clip kinds`() {

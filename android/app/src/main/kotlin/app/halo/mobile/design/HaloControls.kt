@@ -24,6 +24,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -111,7 +112,8 @@ fun HaloChip(
     val border = if (selected) tint.copy(alpha = 0.6f) else HaloColors.Border2
     val fg = if (selected) tint else HaloColors.Text2
     Row(
-        modifier.defaultMinSize(minHeight = 36.dp).clip(HaloShapes.Chip).background(bg).border(1.dp, border, HaloShapes.Chip)
+        // A tappable chip is 36dp tall visually but must present a 48dp target (raw `clickable` does not expand it like Material's own chips).
+        (if (onClick != null) modifier.minimumInteractiveComponentSize() else modifier).defaultMinSize(minHeight = 36.dp).clip(HaloShapes.Chip).background(bg).border(1.dp, border, HaloShapes.Chip)
             .let { if (onClick != null) it.clickable(role = Role.Button, onClick = onClick) else it }
             .semantics { this.selected = selected }.padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
