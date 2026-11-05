@@ -125,7 +125,7 @@ fun HaloApp(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel) {
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             if (tools.isOpen) ToolsHost(tools)
-            else if (subScreen == SUB_DBCHECK) HaloSubScreen("Database", { subScreen = null }, backTag = "dbcheck.back") { DatabaseCheckScreen(cloud) }
+            else if (subScreen == SUB_DBCHECK) HaloSubScreen("Check database", { subScreen = null }, backTag = "dbcheck.back") { DatabaseCheckScreen(cloud) }
             else if (subScreen == SUB_SPEND) HaloSubScreen("Spending", { subScreen = null }, backTag = "spend.back") { app.halo.mobile.expense.ExpenseScreen() }
             else when (dest) {
                 HaloDestination.Home -> HomeScreen(vm, cloud, ::go, onCheckDatabase = { subScreen = SUB_DBCHECK }, extraMore = listOf(

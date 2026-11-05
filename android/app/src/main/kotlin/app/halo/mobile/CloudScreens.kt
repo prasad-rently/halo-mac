@@ -413,7 +413,8 @@ private fun ClipCard(item: ClipItem, onCopy: () -> Unit, onSend: () -> Unit, onT
         }
         Spacer(Modifier.height(8.dp))
         Text(item.text, color = if (kind == ClipKind.URL) HaloColors.Cyan else HaloColors.Text, style = if (kind == ClipKind.CODE) HaloType.Mono else HaloType.Body, maxLines = 4, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
             HaloGhostButton("Transform…", onTransform, Modifier.testTag("clip.transform"), tint = tint)
             HaloIconButton(Icons.Filled.Send, "Send to Mac", onSend, tint = tint)
             HaloIconButton(HaloIcons.Copy, "Copy", onCopy, tint = tint, filled = true)

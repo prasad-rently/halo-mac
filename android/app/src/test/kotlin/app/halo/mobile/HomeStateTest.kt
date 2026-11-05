@@ -54,5 +54,7 @@ class HomeStateTest {
         assertEquals(ClipKind.URL, ClipKind.of("url", "https://example.com"))
         assertEquals(ClipKind.CODE, ClipKind.of("text", "func a() {\n  return 1\n}"))
         assertEquals(ClipKind.TEXT, ClipKind.of("text", "see you at 5, bring snacks"))
+        assertEquals("a bare link copied as plain text is still a link", ClipKind.URL, ClipKind.of("text", "https://halo.example.com/docs"))
+        assertEquals("a sentence that merely contains a link is not", ClipKind.TEXT, ClipKind.of("text", "see https://halo.example.com now"))
     }
 }

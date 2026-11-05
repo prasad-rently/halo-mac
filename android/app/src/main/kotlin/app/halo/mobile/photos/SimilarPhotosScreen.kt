@@ -188,8 +188,10 @@ private fun SummaryCard(ui: PhotosUi, vm: PhotosViewModel) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             val scanning = ui.phase == Phase.SCANNING
             val frac = if (ui.total == 0) 0f else ui.done.toFloat() / ui.total
+            val showTiles = ui.scannedOnce && !scanning
             val centre = if (scanning) "${(frac * 100).toInt()}%" else if (ui.scannedOnce) "${ui.groups.size}" else "–"
-            HaloRing(if (scanning) frac else if (ui.scannedOnce) 1f else 0f, Modifier.testTag("photos.ring"), color = if (scanning) HaloColors.Accent else HaloColors.Green, size = 84.dp, strokeWidth = 9.dp, description = centre) {
+            // Once results exist the "Groups" tile says the same as the ring, so the ring goes and the tiles get the width (a size like "244.8 KB" must not wrap).
+            if (!showTiles) HaloRing(if (scanning) frac else 0f, Modifier.testTag("photos.ring"), color = HaloColors.Accent, size = 84.dp, strokeWidth = 9.dp, description = centre) {
                 Text(centre, color = HaloColors.Text, style = HaloType.Number)
             }
             if (ui.scannedOnce && !scanning) {

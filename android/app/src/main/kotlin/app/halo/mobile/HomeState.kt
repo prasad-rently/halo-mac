@@ -34,6 +34,7 @@ enum class ClipKind(val label: String) { TEXT("Text"), URL("Link"), CODE("Code")
         private val codeHints = listOf("{", "};", "=>", "();", "</", "def ", "func ", "import ", "const ", "SELECT ", "#include", "return ")
         fun of(kind: String, text: String): ClipKind = when {
             kind == "url" -> URL
+            text.trim().let { (it.startsWith("https://") || it.startsWith("http://")) && it.none(Char::isWhitespace) } -> URL   // a bare link copied as plain text
             text.contains('\n') && codeHints.count { text.contains(it) } >= 2 -> CODE
             codeHints.count { text.contains(it) } >= 3 -> CODE
             else -> TEXT
