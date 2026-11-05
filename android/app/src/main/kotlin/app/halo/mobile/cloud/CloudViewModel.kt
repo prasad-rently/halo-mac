@@ -83,6 +83,9 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
     val smsEnabled: StateFlow<Boolean> = _smsEnabled.asStateFlow()
     private val _syncSent = MutableStateFlow(prefs.syncSent)
     val syncSent: StateFlow<Boolean> = _syncSent.asStateFlow()
+    /** A "delete what was uploaded" the user asked for that has not reached the cloud yet (it is retried until it does). */
+    private val _sentRemovalPending = MutableStateFlow(PrefsSyncState(app).sentRemovalPending())
+    val sentRemovalPending: StateFlow<Boolean> = _sentRemovalPending.asStateFlow()
     private val _clipEnabled = MutableStateFlow(prefs.clipboardEnabled)
     val clipEnabled: StateFlow<Boolean> = _clipEnabled.asStateFlow()
     private val _clipFilter = MutableStateFlow(prefs.clipboardFilter)
@@ -222,8 +225,8 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
 
     fun disconnect() {
         SyncScheduler.cancelAll(ctx); ClipboardController.stop()
-        store.clear(); prefs.clearAll(); PrefsSyncState(ctx).clear(); ClipboardHistory.get(ctx).clear(); CloudRuntime.reset()
-        _profile.value = null; _lines.value = emptyList(); _smsEnabled.value = false; _syncSent.value = false; _clipEnabled.value = false; pending = null; _pair.value = PairUi.Idle; _warning.value = null
+        store.clear(); prefs.clearAll(); PrefsSyncState(ctx).apply { clear(); setSentRemovalPending(false) }; ClipboardHistory.get(ctx).clear(); CloudRuntime.reset()
+        _profile.value = null; _lines.value = emptyList(); _smsEnabled.value = false; _syncSent.value = false; _sentRemovalPending.value = false; _clipEnabled.value = false; pending = null; _pair.value = PairUi.Idle; _warning.value = null
     }
 
     var deviceName: String get() = store.deviceName; set(v) { store.deviceName = v; CloudRuntime.reset() }
@@ -248,15 +251,22 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
     fun disableSentSync(removeUploaded: Boolean) {
         prefs.syncSent = false; _syncSent.value = false
         if (!removeUploaded) { _notice.value = "Sent messages will no longer be uploaded. The ones already synced stay on your Mac until you remove them."; return }
+        // Recorded durably before any network call (see SmsSyncRunner.removeSent) so it cannot be lost offline.
+        PrefsSyncState(ctx).setSentRemovalPending(true); _sentRemovalPending.value = true
         viewModelScope.launch(Dispatchers.IO) {
             val r = SmsSyncRunner.removeSent(ctx)
-            _notice.value = r.error ?: "Sent messages removed from the cloud. New ones are no longer uploaded."
+            _sentRemovalPending.value = PrefsSyncState(ctx).sentRemovalPending()
+            if (r.sentRemovalPending) {
+                SyncScheduler.enqueueSoon(ctx, 30_000)    // network-constrained one-shot, backs off until the delete lands
+                _notice.value = "Couldn't remove the uploaded sent messages yet (${r.error ?: "offline?"}). It is queued and will be retried automatically."
+            } else _notice.value = "Sent messages removed from the cloud. New ones are no longer uploaded."
         }
     }
 
     fun syncNow(reconcile: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
             val r = SmsSyncRunner.run(ctx, forceReconcile = reconcile)
+            _sentRemovalPending.value = PrefsSyncState(ctx).sentRemovalPending()
             _notice.value = r.error ?: "Synced — ${prefs.lastSyncSummary}."
             refreshLines()
         }

@@ -30,7 +30,8 @@ object SmsSyncRunner {
 
     @Synchronized fun run(ctx: Context, forceReconcile: Boolean = false): SyncReport {
         val prefs = CloudPrefs(ctx)
-        if (!prefs.smsEnabled) return SyncReport(error = "SMS sync is off.")
+        // A deletion the user asked for must not stall because they also switched SMS sync off.
+        if (!prefs.smsEnabled) return SyncReport(error = "SMS sync is off.", sentRemovalPending = resumeOwedSentRemoval(ctx), retryable = PrefsSyncState(ctx).sentRemovalPending())
         _running.value = true
         try {
             val session = try { CloudRuntime.session(ctx) } catch (e: Exception) { return finish(prefs, SyncReport.fromFailure(e)) }
@@ -79,26 +80,38 @@ object SmsSyncRunner {
     }
 
     /**
-     * The user turned "Also sync messages I send" off and confirmed removing what was already uploaded. Sync is switched
-     * off FIRST (by the caller), and this is @Synchronized with [run], so a pass that was mid-flight finishes before the
-     * delete and none can start a sent upload after it. Inbox messages are not touched.
+     * The user turned "Also sync messages I send" off and confirmed removing what was already uploaded. The request is
+     * recorded durably FIRST ([SyncState.sentRemovalPending]) and only cleared when the cloud confirms the delete, so being
+     * offline, a failed request or a killed process cannot lose it: every [run] retries it (and holds sent uploads while it
+     * is owed). @Synchronized with [run], so a pass that was mid-flight finishes before the delete. Inbox messages are not touched.
      */
     @Synchronized fun removeSent(ctx: Context): SyncReport {
-        val prefs = CloudPrefs(ctx)
-        if (prefs.syncSent) return SyncReport(error = "Sent-message sync is on — turn it off before removing what was uploaded.")
+        PrefsSyncState(ctx).setSentRemovalPending(true)
         return try {
-            val session = CloudRuntime.session(ctx) ?: return SyncReport(error = CloudRuntime.unpairedMessage(ctx, "This phone isn't paired yet."))
-            SmsSyncEngine(session.rtdb, session.crypto, session.deviceId, session.deviceName, AndroidSmsSource(ctx, prefs), PrefsSyncState(ctx), pairingEpoch = session.profile.epoch).removeAllSent()
+            val session = CloudRuntime.session(ctx) ?: return SyncReport(error = CloudRuntime.unpairedMessage(ctx, "This phone isn't paired yet."), sentRemovalPending = true)
+            engineFor(ctx, session).removeAllSent()
             _tick.value = _tick.value + 1
             SyncReport()
-        } catch (e: Exception) { SyncReport.fromFailure(e) }
+        } catch (e: Exception) { SyncReport.fromFailure(e).copy(sentRemovalPending = true, retryable = true) }
     }
+
+    /** Retry an owed sent-removal. True while it is STILL owed (nothing owed -> false, without touching the network). */
+    @Synchronized fun resumeOwedSentRemoval(ctx: Context): Boolean {
+        if (!PrefsSyncState(ctx).sentRemovalPending()) return false
+        return try {
+            val session = CloudRuntime.session(ctx) ?: return true
+            !engineFor(ctx, session).resumeSentRemoval()
+        } catch (e: Exception) { true }
+    }
+
+    private fun engineFor(ctx: Context, session: CloudSession) =
+        SmsSyncEngine(session.rtdb, session.crypto, session.deviceId, session.deviceName, AndroidSmsSource(ctx, CloudPrefs(ctx)), PrefsSyncState(ctx), pairingEpoch = session.profile.epoch)
 
     private fun finish(prefs: CloudPrefs, r: SyncReport): SyncReport {
         // A pass that died before reading the inbox says nothing new about quarantine, so keep the last known count.
         if (r.error == null) prefs.quarantinedCount = r.quarantined
         prefs.lastSyncAt = System.currentTimeMillis()
-        prefs.lastSyncError = r.error ?: if (r.failed > 0) "${r.failed} message(s) couldn't be uploaded — will retry." else null
+        prefs.lastSyncError = r.error ?: if (r.sentRemovalPending) "Removing sent messages from the cloud is pending — will retry." else if (r.failed > 0) "${r.failed} message(s) couldn't be uploaded — will retry." else null
         prefs.lastSyncSummary = buildString {
             append("${r.uploaded} uploaded")
             if (r.uploadedSent > 0) append(", ${r.uploadedSent} sent")
@@ -117,7 +130,7 @@ class SmsSyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
         // Retry with backoff only for transient trouble (failed uploads, a dropped connection); a missing
         // permission or an unpaired phone won't fix itself. A pass that died on an exception used to return
         // success here, so a live SMS that met a flaky network waited for the 15-minute safety-net pass.
-        return if ((r.failed > 0 && r.error == null) || r.retryable) Result.retry() else Result.success()
+        return if ((r.failed > 0 && r.error == null) || r.retryable || r.sentRemovalPending) Result.retry() else Result.success()
     }
 }
 

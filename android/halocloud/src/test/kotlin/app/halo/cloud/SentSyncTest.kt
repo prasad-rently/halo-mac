@@ -146,13 +146,58 @@ class SentSyncTest {
         val r = harness(src).engine.sync(); assertEquals(0, r.uploaded); assertEquals(1, r.uploadedSent)
     }
 
-    @Test fun `the expenditure code is not allowed to touch the sent box - a source guard that bites once F-056 lands here`() {
-        // `halocloud/.../expense/` arrives with F-056 (#63). Until then this scans nothing and passes; the moment that
-        // package exists, any reference to the sent API or record type fails the build.
-        val dir = File(System.getProperty("user.dir"), "src/main/kotlin/app/halo/cloud/expense")
-        val offenders = dir.walkTopDown().filter { it.isFile && it.extension == "kt" }
-            .filter { f -> f.readText().let { t -> FORBIDDEN_IN_EXPENSE.any { it in t } } }.map { it.name }.toList()
-        assertTrue("the expense pipeline must only read SmsSource.inbox(); found sent-box references in $offenders", offenders.isEmpty())
+    @Test fun `only the sync code may touch the sent box - an allowlist source guard over every module, real from day one`() {
+        // The previous version scanned `halocloud/.../expense/`, a directory that does not exist until F-056 lands (and F-056's
+        // app-side files live under app/.../mobile/expense/, which that path would never have covered). Scan EVERY main
+        // source file instead and allow only the files that legitimately implement or drive sent-sync: any new file that
+        // names the sent API (expense code, a ViewModel, a worker...) fails the build until someone consciously adds it here.
+        val androidRoot = File(System.getProperty("user.dir")).parentFile
+        val sources = androidRoot.listFiles { f -> f.isDirectory }.orEmpty()
+            .map { File(it, "src/main/kotlin") }.filter { it.isDirectory }
+            .flatMap { it.walkTopDown().filter { f -> f.isFile && f.extension == "kt" }.toList() }
+        assertTrue("guard found no sources under $androidRoot - it would be vacuous", sources.any { it.name == "SmsSyncEngine.kt" })
+        val offenders = sources.filter { it.name !in SENT_API_ALLOWED && FORBIDDEN_IN_EXPENSE.any { tok -> tok in it.readText() } }.map { it.name }
+        assertTrue("only $SENT_API_ALLOWED may use the sent-box API; found it in $offenders (the expenditure pipeline must read SmsSource.inbox() only)", offenders.isEmpty())
+    }
+
+    // ── a requested "delete what was uploaded" is never lost ────────────────────────────────────────
+
+    @Test fun `a removal that cannot reach the cloud stays owed, holds sent upload, and completes on a later pass`() {
+        val src = Source(listOf(sim1), sent = mutableListOf(1 to sentRow(5, "+919812300000", "one", now - 2 * day)))
+        val h = harness(src)
+        assertEquals(1, h.engine.sync().uploadedSent)
+        h.sentOn = false
+        h.db.failWrites = { it.endsWith("/dev-A/sent") }                         // offline when "Stop and delete" was tapped
+        try { h.engine.removeAllSent(); org.junit.Assert.fail("the delete must fail offline") } catch (e: RtdbException) { }
+        assertTrue("the request is remembered", h.state.sentRemovalPending())
+        assertEquals("nothing was removed", 1, sentIds(h.db).size)
+
+        // Even if the user flips it back on meanwhile, nothing sent is uploaded while the removal is owed.
+        h.sentOn = true; src.sent.add(1 to sentRow(6, "+919812300000", "two", now - day))
+        val r = h.engine.sync()
+        assertEquals(0, r.uploadedSent); assertTrue(r.sentRemovalPending); assertTrue(r.retryable)
+        assertEquals(setOf("5_${now - 2 * day}"), sentIds(h.db))
+
+        h.db.failWrites = null                                                     // back online: the next pass finishes the job first
+        val ok = h.engine.sync()
+        assertFalse(ok.sentRemovalPending); assertFalse(h.state.sentRemovalPending())
+        assertEquals("re-enabled and clean: both rows are re-sent from the horizon, none were left behind", 2, ok.uploadedSent)
+    }
+
+    @Test fun `an owed removal completes even when sent-sync stays off, and is not undone`() {
+        val src = Source(listOf(sim1), sent = mutableListOf(1 to sentRow(5, "+919812300000", "one", now - day)))
+        val h = harness(src); h.engine.sync(); h.sentOn = false
+        h.db.failWrites = { it.endsWith("/dev-A/sent") }
+        try { h.engine.removeAllSent() } catch (e: RtdbException) { }
+        assertFalse("still owed -> resume reports it", h.engine.resumeSentRemoval())
+        h.db.failWrites = null
+        assertTrue(h.engine.resumeSentRemoval()); assertNull(h.db.dump("sms/uid-1/dev-A/sent")); assertFalse(h.state.sentRemovalPending())
+        assertEquals(0, h.engine.sync().uploadedSent)
+    }
+
+    @Test fun `a new pairing does not forget an owed removal`() {
+        val state = MemorySyncState(); state.setSentRemovalPending(true); state.clear()
+        assertTrue(state.sentRemovalPending())
     }
 
     // ── per-SIM, filters, high-water, quarantine, reconcile ─────────────────────────────────────────
@@ -264,6 +309,8 @@ class SentSyncTest {
 
     private companion object {
         /** Anything that would let the expense package reach the sent box. */
-        val FORBIDDEN_IN_EXPENSE = listOf(".sent(", "allSentMessageIds", "SentSmsRecord", "sentHighWater", "sentPath", "Sms.Sent", "TYPE_SENT")
+        val FORBIDDEN_IN_EXPENSE = listOf(".sent(", "allSentMessageIds", "SentSmsRecord", "sentHighWater", "sentPath", "Sms.Sent", "TYPE_SENT", "syncSent", "removeAllSent")
+        /** The only files that implement or drive sent-sync. */
+        val SENT_API_ALLOWED = setOf("SmsSyncEngine.kt", "Sms.kt", "AndroidSmsSource.kt", "CloudStore.kt", "CloudViewModel.kt", "SmsSync.kt", "CloudScreens.kt")
     }
 }

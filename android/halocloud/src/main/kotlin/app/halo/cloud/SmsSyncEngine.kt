@@ -47,6 +47,14 @@ interface SyncState {
     /** Forget every sent mark, failure counter and quarantine entry (the user removed what was uploaded). */
     fun clearSent()
     /**
+     * The user asked for the already-uploaded sent messages to be deleted and the delete has NOT yet reached the cloud (offline,
+     * a busy database, the process died). Persisted so the request is owed until it is done, never silently dropped: while it
+     * is set no sent row is uploaded, and every pass retries the delete. Cleared by [clearSent] (a delete that went through).
+     * Survives [clear] — a new pairing is not a reason to forget a deletion the user asked for.
+     */
+    fun sentRemovalPending(): Boolean
+    fun setSentRemovalPending(pending: Boolean)
+    /**
      * Which pairing the marks were earned under, or null if none recorded. A mark only means "everything up
      * to here is in the cloud" for the cloud (and key) it was written against — see [SmsSyncEngine].
      */
@@ -69,6 +77,7 @@ class MemorySyncState : SyncState {
     private val m = HashMap<Int, Long>()
     private val sentMarks = HashMap<Int, Long>()
     private var epoch: String? = null
+    private var removalPending = false
     private val fails = HashMap<String, Int>()
     private val parkedRows = LinkedHashSet<String>()
     override fun failures(key: String) = fails[key] ?: 0
@@ -78,10 +87,12 @@ class MemorySyncState : SyncState {
     override fun clearQuarantine() { parkedRows.clear(); fails.clear() }
     override fun highWater(subscriptionId: Int) = m[subscriptionId]
     override fun setHighWater(subscriptionId: Int, dateMs: Long) { m[subscriptionId] = dateMs }
-    override fun clear() { m.clear(); sentMarks.clear(); epoch = null; fails.clear(); parkedRows.clear() }
+    override fun clear() { m.clear(); sentMarks.clear(); epoch = null; fails.clear(); parkedRows.clear() }   // removalPending survives, see [SyncState.sentRemovalPending]
+    override fun sentRemovalPending() = removalPending
+    override fun setSentRemovalPending(pending: Boolean) { removalPending = pending }
     override fun sentHighWater(subscriptionId: Int) = sentMarks[subscriptionId]
     override fun setSentHighWater(subscriptionId: Int, dateMs: Long) { sentMarks[subscriptionId] = dateMs }
-    override fun clearSent() { sentMarks.clear(); fails.keys.removeAll { it.startsWith(SmsSyncEngine.SENT_KEY_PREFIX) }; parkedRows.removeAll { it.startsWith(SmsSyncEngine.SENT_KEY_PREFIX) } }
+    override fun clearSent() { removalPending = false; sentMarks.clear(); fails.keys.removeAll { it.startsWith(SmsSyncEngine.SENT_KEY_PREFIX) }; parkedRows.removeAll { it.startsWith(SmsSyncEngine.SENT_KEY_PREFIX) } }
     override fun pairingEpoch() = epoch
     override fun setPairingEpoch(epoch: String) { this.epoch = epoch }
 }
@@ -117,6 +128,8 @@ data class SyncReport(
     val quarantined: Int = 0,
     /** Sent messages uploaded this pass (0 unless "Also sync messages I send" is on). Counted separately from [uploaded]. */
     val uploadedSent: Int = 0,
+    /** A requested "delete what was uploaded" has not reached the cloud yet: sent upload is held and the next pass retries it. */
+    val sentRemovalPending: Boolean = false,
 ) {
     val ok: Boolean get() = error == null && failed == 0
 
@@ -171,6 +184,9 @@ class SmsSyncEngine(
     fun sync(): SyncReport {
         val uid = rtdb.uid
         adoptPairing()
+        // A deletion the user asked for and that did not land (offline when they tapped "Stop and delete") comes first, and
+        // while it is still owed nothing sent is uploaded — otherwise the opt-out could be undone by the very next pass.
+        val removalOwed = !resumeSentRemoval()
         val now = clock()
         val lines = try { source.lines() } catch (e: SecurityException) { return SyncReport(error = "Phone permission not granted.") }
 
@@ -221,7 +237,7 @@ class SmsSyncEngine(
         // Sent messages — opt-in, and its own pass over its own marks (see [syncSent]). A line the user switched off is
         // not read for sent either (D29), and the sender filters apply to the CONTACT, whichever direction.
         var sentUploaded = 0
-        if (syncSent()) {
+        if (syncSent() && !removalOwed) {
             tally.uploaded = 0
             for (l in lines) {
                 if (enabled[l.subscriptionId] == false) continue
@@ -236,7 +252,8 @@ class SmsSyncEngine(
             }
             sentUploaded = tally.uploaded
         }
-        return SyncReport(inboxUploaded, tally.filtered, disabled, tally.failed, quarantined = state.quarantined().size, uploadedSent = sentUploaded)
+        return SyncReport(inboxUploaded, tally.filtered, disabled, tally.failed, quarantined = state.quarantined().size, uploadedSent = sentUploaded,
+            retryable = removalOwed, sentRemovalPending = removalOwed)
     }
 
     private class Tally { var uploaded = 0; var filtered = 0; var failed = 0 }
@@ -349,8 +366,15 @@ class SmsSyncEngine(
      * quarantine so a later opt-in starts clean from the backfill horizon. Inbox rows are untouched.
      */
     fun removeAllSent() {
+        state.setSentRemovalPending(true)                       // owed from the moment it is asked for, until the cloud confirms
         rtdb.delete(SmsWire.sentPath(rtdb.uid, deviceId))
-        state.clearSent()
+        state.clearSent()                                       // also clears the flag
+    }
+
+    /** Finish a removal that was asked for but did not land. True when nothing is owed (none pending, or it just completed). */
+    fun resumeSentRemoval(): Boolean {
+        if (!state.sentRemovalPending()) return true
+        return try { removeAllSent(); true } catch (e: Exception) { false }
     }
 
     /** "Sync older history": move every line's mark back so the next [sync] re-sends `days` of history (idempotent). */

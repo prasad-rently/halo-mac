@@ -161,6 +161,7 @@ fun SmsScreen(vm: CloudViewModel) {
         if (profile != null) vm.refreshLines() else if (problem != null) vm.refreshProfile()
     }
     val syncSent by vm.syncSent.collectAsStateWithLifecycle()
+    val removalPending by vm.sentRemovalPending.collectAsStateWithLifecycle()
     var confirmSentOn by remember { mutableStateOf(false) }
     var confirmSentOff by remember { mutableStateOf(false) }
     var sentInfo by remember { mutableStateOf(false) }
@@ -229,7 +230,7 @@ fun SmsScreen(vm: CloudViewModel) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Sent messages", color = Halo.Text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                        Text(if (syncSent) "On · uploaded encrypted" else "Off · received only", color = if (syncSent) Halo.Amber else Halo.Text3, fontSize = 11.sp, modifier = Modifier.testTag("sms.sent.state"))
+                        Text(if (syncSent) "On · uploaded encrypted" else if (removalPending) "Off · removing uploaded messages…" else "Off · received only", color = if (syncSent || removalPending) Halo.Amber else Halo.Text3, fontSize = 11.sp, modifier = Modifier.testTag("sms.sent.state"))
                     }
                     IconButton(onClick = { sentInfo = true }, modifier = Modifier.testTag("sms.sent.info")) { Icon(Icons.Filled.Info, "About syncing sent messages", tint = Halo.Text2) }
                     Switch(checked = syncSent, onCheckedChange = { on -> if (on) confirmSentOn = true else confirmSentOff = true }, modifier = Modifier.testTag("sms.sent.toggle"))
