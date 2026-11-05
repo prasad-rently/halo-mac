@@ -1,54 +1,32 @@
 package app.halo.mobile
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import app.halo.mobile.design.HaloColors
 
-// Halo's dark-only design tokens (docs/DESIGN_SYSTEM.md), mirrored for Android. Dark-only by design.
+// Compatibility layer. The design system lives in app.halo.mobile.design (see android/DESIGN.md); these names are kept so
+// code written against the old Theme.kt (and branches that have not rebased yet) keeps compiling. New code should use
+// the design package directly.
 object Halo {
-    val Background = Color(0xFF080C14); val Surface = Color(0xFF0D1220); val Surface2 = Color(0xFF131928)
-    val Accent = Color(0xFF4F7CFF); val Green = Color(0xFF22D97A); val Amber = Color(0xFFF5A623); val Red = Color(0xFFFF4D6A)
-    val Text = Color(0xFFEEF2FB); val Text2 = Color(0xFFA9B4CC); val Text3 = Color(0xFF6B7791)
-    val Border = Color(0x14FFFFFF)
+    val Background = HaloColors.Background; val Surface = HaloColors.Surface; val Surface2 = HaloColors.Surface2
+    val Accent = HaloColors.Accent; val Green = HaloColors.Green; val Amber = HaloColors.Amber; val Red = HaloColors.Red
+    val Cyan = HaloColors.Cyan; val Purple = HaloColors.Purple
+    val Text = HaloColors.Text; val Text2 = HaloColors.Text2; val Text3 = HaloColors.Text3
+    val Border = HaloColors.Border
 }
 
 @Composable
-fun HaloTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            primary = Halo.Accent, onPrimary = Color.White, background = Halo.Background, onBackground = Halo.Text,
-            surface = Halo.Surface, onSurface = Halo.Text, surfaceVariant = Halo.Surface2, onSurfaceVariant = Halo.Text2,
-            error = Halo.Red, outline = Halo.Border,
-        ),
-        content = content,
-    )
-}
+fun HaloTheme(content: @Composable () -> Unit) = app.halo.mobile.design.HaloTheme(content)
 
 @Composable
-fun HaloCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Halo.Surface),
-    ) { Column(Modifier.padding(14.dp)) { content() } }
-}
+fun HaloCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) =
+    app.halo.mobile.design.HaloCard(modifier, content = content)
 
 @Composable
-fun SectionLabel(text: String, modifier: Modifier = Modifier) {
-    Text(text.uppercase(), modifier = modifier, color = Halo.Text3, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.4.sp)
-}
+fun SectionLabel(text: String, modifier: Modifier = Modifier) =
+    androidx.compose.material3.Text(text.uppercase(), modifier = modifier, style = app.halo.mobile.design.HaloType.Label, color = HaloColors.Text2)
 
 fun formatBytes(n: Long): String = when {
     n < 1024 -> "$n B"

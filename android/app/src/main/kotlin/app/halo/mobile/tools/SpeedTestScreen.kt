@@ -38,6 +38,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.halo.mobile.Halo
+import app.halo.mobile.design.HaloEmptyState
+import app.halo.mobile.design.HaloIconButton
+import app.halo.mobile.design.HaloInfo
+import app.halo.mobile.design.HaloInfoSheet
+import app.halo.mobile.design.HaloListRow
+import app.halo.mobile.design.HaloPrimaryButton
+import app.halo.mobile.design.HaloStatusBadge
 import app.halo.mobile.HaloCard
 import app.halo.mobile.SectionLabel
 import app.halo.tools.NetworkState
@@ -70,9 +77,9 @@ fun SpeedTestScreen() {
             }
             // The data-use disclosure stays on the main surface, as a chip: it is the thing to know before tapping Start.
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                HaloStatusChip(if (net.connected) net.kind.label else "Offline", if (net.connected) Halo.Green else Halo.Red, Modifier.testTag("tools.speed.network"))
-                HaloStatusChip("Uses ~${plan.estimatedDataBytes / 1_000_000} MB", if (gate is SpeedTestGate.Confirm) Halo.Amber else Halo.Text2, Modifier.testTag("tools.speed.explain"))
-                if (net.metered) HaloStatusChip("Metered", Halo.Amber)
+                HaloStatusBadge(if (net.connected) net.kind.label else "Offline", if (net.connected) Halo.Green else Halo.Red, Modifier.testTag("tools.speed.network"))
+                HaloStatusBadge("Uses ~${plan.estimatedDataBytes / 1_000_000} MB", if (gate is SpeedTestGate.Confirm) Halo.Amber else Halo.Text2, Modifier.testTag("tools.speed.explain"))
+                if (net.metered) HaloStatusBadge("Metered", Halo.Amber)
             }
             (gate as? SpeedTestGate.Blocked)?.let { Text("You're offline", color = Halo.Red, fontSize = 12.sp, modifier = Modifier.testTag("tools.speed.blocked")) }
             (gate as? SpeedTestGate.Confirm)?.let { Text("May use your data plan", color = Halo.Amber, fontSize = 12.sp, modifier = Modifier.testTag("tools.speed.metered")) }
@@ -99,11 +106,7 @@ fun SpeedTestScreen() {
         }
     }
 
-    if (info) HaloInfoSheet("Speed Test", { info = false }) {
-        InfoLine("Downloads about ${plan.downloadBytes / 1_000_000} MB and uploads about ${plan.uploadBytes / 1_000_000} MB over your current connection, and times 10 small requests for latency. It only runs when you tap Start.")
-        InfoLine("Servers: Cloudflare's public speed endpoint (speed.cloudflare.com) and 1.1.1.1 — the same ones Halo on your Mac uses. Cloudflare sees your IP address, like any website. Only zero-filled test data is sent.")
-        InfoLine("Download is the average over the whole transfer; latency is the median of 10. Results vary run to run and with the distance to the nearest server. On metered or mobile data, Halo asks before starting.")
-    }
+    if (info) HaloInfoSheet(HaloInfo("Speed Test", "Downloads about ${plan.downloadBytes / 1_000_000} MB and uploads about ${plan.uploadBytes / 1_000_000} MB over your current connection, and times 10 small requests for latency. It only runs when you tap Start.", listOf("Servers: Cloudflare's public speed endpoint (speed.cloudflare.com) and 1.1.1.1 — the same ones Halo on your Mac uses. Cloudflare sees your IP address, like any website. Only zero-filled test data is sent.", "Download is the average over the whole transfer; latency is the median of 10. Results vary run to run and with the distance to the nearest server. On metered or mobile data, Halo asks before starting.")), { info = false })
     confirm?.let { msg ->
         AlertDialog(onDismissRequest = { confirm = null }, containerColor = Halo.Background,
             title = { Text("Run on this connection?", color = Halo.Text) },

@@ -47,6 +47,13 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.halo.mobile.Halo
+import app.halo.mobile.design.HaloEmptyState
+import app.halo.mobile.design.HaloIconButton
+import app.halo.mobile.design.HaloInfo
+import app.halo.mobile.design.HaloInfoSheet
+import app.halo.mobile.design.HaloListRow
+import app.halo.mobile.design.HaloPrimaryButton
+import app.halo.mobile.design.HaloStatusBadge
 import app.halo.mobile.HaloCard
 import app.halo.mobile.SectionLabel
 import app.halo.mobile.cloud.ClipboardHistory
@@ -92,7 +99,7 @@ fun TransformScreen() {
             }
             s.notice?.let { Text(it, color = Halo.Text2, fontSize = 12.sp, modifier = Modifier.testTag("tools.transform.notice")) }
             if (showHistory) Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                history.take(20).forEach { item -> HaloListRow(item.text.replace('\n', ' '), Modifier.testTag("tools.transform.historyItem")) { s.load(item.text); showHistory = false } }
+                history.take(20).forEach { item -> HaloListRow(item.text.replace('\n', ' '), Modifier.testTag("tools.transform.historyItem"), onClick = { s.load(item.text); showHistory = false }) }
             }
         }
 
@@ -128,12 +135,7 @@ fun TransformScreen() {
         }
     }
 
-    if (info) HaloInfoSheet("Transform", { info = false }) {
-        InfoLine("Runs on this phone; nothing is sent unless you tap Send. Paste reads your clipboard only when you tap it, and History lists items synced from your Mac.")
-        InfoLine("Same results as Halo on your Mac for JSON, Base64, URL, sort, de-duplicate, hash and case. Differences: numbers in JSON keep how you typed them, upper/lower case understands accents, and Base64 decode also accepts URL-safe text.")
-        InfoLine("Format JSON escapes non-ASCII as \\uXXXX, exactly like the Mac action. QR codes are limited to about 2.3 KB of text.")
-        InfoLine("Passwords are marked sensitive when copied. If automatic clipboard sync is on, any copy is also sent to your Mac.")
-    }
+    if (info) HaloInfoSheet(HaloInfo("Transform", "Runs on this phone; nothing is sent unless you tap Send. Paste reads your clipboard only when you tap it, and History lists items synced from your Mac.", listOf("Same results as Halo on your Mac for JSON, Base64, URL, sort, de-duplicate, hash and case. Differences: numbers in JSON keep how you typed them, upper/lower case understands accents, and Base64 decode also accepts URL-safe text.", "Format JSON escapes non-ASCII as \\uXXXX, exactly like the Mac action. QR codes are limited to about 2.3 KB of text.", "Passwords are marked sensitive when copied. If automatic clipboard sync is on, any copy is also sent to your Mac.")), { info = false })
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -156,6 +158,6 @@ private fun ResultCard(r: TransformResult.Output, vm: ToolsViewModel) {
             TextButton(onClick = { vm.transform.load(r.text) }, enabled = !r.secret) { Text("Use as input") }
         }
         note?.let { Text(it, color = Halo.Text2, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp).testTag("tools.transform.resultNote")) }
-        if (r.secret) HaloStatusChip("Auto-sync would also send this", Halo.Amber, Modifier.padding(top = 6.dp))
+        if (r.secret) HaloStatusBadge("Auto-sync would also send this", Halo.Amber, Modifier.padding(top = 6.dp))
     }
 }

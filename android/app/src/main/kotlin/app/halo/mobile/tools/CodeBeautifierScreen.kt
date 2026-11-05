@@ -53,6 +53,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.halo.mobile.Halo
+import app.halo.mobile.design.HaloEmptyState
+import app.halo.mobile.design.HaloIconButton
+import app.halo.mobile.design.HaloInfo
+import app.halo.mobile.design.HaloInfoSheet
+import app.halo.mobile.design.HaloListRow
+import app.halo.mobile.design.HaloPrimaryButton
+import app.halo.mobile.design.HaloStatusBadge
 import app.halo.mobile.HaloCard
 import app.halo.mobile.SectionLabel
 import app.halo.tools.CodeFormatter
@@ -154,9 +161,5 @@ fun CodeBeautifierScreen() {
         }
     }
 
-    if (info) HaloInfoSheet("Code Image", { info = false }) {
-        InfoLine("Turns code into a themed image with the same eight themes as Halo on your Mac. Format re-indents JSON, XML, HTML, CSS, JavaScript and TypeScript; other languages are shown as you wrote them.")
-        InfoLine("Formatting only changes whitespace. For JSON it refuses invalid input instead of guessing.")
-        InfoLine("Long lines wrap at 100 columns and images stop after 300 lines, with a note saying how many were left out. Share saves the image in Pictures/Halo first (Android 10+); Save as… works everywhere.")
-    }
+    if (info) HaloInfoSheet(HaloInfo("Code Image", "Turns code into a themed image with the same eight themes as Halo on your Mac. Format re-indents JSON, XML, HTML, CSS, JavaScript and TypeScript; other languages are shown as you wrote them.", listOf("Formatting only changes whitespace. For JSON it refuses invalid input instead of guessing.", "Long lines wrap at 100 columns and images stop after 300 lines, with a note saying how many were left out. Share saves the image in Pictures/Halo first (Android 10+); Save as… works everywhere.")), { info = false })
 }
