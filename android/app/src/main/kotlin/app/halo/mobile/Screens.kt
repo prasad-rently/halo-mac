@@ -52,6 +52,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -74,6 +75,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import app.halo.mobile.tools.ToolsEntryCard
+import app.halo.mobile.tools.ToolsHost
+import app.halo.mobile.tools.ToolsViewModel
 import app.halo.share.ConsentDecision
 import app.halo.share.Peer
 import java.text.DateFormat
@@ -82,6 +87,10 @@ import java.util.Date
 @Composable
 fun HaloApp(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    // Tools hub (see ToolsHost): drawn in place of the tab body, closed by Back or by pressing any tab.
+    val tools: ToolsViewModel = viewModel()
+    var seenTab by rememberSaveable { mutableIntStateOf(tab) }
+    LaunchedEffect(tab) { if (tab != seenTab) { seenTab = tab; tools.close() } }
     val offer by vm.pendingOffer.collectAsStateWithLifecycle()
     val inbox by vm.inbox.collectAsStateWithLifecycle()
     val transfer by vm.transfer.collectAsStateWithLifecycle()
@@ -111,7 +120,8 @@ fun HaloApp(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel) {
         },
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
-            when (tab) { 0 -> ShareScreen(vm); 1 -> SmsScreen(cloud); 2 -> ClipboardScreen(cloud); 3 -> InboxScreen(vm); else -> SettingsScreen(vm, cloud) }
+            if (tools.isOpen) ToolsHost(tools)
+            else when (tab) { 0 -> ShareScreen(vm); 1 -> SmsScreen(cloud); 2 -> ClipboardScreen(cloud); 3 -> InboxScreen(vm); else -> SettingsScreen(vm, cloud) }
         }
     }
 
@@ -314,6 +324,7 @@ fun SettingsScreen(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Text("Settings", color = Halo.Text, fontSize = 34.sp, fontWeight = FontWeight.Bold)
         CloudSettingsCard(cloud)
+        ToolsEntryCard(viewModel<ToolsViewModel>())
 
         HaloCard {
             SectionLabel("This device")

@@ -52,7 +52,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import app.halo.mobile.cloud.ClipItem
+import app.halo.mobile.tools.ToolsEntryCard
+import app.halo.mobile.tools.ToolsViewModel
 import app.halo.mobile.cloud.CloudViewModel
 import app.halo.mobile.cloud.ProfileProblem
 import app.halo.mobile.cloud.LineUi
@@ -284,6 +287,8 @@ fun ClipboardScreen(vm: CloudViewModel) {
             else PairingPanel(vm, "Pair this phone with your Mac to share your clipboard between them. Copies are encrypted before they leave.")
             return@Column
         }
+        val tools: ToolsViewModel = viewModel()
+        ToolsEntryCard(tools)
         HaloCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -333,7 +338,7 @@ fun ClipboardScreen(vm: CloudViewModel) {
             historyWarning?.let { Text(it, color = Halo.Amber, fontSize = 12.sp, modifier = Modifier.testTag("clip.storageWarning")) }
             if (historyKeyLost) OutlinedButton(onClick = vm::resetHistory, modifier = Modifier.testTag("clip.resetHistory")) { Text("Reset clipboard history") }
             if (history.isEmpty()) HaloCard { Text("Nothing synced yet.", color = Halo.Text3, fontSize = 13.sp) }
-            history.take(50).forEach { ClipRow(it) { vm.copy(it) } }
+            history.take(50).forEach { item -> ClipRow(item, onTransform = { tools.transformText(item.text) }) { vm.copy(item) } }
         }
     }
     if (confirmPurge) androidx.compose.material3.AlertDialog(
@@ -346,12 +351,13 @@ fun ClipboardScreen(vm: CloudViewModel) {
 }
 
 @Composable
-private fun ClipRow(item: ClipItem, onCopy: () -> Unit) {
+private fun ClipRow(item: ClipItem, onTransform: () -> Unit, onCopy: () -> Unit) {
     Column(Modifier.fillMaxWidth().background(Halo.Surface, RoundedCornerShape(12.dp)).padding(12.dp).testTag("clip.item")) {
         Text(item.text, color = Halo.Text, fontSize = 14.sp, maxLines = 4)
         Spacer(Modifier.height(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("${if (item.received) "From" else "Sent from"} ${item.from} · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(item.atMs))}", color = Halo.Text3, fontSize = 11.sp, modifier = Modifier.weight(1f))
+            TextButton(onClick = onTransform, modifier = Modifier.testTag("clip.transform")) { Text("Transform…") }
             TextButton(onClick = onCopy) { Text("Copy") }
         }
     }
