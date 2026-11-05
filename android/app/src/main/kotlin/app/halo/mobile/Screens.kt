@@ -92,7 +92,9 @@ fun HaloApp(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel) {
     val inbox by vm.inbox.collectAsStateWithLifecycle()
     val transfer by vm.transfer.collectAsStateWithLifecycle()
     val shared by vm.shared.collectAsStateWithLifecycle()
-    fun go(d: HaloDestination) { tab = d.ordinal; if (d == HaloDestination.Share) vm.refreshInbox() }
+    // Pressing ANY tab, including the one already selected, returns to that tab's root: LaunchedEffect(tab) above only fires when the tab
+    // CHANGES, so with Tools/Spend/Check database open on Home, tapping Home did nothing.
+    fun go(d: HaloDestination) { tools.close(); subScreen = null; tab = d.ordinal; if (d == HaloDestination.Share) vm.refreshInbox() }
 
     // MR-OS-3: keep the screen (and so the connection) awake for the length of a transfer.
     val view = LocalView.current
@@ -102,8 +104,10 @@ fun HaloApp(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel) {
     // blocks screen capture/casting there, the same job iOS's privacy shield does when the app goes to the app switcher.
     // Release builds only, so debug screenshots (adb screencap) keep working; other tabs are unaffected.
     val window = remember(view) { var c = view.context; while (c is android.content.ContextWrapper && c !is android.app.Activity) c = c.baseContext; (c as? android.app.Activity)?.window }
-    DisposableEffect(window, dest) {
-        val secure = !BuildConfig.DEBUG && dest == HaloDestination.Messages
+    // The Spending screen is built from the same bank SMS (merchants, amounts), so it gets the same protection.
+    val secureScreen = dest == HaloDestination.Messages || subScreen == SUB_SPEND
+    DisposableEffect(window, secureScreen) {
+        val secure = !BuildConfig.DEBUG && secureScreen
         if (secure) window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         onDispose { if (secure) window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE) }
     }

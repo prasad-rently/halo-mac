@@ -51,4 +51,18 @@ class IntegrationGuardsTest {
         assertFalse("a second ToolsRegistry (the photos stub) exists", main.resolve("ToolsRegistry.kt").exists())
         assertTrue(main.resolve("tools/ToolsRegistry.kt").readText().contains("Tool(\"photos\""))
     }
+
+    @Test fun `pressing a tab - even the selected one - closes Tools and the sub-screens`() {
+        val src = main.resolve("Screens.kt").readText()
+        val go = Regex("fun go\\(d: HaloDestination\\) \\{([^\\n]*)\\}").find(src)?.groupValues?.get(1) ?: error("go() not found")
+        assertTrue("go() must close the Tools hub: $go", go.contains("tools.close()"))
+        assertTrue("go() must clear the sub-screen: $go", go.contains("subScreen = null"))
+    }
+
+    @Test fun `FLAG_SECURE covers Messages and Spending and is release-only`() {
+        val src = main.resolve("Screens.kt").readText()
+        assertTrue(src.contains("val secureScreen = dest == HaloDestination.Messages || subScreen == SUB_SPEND"))
+        assertTrue(src.contains("val secure = !BuildConfig.DEBUG && secureScreen"))
+        assertTrue(src.contains("FLAG_SECURE"))
+    }
 }
