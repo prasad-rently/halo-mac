@@ -255,4 +255,15 @@ final class OutboxTests: XCTestCase {
         XCTAssertEqual(rig.model.recentAddresses.count, 1)
         XCTAssertEqual(rig.model.peers.count, 1)
     }
+
+    func testANetworkChangeClearsTheChosenDeviceSoItCannotReturnPreSelected() async throws {
+        let rig = try await Rig.make()
+        rig.model.selectedPeerID = rig.peerID
+        XCTAssertNotNil(rig.model.selectedPeer)
+
+        rig.model.networkChanged(NetworkSignature(value: ""))     // offline: no rescan is started
+
+        XCTAssertTrue(rig.model.peers.isEmpty)
+        XCTAssertNil(rig.model.selectedPeerID, "a device found again on the new network must not come back chosen")
+    }
 }

@@ -70,7 +70,9 @@ enum HaloStrings {
         static let addressPlaceholder = "192.168.1.20 or 192.168.1.20:53317"
         static let addAction = "Add"
         static let done = "Done"
+        #if DEBUG
         static let sendTest = "Send 5 MB test"
+        #endif
         static let selected = "Selected"
         static let dismiss = "Dismiss"
     }

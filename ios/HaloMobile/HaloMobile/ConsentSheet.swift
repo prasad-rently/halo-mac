@@ -4,6 +4,7 @@ import HaloShareKit
 /// MR-RX-2: nothing is written until the person says yes. Shows who, how many, how big, and names.
 struct ConsentSheet: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.scenePhase) private var scenePhase
     let offer: IncomingOffer
 
     var body: some View {
@@ -56,5 +57,8 @@ struct ConsentSheet: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .haloScreen()
+        // A sheet sits above the root view, so the app-wide PrivacyShield does not cover it: hide the sender
+        // and file names whenever the app is not active (app-switcher snapshot).
+        .overlay { if scenePhase != .active { PrivacyShield() } }
     }
 }

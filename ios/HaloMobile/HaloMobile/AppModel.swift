@@ -402,9 +402,12 @@ final class AppModel: ObservableObject {
     private func merge(_ peer: Peer) { directory.merge(peer); objectWillChange.send() }   // a conflicting claim is dropped, never replaces a row
 
     /// The network changed (Wi-Fi switched, VPN toggled): rows found on the old one are stale.
-    private func networkChanged(_ signature: NetworkSignature) {
+    func networkChanged(_ signature: NetworkSignature) {
         stopScan()
         directory.removeAll()
+        // A fingerprint is only a claim: a device that reappears on the new network (possibly at another
+        // host) must not come back already chosen, one tap from Send.
+        selectedPeerID = nil
         objectWillChange.send()
         if signature.isOffline {
             notice = "No network connection."
