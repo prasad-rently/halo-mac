@@ -83,6 +83,21 @@
     "merchantRegex": "(?:\\bat\\s+|\\bto\\s+|info[:\\-]\\s*)([A-Za-z0-9][A-Za-z0-9 &._'-]{2,30}?)(?=\\s+(?:on|via|ref|for|dated|\\.|,|$))"
   },
 
+  "categories": {
+    "note": "F-048 §12 spend-category rules (added for F-056 so desktop and phone share ONE copy). Evaluated in order over UPPERCASE(merchant + ' ' + body); first rule with any trigger as a substring wins. A credit is always 'Income' (checked before these rules); no match is 'Other'; the pipeline sets 'Transfers' for a detected self-transfer. The UI legend is these names plus Income, Transfers, Other.",
+    "rules": [
+      { "category": "Food & Dining", "triggers": ["ZOMATO", "SWIGGY", "RESTAURANT", "CAFE", "EATCLUB", "DOMINO", "MCDONALD", "KFC"] },
+      { "category": "Groceries", "triggers": ["BIGBASKET", "BLINKIT", "ZEPTO", "DMART", "SUPERMARKET", "GROFERS", "JIOMART"] },
+      { "category": "Shopping", "triggers": ["AMAZON", "FLIPKART", "MYNTRA", "AJIO", "MEESHO", "NYKAA", "RETAIL"] },
+      { "category": "Bills & Utilities", "triggers": ["ELECTRICITY", "INDANE", "HPGAS", "BHARATGAS", "BROADBAND", "RECHARGE", "DTH", "WATER BILL", "GAS BILL", "AIRTEL", "JIO", "ACT ", "BSNL"] },
+      { "category": "Transport", "triggers": ["UBER", "OLA", "RAPIDO", "IRCTC", "FUEL", "INDIAN OIL", "IOCL", "BPCL", "HPCL", "METRO", "FASTAG", "PETROL"] },
+      { "category": "Entertainment", "triggers": ["NETFLIX", "SPOTIFY", "PRIME", "HOTSTAR", "BOOKMYSHOW", "JIOCINEMA", "SONYLIV"] },
+      { "category": "Health", "triggers": ["PHARMEASY", "APOLLO", "HOSPITAL", "PHARMACY", "1MG", "NETMEDS", "MEDPLUS"] },
+      { "category": "Financial", "triggers": ["EMI", "LIC", "INSURANCE", "MUTUAL FUND", "SIP", "CRED", "ZERODHA", "GROWW"] },
+      { "category": "Transfers", "triggers": ["UPI", "IMPS", "NEFT", "RTGS"] }
+    ]
+  },
+
   "algorithm": [
     "1. Reject if sender endsWith '-P' (promotional DLT header).",
     "2. Reject if sender matches any nonBankSenders.",

@@ -983,3 +983,123 @@ struct ClipboardPrivacyTests {
         #expect(!ClipboardPrivacy.shouldIgnore(types: []))
     }
 }
+
+// MARK: - Cross-language expense fixtures (F-056 F56-1)
+//
+// docs/specs/pattern-packs/expense-fixtures.v1.json is the contract the Kotlin port
+// (android/halocloud ExpenseFixtureTest) must also satisfy. Its `expect` blocks were
+// recorded FROM this code, so any change to TransactionParser / SmsClassifier /
+// PatternPack that alters behaviour fails here until the fixture (and Kotlin) move too.
+
+@Suite("ExpenseFixtures")
+struct ExpenseFixtureTests {
+    struct Fixture: Decodable {
+        struct Expect: Decodable {
+            let classifier: String
+            let parse: String
+            let amount: Double?
+            let direction: String?
+            let merchant: String?
+            let accountHint: String?
+            let category: String?
+        }
+        struct Msg: Decodable { let id, sender, body: String; let expect: Expect }
+        struct PipeMsg: Decodable { let id, sender, body: String; let tsMs: Double }
+        struct PipeTxn: Decodable {
+            let id: String; let amount: Double; let direction: String; let category: String
+            let isTransfer, isDuplicate, countsTowardTotals: Bool
+        }
+        struct Pipe: Decodable {
+            let name: String
+            let messages: [PipeMsg]
+            let excluded: [String]?
+            let included: [String]?
+            let categoryById: [String: String]?
+            let expectUnreadable: Int
+            let expect: [PipeTxn]
+        }
+        let messages: [Msg]
+        let pipelines: [Pipe]
+    }
+
+    private var root: URL {
+        URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+    }
+
+    private func load() throws -> Fixture {
+        let url = root.appendingPathComponent("docs/specs/pattern-packs/expense-fixtures.v1.json")
+        return try JSONDecoder().decode(Fixture.self, from: try Data(contentsOf: url))
+    }
+
+    @Test("Every single-message fixture: classifier + parse + category agree with the desktop")
+    func singles() throws {
+        let pack = PatternPack.indiaDefault
+        let f = try load()
+        #expect(f.messages.count >= 50)
+        for m in f.messages {
+            #expect(SmsClassifier.classify(sender: m.sender, body: m.body).rawValue == m.expect.classifier, "classifier \(m.id)")
+            let r = TransactionParser.parse(sender: m.sender, body: m.body, messageId: m.id, date: Date(), pack: pack)
+            switch r {
+            case .notTransaction: #expect(m.expect.parse == "notTransaction", "parse \(m.id)")
+            case .unreadable:     #expect(m.expect.parse == "unreadable", "parse \(m.id)")
+            case .ok(let t):
+                #expect(m.expect.parse == "ok", "parse \(m.id)")
+                #expect(t.amount == m.expect.amount, "amount \(m.id)")
+                #expect(t.direction.rawValue == m.expect.direction, "direction \(m.id)")
+                #expect(t.merchant == m.expect.merchant, "merchant \(m.id)")
+                #expect(t.accountHint == m.expect.accountHint, "account \(m.id)")
+                #expect(pack.category(merchant: t.merchant, body: t.body, direction: t.direction) == m.expect.category, "category \(m.id)")
+            }
+        }
+    }
+
+    @Test("Pipeline fixtures: self-transfers, near-dup window, overrides, unreadable tally")
+    func pipelines() throws {
+        let pack = PatternPack.indiaDefault
+        for p in try load().pipelines {
+            var ov = ExpenditureOverrides()
+            ov.excludedIds = Set(p.excluded ?? []); ov.includedIds = Set(p.included ?? [])
+            ov.categoryById = p.categoryById ?? [:]
+            let msgs = p.messages.map {
+                SMSMessage(id: $0.id, lineId: "L", contactNumber: $0.sender, body: $0.body,
+                           date: Date(timeIntervalSince1970: $0.tsMs / 1000),
+                           category: SmsClassifier.classify(sender: $0.sender, body: $0.body), read: true)
+            }
+            let res = TransactionPipeline.run(messages: msgs, pack: pack, overrides: ov)
+            #expect(res.unreadableCount == p.expectUnreadable, "unreadable \(p.name)")
+            #expect(res.transactions.count == p.expect.count, "count \(p.name)")
+            for want in p.expect {
+                guard let got = res.transactions.first(where: { $0.id == want.id }) else {
+                    Issue.record("missing \(want.id) in \(p.name)"); continue
+                }
+                #expect(got.amount == want.amount && got.direction.rawValue == want.direction, "\(p.name)/\(want.id)")
+                #expect(got.category == want.category, "\(p.name)/\(want.id) category")
+                #expect(got.isTransfer == want.isTransfer && got.isDuplicate == want.isDuplicate
+                        && got.countsTowardTotals == want.countsTowardTotals, "\(p.name)/\(want.id) flags")
+            }
+        }
+    }
+
+    @Test("The shipped Swift default pack has not drifted from india-bank-sms.v1.json (word lists + amount regex)")
+    func packMatchesJSON() throws {
+        let url = root.appendingPathComponent("docs/specs/pattern-packs/india-bank-sms.v1.json")
+        let j = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        let parser = try #require(j["parser"] as? [String: Any])
+        let pack = PatternPack.indiaDefault
+        #expect(parser["debitWords"] as? [String] == pack.debitWords)
+        #expect(parser["creditWords"] as? [String] == pack.creditWords)
+        #expect(parser["excludeWords"] as? [String] == pack.excludeWords)
+        #expect(parser["promoWords"] as? [String] == pack.promoWords)
+        #expect(parser["nonBankSenders"] as? [String] == pack.nonBankSenders)
+        #expect(parser["balancePrefix"] as? [String] == pack.balancePrefix)
+        #expect(parser["amountRegex"] as? String == pack.amountRegex)
+        // F-056: the §12 category rules are now in the pack so the phone reads the SAME copy; the desktop's embedded
+        // copy must not drift from it.
+        let cats = try #require((j["categories"] as? [String: Any])?["rules"] as? [[String: Any]])
+        #expect(cats.count == pack.categories.count)
+        for (c, p) in zip(cats, pack.categories) {
+            #expect(c["category"] as? String == p.category, "category name \(p.category)")
+            #expect(c["triggers"] as? [String] == p.triggers, "triggers \(p.category)")
+        }
+    }
+}

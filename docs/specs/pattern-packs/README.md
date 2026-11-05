@@ -8,6 +8,7 @@ parsing (F-048). Externalizing these lists means a bank/format can be added
 
 | File | Locale | Purpose | Source |
 |------|--------|---------|--------|
+| [expense-fixtures.v1.json](expense-fixtures.v1.json) | — | Cross-language contract (F-056): SMS → expected classification/parse/category + pipeline cases. `expect` recorded from the Swift desktop; `HaloTests/ExpenseFixtures` and `android/halocloud ExpenseFixtureTest` both run it | Synthetic messages, no real account data |
 | [india-bank-sms.v1.json](india-bank-sms.v1.json) | en-IN / INR | Classifier categories + transaction parser rules | Ported verbatim from the *Hamza* reference (`~/CW/Hamza`), verified against a real inbox Apr–Jun 2026 |
 
 ## Structure
@@ -16,6 +17,7 @@ parsing (F-048). Externalizing these lists means a bank/format can be added
 - **`dltSuffix`** — India DLT header semantics (`-T/-S/-P/-G`).
 - **`classifier`** — ordered categories + keyword lists (OTP, government, transactional, service, promotional) used by F-044's `SmsClassifier`.
 - **`parser`** — debit/credit verbs, exclude/promo words, non-bank senders, balance prefixes, and the amount/account/merchant regexes used by F-048's `TransactionParser`.
+- **`categories`** — the F-048 §12 spend-category rules (ordered; first rule whose trigger is a substring of `UPPER(merchant + " " + body)` wins). Added for F-056 so desktop and phone share one copy; the Swift `PatternPack.indiaDefault` still embeds its own and `ExpenseFixtures.packMatchesJSON` fails on drift. The Kotlin build packages this one file (and only this file) into `halocloud`'s resources — there is no second copy.
 - **`algorithm`** — the 8-step reference algorithm, so an implementer can port it deterministically.
 
 ## Important inherited fixes (do NOT "clean up")

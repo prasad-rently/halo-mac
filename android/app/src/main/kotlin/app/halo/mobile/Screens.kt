@@ -74,6 +74,8 @@ import app.halo.share.Peer
 import java.text.DateFormat
 import java.util.Date
 
+private const val SUB_SPEND = "spend"
+
 @Composable
 fun HaloApp(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel) {
     var tab by rememberSaveable { mutableIntStateOf(HaloDestination.Home.ordinal) }
@@ -81,7 +83,9 @@ fun HaloApp(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel) {
     // Tools hub (see ToolsHost): drawn in place of the tab body, closed by Back or by pressing any tab.
     val tools: ToolsViewModel = viewModel()
     var seenTab by rememberSaveable { mutableIntStateOf(tab) }
-    LaunchedEffect(tab) { if (tab != seenTab) { seenTab = tab; tools.close() } }
+    // Other full-screen destinations that are not tabs ("spend"): same rule — closed by Back or by pressing any tab.
+    var subScreen by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(tab) { if (tab != seenTab) { seenTab = tab; tools.close(); subScreen = null } }
     val offer by vm.pendingOffer.collectAsStateWithLifecycle()
     val inbox by vm.inbox.collectAsStateWithLifecycle()
     val transfer by vm.transfer.collectAsStateWithLifecycle()
@@ -108,9 +112,12 @@ fun HaloApp(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel) {
         },
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
-            if (tools.isOpen) ToolsHost(tools) else when (dest) {
+            if (tools.isOpen) ToolsHost(tools)
+            else if (subScreen == SUB_SPEND) HaloSubScreen("Spending", { subScreen = null }, backTag = "spend.back") { app.halo.mobile.expense.ExpenseScreen() }
+            else when (dest) {
                 HaloDestination.Home -> HomeScreen(vm, cloud, ::go, extraMore = listOf(
                     MoreEntry("Tools", "Transform · Code Image · Speed Test · Photos", Icons.Filled.Build, "home.more.tools") { tools.openHub() },
+                    MoreEntry("Spend", "This month from bank SMS, on this phone", Icons.Filled.CheckCircle, "home.more.spend") { subScreen = SUB_SPEND },
                 ))
                 HaloDestination.Messages -> SmsScreen(cloud)
                 HaloDestination.Clipboard -> ClipboardScreen(cloud)
