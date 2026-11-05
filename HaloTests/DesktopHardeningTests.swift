@@ -1463,6 +1463,17 @@ struct SentSyncTests {
         #expect(vm.totalUnread == 1, "the unread badge counts the one received message and not the sent one")
     }
 
+    @Test("SMSThread itself never counts a sent message as unread, nor lets one set the category (defence in depth behind the decoder)")
+    func threadGuardsIndependentOfDecoder() {
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        let recv = msg("r", .received, "see you", date: t0, cat: .personal, read: true)
+        let sent = msg("s", .sent, "Rs 500 debited", date: t0.addingTimeInterval(10), cat: .transactional, read: false)   // hand-built: unread + classified
+        let thread = SMSThread(id: "t", lineId: "L", contactNumber: "X", messages: [recv, sent])
+        #expect(thread.unreadCount == 0)
+        #expect(thread.category == .personal)
+        #expect(SMSThread(id: "t", lineId: "L", contactNumber: "X", messages: [sent]).category == .uncategorized)
+    }
+
     // MARK: notifications
 
     @Test("A sent message never raises a notification; a new received one still does")
