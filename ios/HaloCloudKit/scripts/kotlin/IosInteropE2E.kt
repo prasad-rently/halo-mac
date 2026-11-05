@@ -64,15 +64,17 @@ class IosInteropE2E {
         assumeTrue(port != null && mode == "verify")
         val db = client(); val crypto = crypto()
         val expected = File(System.getenv("HALO_E2E_EXPECT_FILE")!!).readText()
+        // The iOS app's own device name when run against a Simulator walkthrough; the test's name otherwise.
+        val iosName = System.getenv("HALO_E2E_IOS_DEVICE_NAME") ?: "iPhone (HaloCloudKit)"
         val latch = CountDownLatch(1); var got: RemoteClip? = null
         // The real receive path: a DIFFERENT device id than the iOS app's, so the item is not dropped as an echo.
         val engine = ClipboardSyncEngine(db, crypto, "kotlin-dev", "Pixel (Kotlin engine)")
-        val h = engine.observe { c -> if (c.deviceName == "iPhone (HaloCloudKit)") { got = c; latch.countDown() } }
+        val h = engine.observe { c -> if (c.deviceName == iosName) { got = c; latch.countDown() } }
         try { assertTrue("iOS item not received", latch.await(15, TimeUnit.SECONDS)) } finally { h.close() }
         assertEquals(expected, got!!.text)
         // and the node is structurally what the desktop/Kotlin parser accepts
         val items = db.get("clipboard/${db.uid}/items") as JsonObject
-        val node = items.values.map { it as JsonObject }.first { (it["deviceName"] as JsonPrimitive).contentOrNull == "iPhone (HaloCloudKit)" }
+        val node = items.values.map { it as JsonObject }.first { (it["deviceName"] as JsonPrimitive).contentOrNull == iosName }
         assertTrue(ClipboardEnvelope.from(node) != null)
     }
 }

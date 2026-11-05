@@ -178,9 +178,6 @@ final class CloudModel: ObservableObject {
 
     // MARK: Clipboard (explicit, foreground)
 
-    /// What the pasteboard holds right now, read only because the user tapped. (iOS may show its own "Allow Paste" prompt.)
-    func pasteboardText() -> String? { UIPasteboard.general.string }
-
     func send(_ text: String) {
         guard let session else { toast = "Not connected."; return }
         Task {

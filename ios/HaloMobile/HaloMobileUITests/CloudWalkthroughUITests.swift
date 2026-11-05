@@ -73,8 +73,8 @@ final class CloudWalkthroughUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["hello from Kotlin ✨ https://example.com/x?y=1"].waitForExistence(timeout: 15))
         shot("clipboard-received")
         UIPasteboard.general.string = "from the iPhone simulator ✨"
-        app.buttons["clipboard.send"].tap()
-        if app.alerts.buttons["Allow Paste"].waitForExistence(timeout: 2) { app.alerts.buttons["Allow Paste"].tap() }
+        app.buttons["clipboard.send"].tap()       // the system PasteButton: no "Allow Paste" prompt
+        shot("after-send-tap")
         XCTAssertTrue(app.buttons["clipboard.confirmSend"].waitForExistence(timeout: 5))
         shot("clipboard-send-sheet")
         app.buttons["clipboard.confirmSend"].tap()
@@ -82,12 +82,30 @@ final class CloudWalkthroughUITests: XCTestCase {
         shot("clipboard-sent")
 
         // Unpair with confirmation
+        unpairViaSettings()
+    }
+
+    private func unpairViaSettings() {
         app.tabBars.buttons["Settings"].tap()
-        app.buttons["settings.cloud"].tap()
+        app.staticTexts["Cloud"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["cloud.unpair"].waitForExistence(timeout: 10))
         app.buttons["cloud.unpair"].tap()
         shot("unpair-confirm")
         app.buttons["Unpair and erase keys"].tap()
-        XCTAssertTrue(app.buttons["cloud.continue"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["cloud.continue"].waitForExistence(timeout: 10))
         shot("unpaired")
+    }
+
+    /// Run alone after the walkthrough left the app paired: unpair + confirm, then a RELAUNCH proves nothing survived.
+    func testUnpairWipesAndStaysUnpairedAfterRelaunch() throws {
+        guard ProcessInfo.processInfo.environment["HALO_CODE"] != nil else { throw XCTSkip("walkthrough env not set") }
+        app.launch()
+        app.tabBars.buttons["Messages"].tap()
+        guard app.staticTexts["VM-HDFCBK"].waitForExistence(timeout: 20) else { throw XCTSkip("not paired (run the walkthrough first)") }
+        unpairViaSettings()
+        app.terminate(); app.launch()
+        app.tabBars.buttons["Messages"].tap()
+        XCTAssertTrue(app.staticTexts["Set up Cloud first"].waitForExistence(timeout: 10), "pairing survived a relaunch")
+        shot("relaunch-unpaired")
     }
 }

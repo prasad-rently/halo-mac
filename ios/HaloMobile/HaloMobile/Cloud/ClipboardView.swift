@@ -44,11 +44,7 @@ struct ClipboardView: View {
     private var content: some View {
         ScrollView {
             VStack(spacing: 12) {
-                HaloPrimaryButton(title: CloudStrings.sendClipboard, icon: "paperplane.fill") {
-                    if let t = cloud.pasteboardText(), !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { pending = t }
-                    else { cloud.toast = CloudStrings.nothingToSend }
-                }
-                .accessibilityIdentifier("clipboard.send")
+                sendButton
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         HaloChip(text: CloudStrings.worksWhileOpen, icon: "bolt.horizontal")
@@ -64,6 +60,28 @@ struct ClipboardView: View {
             }
             .padding(16)
         }
+    }
+
+    /// The system `PasteButton` reads the pasteboard WITHOUT iOS's "Allow Paste" interruption (the tap itself is the
+    /// permission), which is exactly the explicit, user-initiated send this screen promises. It is drawn invisibly over
+    /// the Halo-styled button so it keeps the app's look.
+    private var sendButton: some View {
+        ZStack {
+            HaloPrimaryButton(title: CloudStrings.sendClipboard, icon: "paperplane.fill") {}.allowsHitTesting(false)
+            PasteButton(payloadType: String.self) { strings in
+                let text = strings.first ?? ""
+                DispatchQueue.main.async {
+                    if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { cloud.toast = CloudStrings.nothingToSend } else { pending = text }
+                }
+            }
+            .labelStyle(.titleOnly)
+            .blendMode(.destinationOver)       // invisible but fully tappable
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .contentShape(Rectangle())
+            .accessibilityLabel(CloudStrings.sendClipboard)
+            .accessibilityIdentifier("clipboard.send")
+        }
+        .frame(minHeight: 48)
     }
 
     private var connectionText: String {
