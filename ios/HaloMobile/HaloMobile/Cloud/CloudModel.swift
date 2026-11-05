@@ -129,7 +129,7 @@ final class CloudModel: ObservableObject {
     /// Unpair: stop everything, drop in-memory data, and erase the Keychain profile.
     func unpair() {
         stopSync()
-        try? setup.unpair()
+        do { try setup.unpair() } catch { toast = "Couldn't remove the pairing from the Keychain. Try again." }
         session = nil
         sms = SmsSnapshot(); threads = []; remoteClips = []; sentClips = []; report = nil; pairedVerified = nil
         reloadPhase()
@@ -138,6 +138,8 @@ final class CloudModel: ObservableObject {
     // MARK: Sync lifecycle (foreground only)
 
     func startSync() {
+        // A launch while the device is locked cannot read the Keychain and would otherwise look "unpaired" forever.
+        if phase == .unpaired { reloadPhase() }
         guard phase == .paired, smsTask == nil else { return }
         do { session = try session ?? setup.openSession() } catch { self.error = (error as? LocalizedError)?.errorDescription; return }
         guard let session else { return }
@@ -166,7 +168,8 @@ final class CloudModel: ObservableObject {
         smsTask?.cancel(); smsTask = nil
         clipTask?.cancel(); clipTask = nil
         checkTask?.cancel()
-        sms = SmsSnapshot(); threads = []; remoteClips = []; clipUndecryptable = 0
+        // sentClips holds plaintext the user chose to send (it may be a password), so it does not outlive the session either.
+        sms = SmsSnapshot(); threads = []; remoteClips = []; sentClips = []; clipUndecryptable = 0
         clipConnection = .connecting
     }
 

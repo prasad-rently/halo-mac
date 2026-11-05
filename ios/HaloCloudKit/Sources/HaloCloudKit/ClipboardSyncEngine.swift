@@ -80,6 +80,10 @@ public actor ClipboardSyncEngine {
     public nonisolated func incoming() -> AsyncStream<ClipEvent> {
         AsyncStream { cont in
             let task = Task {
+                // A new observation re-streams the whole remote history, so what the previous one delivered must be
+                // forgotten — the app keeps one session across background -> foreground and clears its list on
+                // background; without this the restarted stream would drop every item as a "re-delivery".
+                await self.beginObservation()
                 guard let uid = try? await self.db.uid() else { cont.yield(.connection(.failed("Couldn't sign in."))); cont.finish(); return }
                 for await ev in self.db.observeChildren("clipboard/\(uid)/items") {
                     switch ev {
@@ -96,6 +100,9 @@ public actor ClipboardSyncEngine {
     }
 
     private func forget(_ id: String) { seenItemIds.remove(id) }
+
+    /// Start of a fresh `incoming()` stream. Our own sent ids are re-added by `publish`; echoes are dropped by device id regardless.
+    private func beginObservation() { seenItemIds.removeAll() }
 
     private func receive(key: String, value: JSONValue) -> ClipEvent? {
         guard let env = ClipboardEnvelope.from(value) else { return nil }

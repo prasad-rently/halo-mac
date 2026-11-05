@@ -94,6 +94,13 @@ public enum DatabaseURLPolicy {
         while c.path.hasSuffix("/") { c.path.removeLast() }
         return c.url
     }
+    /// True for the hosts Google serves Realtime Databases from (`<name>.firebaseio.com`, `<name>.<region>.firebasedatabase.app`).
+    /// Not a security gate (a desktop/Android-issued code may legitimately name another host) — the UI uses it to warn
+    /// when a pairing code points the phone at a database that is NOT a Firebase one, before a passphrase is typed.
+    public static func isFirebaseHosted(_ rawURL: String) -> Bool {
+        guard let host = URLComponents(string: rawURL.trimmingCharacters(in: .whitespacesAndNewlines))?.host?.lowercased() else { return false }
+        return host.hasSuffix(".firebaseio.com") || host.hasSuffix(".firebasedatabase.app")
+    }
     public static func isLoopback(_ host: String) -> Bool {
         ["127.0.0.1", "localhost", "::1", "[::1]"].contains(host.lowercased())
     }

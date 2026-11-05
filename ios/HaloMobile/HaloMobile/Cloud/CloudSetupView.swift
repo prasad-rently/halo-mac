@@ -105,9 +105,18 @@ struct CloudSetupView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(CloudStrings.passphrase).font(.system(size: 17, weight: .semibold)).foregroundColor(.haloText)
                     Text(p.auth.email).font(.system(size: 12)).foregroundColor(.haloText3)
+                    // Show where this code points BEFORE a passphrase is typed: a code from an untrusted source names an
+                    // attacker's database, and typing your real passphrase there hands over ciphertext to brute-force.
+                    Text(URL(string: p.firebaseConfig.databaseURL)?.host ?? "unknown host").font(.system(size: 12)).foregroundColor(.haloText3).lineLimit(1)
+                        .accessibilityIdentifier("cloud.host")
                 }
                 Spacer()
                 Button(CloudStrings.cancel) { cloud.cancelPairing() }.font(.system(size: 13)).foregroundColor(.haloText2)
+            }
+            if !DatabaseURLPolicy.isFirebaseHosted(p.firebaseConfig.databaseURL) && !DatabaseURLPolicy.isLoopback(URL(string: p.firebaseConfig.databaseURL)?.host ?? "") {
+                HaloChip(text: "Not a Firebase database address — only continue if this code came from your own Mac.", icon: "exclamationmark.triangle.fill", color: .haloAmber)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("cloud.hostWarning")
             }
             SecureField("", text: $cloud.passphrase, prompt: Text(CloudStrings.passphrase).foregroundColor(.haloText3))
                 .textContentType(.password).focused($focus)

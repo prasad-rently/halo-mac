@@ -136,6 +136,9 @@ struct ClipboardView: View {
 }
 
 private struct SendSheet: View {
+    // A sheet is presented above the root view, so the app-wide PrivacyShield overlay does not cover it: hide the text
+    // here too whenever the app is not active (app-switcher snapshot).
+    @Environment(\.scenePhase) private var scenePhase
     let text: String
     let send: () -> Void
     let cancel: () -> Void
@@ -157,5 +160,6 @@ private struct SendSheet: View {
         }
         .padding(20).frame(maxHeight: .infinity, alignment: .top)
         .background(Color.haloBackground.ignoresSafeArea()).preferredColorScheme(.dark)
+        .overlay { if scenePhase != .active { PrivacyShield() } }
     }
 }
