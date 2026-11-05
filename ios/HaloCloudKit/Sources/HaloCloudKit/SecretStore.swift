@@ -67,8 +67,14 @@ public final class KeychainSecretStore: SecretStore, @unchecked Sendable {
     }
 
     public func removeAll() throws {
-        let status = SecItemDelete(base() as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else { throw CloudError.secretStore("Keychain wipe failed (\(status)).") }
+        // macOS's SecItemDelete removes only ONE match per call (iOS removes all); loop until nothing is left so
+        // "unpair wipes the Keychain" is true on both. Bounded so a misbehaving keychain cannot spin forever.
+        for _ in 0..<64 {
+            let status = SecItemDelete(base() as CFDictionary)
+            if status == errSecItemNotFound { return }
+            guard status == errSecSuccess else { throw CloudError.secretStore("Keychain wipe failed (\(status)).") }
+        }
+        throw CloudError.secretStore("Keychain wipe did not finish.")
     }
 }
 

@@ -145,3 +145,52 @@ func eventually(timeout: TimeInterval = 5, _ cond: @escaping () async -> Bool) a
     }
     return await cond()
 }
+
+/// An HTTP-level emulation of Firebase over an `InMemoryRTDB`: sign-in, then GET/PUT/DELETE (+ shallow) on
+/// `<path>.json?auth=`. Lets CloudSetup/FirebaseRTDB run through their real request code with no network.
+final class RTDBStubTransport: HTTPTransport, @unchecked Sendable {
+    let db: InMemoryRTDB
+    let email = "me@halo.test", password = "halo-test-password"
+    private let lock = NSLock()
+    private(set) var urls: [URL] = []
+    private(set) var bodies: [String] = []
+    var rejectSignIn: String?     // an Identity Toolkit error code to answer with
+    var denyPaths: Set<String> = []   // first path component refused with 401 (locked rules)
+
+    init(db: InMemoryRTDB) { self.db = db }
+
+    func send(_ request: URLRequest) async throws -> (data: Data, status: Int) {
+        let url = request.url!
+        lock.withLock { urls.append(url); if let b = request.httpBody { bodies.append(String(decoding: b, as: UTF8.self)) } }
+        if url.path.hasSuffix("accounts:signInWithPassword") {
+            if let code = rejectSignIn { return (Data(#"{"error":{"message":"\#(code)"}}"#.utf8), 400) }
+            let body = (try? JSONValue.parse(request.httpBody ?? Data())) ?? .null
+            guard body["email"]?.stringValue == email, body["password"]?.stringValue == password else {
+                return (Data(#"{"error":{"message":"INVALID_LOGIN_CREDENTIALS"}}"#.utf8), 400)
+            }
+            return (Data(#"{"idToken":"id-1","refreshToken":"r","localId":"uid-1","expiresIn":"3600"}"#.utf8), 200)
+        }
+        guard url.path.hasSuffix(".json") else { return (Data(), 404) }
+        let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+        guard comps.queryItems?.first(where: { $0.name == "auth" })?.value == "id-1" else { return (Data(#"{"error":"Permission denied"}"#.utf8), 401) }
+        let path = String(url.path.dropFirst().dropLast(5)).removingPercentEncoding ?? ""
+        if let first = path.split(separator: "/").first, denyPaths.contains(String(first)) { return (Data(#"{"error":"Permission denied"}"#.utf8), 401) }
+        switch request.httpMethod ?? "GET" {
+        case "PUT":
+            try await db.put(path, try JSONValue.parse(request.httpBody ?? Data()))
+            return (request.httpBody ?? Data(), 200)
+        case "DELETE":
+            try await db.delete(path); return (Data("null".utf8), 200)
+        default:
+            if comps.queryItems?.contains(where: { $0.name == "shallow" }) == true {
+                let keys = try await db.shallowKeys(path)
+                return (try JSONValue.object(Dictionary(uniqueKeysWithValues: keys.map { ($0, JSONValue.bool(true)) })).serialized(), 200)
+            }
+            return (try await db.get(path).serialized(), 200)
+        }
+    }
+
+    func openLines(_ request: URLRequest) async throws -> (status: Int, lines: AsyncThrowingStream<String, Error>) { throw CloudError.network }
+    var allURLs: [URL] { lock.withLock { urls } }
+    var allBodies: [String] { lock.withLock { bodies } }
+}
