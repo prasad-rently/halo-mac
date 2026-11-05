@@ -18,7 +18,13 @@ data class PhotoRef(
 data class HashedPhoto(val photo: PhotoRef, val hash: Long)
 
 /** A cluster of >= 2 visually similar photos. `recommendedKeepId` is the one "keep best" pre-selects to keep. */
-data class PhotoGroup(val id: Long, val items: List<HashedPhoto>, val recommendedKeepId: Long) {
+data class PhotoGroup(
+    val id: Long, val items: List<HashedPhoto>, val recommendedKeepId: Long,
+    /** Largest pairwise Hamming distance inside the group. Union-find is transitive (A~B, B~C, A!~C), so this can exceed the threshold. */
+    val diameter: Int = 0,
+    /** True when [diameter] is above the threshold the group was built at: some members are only linked THROUGH others. Not pre-selected for Trash. */
+    val chained: Boolean = false,
+) {
     init { require(items.size >= 2) { "a group has at least two photos" }; require(items.any { it.photo.id == recommendedKeepId }) }
     /** Bytes freed if everything but the recommended keep were deleted. */
     val wastedBytes: Long get() = items.filter { it.photo.id != recommendedKeepId }.sumOf { it.photo.sizeBytes }

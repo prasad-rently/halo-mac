@@ -236,6 +236,7 @@ private fun GroupStrip(g: PhotoGroup, rev: Int, vm: PhotosViewModel) {
             Spacer(Modifier.width(6.dp))
             HaloIconButton(Icons.Filled.Close, "Skip this group", { vm.ignore(g.id) }, Modifier.testTag("photos.skip.${g.id}"))
         }
+        if (g.chained) Text(PhotosStrings.chained(g.diameter), color = Halo.Amber, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp).testTag("photos.chained.${g.id}"))
         Spacer(Modifier.height(6.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(g.items, key = { it.photo.id }) { item ->

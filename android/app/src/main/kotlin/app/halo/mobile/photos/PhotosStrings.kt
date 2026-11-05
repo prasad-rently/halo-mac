@@ -21,6 +21,7 @@ internal object PhotosStrings {
     const val TILE_SCANNED = "Scanned"
     const val STRICT = "Strict"; const val NORMAL = "Normal"; const val LOOSE = "Loose"
     const val INFO = "About Similar Photos"
+    fun chained(diameter: Int) = "Loosely linked: some photos here differ by up to $diameter of 64 bits. Nothing is pre-selected; check each photo."
 
     val INFO_LINES = listOf(
         "Halo compares small previews on this phone to find photos that look alike. Nothing is uploaded and no hash is stored.",

@@ -33,6 +33,13 @@ object Clustering {
         return by.values.toList()
     }
 
+    /** Max pairwise Hamming distance among `items` (O(k^2) popcounts; the clustering pass is already O(n^2) so this adds nothing asymptotically). */
+    fun diameter(items: List<HashedPhoto>): Int {
+        var d = 0
+        for (i in items.indices) for (j in i + 1 until items.size) d = maxOf(d, java.lang.Long.bitCount(items[i].hash xor items[j].hash))
+        return d
+    }
+
     fun recommendedKeep(items: List<HashedPhoto>): HashedPhoto =
         items.maxWithOrNull(
             compareBy<HashedPhoto> { it.photo.megapixels }
@@ -46,7 +53,8 @@ object Clustering {
         val clusters = clusterIndices(LongArray(hashed.size) { hashed[it].hash }, threshold)
         return clusters.filter { it.size > 1 }.map { idx ->
             val items = idx.map { hashed[it] }.sortedBy { it.photo.id }
-            PhotoGroup(id = items.minOf { it.photo.id }, items = items, recommendedKeepId = recommendedKeep(items).photo.id)
+            val diameter = diameter(items)
+            PhotoGroup(id = items.minOf { it.photo.id }, items = items, recommendedKeepId = recommendedKeep(items).photo.id, diameter = diameter, chained = diameter > threshold)
         }.sortedWith(compareByDescending<PhotoGroup> { it.wastedBytes }.thenBy { it.id })
     }
 }

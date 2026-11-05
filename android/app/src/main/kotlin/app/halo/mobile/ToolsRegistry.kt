@@ -4,10 +4,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
- * MINIMAL STUB of the Tools registry owned by the android-tools workstream. It is here only so Similar Photos can register
- * itself without creating a competing hub; the signatures are exactly the agreed contract, so merging the two branches is a
- * union of the entries list. If android-tools' ToolsRegistry.kt is present at merge, TAKE THEIRS and keep the single
- * `SimilarPhotosTool.entry` line in `entries`.
+ * TEMPORARY STUB — NOT the real contract. The android-tools workstream (origin/feat/v2.6-m-android-tools) defines the hub in
+ * package `app.halo.mobile.tools`: `data class Tool(id, title, subtitle, icon, content)` and `ToolsRegistry.tools`, one
+ * `Tool("...") { ... }` line per entry. This file's `ToolEntry` / `entries` are a different shape. At merge: DELETE this file,
+ * ToolsLauncherStub.kt, the `ToolsLauncherStub()` call in SettingsScreen and `SimilarPhotosTool`, and add one line to the real
+ * registry: `Tool("photos", "Similar photos", "Near-duplicate pictures", Icons.Filled.Star) { SimilarPhotosScreen() }`.
  */
 data class ToolEntry(val id: String, val title: String, val icon: ImageVector?, val content: @Composable () -> Unit)
 

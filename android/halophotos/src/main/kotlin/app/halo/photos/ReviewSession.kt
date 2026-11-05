@@ -21,7 +21,9 @@ class ReviewSession(initial: List<PhotoGroup>) {
 
     init {
         initial.forEach { groupMap[it.id] = it }
-        initial.forEach { keepBest(it.id) }
+        // A "chained" group (members linked only through intermediaries, diameter > threshold) is NOT pre-selected: pre-ticking
+        // every-but-one of a loosely linked cluster could queue unrelated photos for Trash on one tap. The user opts in per group.
+        initial.forEach { if (!it.chained) keepBest(it.id) }
         version = 0
     }
 
@@ -98,6 +100,12 @@ class ReviewSession(initial: List<PhotoGroup>) {
             if (m != null && m.size >= remaining.size) m.remove(keep)
         }
         version++
+    }
+
+    /** The groups the plan touches — what must still be unchanged on the device before anything is sent to the system dialog. */
+    fun groupsTouchedBy(plan: DeletionPlan): List<PhotoGroup> {
+        val ids = plan.items.map { it.id }.toSet()
+        return groupMap.values.filter { g -> g.items.any { it.photo.id in ids } }
     }
 
     internal fun versionForRequest() = version

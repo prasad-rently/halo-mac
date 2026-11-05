@@ -18,10 +18,6 @@ object MediaStorePhotos {
 
     /** Newest first. Trashed items are excluded by default on API 30+, which is what lets us verify a trash request afterwards. */
     fun query(context: Context, limit: Int): List<PhotoRef> {
-        val proj = arrayOf(
-            MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME, MediaStore.Images.Media.SIZE,
-            MediaStore.Images.Media.WIDTH, MediaStore.Images.Media.HEIGHT, MediaStore.Images.Media.DATE_MODIFIED,
-        )
         val out = ArrayList<PhotoRef>()
         context.contentResolver.query(collection, proj, "${MediaStore.Images.Media.SIZE} > 0", null, "${MediaStore.Images.Media.DATE_MODIFIED} DESC")?.use { c ->
             val iId = c.getColumnIndexOrThrow(proj[0]); val iName = c.getColumnIndexOrThrow(proj[1]); val iSize = c.getColumnIndexOrThrow(proj[2])
@@ -34,14 +30,36 @@ object MediaStorePhotos {
         return out
     }
 
-    /** Which of `ids` are still visible (not deleted / not trashed). Used to confirm what the system REALLY removed. */
-    fun stillPresent(resolver: ContentResolver, ids: Collection<Long>): Set<Long> {
-        val present = HashSet<Long>()
-        ids.chunked(500).forEach { chunk ->
-            resolver.query(collection, arrayOf(MediaStore.Images.Media._ID), "${MediaStore.Images.Media._ID} IN (${chunk.joinToString(",")})", null, null)?.use { c ->
-                while (c.moveToNext()) present += c.getLong(0)
+    private val proj = arrayOf(
+        MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME, MediaStore.Images.Media.SIZE,
+        MediaStore.Images.Media.WIDTH, MediaStore.Images.Media.HEIGHT, MediaStore.Images.Media.DATE_MODIFIED,
+    )
+
+    /** How many images the library really has (the scan is capped; this is what the "newest N of M" notice quotes). Null if unknown. */
+    fun count(context: Context): Int? = try {
+        context.contentResolver.query(collection, arrayOf(MediaStore.Images.Media._ID), "${MediaStore.Images.Media.SIZE} > 0", null, null)?.use { it.count }
+    } catch (e: Exception) { null }
+
+    /**
+     * The CURRENT rows for `ids` (those still visible: not deleted, not trashed). Null = the provider could not be asked
+     * (null cursor / SecurityException) — callers must treat that as "unknown", never as "everything is gone".
+     * Used both to re-validate a plan against the device before trashing and to verify what the system really removed.
+     */
+    fun lookup(resolver: ContentResolver, ids: Collection<Long>): Map<Long, PhotoRef>? {
+        val out = HashMap<Long, PhotoRef>()
+        try {
+            for (chunk in ids.chunked(500)) {
+                val c = resolver.query(collection, proj, "${MediaStore.Images.Media._ID} IN (${chunk.joinToString(",")})", null, null) ?: return null
+                c.use {
+                    val iId = it.getColumnIndexOrThrow(proj[0]); val iName = it.getColumnIndexOrThrow(proj[1]); val iSize = it.getColumnIndexOrThrow(proj[2])
+                    val iW = it.getColumnIndexOrThrow(proj[3]); val iH = it.getColumnIndexOrThrow(proj[4]); val iMod = it.getColumnIndexOrThrow(proj[5])
+                    while (it.moveToNext()) {
+                        val id = it.getLong(iId)
+                        out[id] = PhotoRef(id, uriFor(id).toString(), it.getString(iName) ?: "image-$id", it.getLong(iSize), it.getInt(iW), it.getInt(iH), it.getLong(iMod))
+                    }
+                }
             }
-        }
-        return present
+        } catch (e: Exception) { return null }
+        return out
     }
 }
