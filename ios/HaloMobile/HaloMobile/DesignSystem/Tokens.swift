@@ -169,14 +169,6 @@ enum HaloAppearance {
         UITabBar.appearance().standardAppearance = tab
         UITabBar.appearance().scrollEdgeAppearance = tab
 
-        let nav = UINavigationBarAppearance()
-        nav.configureWithTransparentBackground()
-        nav.backgroundColor = UIColor(Color.haloBackground)
-        nav.titleTextAttributes = [.foregroundColor: UIColor(Color.haloText)]
-        nav.largeTitleTextAttributes = [.foregroundColor: UIColor(Color.haloText)]
-        UINavigationBar.appearance().standardAppearance = nav
-        UINavigationBar.appearance().scrollEdgeAppearance = nav
-        UINavigationBar.appearance().compactAppearance = nav
     }
 }
 

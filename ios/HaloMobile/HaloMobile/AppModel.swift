@@ -114,7 +114,13 @@ final class AppModel: ObservableObject {
         }
         Task { [weak self] in
             do {
+                #if DEBUG
+                // Several simulators share the Mac's network, so 53317 is often taken: `-debugPort 53320` on launch.
+                let override = UInt16(clamping: UserDefaults.standard.integer(forKey: "debugPort"))
+                let port = try await server.start(port: override == 0 ? HaloShare.defaultPort : override)
+                #else
                 let port = try await server.start(port: HaloShare.defaultPort)
+                #endif
                 self?.listenState = .listening(port: Int(port))
             } catch {
                 self?.server = nil
@@ -205,7 +211,7 @@ final class AppModel: ObservableObject {
             for p in found { self.merge(p) }
             self.isScanning = false
             if self.peers.isEmpty {
-                self.notice = "No devices found. Make sure the other device has HaloShare or LocalSend open on the same Wi-Fi — or add its address below."
+                self.notice = "No devices found on this Wi-Fi."
             }
         }
     }

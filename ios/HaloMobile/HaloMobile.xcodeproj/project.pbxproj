@@ -9,35 +9,43 @@
 /* Begin PBXBuildFile section */
 		31025093DEF0FF87DC265FDB /* HaloInfoSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC3E8B356819F61716797B58 /* HaloInfoSheet.swift */; };
 		34A0B964345A27F2E12A2B17 /* HaloMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 182A1E12BDB9FE5A73C25AC8 /* HaloMobileApp.swift */; };
-		404D6F98AD0EF392C688CB22 /* InboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F41F59B24229F0A4D662A093 /* InboxView.swift */; };
 		442262120895469DEB94F173 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93B0F07C4895D59D750C7C70 /* AppModel.swift */; };
+		48E9FB07BB4E3AC5DC8D7E02 /* HaloRadar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22640DE256B540922AF9F5A6 /* HaloRadar.swift */; };
 		64073DFE008EE29E41C34E36 /* ConsentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E55985030C0D0EBC8D706D8 /* ConsentSheet.swift */; };
 		67B1CD3FFFD2D09B6C957145 /* HaloCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC897746546A565038F844B8 /* HaloCard.swift */; };
 		68F2FE53D6A929E44371EDAE /* Tokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B48A61FCA3FEE7C539AEA45 /* Tokens.swift */; };
+		7F2C5E86F18C58417A2F880D /* InboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75B83DC8F120F2C383C8B0C8 /* InboxView.swift */; };
 		8BD47983099EE93FF3D64850 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55018C3FC87971067CD81FED /* SettingsView.swift */; };
+		9135EB412D9551943D2BB430 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B249AA74AD1B5F351251DFBA /* HomeView.swift */; };
+		950E5951B8824F7587E574DE /* ShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93BD5984B21D6F8E6815B863 /* ShareView.swift */; };
 		98E5D5078285675CEA71C48A /* HaloControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9A066471CFE963A8698EE7A /* HaloControls.swift */; };
 		A10EC2CBE64784DB201B88F1 /* HaloShareKit in Frameworks */ = {isa = PBXBuildFile; productRef = DFEB075606558C71F77FF59E /* HaloShareKit */; };
-		C3490B34E25DA1F1A7449ACD /* ShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D7DE55334AF56B261BA2545 /* ShareView.swift */; };
+		A5A0E2C679CA1E7E38C675AA /* CloudIntegrationPoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B55DF8427BD6A2DF8A96B20 /* CloudIntegrationPoints.swift */; };
 		DA8DC50E9371B4B70AC851E1 /* HaloLists.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE297380EFC0BFDA9226E2EA /* HaloLists.swift */; };
+		F4B954ECF9935CD4A57125C4 /* Strings.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE6EC6A97F20F6991B15CC10 /* Strings.swift */; };
 		FF7D19840EB470BCAEAC89F9 /* HaloMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E93A6A6CB6F20AA3E81A6A3 /* HaloMetrics.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		0B48A61FCA3FEE7C539AEA45 /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
-		0D7DE55334AF56B261BA2545 /* ShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareView.swift; sourceTree = "<group>"; };
 		182A1E12BDB9FE5A73C25AC8 /* HaloMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloMobileApp.swift; sourceTree = "<group>"; };
+		22640DE256B540922AF9F5A6 /* HaloRadar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloRadar.swift; sourceTree = "<group>"; };
 		55018C3FC87971067CD81FED /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		5B55DF8427BD6A2DF8A96B20 /* CloudIntegrationPoints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudIntegrationPoints.swift; sourceTree = "<group>"; };
+		75B83DC8F120F2C383C8B0C8 /* InboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxView.swift; sourceTree = "<group>"; };
 		7E93A6A6CB6F20AA3E81A6A3 /* HaloMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloMetrics.swift; sourceTree = "<group>"; };
 		81BFCD2E539CD24EE1C78B58 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		8EE8B52CD11FACF1224A785D /* HaloMobile.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = HaloMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		93B0F07C4895D59D750C7C70 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		93BD5984B21D6F8E6815B863 /* ShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareView.swift; sourceTree = "<group>"; };
 		9E55985030C0D0EBC8D706D8 /* ConsentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsentSheet.swift; sourceTree = "<group>"; };
 		A9A066471CFE963A8698EE7A /* HaloControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloControls.swift; sourceTree = "<group>"; };
+		AE6EC6A97F20F6991B15CC10 /* Strings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Strings.swift; sourceTree = "<group>"; };
+		B249AA74AD1B5F351251DFBA /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		B91486ED73CB005AB1921E6A /* HaloShareKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HaloShareKit; path = ../HaloShareKit; sourceTree = SOURCE_ROOT; };
 		BC897746546A565038F844B8 /* HaloCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloCard.swift; sourceTree = "<group>"; };
 		CC3E8B356819F61716797B58 /* HaloInfoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloInfoSheet.swift; sourceTree = "<group>"; };
 		DE297380EFC0BFDA9226E2EA /* HaloLists.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloLists.swift; sourceTree = "<group>"; };
-		F41F59B24229F0A4D662A093 /* InboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -58,11 +66,13 @@
 				93B0F07C4895D59D750C7C70 /* AppModel.swift */,
 				9E55985030C0D0EBC8D706D8 /* ConsentSheet.swift */,
 				182A1E12BDB9FE5A73C25AC8 /* HaloMobileApp.swift */,
-				F41F59B24229F0A4D662A093 /* InboxView.swift */,
 				81BFCD2E539CD24EE1C78B58 /* Info.plist */,
 				55018C3FC87971067CD81FED /* SettingsView.swift */,
-				0D7DE55334AF56B261BA2545 /* ShareView.swift */,
+				AE6EC6A97F20F6991B15CC10 /* Strings.swift */,
 				8508B7A5DC22168CA6A573C7 /* DesignSystem */,
+				FF5620EAB215406C02B9A962 /* Home */,
+				897AA48D66BCCA4B0EBDC67D /* Integration */,
+				A68E23DABF0D836B2E704A9A /* Share */,
 			);
 			path = HaloMobile;
 			sourceTree = "<group>";
@@ -78,6 +88,24 @@
 				0B48A61FCA3FEE7C539AEA45 /* Tokens.swift */,
 			);
 			path = DesignSystem;
+			sourceTree = "<group>";
+		};
+		897AA48D66BCCA4B0EBDC67D /* Integration */ = {
+			isa = PBXGroup;
+			children = (
+				5B55DF8427BD6A2DF8A96B20 /* CloudIntegrationPoints.swift */,
+			);
+			path = Integration;
+			sourceTree = "<group>";
+		};
+		A68E23DABF0D836B2E704A9A /* Share */ = {
+			isa = PBXGroup;
+			children = (
+				22640DE256B540922AF9F5A6 /* HaloRadar.swift */,
+				75B83DC8F120F2C383C8B0C8 /* InboxView.swift */,
+				93BD5984B21D6F8E6815B863 /* ShareView.swift */,
+			);
+			path = Share;
 			sourceTree = "<group>";
 		};
 		B3B093B6EBA6D209CDB94DAC = {
@@ -103,6 +131,14 @@
 				B91486ED73CB005AB1921E6A /* HaloShareKit */,
 			);
 			name = Packages;
+			sourceTree = "<group>";
+		};
+		FF5620EAB215406C02B9A962 /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				B249AA74AD1B5F351251DFBA /* HomeView.swift */,
+			);
+			path = Home;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -169,6 +205,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				442262120895469DEB94F173 /* AppModel.swift in Sources */,
+				A5A0E2C679CA1E7E38C675AA /* CloudIntegrationPoints.swift in Sources */,
 				64073DFE008EE29E41C34E36 /* ConsentSheet.swift in Sources */,
 				67B1CD3FFFD2D09B6C957145 /* HaloCard.swift in Sources */,
 				98E5D5078285675CEA71C48A /* HaloControls.swift in Sources */,
@@ -176,9 +213,12 @@
 				DA8DC50E9371B4B70AC851E1 /* HaloLists.swift in Sources */,
 				FF7D19840EB470BCAEAC89F9 /* HaloMetrics.swift in Sources */,
 				34A0B964345A27F2E12A2B17 /* HaloMobileApp.swift in Sources */,
-				404D6F98AD0EF392C688CB22 /* InboxView.swift in Sources */,
+				48E9FB07BB4E3AC5DC8D7E02 /* HaloRadar.swift in Sources */,
+				9135EB412D9551943D2BB430 /* HomeView.swift in Sources */,
+				7F2C5E86F18C58417A2F880D /* InboxView.swift in Sources */,
 				8BD47983099EE93FF3D64850 /* SettingsView.swift in Sources */,
-				C3490B34E25DA1F1A7449ACD /* ShareView.swift in Sources */,
+				950E5951B8824F7587E574DE /* ShareView.swift in Sources */,
+				F4B954ECF9935CD4A57125C4 /* Strings.swift in Sources */,
 				68F2FE53D6A929E44371EDAE /* Tokens.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
