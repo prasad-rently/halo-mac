@@ -318,14 +318,16 @@ struct SMSConsoleView: View {
                     .multilineTextAlignment(.leading)
                 HStack(spacing: 6) {
                     Image(systemName: "paperplane.fill").font(.system(size: 8)).foregroundColor(.haloAccent)
-                    Text(vm.sentLabel(for: m, line: line)).font(HaloFont.body(9)).foregroundColor(.haloAccent)
+                    Text(vm.sentLabel(for: m, line: line)).font(HaloFont.body(9)).foregroundColor(.haloText2)
                     Text("·").foregroundColor(.haloText2)
                     Text(SMSTime.clock(m.date)).font(HaloFont.body(9)).foregroundColor(.haloText2)
                 }
             }
             .padding(12)
-            .background(Color.haloAccent.opacity(0.14)).cornerRadius(12)
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.haloAccent.opacity(0.4), lineWidth: 1))
+            // Same bubble as a received one (haloSurface2 radius-12 card, haloBorder stroke) with the console's own
+            // selected-row accent wash (haloAccent @ 0.12) — the idiom the sidebar and filter chips already use.
+            .background(Color.haloAccent.opacity(0.12)).cornerRadius(12)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.haloBorder, lineWidth: 1))
             .frame(maxWidth: 520, alignment: .trailing)
         }
     }
