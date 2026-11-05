@@ -299,6 +299,9 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
         ClipboardController.publishText(ctx, text) { _clipNotice.value = it }
     }
 
+    /** Send one history item (or any text) to the Mac. Same path as "Send clipboard": filter, dedupe and history all apply. */
+    fun sendClipText(text: String) { ClipboardController.publishText(ctx, text) { _clipNotice.value = it } }
+
     fun copy(item: ClipItem) { ClipboardController.copyToClipboard(ctx, item); _clipNotice.value = "Copied." }
     fun purgeClipboard() = ClipboardController.purge(ctx) { _clipNotice.value = it }
 
