@@ -3,10 +3,8 @@
      no accessibility events: it exists only because an enabled accessibility service is the one
      background context Android 10+ lets read the clipboard. It never reads the screen. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagDefault"
     android:canRetrieveWindowContent="false"
     android:description="@string/accessibility_description"
-    android:notificationTimeout="500"
     android:summary="@string/accessibility_description" />

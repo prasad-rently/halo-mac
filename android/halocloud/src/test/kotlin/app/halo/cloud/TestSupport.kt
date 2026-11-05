@@ -12,7 +12,13 @@ class FakeRtdb(override val uid: String = "uid-1") : Rtdb {
     private val observers = ArrayList<Obs>()
     /** Set to make every write throw — models a dropped connection. */
     @Volatile var failWrites: ((String) -> Boolean)? = null
+    /** What a failing write throws: NETWORK by default; OPERATION_FAILED models the server refusing one particular row. */
+    @Volatile var failKind: RtdbException.Kind = RtdbException.Kind.NETWORK
+    /** HTTP status carried by a failing write (0 = unknown). 5xx / 429 model an outage; 400 a row the server rejects. */
+    @Volatile var failStatus: Int = 0
     val writes = ArrayList<String>()
+    /** Every path read with [get] (not [shallowKeys]) — lets a test prove a hot path does not pull a whole node. */
+    val reads = java.util.Collections.synchronizedList(ArrayList<String>())
 
     private fun parts(p: String) = p.split('/').filter { it.isNotEmpty() }
 
@@ -23,10 +29,10 @@ class FakeRtdb(override val uid: String = "uid-1") : Rtdb {
         return cur
     }
 
-    @Synchronized override fun get(path: String): JsonElement? = StreamModel.toJson(node(parts(path)))
+    @Synchronized override fun get(path: String): JsonElement? { reads.add(path); return StreamModel.toJson(node(parts(path))) }
 
     @Synchronized override fun put(path: String, value: JsonElement) {
-        if (failWrites?.invoke(path) == true) throw RtdbException(RtdbException.Kind.NETWORK, "offline")
+        if (failWrites?.invoke(path) == true) throw RtdbException(failKind, "offline", failStatus)
         writes.add(path)
         val p = parts(path)
         // Which observed child is new?
@@ -60,7 +66,7 @@ class FakeRtdb(override val uid: String = "uid-1") : Rtdb {
         if (value is JsonNull) cur.remove(p.last()) else cur[p.last()] = explode(value)
     }
 
-    fun dump(path: String): JsonElement? = get(path)
+    @Synchronized fun dump(path: String): JsonElement? = StreamModel.toJson(node(parts(path)))   // not counted in [reads]
 }
 
 fun testCrypto(): CryptoService = CryptoService.create("correct horse battery staple", ByteArray(16) { it.toByte() }, CryptoService.MINIMUM_ITERATIONS)

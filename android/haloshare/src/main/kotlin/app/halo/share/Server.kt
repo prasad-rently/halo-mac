@@ -84,6 +84,8 @@ class HaloShareServer(
     private val pool = Executors.newCachedThreadPool { r -> Thread(r, "haloshare-conn").apply { isDaemon = true } }
     private var serverSocket: ServerSocket? = null
     private val running = AtomicBoolean(false)
+    /** Terminal: a stopped server is never restarted (a new instance is made instead), so a stop() that races a start() always wins. */
+    private val stopped = AtomicBoolean(false)
     private val sweeper = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "haloshare-sweep").apply { isDaemon = true } }
 
     /** Sessions currently held. For tests. */
@@ -109,34 +111,58 @@ class HaloShareServer(
     /** The bound port, or 0 before [start]. */
     val port: Int get() = serverSocket?.localPort ?: 0
 
-    /** Starts listening. Pass `0` for an ephemeral port (tests). Returns the bound port. */
-    fun start(port: Int = HaloShare.DEFAULT_PORT): Int {
+    /**
+     * Starts listening. Pass `0` for an ephemeral port (tests). Returns the bound port.
+     *
+     * [bindRetryMs]: how long to keep retrying while the port is still held ("Address already in use"). A restart is
+     * stop-then-start, and the old listener's socket is released by another thread, so the new bind can arrive a few
+     * milliseconds early; retrying briefly turns that race into a short wait instead of a "couldn't listen" the user has
+     * to retry by hand. 0 = fail at once (the default). A [stop] during the wait ends it immediately.
+     */
+    fun start(port: Int = HaloShare.DEFAULT_PORT, bindRetryMs: Long = 0): Int {
+        check(!stopped.get()) { "stopped" }
         check(running.compareAndSet(false, true)) { "already started" }
-        val socket = ServerSocket()
-        socket.reuseAddress = true
-        try {
-            socket.bind(java.net.InetSocketAddress(port))
-        } catch (e: IOException) {
-            running.set(false)
-            throw e
+        val deadline = System.nanoTime() + bindRetryMs.coerceAtLeast(0) * 1_000_000
+        var bound: ServerSocket? = null
+        while (bound == null) {
+            val candidate = ServerSocket()
+            candidate.reuseAddress = true
+            try {
+                candidate.bind(java.net.InetSocketAddress(port))
+                bound = candidate
+            } catch (e: IOException) {
+                runCatching { candidate.close() }
+                if (e is java.net.BindException && !stopped.get() && System.nanoTime() < deadline) {
+                    try { Thread.sleep(25) } catch (i: InterruptedException) { Thread.currentThread().interrupt(); running.set(false); throw e }
+                    continue
+                }
+                running.set(false)
+                throw e
+            }
         }
-        serverSocket = socket
-        val period = (sessionTimeoutMs / 4).coerceIn(250, 30_000)
-        sweeper.scheduleWithFixedDelay({ runCatching { sweepExpiredSessions() } }, period, period, java.util.concurrent.TimeUnit.MILLISECONDS)
-        Thread({ acceptLoop(socket) }, "haloshare-accept").apply { isDaemon = true }.start()
+        val socket: ServerSocket = bound
+        // stop() may have run while we were binding. It found no socket to close, so nobody else will: close it here,
+        // or the port stays open with no owner. (`stopped` and the socket are published under `lock`, as stop() reads them.)
+        synchronized(lock) {
+            if (stopped.get()) { runCatching { socket.close() }; throw IOException("stopped while starting") }
+            serverSocket = socket
+            val period = (sessionTimeoutMs / 4).coerceIn(250, 30_000)
+            sweeper.scheduleWithFixedDelay({ runCatching { sweepExpiredSessions() } }, period, period, java.util.concurrent.TimeUnit.MILLISECONDS)
+            Thread({ acceptLoop(socket) }, "haloshare-accept").apply { isDaemon = true }.start()
+        }
         return socket.localPort
     }
 
     fun stop() {
-        if (!running.compareAndSet(true, false)) return
-        runCatching { serverSocket?.close() }
-        serverSocket = null
+        stopped.set(true); running.set(false)
         synchronized(lock) {
+            runCatching { serverSocket?.close() }
+            serverSocket = null
             sessions.values.forEach { discardPartials(it) }
             sessions.clear()
+            pool.shutdownNow()
+            sweeper.shutdownNow()
         }
-        pool.shutdownNow()
-        sweeper.shutdownNow()
     }
 
     private fun acceptLoop(socket: ServerSocket) {

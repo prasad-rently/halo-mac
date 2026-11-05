@@ -52,6 +52,8 @@ struct SMSDevice: Identifiable, Hashable, Sendable {
     let id: String
     let name: String       // "Pixel 8"
     let platform: String   // "android" / "ios"
+    /// When the phone last synced (`devices/{uid}/{id}.lastSeen`); nil if it never wrote one. F-057 FR-S4.
+    var lastSeen: Date? = nil
     var iconName: String { platform == "ios" ? "iphone" : "candybarphone" }
 }
 
@@ -93,43 +95,46 @@ struct SMSThread: Identifiable, Hashable, Sendable {
     var category: SMSCategory { lastMessage?.category ?? .uncategorized }
 }
 
-// MARK: - Classifier (compact port of Hamza's SmsClassifier, F-044 §7.4)
+// MARK: - Classifier (pack-driven, F-044 §7.4)
 
+/// First-match-wins classifier: otp → personal → government → `-P` shortcut → transactional → service → promotional →
+/// DLT suffix → uncategorized. The keyword lists are NOT in this file: they are the `classifier` section of
+/// `india-bank-sms.v1.json`, the same file the Android `SmsClassifier` reads (F-044 §7.4 puts the exact lists in the pack),
+/// so the desktop and the phone cannot disagree on a list. This replaces an older compact hard-coded port whose shorter
+/// lists classified two fixtures differently from the phone.
 enum SmsClassifier {
-    static func classify(sender: String, body: String) -> SMSCategory {
+    static func classify(sender: String, body: String, pack: PatternPack = .indiaDefault) -> SMSCategory {
+        let k = pack.classifier
         let s = sender.uppercased()
         let b = body.uppercased()
+        let bRange = NSRange(location: 0, length: (b as NSString).length)
 
         // 1. OTP
-        if b.contains("OTP") || b.contains("ONE TIME PASSWORD") || b.contains("VERIFICATION CODE")
-            || b.contains("DO NOT SHARE") || b.range(of: #"\b\d{4,8}\b\s+IS\s+(YOUR|THE)"#, options: .regularExpression) != nil {
-            return .otp
-        }
-        // 2. Personal (sender is a bare phone number)
-        if !sender.contains(where: { $0.isLetter }) {
-            let digits = sender.filter(\.isNumber).count
-            if (7...15).contains(digits) { return .personal }
-        }
+        if k.otpKeywords.contains(where: { b.contains($0) }) || k.otpNumber.firstMatch(in: b, range: bRange) != nil { return .otp }
+        // 2. Personal: sender is a bare phone number — no letters, only [0-9 +()-.], digit count within the pack's range.
+        if isPersonalSender(sender, k) { return .personal }
         // 3. Government
-        for g in ["UIDAI", "NDMA", "EPFO", "INCOMETAX", "MYGOV", "COWIN", "-G"] where s.contains(g) { return .government }
-        // -P promotional DLT header shortcut
+        if k.govSenders.contains(where: { s.contains($0) }) || k.govKeywords.contains(where: { b.contains($0) }) { return .government }
+        // -P promotional DLT header shortcut (before the transactional content check).
         if s.hasSuffix("-P") { return .promotional }
         // 4. Transactional
-        let txnStrong = ["DEBITED", "CREDITED", "WITHDRAWN", "UPI", "NEFT", "IMPS", "A/C", "AVL BAL", "TXN"]
-        if txnStrong.contains(where: { b.contains($0) }) { return .transactional }
-        let money = ["RS.", "RS ", "INR", "₹"]
-        let verbs = ["PAID", "RECEIVED", "SPENT", "PAYMENT", "CHARGED"]
-        if money.contains(where: { b.contains($0) }) && verbs.contains(where: { b.contains($0) }) { return .transactional }
-        // 5. Service
-        let service = ["DELIVERED", "OUT FOR DELIVERY", "SHIPPED", "ORDER", "BOOKING", "PNR", "TICKET", "DUE DATE", "STATEMENT"]
-        if service.contains(where: { b.contains($0) }) { return .service }
-        // 6. Promotional
-        let promo = ["OFFER", "DISCOUNT", "SALE", "% OFF", "COUPON", "UNSUBSCRIBE", "CLICK HERE", "HURRY"]
-        if promo.contains(where: { b.contains($0) }) { return .promotional }
+        if k.transactionalStrong.contains(where: { b.contains($0) }) { return .transactional }
+        if k.moneyTokens.contains(where: { b.contains($0) }) && k.transactionalVerbs.contains(where: { b.contains($0) }) { return .transactional }
+        // 5. Service  6. Promotional
+        if k.serviceKeywords.contains(where: { b.contains($0) }) { return .service }
+        if k.promoKeywords.contains(where: { b.contains($0) }) { return .promotional }
         // 7. DLT suffix fallback
         if s.hasSuffix("-T") { return .transactional }
         if s.hasSuffix("-S") { return .service }
         if s.hasSuffix("-G") { return .government }
         return .uncategorized
+    }
+
+    private static func isPersonalSender(_ sender: String, _ k: ClassifierRules) -> Bool {
+        if sender.isEmpty || sender.contains(where: { $0.isLetter }) { return false }
+        let allowed: Set<Character> = [" ", "+", "(", ")", "-", "."]
+        if !sender.allSatisfy({ $0.isASCII && $0.isNumber || allowed.contains($0) }) { return false }
+        let digits = sender.filter { $0.isASCII && $0.isNumber }.count
+        return (k.personalDigitsMin...k.personalDigitsMax).contains(digits)
     }
 }

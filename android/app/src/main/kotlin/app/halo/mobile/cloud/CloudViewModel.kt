@@ -7,10 +7,12 @@ import android.provider.Settings
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.halo.cloud.CryptoService
+import app.halo.cloud.FirebaseHosts
 import app.halo.cloud.FirebaseRtdbClient
 import app.halo.cloud.KeyCheck
 import app.halo.cloud.PairingConfirmation
 import app.halo.cloud.PairingPayload
+import app.halo.cloud.ProfileLoad
 import app.halo.cloud.SimLine
 import app.halo.cloud.SmsSyncEngine
 import kotlinx.coroutines.Dispatchers
@@ -23,10 +25,20 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import java.util.Base64
 
+/** Why a paired phone shows no profile. */
+enum class ProfileProblem { UNAVAILABLE, KEY_LOST }
+
+private fun problemOf(r: ProfileLoad<*>): ProfileProblem? = when (r) {
+    is ProfileLoad.Unavailable -> ProfileProblem.UNAVAILABLE
+    ProfileLoad.KeyLost -> ProfileProblem.KEY_LOST
+    else -> null
+}
+
 sealed interface PairUi {
     object Idle : PairUi
     data class Working(val what: String) : PairUi
-    data class NeedsPassphrase(val payload: PairingPayload) : PairUi
+    /** [hostWarning]: the database host is not a Firebase address (H-15) — shown, never silently accepted. */
+    data class NeedsPassphrase(val payload: PairingPayload, val hostWarning: String? = null) : PairUi
     /** The database held nothing encrypted, so the passphrase could not be verified: ask for it a second time. [error] is a failed confirmation. */
     data class NeedsConfirmation(val payload: PairingPayload, val error: String? = null) : PairUi
     data class Failed(val why: String) : PairUi
@@ -43,8 +55,13 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
     private val store = CloudStore(app)
     val prefs = CloudPrefs(app)
 
-    private val _profile = MutableStateFlow(store.load())
+    private val initialLoad = store.loadResult()
+    private val _profile = MutableStateFlow((initialLoad as? ProfileLoad.Loaded)?.value)
     val profile: StateFlow<CloudProfile?> = _profile.asStateFlow()
+
+    /** Why there is no profile when the phone may well be paired: the saved connection can't be opened right now / ever again. Null = simply not paired (or fine). */
+    private val _problem = MutableStateFlow(problemOf(initialLoad))
+    val profileProblem: StateFlow<ProfileProblem?> = _problem.asStateFlow()
 
     private val _pair = MutableStateFlow<PairUi>(PairUi.Idle)
     val pair: StateFlow<PairUi> = _pair.asStateFlow()
@@ -64,6 +81,11 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _smsEnabled = MutableStateFlow(prefs.smsEnabled)
     val smsEnabled: StateFlow<Boolean> = _smsEnabled.asStateFlow()
+    private val _syncSent = MutableStateFlow(prefs.syncSent)
+    val syncSent: StateFlow<Boolean> = _syncSent.asStateFlow()
+    /** A "delete what was uploaded" the user asked for that has not reached the cloud yet (it is retried until it does). */
+    private val _sentRemovalPending = MutableStateFlow(PrefsSyncState(app).sentRemovalPending())
+    val sentRemovalPending: StateFlow<Boolean> = _sentRemovalPending.asStateFlow()
     private val _clipEnabled = MutableStateFlow(prefs.clipboardEnabled)
     val clipEnabled: StateFlow<Boolean> = _clipEnabled.asStateFlow()
     private val _clipFilter = MutableStateFlow(prefs.clipboardFilter)
@@ -72,12 +94,51 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
     val syncing: StateFlow<Boolean> = SmsSyncRunner.running
     val syncTick: StateFlow<Int> = SmsSyncRunner.tick
     val history get() = ClipboardHistory.get(ctx).items
+    val historyWarning get() = ClipboardHistory.get(ctx).warning
+    val historyKeyLost get() = ClipboardHistory.get(ctx).keyLost
+    /** The explicit reset after the history's secure key was lost (Keystore work: off the main thread). */
+    fun resetHistory() { viewModelScope.launch(Dispatchers.IO) { ClipboardHistory.get(ctx).resetLostKey() } }
+    /** The storage warning promises a retry; this is what makes it true when no new clip arrives to trigger a save. Off the main thread: it touches the Keystore. */
+    fun retryHistory() { viewModelScope.launch(Dispatchers.IO) { ClipboardHistory.get(ctx).retry() } }
     val clipStatus: StateFlow<String> = ClipboardController.status
 
-    init {
-        if (_profile.value != null) {
-            if (prefs.smsEnabled) SyncScheduler.schedulePeriodic(ctx)
-            if (prefs.clipboardEnabled) ClipboardController.start(ctx)
+    init { if (_profile.value != null) startServices() }
+
+    private fun startServices() {
+        if (prefs.smsEnabled) SyncScheduler.schedulePeriodic(ctx)
+        if (prefs.clipboardEnabled) ClipboardController.start(ctx)
+    }
+
+    /**
+     * Re-read the saved connection. Called on resume and from "Try again" while [profileProblem] is showing: a Keystore that
+     * was busy a moment ago usually is not now. Never writes anything — an unreadable profile is only ever replaced by the
+     * user pairing again after [resetLostProfile].
+     */
+    fun refreshProfile() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val r = store.loadResult()
+            if (r is ProfileLoad.Loaded) {
+                CloudRuntime.reset()
+                val first = _profile.value == null
+                _profile.value = r.value; _problem.value = null
+                if (first) startServices()
+            } else if (_profile.value == null) _problem.value = problemOf(r)
+        }
+    }
+
+    /** The user chose to give up on a profile whose key is gone: forget it, make a fresh key, and show the pairing panel. */
+    fun resetLostProfile() {
+        viewModelScope.launch(Dispatchers.IO) {
+            // The confirmation dialog may have been up for a while, and "key lost" can be a Keystore that was not ready: look
+            // again, and never delete a profile that has become readable (or is merely unavailable) in the meantime.
+            when (val r = store.loadResult()) {
+                is ProfileLoad.Loaded -> { CloudRuntime.reset(); val first = _profile.value == null; _profile.value = r.value; _problem.value = null; if (first) startServices(); return@launch }
+                is ProfileLoad.Unavailable -> { _problem.value = ProfileProblem.UNAVAILABLE; return@launch }
+                else -> {}
+            }
+            disconnect()
+            runCatching { SecretBox.ensureKey() }
+            _problem.value = null
         }
     }
 
@@ -87,6 +148,7 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The desktop's pairing code (base64 of the payload JSON), pasted or scanned. */
     fun submitCode(raw: String) {
+        if (_problem.value != null) { _pair.value = PairUi.Failed("This phone has a saved connection that can't be opened right now. Try again, or reset it first."); return }
         val text = raw.filterNot { it.isWhitespace() }
         if (text.isEmpty()) { _pair.value = PairUi.Failed("Paste the pairing code from your Mac first."); return }
         val payload = try { PairingPayload.decode(text) } catch (e: Exception) { _pair.value = PairUi.Failed("That doesn't look like a Halo pairing code."); return }
@@ -95,7 +157,7 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
             payload.salt == null || payload.salt!!.size < CryptoService.MINIMUM_SALT_BYTES -> _pair.value = PairUi.Failed("The pairing code's key salt is invalid.")
             payload.iterations < CryptoService.MINIMUM_ITERATIONS -> _pair.value = PairUi.Failed("The pairing code asks for a key-derivation cost below Halo's minimum.")
             !payload.firebaseConfig.databaseURL.startsWith("https://") && !DebugEndpoints.applies(payload.firebaseConfig.databaseURL) -> _pair.value = PairUi.Failed("The pairing code's database address isn't https.")
-            else -> _pair.value = PairUi.NeedsPassphrase(payload)
+            else -> _pair.value = PairUi.NeedsPassphrase(payload, if (DebugEndpoints.applies(payload.firebaseConfig.databaseURL)) null else FirebaseHosts.warning(payload.firebaseConfig.databaseURL))
         }
     }
 
@@ -153,18 +215,18 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun finishPairing(payload: PairingPayload, key: ByteArray, client: FirebaseRtdbClient) {
         _warning.value = if (client.checkPublicAccess() == FirebaseRtdbClient.PublicAccess.OPEN)
-            "Your Realtime Database is open to the internet (test-mode rules). Message text stays encrypted, but device names and timestamps are readable by anyone. Publish the owner-only rules from docs/specs/firebase-setup.md." else null
+            "Your Realtime Database is open to the internet (test-mode rules). Message text stays encrypted, but device names and timestamps are readable by anyone. Publish the owner-only rules in docs/specs/firebase-rules.json (Realtime Database → Rules; steps in docs/specs/firebase-setup.md)." else null
 
         val profile = CloudProfile(payload.firebaseConfig, payload.auth, payload.saltBase64, payload.iterations, Base64.getEncoder().encodeToString(key), epoch = java.util.UUID.randomUUID().toString())
         store.save(profile); CloudRuntime.reset()
         pending = null
-        _profile.value = profile; _pair.value = PairUi.Idle
+        _profile.value = profile; _problem.value = null; _pair.value = PairUi.Idle
     }
 
     fun disconnect() {
         SyncScheduler.cancelAll(ctx); ClipboardController.stop()
-        store.clear(); prefs.clearAll(); PrefsSyncState(ctx).clear(); ClipboardHistory.get(ctx).clear(); CloudRuntime.reset()
-        _profile.value = null; _lines.value = emptyList(); _smsEnabled.value = false; _clipEnabled.value = false; pending = null; _pair.value = PairUi.Idle; _warning.value = null
+        store.clear(); prefs.clearAll(); PrefsSyncState(ctx).apply { clear(); setSentRemovalPending(false) }; ClipboardHistory.get(ctx).clear(); CloudRuntime.reset()
+        _profile.value = null; _lines.value = emptyList(); _smsEnabled.value = false; _syncSent.value = false; _sentRemovalPending.value = false; _clipEnabled.value = false; pending = null; _pair.value = PairUi.Idle; _warning.value = null
     }
 
     var deviceName: String get() = store.deviceName; set(v) { store.deviceName = v; CloudRuntime.reset() }
@@ -176,11 +238,45 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
         if (on) { SyncScheduler.schedulePeriodic(ctx); syncNow() } else SyncScheduler.cancelAll(ctx)
     }
 
+    /** "Also sync messages I send": the user's explicit opt-in (the screen confirms first). Takes effect on the very next pass. */
+    fun enableSentSync() {
+        prefs.syncSent = true; _syncSent.value = true
+        syncNow()
+    }
+
+    /**
+     * Turning it off stops new uploads at once. [removeUploaded] is the second, separately-confirmed choice: also delete the
+     * sent messages already in the cloud (the Mac's copies go with them). Declining leaves them there.
+     */
+    fun disableSentSync(removeUploaded: Boolean) {
+        prefs.syncSent = false; _syncSent.value = false
+        if (!removeUploaded) { _notice.value = "Sent messages will no longer be uploaded. The ones already synced stay on your Mac until you remove them."; return }
+        // Recorded durably before any network call (see SmsSyncRunner.removeSent) so it cannot be lost offline.
+        PrefsSyncState(ctx).setSentRemovalPending(true); _sentRemovalPending.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val r = SmsSyncRunner.removeSent(ctx)
+            _sentRemovalPending.value = PrefsSyncState(ctx).sentRemovalPending()
+            if (r.sentRemovalPending) {
+                SyncScheduler.enqueueSoon(ctx, 30_000)    // network-constrained one-shot, backs off until the delete lands
+                _notice.value = "Couldn't remove the uploaded sent messages yet (${r.error ?: "offline?"}). It is queued and will be retried automatically."
+            } else _notice.value = "Sent messages removed from the cloud. New ones are no longer uploaded."
+        }
+    }
+
     fun syncNow(reconcile: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
             val r = SmsSyncRunner.run(ctx, forceReconcile = reconcile)
+            _sentRemovalPending.value = PrefsSyncState(ctx).sentRemovalPending()
             _notice.value = r.error ?: "Synced — ${prefs.lastSyncSummary}."
             refreshLines()
+        }
+    }
+
+    /** H-14: give the messages the engine parked another go. */
+    fun retrySkipped() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val r = SmsSyncRunner.retrySkipped(ctx)
+            _notice.value = r.error ?: if (r.quarantined > 0) "${r.quarantined} message(s) still couldn't be synced." else "Retried — ${prefs.lastSyncSummary}."
         }
     }
 
@@ -233,6 +329,9 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
         if (text == null) { _clipNotice.value = "Your clipboard is empty (or Android didn't let Halo read it — try again with Halo open)."; return }
         ClipboardController.publishText(ctx, text) { _clipNotice.value = it }
     }
+
+    /** Send one history item (or any text) to the Mac. Same path as "Send clipboard": filter, dedupe and history all apply. */
+    fun sendClipText(text: String) { ClipboardController.publishText(ctx, text) { _clipNotice.value = it } }
 
     fun copy(item: ClipItem) { ClipboardController.copyToClipboard(ctx, item); _clipNotice.value = "Copied." }
     fun purgeClipboard() = ClipboardController.purge(ctx) { _clipNotice.value = it }

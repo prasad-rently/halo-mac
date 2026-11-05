@@ -3,14 +3,18 @@ package app.halo.mobile.cloud
 import android.accessibilityservice.AccessibilityService
 import android.app.Activity
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
 import app.halo.cloud.ClipboardSyncEngine
 import app.halo.cloud.RemoteClip
+import app.halo.cloud.SealedFile
+import app.halo.cloud.SealedStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
@@ -22,24 +26,68 @@ import java.util.concurrent.Executors
 @Serializable
 data class ClipItem(val id: String, val text: String, val kind: String, val from: String, val atMs: Long, val received: Boolean)
 
-/** The phone-side clipboard history (D9: remote copies land HERE — never in the live clipboard). Capped like the cloud. */
+/**
+ * The phone-side clipboard history (D9: remote copies land HERE — never in the live clipboard). Capped like the cloud.
+ * H-13: sealed at rest under the Keystore key, like the pairing profile — clipboard text is exactly where a
+ * password someone copied ends up. A plaintext file left by an earlier version is migrated on first read.
+ */
 class ClipboardHistory(ctx: Context) {
-    private val file = File(ctx.filesDir, "clipboard-history.json")
+    private val store = SealedStore(SealedFile(File(ctx.filesDir, "clipboard-history.json"), SecretBox))
     private val json = Json { ignoreUnknownKeys = true }
     private val ser = ListSerializer(ClipItem.serializer())
     private val _items = MutableStateFlow(load())
     val items: StateFlow<List<ClipItem>> = _items
+    private val _keyLost = MutableStateFlow(store.keyLost)
+    /** The history's key is gone for good: the saved history can never be read again. The UI offers [resetLostKey]. */
+    val keyLost: StateFlow<Boolean> = _keyLost
+    private val _warning = MutableStateFlow(store.warning)
+    /** Content-free storage status ("temporarily unreadable", "could not be sealed yet") or null. */
+    val warning: StateFlow<String?> = _warning
 
-    private fun load(): List<ClipItem> = try { if (file.exists()) json.decodeFromString(ser, file.readText()) else emptyList() } catch (e: Exception) { emptyList() }
+    private fun parse(text: String?): List<ClipItem> = try { text?.let { json.decodeFromString(ser, it) } ?: emptyList() } catch (e: Exception) { emptyList() }
+    private fun load(): List<ClipItem> = parse(store.load())
 
     @Synchronized fun add(item: ClipItem) {
         if (_items.value.any { it.id == item.id }) return
-        val next = (listOf(item) + _items.value).sortedByDescending { it.atMs }.take(ClipboardSyncEngine.CAP)
-        _items.value = next; persist(next)
+        _items.value = (listOf(item) + _items.value).sortedByDescending { it.atMs }.take(ClipboardSyncEngine.CAP)
+        persist()
     }
 
-    @Synchronized fun clear() { _items.value = emptyList(); file.delete() }
-    private fun persist(l: List<ClipItem>) { runCatching { file.writeText(json.encodeToString(ser, l)) } }
+    /**
+     * Re-attempts a save that was deferred (store blocked) or a migration that could not seal. Without it the
+     * "will be retried" warning only came true when the next clip happened to arrive — never, if sync is idle.
+     */
+    @Synchronized fun retry() { if (store.warning != null) persist() }
+
+    @Synchronized fun clear() { _items.value = emptyList(); store.delete(); _warning.value = null; _keyLost.value = false }
+
+    /**
+     * The user's explicit "reset" after the secure key was lost: drop the unreadable file, create a fresh key, and save what
+     * is held in memory under it. (This is the only place besides pairing that creates a key — see [SecretBox].)
+     */
+    @Synchronized fun resetLostKey() {
+        // Re-read first: if the key has come back (a "missing" key can be a Keystore that was not ready), there is nothing to
+        // reset and deleting the file would destroy a history that is readable again. Only a still-lost key is reset.
+        val text = store.load()
+        if (!store.keyLost) {
+            if (text != null) _items.value = (_items.value + parse(text)).distinctBy { it.id }.sortedByDescending { it.atMs }.take(ClipboardSyncEngine.CAP)
+            persist(); return
+        }
+        store.delete(); runCatching { SecretBox.ensureKey() }; persist()
+    }
+
+    /**
+     * Never replaces a file that could not be read: if Keystore was momentarily unavailable at load, the first
+     * successful re-read merges what is on disk with what arrived since, then writes. See [SealedStore].
+     */
+    private fun persist() {
+        store.save { onDisk ->
+            val merged = (_items.value + parse(onDisk)).distinctBy { it.id }.sortedByDescending { it.atMs }.take(ClipboardSyncEngine.CAP)
+            _items.value = merged
+            json.encodeToString(ser, merged)
+        }
+        _warning.value = store.warning; _keyLost.value = store.keyLost
+    }
 
     companion object {
         @Volatile private var instance: ClipboardHistory? = null
@@ -49,28 +97,54 @@ class ClipboardHistory(ctx: Context) {
 
 /**
  * Process-wide clipboard sync (F-045). One engine and one stream for the whole process, whichever of the
- * accessibility service or the app started it — two live streams would deliver every remote clip twice.
+ * accessibility service, the app or the foreground service started it — two live streams would deliver every remote
+ * clip twice. Who may stop it is [ClipboardLifecycle]'s rule: only the last owner to let go, or the user's own setting.
  */
 object ClipboardController {
     private val io = Executors.newSingleThreadExecutor { r -> Thread(r, "halo-clip").apply { isDaemon = true } }
     @Volatile private var engine: ClipboardSyncEngine? = null     // read off-lock by publishText/copyToClipboard
     private var stream: AutoCloseable? = null
     private var listener: ClipboardManager.OnPrimaryClipChangedListener? = null
+    @Volatile private var appContext: Context? = null
     private val _status = MutableStateFlow("")
     val status: StateFlow<String> = _status
 
-    /** Start (or restart) publishing + receiving, if the user has it on and the phone is paired. */
-    @Synchronized fun start(ctx: Context) {
+    private val lifecycle = ClipboardLifecycle(object : ClipboardBackend {
+        override fun startStream() { appContext?.let { openStream(it) } }
+        override fun stopStream() { closeStream() }
+        override fun startListening() { appContext?.let { listen(it) } }
+        override fun stopListening() { unlisten() }
+    })
+
+    /**
+     * Claim the stream for [owner], (re)starting publishing + receiving — if the user has clipboard sync on. With it off
+     * nothing may run, so the call stops everything instead (the user's setting outranks every owner).
+     */
+    @Synchronized fun start(ctx: Context, owner: ClipboardOwner = ClipboardOwner.USER) {
         val app = ctx.applicationContext
+        appContext = app
+        if (!CloudPrefs(app).clipboardEnabled) { stop(); return }
+        lifecycle.acquire(owner)
+    }
+
+    /** [owner] no longer needs the stream. It keeps running if anyone else (the user's switch, the accessibility service) still does. */
+    @Synchronized fun release(owner: ClipboardOwner) { lifecycle.release(owner) }
+
+    /** The user's clipboard sync is off, or the phone was disconnected: stop for everyone. */
+    @Synchronized fun stop() { lifecycle.stopAll() }
+
+    /** Re-open the stream for the current owners (the network changed). */
+    @Synchronized fun refresh() { lifecycle.refresh() }
+
+    private fun openStream(app: Context) {
         val prefs = CloudPrefs(app)
-        if (!prefs.clipboardEnabled) { stop(); return }
         io.execute {
             try {
-                val session = CloudRuntime.session(app) ?: run { _status.value = "Not paired."; return@execute }
+                val session = CloudRuntime.session(app) ?: run { _status.value = CloudRuntime.unpairedMessage(app, "Not paired."); return@execute }
                 synchronized(this) {
-                    // Sign-in above can take seconds. If the user switched sync off (stop()) or disconnected in the
-                    // meantime, opening the stream now would leave a live subscription nobody can turn off.
-                    if (!CloudPrefs(app).clipboardEnabled) return@execute
+                    // Sign-in above can take seconds. If the user switched sync off (stop()) or disconnected, or every owner
+                    // let go, in the meantime, opening the stream now would leave a live subscription nobody can turn off.
+                    if (!CloudPrefs(app).clipboardEnabled || !lifecycle.isRunning) return@execute
                     stream?.close()
                     val e = ClipboardSyncEngine(session.rtdb, session.crypto, session.deviceId, session.deviceName, { prefs.clipboardFilter })
                     engine = e
@@ -80,24 +154,50 @@ object ClipboardController {
                 }
             } catch (e: Exception) { _status.value = e.message ?: "Couldn't connect." }
         }
-        listen(app)
     }
 
-    @Synchronized fun stop() { stream?.close(); stream = null; engine = null; _status.value = "" }
+    @Synchronized private fun closeStream() { stream?.close(); stream = null; engine = null; _status.value = "" }
 
-    private fun listen(app: Context) {
+    @Synchronized private fun listen(app: Context) {
         if (listener != null) return
         val cm = app.getSystemService(ClipboardManager::class.java) ?: return
         val l = ClipboardManager.OnPrimaryClipChangedListener { onLocalCopy(app) }
         cm.addPrimaryClipChangedListener(l); listener = l
     }
 
+    @Synchronized private fun unlisten() {
+        val l = listener ?: return
+        appContext?.getSystemService(ClipboardManager::class.java)?.removePrimaryClipChangedListener(l); listener = null
+    }
+
     /** A copy happened. Read it (only possible when Android lets this process) and publish. */
     fun onLocalCopy(ctx: Context) {
         val app = ctx.applicationContext
         if (!CloudPrefs(app).clipboardEnabled) return
+        if (isMarkedSensitive(app)) return          // a password manager / Halo's own generator said "don't keep or share this" (Android 13+ flag)
         val text = readClipboard(app) ?: return
+        if (text == localOnlyText) return          // an in-app "Copy" of private content (an OTP): never leaves the phone
         publishText(app, text)
+    }
+
+    /** True when the current clip carries `ClipDescription.EXTRA_IS_SENSITIVE` (API 33+). Older Android has no such flag, so false. */
+    private fun isMarkedSensitive(ctx: Context): Boolean {
+        if (Build.VERSION.SDK_INT < 33) return false
+        return try { ctx.getSystemService(ClipboardManager::class.java)?.primaryClipDescription?.extras?.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE, false) == true }
+        catch (e: SecurityException) { false }
+    }
+
+    /**
+     * Put a secret (a generated password) on the clipboard WITHOUT letting Halo's own clipboard sync pick it up: the echo is
+     * suppressed like [copyToClipboard]'s, and the clip is flagged sensitive so Android 13+ hides it from the preview/suggestions
+     * and [onLocalCopy] skips it. Sending it to the Mac stays an explicit, separate tap.
+     */
+    fun copySensitive(ctx: Context, text: String) {
+        localOnlyText = text                       // integration: same engine-not-open race as copyPrivate (pre-Android-13 has no sensitive flag to rely on)
+        engine?.suppressEcho(text)
+        val clip = ClipData.newPlainText("Halo", text)
+        if (Build.VERSION.SDK_INT >= 33) clip.description.extras = android.os.PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
+        ctx.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(clip)
     }
 
     /** Null when the clipboard is empty or Android won't let a background process read it (10+). */
@@ -111,7 +211,7 @@ object ClipboardController {
         io.execute {
             val result = try {
                 val e = engine ?: run {
-                    val session = CloudRuntime.session(app) ?: return@execute run { done?.invoke("This phone isn't paired yet.") ; Unit }
+                    val session = CloudRuntime.session(app) ?: return@execute run { done?.invoke(CloudRuntime.unpairedMessage(app, "This phone isn't paired yet.")) ; Unit }
                     val prefs = CloudPrefs(app)
                     ClipboardSyncEngine(session.rtdb, session.crypto, session.deviceId, session.deviceName, { prefs.clipboardFilter }).also { engine = it }
                 }
@@ -134,12 +234,29 @@ object ClipboardController {
         ctx.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Halo", item.text))
     }
 
+    /** The last text this app put on the clipboard that must stay on the phone (a one-time code copied from the inbox). */
+    @Volatile private var localOnlyText: String? = null
+
+    /**
+     * Put [text] on the live clipboard for the user to paste, and keep it OFF the cloud. Unlike [copyToClipboard] this does not
+     * depend on a sync engine being open: with clipboard sync on but the stream still connecting, the engine is null, no echo
+     * hash exists, and our own clipboard listener would have uploaded the code. It is also flagged sensitive so Android 13+
+     * hides it from the clipboard preview and keyboard suggestions. Pre-13 phones simply ignore the extra.
+     */
+    fun copyPrivate(ctx: Context, text: String) {
+        localOnlyText = text
+        engine?.suppressEcho(text)
+        val clip = ClipData.newPlainText("Halo", text)
+        clip.description.extras = android.os.PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) }
+        ctx.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(clip)
+    }
+
     fun purge(ctx: Context, done: (String) -> Unit) {
         val app = ctx.applicationContext
         io.execute {
             val msg = try {
                 val session = CloudRuntime.session(app)
-                if (session == null) "This phone isn't paired yet." else {
+                if (session == null) CloudRuntime.unpairedMessage(app, "This phone isn't paired yet.") else {
                     (engine ?: ClipboardSyncEngine(session.rtdb, session.crypto, session.deviceId, session.deviceName)).purge()
                     ClipboardHistory.get(app).clear(); "Synced clipboard removed from the cloud and from this phone."
                 }
@@ -155,19 +272,50 @@ object ClipboardController {
  * a given phone's OEM build permits the background read must be checked on that phone.
  */
 class ClipboardAccessibilityService : AccessibilityService() {
-    override fun onServiceConnected() { super.onServiceConnected(); ClipboardController.start(this) }
+    override fun onServiceConnected() { super.onServiceConnected(); ClipboardController.start(this, ClipboardOwner.ACCESSIBILITY) }
+    // The user turned the service off (or Android disconnected it): let go of OUR claim. Without this the claim outlived the
+    // service, so "last owner out closes the stream" never held once this had been connected — the stream and the clipboard
+    // listener stayed open after the foreground service stopped, with nothing alive that needed them.
+    override fun onUnbind(intent: Intent?): Boolean { ClipboardController.release(ClipboardOwner.ACCESSIBILITY); return super.onUnbind(intent) }
+    override fun onDestroy() { ClipboardController.release(ClipboardOwner.ACCESSIBILITY); super.onDestroy() }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) { /* intentionally empty */ }
     override fun onInterrupt() {}
 }
 
-/** The share-sheet target: "Send to Mac" works everywhere, because the user hands Halo the text explicitly. */
+/**
+ * The share-sheet target: "Send to Mac" works everywhere, because the user hands Halo the text explicitly.
+ *
+ * H-15, three things the first version got wrong:
+ *  - it ignored the "Clipboard sync" switch — with sync off the user had said "don't send my clipboard stuff",
+ *    and this path sent anyway. It now declines and says why.
+ *  - it called finish() straight after queueing the upload. A finished, backgrounded process is a cached process
+ *    Android may kill mid-request, so the "Sent" the user saw could be a lie. It now stays (invisibly — the theme
+ *    is translucent) until the upload reports an outcome, with a hard ceiling so it can never linger.
+ *  - the manifest entry accepts only ACTION_SEND / text/plain (see ManifestExportTest); [onCreate] re-checks the action.
+ */
 class SendToMacActivity : Activity() {
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private val ceiling = Runnable { finish() }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val text = intent?.takeIf { it.action == Intent.ACTION_SEND }?.getStringExtra(Intent.EXTRA_TEXT)
+        val text = intent?.takeIf { it.action == Intent.ACTION_SEND }?.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()   // not getStringExtra: many apps share a Spanned, which that returns as null
         if (text.isNullOrBlank()) { finish(); return }
         val app = applicationContext
-        ClipboardController.publishText(app, text) { msg -> android.os.Handler(android.os.Looper.getMainLooper()).post { Toast.makeText(app, msg, Toast.LENGTH_SHORT).show() } }
-        finish()
+        if (!CloudPrefs(app).clipboardEnabled) {
+            Toast.makeText(app, "Clipboard sync is off — turn it on in Halo's Clipboard tab to send to your Mac.", Toast.LENGTH_LONG).show()
+            finish(); return
+        }
+        main.postDelayed(ceiling, CEILING_MS)
+        ClipboardController.publishText(app, text) { msg ->
+            main.post {
+                Toast.makeText(app, msg, Toast.LENGTH_SHORT).show()
+                if (!isFinishing) finish()
+            }
+        }
     }
+
+    override fun onDestroy() { main.removeCallbacks(ceiling); super.onDestroy() }
+
+    private companion object { const val CEILING_MS = 60_000L }
 }
