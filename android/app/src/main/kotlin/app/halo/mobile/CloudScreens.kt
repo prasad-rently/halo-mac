@@ -58,7 +58,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.halo.cloud.PairingConfirmation
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.halo.mobile.cloud.ClipItem
-import app.halo.mobile.tools.ToolsEntryCard
 import app.halo.mobile.tools.ToolsViewModel
 import app.halo.mobile.cloud.CloudViewModel
 import app.halo.mobile.cloud.LineUi
@@ -362,7 +361,6 @@ fun ClipboardScreen(vm: CloudViewModel) {
         historyWarning?.let { HaloBanner(it, textModifier = Modifier.testTag("clip.storageWarning")) }
         if (historyKeyLost) HaloGhostButton("Reset clipboard history", vm::resetHistory, Modifier.testTag("clip.resetHistory"), tint = HaloColors.Amber)
         if (history.isEmpty()) HaloCard { HaloEmptyState(Icons.Filled.Send, HaloCopy.NOTHING_SYNCED, subtitle = HaloCopy.NOTHING_SYNCED_SUB) }
-        ToolsEntryCard(tools)
         history.take(50).forEach { ClipCard(it, onCopy = { vm.copy(it) }, onSend = { vm.sendClipText(it.text) }, onTransform = { tools.transformText(it.text) }) }
     }
     if (confirmPurge) androidx.compose.material3.AlertDialog(

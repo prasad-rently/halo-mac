@@ -4,8 +4,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
+import app.halo.mobile.photos.SimilarPhotosScreen
 
 /**
  * One entry in the Tools hub. This list is the ONLY thing another tool has to touch to appear in the hub — add one line:
@@ -22,6 +24,7 @@ object ToolsRegistry {
         Tool("transform", "Transform", "Text utilities", Icons.Filled.Edit) { TransformScreen() },
         Tool("beautifier", "Code Image", "Format and share", Icons.Filled.Build) { CodeBeautifierScreen() },
         Tool("speedtest", "Speed Test", "Down, up, ping", Icons.Filled.PlayArrow) { SpeedTestScreen() },
+        Tool("photos", "Similar Photos", "Find look-alikes", Icons.Filled.Star) { SimilarPhotosScreen() },
     )
 
     fun byId(id: String?): Tool? = tools.firstOrNull { it.id == id }

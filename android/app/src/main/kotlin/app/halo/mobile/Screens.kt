@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -65,7 +66,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import app.halo.mobile.tools.ToolsEntryCard
 import app.halo.mobile.tools.ToolsHost
 import app.halo.mobile.tools.ToolsViewModel
 import app.halo.mobile.design.*
@@ -109,7 +109,9 @@ fun HaloApp(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel) {
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             if (tools.isOpen) ToolsHost(tools) else when (dest) {
-                HaloDestination.Home -> HomeScreen(vm, cloud, ::go)
+                HaloDestination.Home -> HomeScreen(vm, cloud, ::go, extraMore = listOf(
+                    MoreEntry("Tools", "Transform · Code Image · Speed Test · Photos", Icons.Filled.Build, "home.more.tools") { tools.openHub() },
+                ))
                 HaloDestination.Messages -> SmsScreen(cloud)
                 HaloDestination.Clipboard -> ClipboardScreen(cloud)
                 HaloDestination.Share -> ShareScreen(vm)
@@ -316,7 +318,6 @@ fun SettingsScreen(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel
 
     HaloScreen(HaloCopy.SETTINGS_TITLE) {
         CloudSettingsCard(cloud)
-        ToolsEntryCard(viewModel<ToolsViewModel>())
 
         HaloCard {
             HaloSectionHeader("This device")

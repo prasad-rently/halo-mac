@@ -26,4 +26,6 @@ include(":haloshare")
 include(":halocloud")
 // :halotools — pure-JVM text transforms, code beautifier + speed-test engine behind the app's Tools hub.
 include(":halotools")
+// :halophotos is the Similar Photos (F-025) core: pHash, clustering, review/delete state machine. Plain JVM, no deps.
+include(":halophotos")
 include(":app")
