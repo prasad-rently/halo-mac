@@ -160,3 +160,12 @@ private fun ChipsPreview() = PreviewSurface {
         Row(verticalAlignment = Alignment.CenterVertically) { HaloSwitch(true, {}); Spacer(Modifier.width(8.dp)); HaloSwitch(false, {}) }
     }
 }
+
+/** Text-field colours matching the dark surfaces (accent focus ring, hairline otherwise). Pass to OutlinedTextField(colors = haloFieldColors()). */
+@Composable
+fun haloFieldColors() = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = HaloColors.Accent, unfocusedBorderColor = HaloColors.Border2, focusedLabelColor = HaloColors.Accent, unfocusedLabelColor = HaloColors.Text2,
+    focusedTextColor = HaloColors.Text, unfocusedTextColor = HaloColors.Text, cursorColor = HaloColors.Accent,
+    focusedContainerColor = HaloColors.Surface, unfocusedContainerColor = HaloColors.Surface,
+    focusedPlaceholderColor = HaloColors.Text3, unfocusedPlaceholderColor = HaloColors.Text3,
+)

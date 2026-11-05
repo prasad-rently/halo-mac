@@ -68,10 +68,11 @@ fun HaloCard(
     modifier: Modifier = Modifier,
     accentTop: Color? = null,
     onClick: (() -> Unit)? = null,
+    borderColor: Color = HaloColors.Border,
     contentPadding: PaddingValues = PaddingValues(HaloSpacing.CardPad),
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val base = modifier.fillMaxWidth().clip(HaloShapes.Card).background(HaloColors.Surface2).border(BorderStroke(1.dp, HaloColors.Border), HaloShapes.Card)
+    val base = modifier.fillMaxWidth().clip(HaloShapes.Card).background(HaloColors.Surface2).border(BorderStroke(1.dp, borderColor), HaloShapes.Card)
         .let { if (onClick != null) it.clickable(role = Role.Button, onClick = onClick) else it }
     Box(base) {
         Column(Modifier.padding(contentPadding), content = content)

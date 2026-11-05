@@ -145,11 +145,12 @@ fun HaloBanner(
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
     actionTag: Modifier = Modifier,
+    textModifier: Modifier = Modifier,
 ) {
     HaloCard(modifier, accentTop = tint) {
         Row(verticalAlignment = Alignment.Top) {
             Icon(icon, null, tint = tint, modifier = Modifier.padding(top = 2.dp).size(18.dp)); Spacer(Modifier.width(10.dp))
-            Text(text, color = HaloColors.Text, fontSize = 14.sp, modifier = Modifier.weight(1f))
+            Text(text, color = HaloColors.Text, fontSize = 14.sp, modifier = Modifier.weight(1f).then(textModifier))
             if (info != null) HaloInfoButton(info)
         }
         if (actionLabel != null && onAction != null) { Spacer(Modifier.size(8.dp)); HaloGhostButton(actionLabel, onAction, actionTag, tint = tint) }
