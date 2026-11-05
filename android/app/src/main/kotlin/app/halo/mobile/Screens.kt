@@ -314,6 +314,7 @@ fun SettingsScreen(vm: AppViewModel, cloud: app.halo.mobile.cloud.CloudViewModel
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Text("Settings", color = Halo.Text, fontSize = 34.sp, fontWeight = FontWeight.Bold)
         CloudSettingsCard(cloud)
+        ToolsLauncherStub()   // TEMPORARY until the android-tools hub lands
 
         HaloCard {
             SectionLabel("This device")
