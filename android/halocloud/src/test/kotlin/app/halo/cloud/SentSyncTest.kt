@@ -156,6 +156,12 @@ class SentSyncTest {
             .map { File(it, "src/main/kotlin") }.filter { it.isDirectory }
             .flatMap { it.walkTopDown().filter { f -> f.isFile && f.extension == "kt" }.toList() }
         assertTrue("guard found no sources under $androidRoot - it would be vacuous", sources.any { it.name == "SmsSyncEngine.kt" })
+        // Non-vacuous against the REAL F-056 code (integrated tree): both halves of the expense feature must be in the scanned set,
+        // and the ingest must read through inbox() — so the guard is demonstrably looking at what it is guarding.
+        val expense = sources.filter { "/expense/" in it.path.replace('\\', '/') }
+        assertTrue("F-056 core (halocloud/.../expense) not scanned: $expense", expense.any { it.name == "ExpenseIngest.kt" } && expense.any { it.name == "ExpenseLedger.kt" })
+        assertTrue("F-056 app side (app/.../mobile/expense) not scanned", expense.any { it.name == "ExpenseRuntime.kt" } && expense.any { it.name == "ExpenseViewModel.kt" })
+        assertTrue("the expense ingest must read the inbox via SmsSource.inbox()", expense.first { it.name == "ExpenseIngest.kt" }.readText().contains(".inbox("))
         val offenders = sources.filter { it.name !in SENT_API_ALLOWED && FORBIDDEN_IN_EXPENSE.any { tok -> tok in it.readText() } }.map { it.name }
         assertTrue("only $SENT_API_ALLOWED may use the sent-box API; found it in $offenders (the expenditure pipeline must read SmsSource.inbox() only)", offenders.isEmpty())
     }

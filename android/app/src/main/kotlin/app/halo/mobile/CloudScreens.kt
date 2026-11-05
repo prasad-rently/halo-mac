@@ -247,7 +247,7 @@ fun SmsScreen(vm: CloudViewModel) {
             else HaloCard(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
                 val now = System.currentTimeMillis()
                 shown.forEach { m -> MessageRow(m, now, lines.firstOrNull { it.line.subscriptionId == m.subId }?.line?.label?.takeIf { lines.size > 1 }) { code ->
-                    app.halo.mobile.cloud.ClipboardController.copyToClipboard(ctx, ClipItem("otp-${m.id}", code, "text", "Messages", System.currentTimeMillis(), received = false))
+                    app.halo.mobile.cloud.ClipboardController.copySensitive(ctx, code)   // an OTP: flagged sensitive (hidden from previews) and never published by clipboard sync
                     copied = "Code copied"
                 } }
             }
