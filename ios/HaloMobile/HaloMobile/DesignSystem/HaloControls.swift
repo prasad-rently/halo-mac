@@ -39,7 +39,7 @@ struct HaloPrimaryButton: View {
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
             .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: 52)
-            .background(LinearGradient(colors: [.haloAccent, .haloAccent2], startPoint: .topLeading, endPoint: .bottomTrailing))
+            .background(LinearGradient(colors: [.haloAccentFill, .haloAccent2], startPoint: .topLeading, endPoint: .bottomTrailing))
             .foregroundColor(.white)
             .clipShape(RoundedRectangle(cornerRadius: HaloLayout.controlRadius + 2, style: .continuous))
             .shadow(color: Color.haloAccent.opacity(isEnabled ? 0.35 : 0), radius: 12, y: 6)
@@ -151,8 +151,8 @@ struct HaloChip: View {
             Text(text).font(HaloFont.micro).lineLimit(1)
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
-        .foregroundColor(isSelected ? tint : .haloText2)
-        .background(Capsule().fill(isSelected ? tint.opacity(0.15) : Color.white.opacity(0.05)))
+        .foregroundColor(isSelected ? Color.haloReadable(tint) : .haloText2)
+        .background(Capsule().fill(isSelected ? tint.opacity(0.10) : Color.white.opacity(0.05)))
         .overlay(Capsule().stroke(isSelected ? tint.opacity(0.35) : Color.haloBorder, lineWidth: 1))
     }
 }
@@ -164,10 +164,13 @@ struct HaloStatusBadge: View {
     var text: String
     var state: HaloState
     var showsIcon = true
+    /// Line limit at normal text sizes. Pass a larger value (or 0 for unlimited) when the text is a
+    /// reason the person must be able to read in full, e.g. why the receiver could not start.
+    var maxLines = 1
     @Environment(\.dynamicTypeSize) private var typeSize
 
-    init(_ text: String, _ state: HaloState = .neutral, showsIcon: Bool = true) {
-        self.text = text; self.state = state; self.showsIcon = showsIcon
+    init(_ text: String, _ state: HaloState = .neutral, showsIcon: Bool = true, maxLines: Int = 1) {
+        self.text = text; self.state = state; self.showsIcon = showsIcon; self.maxLines = maxLines
     }
 
     /// Source-compatible with the cloud workstream's `HaloStatusBadge(text:level:)`.
@@ -178,13 +181,16 @@ struct HaloStatusBadge: View {
     init(text: String, level: Level) { self.init(text, level.state) }
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
             if showsIcon { Image(systemName: state.symbol).font(.system(.caption2).weight(.bold)).accessibilityHidden(true) }
-            Text(text).font(HaloFont.micro).lineLimit(typeSize.isAccessibilitySize ? 4 : 1)
+            Text(text).font(HaloFont.micro)
+                .lineLimit(maxLines == 0 ? nil : (typeSize.isAccessibilitySize ? max(maxLines, 4) : maxLines))
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 9).padding(.vertical, 4)
-        .foregroundColor(state.color)
-        .background(Capsule().fill(state.color.opacity(0.15)))
+        .foregroundColor(Color.haloReadable(state.color))
+        // RoundedRectangle (radius clamps to a capsule on one line) so a wrapped reason doesn't turn into a blob.
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(state.color.opacity(0.10)))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(text)
     }

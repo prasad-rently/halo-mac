@@ -46,6 +46,16 @@ extension Color {
     static let haloText2      = Color(hex: "#8892a8")
     static let haloText3      = Color(hex: "#7a869e")
     static let haloTextDecor  = Color(hex: "#4a5568")
+
+    // Contrast helpers (both are deliberate deviations from desktop, for the same reason as haloText3):
+    // - white label on desktop's #4f7cff measures 3.7:1 (needs 4.5:1 for 17pt text), so the primary
+    //   button's gradient starts at a slightly deeper blue (white on it: 4.7:1).
+    // - #4f7cff text on its own 15% tint (info badge, accent chip) measures 3.9:1; a lighter blue gives 5.7:1.
+    static let haloAccentFill = Color(hex: "#3f68ee")
+    static let haloAccentText = Color(hex: "#7a9bff")
+
+    /// Text colour that stays AA-legible when drawn on a pill tinted with `c`.
+    static func haloReadable(_ c: Color) -> Color { c == .haloAccent ? .haloAccentText : c }
 }
 
 // MARK: - Semantic state

@@ -16,6 +16,8 @@ big tappable actions. It must read as the same product as the Halo desktop app
 | `haloCyan` / `haloPurple` | `#00d4e8` / `#b06cff` | URL / code content |
 | `haloText` / `haloText2` | `#f0f2f8` / `#8892a8` | primary / secondary text (desktop values) |
 | `haloText3` | `#7a869e` | tertiary text. **Deliberately lighter than desktop's `#4a5568`** (2.3:1, fails AA). Desktop value kept as `haloTextDecor`, decoration only. |
+| `haloAccentFill` | `#3f68ee` | start colour of the primary button gradient. Desktop's `#4f7cff` gives a 3.7:1 white label (needs 4.5:1 at 17pt); this gives 4.7:1. |
+| `haloAccentText` | `#7a9bff` | accent-coloured *text on an accent-tinted pill* (info badge, accent chip): `#4f7cff` on its own tint is 3.9:1, this is 5.7:1. Use `Color.haloReadable(tint)`. |
 
 `HaloState` (`.ok .warning .error .info .neutral`) maps state to colour **and** an SF Symbol — pair colour with a word/icon, never colour alone.
 Typography is `HaloFont` (text styles → Dynamic Type). Layout constants in `HaloLayout` (16pt gutters, 14pt card radius, 44pt min target). `HaloHaptics` for feedback. `HaloAppearance.install()` styles tab/nav bars (called from the app entry).

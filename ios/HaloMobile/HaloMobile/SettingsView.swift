@@ -69,7 +69,7 @@ struct SettingsView: View {
             HaloCard(padding: 0) {
                 VStack(spacing: 0) {
                     HaloListRow(icon: "antenna.radiowaves.left.and.right", tint: statusState.color,
-                                title: HaloStrings.Settings.status) { HaloStatusBadge(statusText, statusState) }
+                                title: HaloStrings.Settings.status) { HaloStatusBadge(statusText, statusState, maxLines: 0) }
                     HaloRowDivider()
                     HaloListRow(icon: "folder.fill", tint: .haloAccent, title: HaloStrings.Settings.savedTo) {
                         Text(HaloStrings.Settings.savedToValue).font(HaloFont.caption).foregroundColor(.haloText2)

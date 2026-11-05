@@ -98,7 +98,7 @@ enum HaloStrings {
         static let accept = "Accept"
         static let decline = "Decline"
         static let moreFiles = "more…"
-        static let footer = "Only accept from people you know."
+        static let footer = "Only accept from people you know. Files are saved to Halo → Received."
     }
 
     enum Info {
