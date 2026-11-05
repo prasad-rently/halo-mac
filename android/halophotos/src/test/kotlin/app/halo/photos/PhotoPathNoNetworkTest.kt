@@ -45,4 +45,18 @@ class PhotoPathNoNetworkTest {
         val deps = gradle.lines().filter { it.trim().startsWith("implementation(") || it.trim().startsWith("api(") }
         assertTrue("runtime deps found: $deps", deps.isEmpty())
     }
+
+    /**
+     * Deletion is reachable only through TrashRequest (system dialog). Any other delete API in the photos package is a bug.
+     * (`createDeleteRequest` is also out: it deletes permanently, with no Trash to recover from.)
+     */
+    @Test fun `no silent or permanent deletion API anywhere in the photos path`() {
+        val forbidden = listOf(".delete(", "createDeleteRequest", "File(", "deleteRecursively", "unlink", "removeItem", "RecoverableSecurityException", "MANAGE_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE")
+        for (f in sources("halo.appPhotosSrc") + sources("halo.photosSrc")) {
+            val code = f.readText().replace(Regex("/\\*[\\s\\S]*?\\*/"), "").lines().joinToString("\n") { it.substringBefore("//") }
+            for (b in forbidden) assertTrue("${f.name} uses '$b'", !code.contains(b))
+        }
+        val trash = sources("halo.appPhotosSrc").single { it.name == "TrashRequest.kt" }.readText()
+        assertTrue(trash.contains("createTrashRequest"))
+    }
 }

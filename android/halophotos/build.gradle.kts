@@ -19,6 +19,10 @@ tasks.test {
     useJUnit()
     testLogging { events("failed", "skipped"); showStandardStreams = true }
     maxHeapSize = "1g"
+    // The structural tests read these files; declare them so Gradle re-runs the tests when they change.
+    inputs.dir(rootProject.projectDir.resolve("app/src/main/kotlin/app/halo/mobile/photos"))
+    inputs.file(rootProject.projectDir.parentFile.resolve("docs/specs/phash-parity.v1.json"))
+    inputs.file(projectDir.resolve("build.gradle.kts"))
     systemProperty("halo.phashParity", rootProject.projectDir.parentFile.resolve("docs/specs/phash-parity.v1.json").absolutePath)
     systemProperty("halo.photosSrc", projectDir.resolve("src/main").absolutePath)
     systemProperty("halo.appPhotosSrc", rootProject.projectDir.resolve("app/src/main/kotlin/app/halo/mobile/photos").absolutePath)
