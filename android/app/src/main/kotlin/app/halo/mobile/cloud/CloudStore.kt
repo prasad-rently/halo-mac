@@ -6,6 +6,7 @@ import app.halo.cloud.CloudAuthCredential
 import app.halo.cloud.FirebaseConfig
 import app.halo.cloud.ProfileLoad
 import app.halo.cloud.SealedBlobFile
+import app.halo.cloud.SmsSyncEngine
 import app.halo.cloud.SyncState
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -66,6 +67,12 @@ class CloudPrefs(ctx: Context) {
     var allow: Set<String> get() = p.getStringSet("smsAllow", emptySet()) ?: emptySet(); set(v) { p.edit().putStringSet("smsAllow", v).apply() }
     var deny: Set<String> get() = p.getStringSet("smsDeny", emptySet()) ?: emptySet(); set(v) { p.edit().putStringSet("smsDeny", v).apply() }
 
+    /**
+     * "Also sync messages I send". OFF unless the user turns it on, and never turned on by anything else (not a default,
+     * not a pairing, not an upgrade): it widens what leaves the phone from received messages to the user's own writing.
+     */
+    var syncSent: Boolean get() = p.getBoolean("syncSent", false); set(v) { p.edit().putBoolean("syncSent", v).apply() }
+
     var clipboardEnabled: Boolean get() = p.getBoolean("clipEnabled", false); set(v) { p.edit().putBoolean("clipEnabled", v).apply() }
     var clipboardFilter: Boolean get() = p.getBoolean("clipFilter", false); set(v) { p.edit().putBoolean("clipFilter", v).apply() }
 
@@ -89,8 +96,19 @@ class PrefsSyncState(ctx: Context) : SyncState {
     private val p = ctx.getSharedPreferences("halo.cloud.syncstate", Context.MODE_PRIVATE)
     override fun highWater(subscriptionId: Int): Long? = if (p.contains("hw.$subscriptionId")) p.getLong("hw.$subscriptionId", 0) else null
     override fun setHighWater(subscriptionId: Int, dateMs: Long) { p.edit().putLong("hw.$subscriptionId", dateMs).apply() }
+    override fun sentHighWater(subscriptionId: Int): Long? = if (p.contains("shw.$subscriptionId")) p.getLong("shw.$subscriptionId", 0) else null
+    override fun setSentHighWater(subscriptionId: Int, dateMs: Long) { p.edit().putLong("shw.$subscriptionId", dateMs).apply() }
+    override fun sentRemovalPending(): Boolean = p.getBoolean("sentRemovalPending", false)
+    override fun setSentRemovalPending(pending: Boolean) { p.edit().putBoolean("sentRemovalPending", pending).commit() }
+    override fun clearSent() {
+        val e = p.edit().remove("sentRemovalPending")
+        for (k in p.all.keys) if (k.startsWith("shw.") || k.startsWith("fail.${SmsSyncEngine.SENT_KEY_PREFIX}")) e.remove(k)
+        e.putStringSet("quarantine", quarantined().filterNot { it.startsWith(SmsSyncEngine.SENT_KEY_PREFIX) }.toSet())
+        e.commit()
+    }
     // commit(), not apply(): a cleared mark set and the epoch that replaces it must reach disk together.
-    override fun clear() { p.edit().clear().commit() }
+    // A requested sent-removal that has not landed survives a new pairing (see [SyncState.sentRemovalPending]).
+    override fun clear() { val owed = sentRemovalPending(); p.edit().clear().apply { if (owed) putBoolean("sentRemovalPending", true) }.commit() }
     // H-14 quarantine: failure counters and the parked set live beside the marks and are cleared with them.
     override fun failures(key: String): Int = p.getInt("fail.$key", 0)
     override fun setFailures(key: String, count: Int) { p.edit().apply { if (count <= 0) remove("fail.$key") else putInt("fail.$key", count) }.apply() }

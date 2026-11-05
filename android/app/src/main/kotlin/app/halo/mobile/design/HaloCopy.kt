@@ -42,6 +42,17 @@ object HaloCopy {
     val INFO_SMS_SYNC = HaloInfo("About message sync",
         "Inbox only, encrypted on this phone before upload. The first sync covers the last 90 days; \"Older history\" goes back a year.",
         listOf("Messages you delete on this phone are removed from the cloud too."))
+    // Sent-message sync (#70). The privacy text stays complete; it just lives behind the (i).
+    const val SENT_TITLE = "Sent messages"
+    const val SENT_ON = "On · uploaded encrypted"
+    const val SENT_OFF = "Off · received only"
+    const val SENT_REMOVING = "Off · removing uploaded messages…"
+    const val SENT_CONFIRM_ON_TITLE = "Sync sent messages?"
+    const val SENT_CONFIRM_OFF_TITLE = "Stop syncing sent?"
+    val INFO_SENT_SYNC = HaloInfo("Sync sent messages",
+        "Turning this on uploads what you write, not only what people send you — end-to-end encrypted with the same key as received messages — so your Mac shows both sides of each conversation.",
+        listOf("It follows the SIM switches and sender filters (a blocked number is skipped both ways). Sent messages are copied on the next sync, up to about 15 minutes after sending. They never raise a notification or count as unread on your Mac, and are never used for spending tracking.",
+            "Turn it off any time: uploads stop at once, and you can also delete what was already uploaded."))
     val INFO_FILTERS = HaloInfo("Sender filters",
         "Numbers or sender names, separated by commas. \"Only these senders\" limits what syncs; \"Never these senders\" always wins over it.")
     val INFO_NO_SIM_NAMES = HaloInfo("SIM names",

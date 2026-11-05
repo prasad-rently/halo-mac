@@ -8,12 +8,15 @@ import android.provider.Telephony
 import android.telephony.SubscriptionManager
 import androidx.core.content.ContextCompat
 import app.halo.cloud.SimAttribution
+import app.halo.cloud.SentSmsRecord
 import app.halo.cloud.SimLine
 import app.halo.cloud.SmsRecord
 import app.halo.cloud.SmsSource
 
 /**
- * The device inbox through the SMS content provider. Inbox only (D23). Throws `SecurityException` when
+ * The device SMS box through the SMS content provider: [inbox] reads `Telephony.Sms.Inbox` (type 1) and nothing else — the
+ * expenditure pipeline (F-048/F-056) reads it — and [sent] reads `Telephony.Sms.Sent` (type 2), which only the opt-in
+ * sent-sync ever calls. Two different URIs and two different record types, so a sent row cannot come out of [inbox]. Throws `SecurityException` when
  * READ_SMS isn't granted, which the engine reports instead of crashing a background worker.
  */
 class AndroidSmsSource(private val ctx: Context, private val prefs: CloudPrefs) : SmsSource {
@@ -68,6 +71,39 @@ class AndroidSmsSource(private val ctx: Context, private val prefs: CloudPrefs) 
             }
         }
         return out
+    }
+
+    override fun sent(subscriptionId: Int, sinceMs: Long): List<SentSmsRecord> {
+        requireSms()
+        val known = activeSims().map { it.id }.toSet()
+        val out = ArrayList<SentSmsRecord>()
+        ctx.contentResolver.query(Telephony.Sms.Sent.CONTENT_URI, projection, "${Telephony.Sms.DATE} >= ?", arrayOf(sinceMs.toString()), "${Telephony.Sms.DATE} ASC")?.use { c ->
+            val sub = c.getColumnIndex("sub_id")
+            while (c.moveToNext()) {
+                val rowSub = if (sub >= 0 && !c.isNull(sub)) c.getInt(sub) else -1
+                if (!SimAttribution.owns(subscriptionId, rowSub, known)) continue
+                out.add(SentSmsRecord(
+                    smsId = c.getLong(c.getColumnIndexOrThrow(Telephony.Sms._ID)),
+                    address = c.getString(c.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)).orEmpty(),     // for a sent row: the RECIPIENT
+                    body = c.getString(c.getColumnIndexOrThrow(Telephony.Sms.BODY)).orEmpty(),
+                    dateMs = c.getLong(c.getColumnIndexOrThrow(Telephony.Sms.DATE)),
+                    threadId = c.getLong(c.getColumnIndexOrThrow(Telephony.Sms.THREAD_ID)),
+                    subscriptionId = subscriptionId,
+                    read = c.getInt(c.getColumnIndexOrThrow(Telephony.Sms.READ)) != 0,
+                    seen = c.getInt(c.getColumnIndexOrThrow(Telephony.Sms.SEEN)) != 0,
+                ))
+            }
+        }
+        return out
+    }
+
+    override fun allSentMessageIds(): Set<String> {
+        requireSms()
+        val ids = HashSet<String>()
+        ctx.contentResolver.query(Telephony.Sms.Sent.CONTENT_URI, arrayOf(Telephony.Sms._ID, Telephony.Sms.DATE), null, null, null)?.use { c ->
+            while (c.moveToNext()) ids.add("${c.getLong(0)}_${c.getLong(1)}")
+        }
+        return ids
     }
 
     override fun allMessageIds(): Set<String> {

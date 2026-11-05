@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -147,6 +148,7 @@ fun PairingPanel(vm: CloudViewModel, why: String) {
 
 private val SMS_PERMISSIONS = arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_PHONE_STATE, Manifest.permission.READ_PHONE_NUMBERS)
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 /** The Messages tab: sync state + a utility inbox (sender, preview, time, line chips, one-tap OTP copy). Behaviour of the sync controls is unchanged. */
 @Composable
 fun SmsScreen(vm: CloudViewModel) {
@@ -171,6 +173,10 @@ fun SmsScreen(vm: CloudViewModel) {
         canRead = granted(Manifest.permission.READ_SMS); canSeeSims = granted(Manifest.permission.READ_PHONE_STATE); resume++
         if (profile != null) vm.refreshLines() else if (problem != null) vm.refreshProfile()
     }
+    val syncSent by vm.syncSent.collectAsStateWithLifecycle()
+    val removalPending by vm.sentRemovalPending.collectAsStateWithLifecycle()
+    var confirmSentOn by remember { mutableStateOf(false) }
+    var confirmSentOff by remember { mutableStateOf(false) }
     var allow by remember { mutableStateOf(vm.prefs.allow.joinToString(", ")) }
     var deny by remember { mutableStateOf(vm.prefs.deny.joinToString(", ")) }
     var lineFilter by rememberSaveable { mutableIntStateOf(ALL_LINES) }
@@ -216,6 +222,10 @@ fun SmsScreen(vm: CloudViewModel) {
                         HaloGhostButton(HaloCopy.RETRY_SKIPPED, { vm.retrySkipped() }, Modifier.testTag("sms.retrySkipped"), enabled = !syncing, tint = HaloColors.Amber)
                     }
                 }
+                Spacer(Modifier.height(8.dp))
+                HaloToggleRow(HaloCopy.SENT_TITLE, syncSent, { on -> if (on) confirmSentOn = true else confirmSentOff = true },
+                    subtitle = if (syncSent) HaloCopy.SENT_ON else if (removalPending) HaloCopy.SENT_REMOVING else HaloCopy.SENT_OFF,
+                    info = HaloCopy.INFO_SENT_SYNC, switchTag = Modifier.testTag("sms.sent.toggle"), modifier = Modifier.testTag("sms.sent.row"))
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     HaloPrimaryButton(HaloCopy.SYNC_NOW, { vm.syncNow(reconcile = true) }, Modifier.testTag("sms.syncNow"), icon = Icons.Filled.Refresh, loading = syncing)
@@ -258,6 +268,21 @@ fun SmsScreen(vm: CloudViewModel) {
             }
         }
     }
+
+    if (confirmSentOn) AlertDialog(
+        onDismissRequest = { confirmSentOn = false }, containerColor = HaloColors.Surface,
+        title = { Text(HaloCopy.SENT_CONFIRM_ON_TITLE, color = HaloColors.Text) },
+        text = { Text("Your sent messages from the last ${vm.prefs.backfillDays} days will be uploaded, encrypted.", color = HaloColors.Text2) },
+        confirmButton = { HaloPrimaryButton("Turn on", { confirmSentOn = false; vm.enableSentSync() }, Modifier.testTag("sms.sent.confirmOn")) },
+        dismissButton = { HaloGhostButton("Cancel", { confirmSentOn = false }) },
+    )
+    if (confirmSentOff) AlertDialog(
+        onDismissRequest = { confirmSentOff = false }, containerColor = HaloColors.Surface,
+        title = { Text(HaloCopy.SENT_CONFIRM_OFF_TITLE, color = HaloColors.Text) },
+        text = { Text("Delete the sent messages already uploaded? They will disappear from your Mac. Messages on this phone are not touched.", color = HaloColors.Text2) },
+        confirmButton = { HaloPrimaryButton("Stop and delete", { confirmSentOff = false; vm.disableSentSync(removeUploaded = true) }, Modifier.testTag("sms.sent.removeUploaded")) },
+        dismissButton = { HaloGhostButton("Stop, keep", { confirmSentOff = false; vm.disableSentSync(removeUploaded = false) }, Modifier.testTag("sms.sent.keepUploaded")) },
+    )
 }
 
 private const val ALL_LINES = Int.MIN_VALUE
