@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Email
@@ -24,8 +25,8 @@ import androidx.compose.ui.unit.dp
  * (truncation, contrast, font scale) while `@Preview` tooling is not available offline.
  */
 @Composable
-fun HaloDesignGallery() {
-    HaloScreen("Design", subtitle = "Halo components") {
+fun HaloDesignGallery(extra: @Composable () -> Unit = {}) {
+    HaloScreen("Design", subtitle = "Halo components", modifier = Modifier.statusBarsPadding()) {
         HaloSectionHeader("Ring + tiles")
         HaloCard(accentTop = HaloColors.Green) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -56,6 +57,7 @@ fun HaloDesignGallery() {
         }
         HaloBanner("Notifications are hidden", info = HaloInfo("Why", "Halo must show one while it listens."), actionLabel = "Open settings", onAction = {})
         HaloCard { HaloEmptyState(Icons.Filled.Email, "No messages yet", subtitle = "Turn on sync to see them here.", actionLabel = "Turn on sync", onAction = {}) }
+        extra()
         Spacer(Modifier.height(8.dp))
     }
 }

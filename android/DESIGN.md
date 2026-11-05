@@ -48,3 +48,17 @@ Every component has a `@Preview` (a local stand-in annotation — `ui-tooling-pr
 - DO let key numbers wrap (`HaloMetricTile` allows two lines) rather than truncate; check at font scale 1.3.
 - DON'T use `Color(...)` literals in screens; DON'T add a light theme; DON'T use alpha-faded gradients to mean "disabled".
 - DON'T show colour alone for state (colour-blind users): pair with text/icon.
+
+## Navigation map (<= 5 destinations)
+Bottom bar: **Home · Messages · Clipboard · Share · Settings** (`HaloDestination`, `HomeScreen.kt`). Test tags kept: `tab.home`, `tab.sms` (Messages), `tab.clipboard`, `tab.share`, `tab.settings`. `tab.inbox` is gone.
+
+| Was | Now |
+|---|---|
+| Share tab | **Share** — device grid, Choose files, transfer ring, "Add by address" (collapsed) |
+| Files tab (received inbox) | **Share** -> Received section (also Home -> More -> Received files) |
+| SMS tab | **Messages** — sync card, line chips, inbox with OTP Copy chips, SIM lines, sender filters |
+| Clipboard tab | **Clipboard** — Send current clipboard, typed colour cards, settings card |
+| Settings | **Settings** — grouped cards; long copy behind (i) sheets |
+| (new) | **Home** — cloud ring, 2x2 tiles, quick actions, recent activity, More |
+
+**Adding a feature that does not earn a tab** (Tools hub, Spend, Similar Photos, ...): add a `MoreEntry(title, subtitle, icon, tag, onClick)` to the list passed as `extraMore` to `HomeScreen` (or append in `HomeScreen.more`), and, if it deserves one, a quick action in `HomeScreen`'s Quick actions row (`QuickAction(...)`; up to 4 fit equal-width, more needs the row switched back to horizontal scroll). Full-screen destinations reached from there are plain composables swapped in `HaloApp` (add an enum case to `HaloDestination` only if it is a bottom-bar tab — keep the bar at 5).

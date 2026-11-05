@@ -3,6 +3,8 @@ package app.halo.mobile.design
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -157,16 +159,19 @@ fun HaloBanner(
     }
 }
 
-/** A settings row: title, one-line subtitle, optional (i), switch. The whole row toggles. */
+/**
+ * A settings row: title, one-line subtitle, optional (i), switch. The label column is the toggle for TalkBack ("title, subtitle,
+ * switch, on" in one node); the visual switch is hidden from accessibility so it isn't announced twice, but stays tappable.
+ */
 @Composable
 fun HaloToggleRow(title: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier, subtitle: String? = null, info: HaloInfo? = null, enabled: Boolean = true, switchTag: Modifier = Modifier) {
     Row(modifier.fillMaxWidth().defaultMinSize(minHeight = HaloSpacing.MinTouch), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f).toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)) {
             Text(title, color = HaloColors.Text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
             if (subtitle != null) Text(subtitle, color = HaloColors.Text2, fontSize = 12.sp)
         }
         if (info != null) HaloInfoButton(info)
-        HaloSwitch(checked, onCheckedChange, switchTag, enabled)
+        HaloSwitch(checked, onCheckedChange, switchTag.semantics { hideFromAccessibility() }, enabled)
     }
 }
 

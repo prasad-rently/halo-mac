@@ -157,7 +157,7 @@ fun HaloSparkline(values: List<Float>, modifier: Modifier = Modifier, color: Col
         values.forEachIndexed { i, v ->
             val h = (v / max).coerceIn(0.06f, 1f) * size.height
             drawRoundRect(color.copy(alpha = if (i == values.lastIndex) 1f else 0.45f), Offset(i * (w + gap), size.height - h), Size(w, h),
-                androidx.compose.ui.geometry.CornerRadius(w / 3, w / 3))
+                androidx.compose.ui.geometry.CornerRadius(3.dp.toPx(), 3.dp.toPx()))
         }
     }
 }

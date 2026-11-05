@@ -367,12 +367,24 @@ fun BackgroundReceiveCard(vm: AppViewModel) {
         }
         if (refusal != null) {
             Spacer(Modifier.height(10.dp))
-            HaloBanner("Background receiving is off: Android is hiding Halo's notifications, and Halo must show one while it listens so you can see it is on and stop it. Turn notifications on for Halo, then switch this on again.",
+            HaloBanner("Background receiving is off: Android is hiding Halo's notifications.",
                 info = HaloCopy.INFO_NOTIFICATION_GATE, textModifier = Modifier.testTag("settings.background.refused"), actionLabel = "Open notification settings",
                 onAction = {
                     ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
                 }, actionTag = Modifier.testTag("settings.background.openSettings"))
         }
         if (paused) { Spacer(Modifier.height(10.dp)); HaloBanner("Android paused background receiving (it limits this kind of service to a few hours a day). Switch it off and on to resume.", textModifier = Modifier.testTag("settings.background.paused")) }
+    }
+}
+
+/** Debug gallery only: two nearby-device tiles (one chosen) so the Share grid can be checked without a second device on the network. */
+@Composable
+internal fun DeviceTilesSample() {
+    val a = Peer(app.halo.share.DeviceInfo(alias = "MacBook Pro", deviceModel = "MacBookPro18,3", deviceType = "desktop", fingerprint = "aaaa"), "192.168.1.20")
+    val b = Peer(app.halo.share.DeviceInfo(alias = "Pixel 9 with a very long device name", deviceModel = "Pixel 9", deviceType = "mobile", fingerprint = "bbbb"), "192.168.1.31")
+    HaloSectionHeader(HaloCopy.NEARBY)
+    Row(Modifier.height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        DeviceTile(a, true, Modifier.weight(1f).fillMaxHeight()) {}
+        DeviceTile(b, false, Modifier.weight(1f).fillMaxHeight()) {}
     }
 }
