@@ -39,6 +39,7 @@ kotlin { jvmToolchain(17) }
 dependencies {
     implementation(project(":haloshare"))
     implementation(project(":halocloud"))
+    implementation(project(":halotools"))
 
     implementation("androidx.core:core-ktx:1.17.0")
     // Background SMS sync: survives process death, honours the network constraint, backs off on failure (F-044 D8).
@@ -46,6 +47,8 @@ dependencies {
     // QR pairing without Google Play Services (the phone must pair on a de-Googled device too). Brings its own
     // camera-permission request; the pairing code can also be pasted, so the camera is never required.
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    // The same zxing core the scanner already pulls in (3.4.1), declared directly because the Tools hub also *generates* QR codes.
+    implementation("com.google.zxing:core:3.4.1")
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")

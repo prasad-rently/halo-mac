@@ -56,7 +56,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.halo.cloud.PairingConfirmation
+import androidx.lifecycle.viewmodel.compose.viewModel
 import app.halo.mobile.cloud.ClipItem
+import app.halo.mobile.tools.ToolsEntryCard
+import app.halo.mobile.tools.ToolsViewModel
 import app.halo.mobile.cloud.CloudViewModel
 import app.halo.mobile.cloud.LineUi
 import app.halo.mobile.cloud.LocalInbox
@@ -334,6 +337,7 @@ fun ClipboardScreen(vm: CloudViewModel) {
             else PairingPanel(vm, "Pair this phone with your Mac to share your clipboard between them. Copies are encrypted before they leave.")
             return@HaloScreen
         }
+        val tools: ToolsViewModel = viewModel()
         HaloPrimaryButton(HaloCopy.SEND_CURRENT, vm::sendClipboardNow, Modifier.fillMaxWidth().testTag("clip.sendNow"), icon = Icons.Filled.Send, enabled = enabled)
         if (status.isNotBlank()) Text(status, color = HaloColors.Text2, fontSize = 12.sp, modifier = Modifier.testTag("clip.status"))
         notice?.let { Text(it, color = HaloColors.Text2, fontSize = 12.sp, modifier = Modifier.testTag("clip.notice")) }
@@ -358,7 +362,8 @@ fun ClipboardScreen(vm: CloudViewModel) {
         historyWarning?.let { HaloBanner(it, textModifier = Modifier.testTag("clip.storageWarning")) }
         if (historyKeyLost) HaloGhostButton("Reset clipboard history", vm::resetHistory, Modifier.testTag("clip.resetHistory"), tint = HaloColors.Amber)
         if (history.isEmpty()) HaloCard { HaloEmptyState(Icons.Filled.Send, HaloCopy.NOTHING_SYNCED, subtitle = HaloCopy.NOTHING_SYNCED_SUB) }
-        history.take(50).forEach { ClipCard(it, onCopy = { vm.copy(it) }, onSend = { vm.sendClipText(it.text) }) }
+        ToolsEntryCard(tools)
+        history.take(50).forEach { ClipCard(it, onCopy = { vm.copy(it) }, onSend = { vm.sendClipText(it.text) }, onTransform = { tools.transformText(it.text) }) }
     }
     if (confirmPurge) androidx.compose.material3.AlertDialog(
         onDismissRequest = { confirmPurge = false }, containerColor = HaloColors.Surface,
@@ -371,7 +376,7 @@ fun ClipboardScreen(vm: CloudViewModel) {
 
 /** A typed clipboard card: accent bar + badge by kind (link cyan, code purple, text accent), copy and send-to-Mac as icon buttons. */
 @Composable
-private fun ClipCard(item: ClipItem, onCopy: () -> Unit, onSend: () -> Unit) {
+private fun ClipCard(item: ClipItem, onCopy: () -> Unit, onSend: () -> Unit, onTransform: () -> Unit) {
     val kind = remember(item.id) { ClipKind.of(item.kind, item.text) }
     val tint = when (kind) { ClipKind.URL -> HaloColors.Cyan; ClipKind.CODE -> HaloColors.Purple; ClipKind.TEXT -> HaloColors.Accent }
     HaloCard(Modifier.testTag("clip.item"), accentTop = tint) {
@@ -383,6 +388,7 @@ private fun ClipCard(item: ClipItem, onCopy: () -> Unit, onSend: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         Text(item.text, color = if (kind == ClipKind.URL) HaloColors.Cyan else HaloColors.Text, style = if (kind == ClipKind.CODE) HaloType.Mono else HaloType.Body, maxLines = 4, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            HaloGhostButton("Transform…", onTransform, Modifier.testTag("clip.transform"), tint = tint)
             HaloIconButton(Icons.Filled.Send, "Send to Mac", onSend, tint = tint)
             HaloIconButton(HaloIcons.Copy, "Copy", onCopy, tint = tint, filled = true)
         }
