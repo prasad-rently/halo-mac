@@ -179,6 +179,14 @@ final class SMSSyncClient: ObservableObject {
                     Task { @MainActor in self?.mergeMessage(deviceId: deviceId, msgId: msgId, value: value) }
                 }
                 observers.append((path: msgsPath, handle: msgsHandle))
+
+                // The user's own sent messages, if the phone has opted in to syncing them. A sibling node of
+                // `messages` on purpose: a Mac that predates this never observes it. Absent for most users.
+                let sentPath = "sms/\(uid)/\(deviceId)/sent"
+                let sentHandle = try await rtdb.observeChildAdded(at: sentPath) { [weak self] msgId, value in
+                    Task { @MainActor in self?.mergeMessage(deviceId: deviceId, msgId: msgId, value: value, node: .sent) }
+                }
+                observers.append((path: sentPath, handle: sentHandle))
             } catch {
                 state = .error(error.localizedDescription)
             }
@@ -268,11 +276,14 @@ final class SMSSyncClient: ObservableObject {
     func wipeLine(_ line: SMSLine) async {
         guard case let .connected(uid) = state else { return }
         do {
-            let msgsRaw = (try await rtdb.getValue(at: "sms/\(uid)/\(line.deviceId)/messages")) as? [String: Any] ?? [:]
-            for (rawId, mv) in msgsRaw {
-                let m = mv as? [String: Any] ?? [:]
-                if (m["subscriptionId"] as? Int ?? 0) == line.subscriptionId {
-                    try await rtdb.removeValue(at: "sms/\(uid)/\(line.deviceId)/messages/\(rawId)")
+            // Both nodes: a line's wipe must take its sent messages with it.
+            for node in ["messages", "sent"] {
+                let raw = (try await rtdb.getValue(at: "sms/\(uid)/\(line.deviceId)/\(node)")) as? [String: Any] ?? [:]
+                for (rawId, mv) in raw {
+                    let m = mv as? [String: Any] ?? [:]
+                    if (m["subscriptionId"] as? Int ?? 0) == line.subscriptionId {
+                        try await rtdb.removeValue(at: "sms/\(uid)/\(line.deviceId)/\(node)/\(rawId)")
+                    }
                 }
             }
             try await rtdb.removeValue(at: "sms/\(uid)/\(line.deviceId)/lines/\(line.subscriptionId)")
@@ -328,6 +339,9 @@ final class SMSSyncClient: ObservableObject {
                 if let messagesDict = dict["messages"] as? [String: Any] {
                     for (msgId, mv) in messagesDict { mergeMessage(deviceId: deviceId, msgId: msgId, value: mv) }
                 }
+                if let sentDict = dict["sent"] as? [String: Any] {
+                    for (msgId, mv) in sentDict { mergeMessage(deviceId: deviceId, msgId: msgId, value: mv, node: .sent) }
+                }
             }
         } catch {
             state = .error(error.localizedDescription)
@@ -349,19 +363,28 @@ final class SMSSyncClient: ObservableObject {
         publishLines()
     }
 
-    private func mergeMessage(deviceId: String, msgId: String, value: Any?) {
-        guard let crypto, let message = SMSWire.message(deviceId: deviceId, msgId: msgId, value: value, crypto: crypto)
+    /// Upsert one decoded message. Internal (not private) so the merge path can be driven with wire-format values in tests.
+    func mergeMessage(deviceId: String, msgId: String, value: Any?, node: SMSNodeKind = .messages) {
+        guard let crypto, let message = SMSWire.message(deviceId: deviceId, msgId: msgId, value: value, crypto: crypto, node: node)
         else { return }
         let isNew = messagesById[message.id] == nil
         messagesById[message.id] = message
         publishThreads()
 
-        // D30 — notify only for genuinely-new messages that arrived *after* connect
-        // (skip the historical backfill `child_added` re-delivers on attach).
-        if isNew, message.date >= connectedAt, notificationsEnabled {
+        // D30 — notify only for genuinely-new RECEIVED messages that arrived *after* connect
+        // (skip the historical backfill `child_added` re-delivers on attach). A message the user sent is
+        // never a notification: they know — they just wrote it.
+        if Self.shouldNotify(message: message, isNew: isNew, connectedAt: connectedAt, notificationsEnabled: notificationsEnabled) {
             let note = Self.newMessageNotification(sender: message.contactNumber)
             AlertManager.fireExternal(kindRaw: "sms_new", title: note.title, body: note.body)
         }
+    }
+
+    /// The whole decision for a D30 new-SMS notification, as one pure function so it can be tested: only a
+    /// genuinely-new RECEIVED message that arrived after connect. A message the user sent is never a
+    /// notification (and never "unread" — see `SMSThread.unreadCount`).
+    nonisolated static func shouldNotify(message: SMSMessage, isNew: Bool, connectedAt: Date, notificationsEnabled: Bool) -> Bool {
+        isNew && message.direction == .received && message.date >= connectedAt && notificationsEnabled
     }
 
     /// Test seam (H-21a): install the key a real `connect` would have derived, so the merge path can
@@ -463,6 +486,12 @@ final class SMSSyncClient: ObservableObject {
     }
 }
 
+/// Where under `sms/{uid}/{deviceId}/` a message node lives.
+enum SMSNodeKind: Sendable {
+    case messages
+    case sent
+}
+
 // MARK: - SMSWire  (H-20a)
 
 /// The desktop's reading of the nodes the phone writes — pure functions, no network and no
@@ -492,23 +521,44 @@ enum SMSWire {
                        syncEnabled: l["syncEnabled"] as? Bool ?? true)
     }
 
-    /// nil when the row cannot be decrypted (wrong key, or a half-written node) — it is skipped, not shown blank.
-    static func message(deviceId: String, msgId: String, value: Any?, crypto: CryptoService) -> SMSMessage? {
+    /// Which node a message was read from. `sent` is the phone's opt-in "Also sync messages I send".
+    /// nil when the row cannot be decrypted (wrong key, or a half-written node) or is not a message this
+    /// console shows — it is skipped, not shown blank and never shown as something else.
+    ///
+    /// `type` is the provider's message type: 1 = received, 2 = sent. A `messages` row without one is a
+    /// received message (every phone before sent-sync wrote exactly that). A `messages` row of any other type
+    /// (draft, outbox, failed, queued) is NOT a received message and must not be rendered as one. A row under
+    /// `sent` is a sent message; if it claims another type it is rejected.
+    static func message(deviceId: String, msgId: String, value: Any?, crypto: CryptoService,
+                        node: SMSNodeKind = .messages) -> SMSMessage? {
         let m = value as? [String: Any] ?? [:]
+        // Absent = an older phone (received). Present but not a number is malformed, and is rejected rather than guessed at.
+        let type: Int? = m["type"] == nil ? nil : ((m["type"] as? NSNumber)?.intValue ?? -1)
+        let direction: SMSDirection
+        switch (node, type) {
+        case (.messages, nil), (.messages, 1): direction = .received
+        case (.messages, 2), (.sent, nil), (.sent, 2): direction = .sent
+        default: return nil
+        }
         guard let addressEnc = m["addressEnc"] as? String,
               let bodyEnc = m["bodyEnc"] as? String,
               let address = try? crypto.decrypt(addressEnc),
               let body = try? crypto.decrypt(bodyEnc) else { return nil }
         let subId = m["subscriptionId"] as? Int ?? 0
         let dateMs = (m["date"] as? NSNumber)?.doubleValue ?? 0
+        let sent = direction == .sent
         return SMSMessage(
-            id: "\(deviceId)/\(msgId)",   // raw keys can repeat across devices
+            // raw keys can repeat across devices; a sent row never shares an id with a received one
+            id: sent ? "\(deviceId)/sent/\(msgId)" : "\(deviceId)/\(msgId)",
             lineId: "\(deviceId)-\(subId)",
             contactNumber: address,
             body: body,
             date: Date(timeIntervalSince1970: dateMs / 1000),
-            category: SmsClassifier.classify(sender: address, body: body),
-            read: (m["read"] as? Bool) ?? true)
+            // A sent message is not classified: the classifier reads a sender's alert format, and the user's own
+            // words about money ("paid you Rs 500") would otherwise label it transactional.
+            category: sent ? .uncategorized : SmsClassifier.classify(sender: address, body: body),
+            read: sent ? true : ((m["read"] as? Bool) ?? true),
+            direction: direction)
     }
 
     private static func decryptOptional(_ value: Any?, _ crypto: CryptoService) -> String? {

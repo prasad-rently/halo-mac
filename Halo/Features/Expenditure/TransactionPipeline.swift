@@ -19,6 +19,10 @@ enum TransactionPipeline {
         var unreadable = 0
 
         for m in messages {
+            // A message the user SENT is never a transaction source — not even force-included (D9): that
+            // override is for a received alert the classifier missed, and a sent id can be reached by nothing.
+            // Checked first so no override, category or future parser change can route a sent text into the ledger.
+            guard m.direction == .received else { continue }
             if overrides.excludedIds.contains(m.id) { continue }          // force-exclude (D9)
             let forced = overrides.includedIds.contains(m.id)             // force-include (D9)
             guard m.category == .transactional || forced else { continue } // keep transactional only

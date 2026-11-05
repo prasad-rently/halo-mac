@@ -36,6 +36,16 @@ must read back from each (`expect`). Both sides test against the one file:
 * `syncEnabledPresentInNode: false` marks a line the phone wrote before the desktop ever
   toggled it (no `syncEnabled` field in the node; the desktop reads that as `true`).
 
+## Sent messages (`sent`)
+
+The phone's opt-in "Also sync messages I send" writes the user's own outgoing SMS to
+`sms/{uid}/{deviceId}/sent/{smsId}_{dateMs}` — a **sibling of `messages`**, deliberately not a `type: 2` row inside it. A desktop
+build that predates this observes `messages` only and never looks at `sent`, so an old Mac cannot show (or notify for) the user's own
+text as something they received. The node shape is the message node's with `type` 2 and `addressEnc` = the **recipient**; its
+`threadKey` equals the one an inbox row from the same contact on the same line gets. The `sent` entry was produced by the real Kotlin
+writer (`SmsWire.sentMessageNode`); `WireContractTests.sentMessages` decodes it with `SMSWire.message(..., node: .sent)`. No
+Realtime Database rule change: `sms/$uid` already grants the owner read/write below it, and the desktop never queries `sent` by `date`.
+
 ## How it was captured / how to regenerate
 
 Run from `android/` (JVM only, no emulator, no network, no Firebase):
