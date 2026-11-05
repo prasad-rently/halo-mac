@@ -60,13 +60,13 @@ fun HaloPrimaryButton(
     val active = enabled && !loading
     Row(
         modifier.defaultMinSize(minHeight = HaloSpacing.MinTouch).clip(HaloShapes.Button)
-            .background(if (active) HaloColors.AccentGradient else androidx.compose.ui.graphics.SolidColor(HaloColors.Surface))
-            .let { if (active) it else it.border(1.dp, HaloColors.Border, HaloShapes.Button) }
+            .background(if (enabled) HaloColors.AccentGradient else androidx.compose.ui.graphics.SolidColor(HaloColors.Surface))
+            .let { if (enabled) it else it.border(1.dp, HaloColors.Border, HaloShapes.Button) }
             .clickable(enabled = active, role = Role.Button) { haptic.performHapticFeedback(HapticFeedbackType.ContextClick); onClick() }
             .padding(horizontal = 18.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
     ) {
-        val fg = if (active) Color.White else HaloColors.Text3
+        val fg = if (enabled) Color.White else HaloColors.Text3
         if (loading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
         else if (icon != null) Icon(icon, null, Modifier.size(18.dp), tint = fg)
         if (loading || icon != null) Spacer(Modifier.width(8.dp))

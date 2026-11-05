@@ -16,9 +16,9 @@ object LocalInbox {
         ctx.contentResolver.query(Telephony.Sms.Inbox.CONTENT_URI,
             arrayOf(Telephony.Sms._ID, Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE, Telephony.Sms.READ, "sub_id"),
             countOnlySinceMs?.let { "${Telephony.Sms.DATE} >= ?" }, countOnlySinceMs?.let { arrayOf(it.toString()) },
-            "${Telephony.Sms.DATE} DESC LIMIT $limit")?.use { c ->
+            "${Telephony.Sms.DATE} DESC")?.use { c ->
             val sub = c.getColumnIndex("sub_id")
-            while (c.moveToNext()) out.add(LocalMessage(
+            while (out.size < limit && c.moveToNext()) out.add(LocalMessage(
                 c.getLong(0), c.getString(1).orEmpty(), c.getString(2).orEmpty(), c.getLong(3), c.getInt(4) == 1, if (sub >= 0) c.getInt(sub) else -1))
         }
         out

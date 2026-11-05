@@ -200,7 +200,7 @@ fun SmsScreen(vm: CloudViewModel) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     HaloStatusBadge(if (prefs.lastSyncError != null) "Error" else if (last == 0L) "Not yet" else "Synced", if (prefs.lastSyncError != null) HaloColors.Red else if (last == 0L) HaloColors.Text3 else HaloColors.Green, icon = if (prefs.lastSyncError == null && last != 0L) Icons.Filled.Check else null)
                     Spacer(Modifier.width(8.dp))
-                    Text(if (last == 0L) "Not yet" else DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(last)) + " · " + prefs.lastSyncSummary,
+                    Text(if (last == 0L) "Waiting for the first sync" else DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(last)) + " · " + prefs.lastSyncSummary,
                         color = HaloColors.Text2, fontSize = 12.sp, modifier = Modifier.weight(1f).testTag("sms.last"))
                 }
                 prefs.lastSyncError?.let { Spacer(Modifier.height(4.dp)); Text(it, color = HaloColors.Red, fontSize = 12.sp, modifier = Modifier.testTag("sms.error")) }

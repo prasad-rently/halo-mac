@@ -146,7 +146,7 @@ fun HomeScreen(vm: AppViewModel, cloud: CloudViewModel, go: (HaloDestination) ->
 
         // Quick actions
         HaloSectionHeader(HaloCopy.QUICK_ACTIONS)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             QuickAction(HaloCopy.QA_SEND_CLIPBOARD, Icons.Filled.Send, "home.sendClipboard") { if (clipOn) cloud.sendClipboardNow() else go(HaloDestination.Clipboard) }
             QuickAction(HaloCopy.QA_SEND_FILE, Icons.Filled.Share, "home.sendFile") { go(HaloDestination.Share) }
             QuickAction(HaloCopy.QA_SCAN, Icons.Filled.Search, "home.scan") { vm.scan(); go(HaloDestination.Share) }
@@ -176,9 +176,10 @@ private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
 private fun Color.lighten(): Color = Color(red + (1 - red) * 0.25f, green + (1 - green) * 0.25f, blue + (1 - blue) * 0.25f, alpha)
 
 @Composable
-private fun QuickAction(label: String, icon: ImageVector, tag: String, onClick: () -> Unit) {
+private fun androidx.compose.foundation.layout.RowScope.QuickAction(label: String, icon: ImageVector, tag: String, onClick: () -> Unit) {
+    val modifier = Modifier.weight(1f)
     Column(
-        Modifier.width(92.dp).clip(HaloShapes.Tile).clickable(role = Role.Button, onClick = onClick).padding(vertical = 6.dp).testTag(tag),
+        modifier.clip(HaloShapes.Tile).clickable(role = Role.Button, onClick = onClick).padding(vertical = 6.dp).testTag(tag),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(Modifier.size(56.dp).clip(HaloShapes.Tile).background(HaloColors.AccentGradient), contentAlignment = Alignment.Center) { Icon(icon, null, tint = Color.White, modifier = Modifier.size(26.dp)) }
