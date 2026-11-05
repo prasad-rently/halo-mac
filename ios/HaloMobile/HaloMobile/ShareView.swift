@@ -1,10 +1,12 @@
 import SwiftUI
+import PhotosUI
 import UniformTypeIdentifiers
 import HaloShareKit
 
 struct ShareView: View {
     @EnvironmentObject var model: AppModel
     @State private var picking = false
+    @State private var photoSelection: [PhotosPickerItem] = []
     @FocusState private var addressFocused: Bool
 
     var body: some View {
@@ -12,6 +14,8 @@ struct ShareView: View {
             ScrollView {
                 VStack(spacing: 18) {
                     thisDevice
+                    localNetworkStatus
+                    outboxCard
                     nearby
                     addByAddress
                     transferCard
@@ -30,8 +34,14 @@ struct ShareView: View {
             }
             .navigationTitle("Halo")
             .navigationBarTitleDisplayMode(.large)
+            // Picking only lines files up; the send happens from the sheet, after a device is chosen.
             .fileImporter(isPresented: $picking, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
-                if case .success(let urls) = result, !urls.isEmpty { model.send(urls) }
+                if case .success(let urls) = result { model.queue(pickedFiles: urls) }
+            }
+            .onChange(of: photoSelection) { items in
+                guard !items.isEmpty else { return }
+                model.queue(photos: items)
+                photoSelection = []
             }
         }
     }
@@ -96,7 +106,7 @@ struct ShareView: View {
                 }
             } else {
                 ForEach(model.peers) { peer in
-                    Button { model.selectedPeerID = peer.id } label: { peerRow(peer) }
+                    Button { model.selectedPeerID = peer.id } label: { PeerRow(peer: peer, selected: model.selectedPeerID == peer.id) }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("share.peer.\(peer.alias)")
                 }
@@ -107,33 +117,6 @@ struct ShareView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("share.notice")
             }
-        }
-    }
-
-    private func peerRow(_ peer: Peer) -> some View {
-        let selected = model.selectedPeerID == peer.id
-        return HStack(spacing: 12) {
-            Image(systemName: icon(for: peer)).foregroundColor(selected ? .haloAccent : .haloText2).frame(width: 26)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(peer.alias).font(.system(size: 15, weight: .medium)).foregroundColor(.haloText)
-                Text("\(peer.info.deviceModel ?? peer.info.deviceType ?? "device") · \(peer.host)")
-                    .font(.system(size: 11)).foregroundColor(.haloText3)
-            }
-            Spacer()
-            if selected { Image(systemName: "checkmark.circle.fill").foregroundColor(.haloAccent) }
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 12).fill(selected ? Color.haloAccent.opacity(0.12) : Color.haloSurface))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(selected ? Color.haloAccent.opacity(0.5) : Color.haloBorder, lineWidth: 1))
-    }
-
-    private func icon(for peer: Peer) -> String {
-        switch peer.info.deviceType {
-        case "desktop": return "desktopcomputer"
-        case "mobile": return "iphone"
-        case "web": return "globe"
-        case "headless", "server": return "server.rack"
-        default: return "questionmark.circle"
         }
     }
 
@@ -157,56 +140,78 @@ struct ShareView: View {
                     .disabled(model.manualAddress.trimmingCharacters(in: .whitespaces).isEmpty)
                     .accessibilityIdentifier("share.addAddress")
             }
-            Text("For networks that block discovery. Use the address shown on the other device.")
-                .font(.system(size: 11)).foregroundColor(.haloText3).frame(maxWidth: .infinity, alignment: .leading)
+            if !model.recentAddresses.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(model.recentAddresses, id: \.self) { address in
+                            Button { model.addManualPeer(address: address) } label: {
+                                Text(address).font(.system(size: 12, design: .monospaced))
+                                    .padding(.horizontal, 10).padding(.vertical, 6)
+                                    .background(Capsule().fill(Color.haloSurface2))
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu { Button("Forget", role: .destructive) { model.forgetAddress(address) } }
+                            .accessibilityIdentifier("share.recent.\(address)")
+                        }
+                    }
+                }
+            }
         }
     }
 
-    // MARK: Send / transfer
+    // MARK: Local Network (MR-SH-4 / MR-DI-5)
+
+    @ViewBuilder private var localNetworkStatus: some View {
+        if !model.localNetworkExplained { LocalNetworkExplainer() }
+        else if model.localNetwork == .denied { LocalNetworkDeniedCard() }
+    }
+
+    // MARK: Outbox
+
+    @ViewBuilder private var outboxCard: some View {
+        if let outbox = model.outbox {
+            Button { model.showSendSheet = true } label: {
+                HaloCard {
+                    HStack(spacing: 10) {
+                        Image(systemName: "tray.full").foregroundColor(.haloAccent)
+                        Text("\(outbox.files.count) · \(Bytes.string(outbox.totalBytes))").font(.system(size: 14, weight: .semibold)).foregroundColor(.haloText)
+                        HaloChip(text: ShareStrings.notSentYet, tint: .haloAmber)
+                        if model.otherStagedBatchCount > 0 { HaloChip(text: "+\(model.otherStagedBatchCount)", tint: .haloText2) }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundColor(.haloText3)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("share.reviewOutbox")
+        }
+    }
+
+    // MARK: Pick
 
     private var transferCard: some View {
         VStack(spacing: 8) {
             SectionLabel("Send")
             HaloCard {
                 VStack(alignment: .leading, spacing: 12) {
-                    switch model.transfer {
-                    case .idle:
-                        Text(model.selectedPeer.map { "To \($0.alias)" } ?? "Choose a device above")
-                            .font(.system(size: 13)).foregroundColor(.haloText2)
-                    case .sending(let name, let sent, let total, let overallSent, let overallTotal):
-                        Text("Sending \(name)").font(.system(size: 13, weight: .medium)).foregroundColor(.haloText)
-                        ProgressView(value: Double(overallSent), total: Double(max(overallTotal, 1)))
-                            .tint(.haloAccent)
-                        Text("\(Bytes.string(sent)) of \(Bytes.string(total))")
-                            .font(.system(size: 11)).foregroundColor(.haloText3)
-                    case .finished(let message):
-                        Label(message, systemImage: "checkmark.circle").font(.system(size: 13)).foregroundColor(.haloGreen)
-                            .accessibilityIdentifier("share.result")
-                    case .failed(let why):
-                        Label(why, systemImage: "exclamationmark.triangle").font(.system(size: 13)).foregroundColor(.haloRed)
-                            .accessibilityIdentifier("share.result")
-                    }
-
                     HStack(spacing: 10) {
-                        if model.transfer.isBusy {
-                            Button(role: .destructive) { model.cancelSend() } label: { Label("Cancel", systemImage: "xmark") }
-                                .buttonStyle(.bordered)
-                                .accessibilityIdentifier("share.cancel")
-                        } else {
-                            Button { model.dismissTransferResult(); picking = true } label: {
-                                Label("Choose files…", systemImage: "doc.badge.plus")
-                            }
+                        Button { picking = true } label: { Label("Files", systemImage: "doc.badge.plus") }
                             .buttonStyle(.borderedProminent)
-                            .disabled(model.selectedPeer == nil)
+                            .disabled(model.transfer.isBusy)
                             .accessibilityIdentifier("share.chooseFiles")
 
-                            #if DEBUG
-                            Button { model.dismissTransferResult(); model.sendTestFile() } label: { Text("Send 5 MB test") }
-                                .buttonStyle(.bordered)
-                                .disabled(model.selectedPeer == nil)
-                                .accessibilityIdentifier("share.sendTest")
-                            #endif
+                        PhotosPicker(selection: $photoSelection, maxSelectionCount: 25, matching: .any(of: [.images, .videos])) {
+                            Label("Photos", systemImage: "photo.on.rectangle")
                         }
+                        .buttonStyle(.bordered)
+                        .disabled(model.transfer.isBusy)
+                        .accessibilityIdentifier("share.choosePhotos")
+
+                        #if DEBUG
+                        Button { model.queueTestFile() } label: { Text("5 MB test") }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("share.sendTest")
+                        #endif
                     }
                 }
             }

@@ -16,11 +16,26 @@ struct SettingsView: View {
                         .font(.system(size: 11)).foregroundColor(.haloText3)
                 }
 
-                Section("Receiving") {
+                Section("HaloShare") {
                     LabeledContent("Status") { Text(statusText).foregroundColor(.haloText2) }
-                    LabeledContent("Saved to") { Text("Halo → Received").foregroundColor(.haloText2) }
-                    Text("Nothing is saved until you accept. Files never overwrite each other.")
-                        .font(.system(size: 11)).foregroundColor(.haloText3)
+                    LabeledContent("Saved to") { Text("Files › Halo › Received").foregroundColor(.haloText2) }
+                    LabeledContent("Local Network") {
+                        Text(localNetworkText).foregroundColor(model.localNetwork == .denied ? .haloAmber : .haloText2)
+                    }
+                    .accessibilityIdentifier("settings.localNetwork")
+                    if model.localNetwork == .denied {
+                        Button("Open Settings") { model.openSystemSettings() }
+                    }
+                    LabeledContent("Share from other apps") {
+                        Text(model.staging == nil ? "Unavailable" : "On").foregroundColor(model.staging == nil ? .haloAmber : .haloText2)
+                    }
+                    // Honest limits (F-050 D8) behind an (i): iOS suspends apps; nothing pretends otherwise.
+                    HStack {
+                        HaloChip(text: ShareStrings.receivingChip, systemImage: "antenna.radiowaves.left.and.right", tint: .haloGreen)
+                            .accessibilityIdentifier("settings.receivingCopy")
+                        HaloInfoButton(title: ShareStrings.receivingInfoTitle, message: ShareStrings.receivingInfo + "\n\n" + ShareStrings.safetyInfo)
+                        Spacer()
+                    }
                 }
 
                 Section("About HaloShare") {
@@ -37,6 +52,15 @@ struct SettingsView: View {
             .navigationTitle("Settings")
             .onAppear { alias = model.identity.alias }
             .onDisappear { if alias != model.identity.alias { model.setAlias(alias) } }
+        }
+    }
+
+    private var localNetworkText: String {
+        if !model.localNetworkExplained { return "Not asked yet" }
+        switch model.localNetwork {
+        case .granted: return "Allowed"
+        case .denied: return "Off"
+        case .undetermined: return "Checking…"
         }
     }
 

@@ -21,6 +21,16 @@ targets:
     dependencies:
       - package: HaloShareKit
         product: HaloShareKit
+      - package: HaloShareKit
+        product: HaloShareStaging
+      # F-050 D7: the Share Extension is embedded in the app.
+      - target: HaloShareExtension
+    entitlements:
+      path: HaloMobile/HaloMobile.entitlements
+      properties:
+        # Hand-off from the Share Extension (staged items). Both targets must carry the same group.
+        com.apple.security.application-groups:
+          - group.com.halo.mobile
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.halo.mobile
@@ -45,11 +55,73 @@ targets:
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         # iOS shows this the first time the app touches the LAN (HTTP scan / receiving).
+        # Registers halomobile:// — the Share Extension's "Open Halo" button. The URL carries no data.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.halo.mobile
+            CFBundleURLSchemes:
+              - halomobile
+        # LocalNetworkPermission probes this (never advertised or used for discovery): the only way
+        # iOS lets an app learn whether Local Network access was denied. HaloShare discovery itself
+        # is an HTTP scan — iOS has no multicast without a restricted entitlement.
+        NSBonjourServices:
+          - _halosharecheck._tcp
         NSLocalNetworkUsageDescription: Halo uses your local network to find nearby devices and send or receive files with them. Nothing leaves your network.
         # HaloShare talks plain HTTP to peers on the LAN (requirements MD1). IP addresses are
         # exempt from ATS already; this makes the intent explicit.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+  HaloShareExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: HaloShareExtension
+    dependencies:
+      # Staging only. No HaloShareKit => no client, server or scanner is linked into the
+      # extension: it cannot touch the network.
+      - package: HaloShareKit
+        product: HaloShareStaging
+    entitlements:
+      path: HaloShareExtension/HaloShareExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.halo.mobile
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.halo.mobile.share
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: HaloShareExtension/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: YES
+    info:
+      path: HaloShareExtension/Info.plist
+      properties:
+        CFBundleDisplayName: HaloShare
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsFileWithMaxCount: 25
+              NSExtensionActivationSupportsImageWithMaxCount: 25
+              NSExtensionActivationSupportsMovieWithMaxCount: 25
+              NSExtensionActivationSupportsWebURLWithMaxCount: 25
+              NSExtensionActivationSupportsText: true
+  HaloMobileTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: HaloMobileTests
+    dependencies:
+      - target: HaloMobile
+      - package: HaloShareKit
+        product: HaloShareKit
+      - package: HaloShareKit
+        product: HaloShareStaging
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.halo.mobile.tests
 schemes:
   HaloMobile:
     build:
@@ -57,3 +129,6 @@ schemes:
         HaloMobile: all
     run:
       config: Debug
+    test:
+      targets:
+        - HaloMobileTests

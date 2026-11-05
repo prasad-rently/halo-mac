@@ -107,7 +107,12 @@ public enum SafeFileName {
 
     public static func relativePath(_ raw: String) -> String? {
         guard !raw.contains("\0") else { return nil }
-        let parts = raw.replacingOccurrences(of: "\\", with: "/")
+        // Control and format characters (U+202E right-to-left override, zero-width, BOM …) are not
+        // part of any honest name, and the consent sheet and Inbox display names verbatim: an RLO
+        // in the middle of "invoice-<RLO>gpj.exe" makes a row that reads as a .jpg.
+        let invisible = CharacterSet.controlCharacters.union(CharacterSet(charactersIn: "\u{2028}\u{2029}"))
+        let cleaned = String(String.UnicodeScalarView(raw.unicodeScalars.filter { !invisible.contains($0) }))
+        let parts = cleaned.replacingOccurrences(of: "\\", with: "/")
             .split(separator: "/", omittingEmptySubsequences: true)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty && $0 != "." && $0 != ".." }

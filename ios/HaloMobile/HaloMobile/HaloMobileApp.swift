@@ -12,15 +12,21 @@ struct HaloMobileApp: App {
                 .preferredColorScheme(.dark)
                 .tint(.haloAccent)
                 // iOS can't host a listener while suspended (requirements MR-OS-2): listen while
-                // the app is active, stop cleanly when it is not.
+                // the app is active. Leaving mid-transfer asks iOS for a short grace period first
+                // (D8); the model stops the listener once nothing is in flight.
                 .onChange(of: scenePhase) { phase in
                     switch phase {
-                    case .active: model.startServer()
-                    case .background: model.stopServer()
+                    case .active: model.didBecomeActive()
+                    case .background: model.didEnterBackground()
                     default: break
                     }
                 }
-                .onAppear { model.startServer() }
+                .onAppear { model.didBecomeActive() }
+                // halomobile://share (the Share Extension's "Open Halo"). The URL carries no data —
+                // the staged items are read from the App Group container, never from the URL.
+                .onOpenURL { url in
+                    if url.scheme == "halomobile", url.host == "share" { model.loadStagedShares() }
+                }
         }
     }
 }
@@ -42,6 +48,9 @@ struct RootView: View {
         .sheet(item: $model.pendingOffer) { pending in
             ConsentSheet(offer: pending.offer)
                 .interactiveDismissDisabled()      // declining must be an explicit act
+        }
+        .sheet(isPresented: $model.showSendSheet) {
+            SendSheet().environmentObject(model)
         }
     }
 }
