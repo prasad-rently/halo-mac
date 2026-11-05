@@ -16,10 +16,24 @@ struct SettingsView: View {
                         .font(.system(size: 11)).foregroundColor(.haloText3)
                 }
 
-                Section("Receiving") {
+                Section("HaloShare") {
                     LabeledContent("Status") { Text(statusText).foregroundColor(.haloText2) }
-                    LabeledContent("Saved to") { Text("Halo → Received").foregroundColor(.haloText2) }
-                    Text("Nothing is saved until you accept. Files never overwrite each other.")
+                    LabeledContent("Saved to") { Text("Files → On My iPhone → Halo → Received").foregroundColor(.haloText2).multilineTextAlignment(.trailing) }
+                    LabeledContent("Local Network") {
+                        Text(localNetworkText).foregroundColor(model.localNetwork == .denied ? .haloAmber : .haloText2)
+                    }
+                    .accessibilityIdentifier("settings.localNetwork")
+                    if model.localNetwork == .denied {
+                        Button("Open Settings to allow it") { model.openSystemSettings() }
+                    }
+                    LabeledContent("Share from other apps") {
+                        Text(model.staging == nil ? "Unavailable in this build" : "On").foregroundColor(model.staging == nil ? .haloAmber : .haloText2)
+                    }
+                    // Honest limits (F-050 D8). iOS suspends apps; nothing below pretends otherwise.
+                    Text("Receiving works while Halo is open. iOS doesn't let apps listen in the background, so keep Halo open to receive. If you leave Halo mid-transfer it gets a short moment to finish and notifies you if it couldn't.")
+                        .font(.system(size: 11)).foregroundColor(.haloText3)
+                        .accessibilityIdentifier("settings.receivingCopy")
+                    Text("Nothing is saved until you accept. Files never overwrite each other. Items shared from other apps wait in Halo until you choose a device and tap Send.")
                         .font(.system(size: 11)).foregroundColor(.haloText3)
                 }
 
@@ -37,6 +51,15 @@ struct SettingsView: View {
             .navigationTitle("Settings")
             .onAppear { alias = model.identity.alias }
             .onDisappear { if alias != model.identity.alias { model.setAlias(alias) } }
+        }
+    }
+
+    private var localNetworkText: String {
+        if !model.localNetworkExplained { return "Not asked yet" }
+        switch model.localNetwork {
+        case .granted: return "Allowed"
+        case .denied: return "Off — devices can't be found"
+        case .undetermined: return "Checking…"
         }
     }
 
