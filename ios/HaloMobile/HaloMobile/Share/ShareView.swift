@@ -19,14 +19,28 @@ struct ShareView: View {
                     thisDevice
                     noticeBanner
                     nearby
-                    sendCard
                     received
+                    #if DEBUG
+                    HaloSecondaryButton(HaloStrings.Share.sendTest, icon: "hammer") {
+                        model.dismissTransferResult(); model.sendTestFile()
+                    }
+                    .disabled(model.selectedPeer == nil || model.transfer.isBusy)
+                    .accessibilityIdentifier("share.sendTest")
+                    #endif
                 }
                 .padding(HaloLayout.screenPadding)
             }
             .haloScreen()
             .scrollDismissesKeyboard(.interactively)
+            // The primary action stays on screen: target + "Choose files" + transfer progress.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                sendCard
+                    .padding(.horizontal, HaloLayout.screenPadding).padding(.top, 8).padding(.bottom, 6)
+                    .background(LinearGradient(colors: [Color.haloBackground.opacity(0), Color.haloBackground.opacity(0.95)],
+                                               startPoint: .top, endPoint: .center))
+            }
             .navigationTitle(HaloStrings.Share.title)
+            .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(isPresented: $router.showInbox) { InboxView() }
             .fileImporter(isPresented: $picking, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
                 if case .success(let urls) = result, !urls.isEmpty { model.send(urls) }
@@ -36,7 +50,17 @@ struct ShareView: View {
                            summary: HaloStrings.Info.receivingSummary, points: ShareInfo.receiving)
             .haloInfoSheet(isPresented: $showDiscoveryInfo, title: HaloStrings.Info.discoveryTitle,
                            summary: HaloStrings.Info.discoverySummary, points: ShareInfo.discovery)
-            .onAppear { consumeScanRequest() }
+            .onAppear {
+                consumeScanRequest()
+                #if DEBUG
+                switch UserDefaults.standard.string(forKey: "debugSheet") {
+                case "add": showAddSheet = true
+                case "receiving": showReceivingInfo = true
+                case "discovery": showDiscoveryInfo = true
+                default: break
+                }
+                #endif
+            }
             .onChange(of: router.scanOnShare) { _ in consumeScanRequest() }
             .onChange(of: model.peers.count) { _ in
                 // A manually-added device landed: close the sheet.
@@ -84,9 +108,9 @@ struct ShareView: View {
 
     @ViewBuilder private var noticeBanner: some View {
         if let notice = model.notice {
-            HaloCard(accentTop: .haloAmber, padding: 12) {
+            HaloCard(padding: 12) {
                 HStack(spacing: 10) {
-                    Image(systemName: "exclamationmark.circle.fill").foregroundColor(.haloAmber).accessibilityHidden(true)
+                    Image(systemName: "info.circle.fill").foregroundColor(.haloAccent).accessibilityHidden(true)
                     Text(notice).font(HaloFont.body).foregroundColor(.haloText).frame(maxWidth: .infinity, alignment: .leading)
                     HaloIconButton(icon: "xmark", label: HaloStrings.Share.dismiss) { model.notice = nil }
                 }
@@ -106,28 +130,26 @@ struct ShareView: View {
 
     private var nearby: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                HaloSectionHeader(HaloStrings.Share.nearbyDevices, onInfo: { showDiscoveryInfo = true })
-                if model.isScanning {
-                    HaloSecondaryButton(HaloStrings.Share.stop, icon: "stop.fill", fullWidth: false) { model.stopScan() }
-                } else {
-                    HaloSecondaryButton(HaloStrings.Share.scan, icon: "arrow.clockwise", tint: .haloAccent, fullWidth: false) { model.scan() }
-                        .accessibilityIdentifier("share.scan")
-                }
-            }
+            HaloSectionHeader(HaloStrings.Share.nearbyDevices, onInfo: { showDiscoveryInfo = true })
 
-            HaloCard {
-                VStack(spacing: 6) {
-                    HaloRadar(isScanning: model.isScanning, peerIDs: model.peers.map(\.id))
-                        .frame(maxWidth: .infinity)
-                    Text(radarCaption).font(HaloFont.bodyMedium)
-                        .foregroundColor(model.peers.isEmpty && !model.isScanning ? .haloText2 : .haloText)
-                    if model.peers.isEmpty && !model.isScanning {
-                        Text(HaloStrings.Share.noDevicesHint).font(HaloFont.caption).foregroundColor(.haloText3)
-                            .multilineTextAlignment(.center)
+            HaloCard(padding: 12) {
+                HStack(spacing: 12) {
+                    HaloRadar(isScanning: model.isScanning, peerIDs: model.peers.map(\.id), size: 112)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(radarCaption).font(HaloFont.headline)
+                            .foregroundColor(model.peers.isEmpty && !model.isScanning ? .haloText2 : .haloText)
+                        if model.peers.isEmpty && !model.isScanning {
+                            Text(HaloStrings.Share.noDevicesHint).font(HaloFont.caption).foregroundColor(.haloText3)
+                        }
+                        if model.isScanning {
+                            HaloSecondaryButton(HaloStrings.Share.stop, icon: "stop.fill", fullWidth: false) { model.stopScan() }
+                        } else {
+                            HaloSecondaryButton(HaloStrings.Share.scan, icon: "arrow.clockwise", tint: .haloAccent, fullWidth: false) { model.scan() }
+                                .accessibilityIdentifier("share.scan")
+                        }
                     }
+                    Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity)
             }
 
             LazyVGrid(columns: columns, spacing: HaloLayout.cardSpacing) {
@@ -176,13 +198,6 @@ struct ShareView: View {
                     .disabled(model.selectedPeer == nil)
                     .accessibilityIdentifier("share.chooseFiles")
 
-                    #if DEBUG
-                    HaloSecondaryButton(HaloStrings.Share.sendTest, icon: "hammer") {
-                        model.dismissTransferResult(); model.sendTestFile()
-                    }
-                    .disabled(model.selectedPeer == nil)
-                    .accessibilityIdentifier("share.sendTest")
-                    #endif
                 }
             }
         }
@@ -304,7 +319,7 @@ struct DeviceTile: View {
                 }
             }
             .padding(12)
-            .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 100, alignment: .leading)
             .background(isSelected ? Color.haloAccent.opacity(0.12) : Color.haloSurface2)
             .clipShape(RoundedRectangle(cornerRadius: HaloLayout.cardRadius, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: HaloLayout.cardRadius, style: .continuous)
@@ -325,7 +340,7 @@ struct AddTile: View {
                 Text(HaloStrings.Share.addByAddress).font(HaloFont.caption.weight(.semibold)).foregroundColor(.haloText2)
                     .multilineTextAlignment(.center)
             }
-            .frame(maxWidth: .infinity, minHeight: 112)
+            .frame(maxWidth: .infinity, minHeight: 100)
             .overlay(RoundedRectangle(cornerRadius: HaloLayout.cardRadius, style: .continuous)
                 .strokeBorder(Color.haloBorder2, style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
             .contentShape(Rectangle())

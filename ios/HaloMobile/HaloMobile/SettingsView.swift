@@ -23,6 +23,7 @@ struct SettingsView: View {
             .haloScreen()
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle(HaloStrings.Settings.title)
+            .navigationBarTitleDisplayMode(.inline)
             .onAppear { alias = model.identity.alias }
             .onDisappear { if alias != model.identity.alias { model.setAlias(alias) } }
             .haloInfoSheet(isPresented: $showDeviceInfo, title: HaloStrings.Info.deviceTitle, points: [

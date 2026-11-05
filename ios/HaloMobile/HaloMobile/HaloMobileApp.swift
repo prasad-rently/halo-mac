@@ -26,7 +26,12 @@ struct HaloMobileApp: App {
                     default: break
                     }
                 }
-                .onAppear { model.startServer() }
+                .onAppear {
+                    model.startServer()
+                    #if DEBUG
+                    DebugLaunch.apply(model: model, router: router)
+                    #endif
+                }
         }
     }
 }
