@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -54,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -102,44 +104,68 @@ fun SimilarPhotosScreen(vm: PhotosViewModel = viewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val sysDialog by vm.systemDialog.collectAsStateWithLifecycle()
     var askedOnce by remember { mutableStateOf(false) }
+    var info by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { vm.onPermissionsChanged(grantedNow(ctx)) }
-
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         askedOnce = true
         vm.onPermissionsChanged(grantedNow(ctx))
     }
+    val askPermission = { permLauncher.launch(PhotoPermissions.toRequest(Build.VERSION.SDK_INT).toTypedArray()) }
     val trashLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { vm.systemDialogResult() }
     LaunchedEffect(sysDialog) {
         sysDialog?.let { trashLauncher.launch(IntentSenderRequest.Builder(it).build()); vm.systemDialogLaunched() }
     }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Text("Similar Photos", color = Halo.Text, fontSize = 30.sp, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() }.testTag("photos.title"))
-        Text("Finds photos that look alike — the same shot saved twice, a burst, a screenshot of a screenshot. Everything happens on this phone; no photo or hash ever leaves it.", color = Halo.Text3, fontSize = 12.sp)
-        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(PhotosStrings.TITLE, color = Halo.Text, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).semantics { heading() }.testTag("photos.title"))
+            HaloIconButton(Icons.Filled.Info, PhotosStrings.INFO, { info = true }, Modifier.testTag("photos.info"))
+        }
+        Spacer(Modifier.height(8.dp))
 
-        when (ui.access) {
-            MediaAccess.NONE -> PermissionCard(askedOnce, onAllow = { permLauncher.launch(PhotoPermissions.toRequest(Build.VERSION.SDK_INT).toTypedArray()) }, onSettings = { openAppSettings(ctx) })
-            else -> {
-                if (ui.access == MediaAccess.PARTIAL) PartialBanner(onMore = { permLauncher.launch(PhotoPermissions.toRequest(Build.VERSION.SDK_INT).toTypedArray()) }, onSettings = { openAppSettings(ctx) })
-                ScanControls(ui, vm)
-                if (ui.phase == Phase.READY || ui.phase == Phase.DELETING) Results(ui, vm)
+        if (ui.access == MediaAccess.NONE) {
+            HaloCard {
+                HaloEmptyState(PhotosStrings.EMPTY_NO_ACCESS, PhotosStrings.ALLOW, { askPermission() }, Modifier.testTag("photos.allow"))
+                if (askedOnce) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { HaloChip(PhotosStrings.SETTINGS, accent = Halo.Amber) { openAppSettings(ctx) } }
+            }
+        } else {
+            SummaryCard(ui, vm)
+            if (ui.access == MediaAccess.PARTIAL) {
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HaloChip(PhotosStrings.PARTIAL_CHIP, selected = true, accent = Halo.Amber, modifier = Modifier.testTag("photos.partial")) { info = true }
+                    HaloChip(PhotosStrings.MORE) { askPermission() }
+                }
+            }
+            if (ui.scannedOnce && ui.phase != Phase.SCANNING) {
+                Spacer(Modifier.height(8.dp))
+                ThresholdRow(ui, vm)
+            }
+            ui.message?.let { Text(it, color = Halo.Amber, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp).testTag("photos.message")) }
+            Spacer(Modifier.height(8.dp))
+            Box(Modifier.weight(1f)) {
+                if (ui.scannedOnce && ui.phase != Phase.SCANNING) {
+                    if (ui.groups.isEmpty()) HaloEmptyState(PhotosStrings.EMPTY_NONE_FOUND, null, null)
+                    else LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) { items(ui.groups, key = { it.id }) { g -> GroupStrip(g, ui.rev, vm) } }
+                }
+            }
+            if (ui.scannedOnce && ui.groups.isNotEmpty() && ui.phase != Phase.SCANNING) {
+                Column(Modifier.padding(vertical = 10.dp)) {
+                    if (ui.deleteMode == DeleteMode.DISABLED_BEFORE_API_30) HaloChip(PhotosStrings.DELETE_UNAVAILABLE, accent = Halo.Amber, modifier = Modifier.testTag("photos.deleteDisabled")) { info = true }
+                    else HaloPrimaryButton(if (ui.marked > 0) "${PhotosStrings.REVIEW} · ${ui.marked}" else PhotosStrings.REVIEW, vm::requestDelete, Modifier.testTag("photos.delete"), enabled = ui.marked > 0 && ui.phase == Phase.READY, destructive = true)
+                }
             }
         }
     }
+
+    if (info) HaloInfoSheet(PhotosStrings.INFO, PhotosStrings.INFO_LINES) { info = false }
 
     ui.confirm?.let { req ->
         AlertDialog(
             onDismissRequest = vm::cancelConfirm, containerColor = Halo.Background,
             title = { Text("Move ${req.plan.count} photo${if (req.plan.count == 1) "" else "s"} to Trash?", color = Halo.Text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("photos.confirm.title")) },
-            text = {
-                Column {
-                    Text("${req.plan.count} photo${if (req.plan.count == 1) "" else "s"} · ${formatBytes(req.plan.totalBytes)}", color = Halo.Text2, modifier = Modifier.testTag("photos.confirm.summary"))
-                    Spacer(Modifier.height(8.dp))
-                    Text("Android will ask you to confirm once more. Photos go to your Gallery's Trash, where they can be restored for a limited time. At least one photo from every group stays.", color = Halo.Text3, fontSize = 12.sp)
-                }
-            },
+            text = { Text("${req.plan.count} photo${if (req.plan.count == 1) "" else "s"} · ${formatBytes(req.plan.totalBytes)}", color = Halo.Text2, fontSize = 15.sp, modifier = Modifier.testTag("photos.confirm.summary")) },
             confirmButton = { Button(onClick = vm::confirmDelete, colors = ButtonDefaults.buttonColors(containerColor = Halo.Red), modifier = Modifier.testTag("photos.confirm.ok")) { Text("Continue") } },
             dismissButton = { TextButton(onClick = vm::cancelConfirm, modifier = Modifier.testTag("photos.confirm.cancel")) { Text("Cancel", color = Halo.Text2) } },
         )
@@ -150,108 +176,67 @@ private fun openAppSettings(ctx: android.content.Context) {
     ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", ctx.packageName, null)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
 
+/** Ring = scan progress while scanning; afterwards the metric tiles. One glanceable card, no sentences. */
 @Composable
-private fun PermissionCard(askedOnce: Boolean, onAllow: () -> Unit, onSettings: () -> Unit) {
+private fun SummaryCard(ui: PhotosUi, vm: PhotosViewModel) {
     HaloCard {
-        SectionLabel("Photo access")
-        Spacer(Modifier.height(8.dp))
-        Text("To compare your photos, Halo needs to read them. It only reads small previews to work out what looks alike, and it can't change or delete anything unless you confirm in Android's own dialog.", color = Halo.Text2, fontSize = 13.sp)
-        if (Build.VERSION.SDK_INT >= 34) Text("On Android 14+ you can allow just some photos; Halo will then compare only those.", color = Halo.Text3, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
-        Spacer(Modifier.height(10.dp))
-        Button(onClick = onAllow, modifier = Modifier.testTag("photos.allow")) { Text("Allow photo access") }
-        if (askedOnce) {
-            Text("Still no access. If Android no longer shows the prompt, enable Photos in the app's settings.", color = Halo.Amber, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
-            TextButton(onClick = onSettings) { Text("Open app settings", color = Halo.Accent) }
-        }
-    }
-}
-
-@Composable
-private fun PartialBanner(onMore: () -> Unit, onSettings: () -> Unit) {
-    HaloCard {
-        Text("Only the photos you selected are being scanned", color = Halo.Amber, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("photos.partial"))
-        Text("You gave Halo access to selected photos only, so near-duplicates of photos you did not select can't be found.", color = Halo.Text3, fontSize = 12.sp)
-        Row { TextButton(onClick = onMore) { Text("Choose more photos", color = Halo.Accent) }; TextButton(onClick = onSettings) { Text("Allow all", color = Halo.Accent) } }
-    }
-    Spacer(Modifier.height(8.dp))
-}
-
-@Composable
-private fun ScanControls(ui: PhotosUi, vm: PhotosViewModel) {
-    HaloCard {
-        when (ui.phase) {
-            Phase.SCANNING -> {
-                Text("Scanning ${ui.done} of ${ui.total}", color = Halo.Text, fontSize = 14.sp, modifier = Modifier.testTag("photos.progress"))
-                Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(progress = { if (ui.total == 0) 0f else ui.done.toFloat() / ui.total }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Scan progress ${ui.done} of ${ui.total}" })
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = vm::cancelScan, modifier = Modifier.testTag("photos.cancel")) { Icon(Icons.Filled.Close, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Cancel") }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            val scanning = ui.phase == Phase.SCANNING
+            val frac = if (ui.total == 0) 0f else ui.done.toFloat() / ui.total
+            HaloRing(if (scanning) frac else if (ui.scannedOnce) 1f else 0f, if (scanning) "${(frac * 100).toInt()}%" else if (ui.scannedOnce) "${ui.groups.size}" else "–",
+                color = if (scanning) Halo.Accent else Halo.Green, modifier = Modifier.testTag("photos.ring"))
+            if (ui.scannedOnce && !scanning) {
+                val free = ui.groups.sumOf { it.wastedBytes }
+                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HaloMetricTile(PhotosStrings.TILE_GROUPS, "${ui.groups.size}", Modifier.weight(1f).testTag("photos.summary"), Halo.Accent)
+                    HaloMetricTile(PhotosStrings.TILE_FREE, formatBytes(free), Modifier.weight(1f), Halo.Green)
+                }
+            } else {
+                Text(if (scanning) "${ui.done} / ${ui.total}" else PhotosStrings.EMPTY_IDLE, color = Halo.Text2, fontSize = 15.sp, modifier = Modifier.weight(1f).testTag("photos.progress"))
             }
-            else -> {
-                Button(onClick = vm::scan, enabled = ui.phase != Phase.DELETING, modifier = Modifier.testTag("photos.scan")) { Text(if (ui.scannedOnce) "Scan again" else "Scan photos") }
-                Spacer(Modifier.height(10.dp))
-                SectionLabel("Similarity")
-                Text("Match photos up to ${ui.threshold} of 64 bits different", color = Halo.Text2, fontSize = 12.sp, modifier = Modifier.testTag("photos.thresholdLabel"))
-                Slider(
-                    value = ui.threshold.toFloat(), onValueChange = { vm.setThresholdLive(it.toInt()) }, onValueChangeFinished = { vm.regroup(ui.threshold) },
-                    valueRange = Clustering.MIN_THRESHOLD.toFloat()..Clustering.MAX_THRESHOLD.toFloat(), steps = Clustering.MAX_THRESHOLD - Clustering.MIN_THRESHOLD - 1,
-                    enabled = ui.scannedOnce, colors = SliderDefaults.colors(thumbColor = Halo.Accent, activeTrackColor = Halo.Accent),
-                    modifier = Modifier.semantics { contentDescription = "Similarity threshold, ${ui.threshold} of 64 bits. Lower is stricter." }.testTag("photos.threshold"),
-                )
-                Text("Lower = only near-identical photos. Higher = also loosely similar ones (more false matches).", color = Halo.Text3, fontSize = 11.sp)
+        }
+        Spacer(Modifier.height(12.dp))
+        if (ui.phase == Phase.SCANNING) HaloPrimaryButton(PhotosStrings.CANCEL, vm::cancelScan, Modifier.testTag("photos.cancel"))
+        else HaloPrimaryButton(if (ui.scannedOnce) PhotosStrings.RESCAN else PhotosStrings.SCAN, vm::scan, Modifier.testTag("photos.scan"), enabled = ui.phase != Phase.DELETING)
+        if (ui.scannedOnce && (ui.failed > 0 || ui.truncatedFrom != null)) {
+            Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (ui.failed > 0) HaloChip("${ui.failed} unreadable", accent = Halo.Amber)
+                ui.truncatedFrom?.let { HaloChip("Newest ${Clustering.MAX_PHOTOS} of $it", accent = Halo.Amber) }
             }
         }
     }
-    Spacer(Modifier.height(8.dp))
 }
 
+/** Preset chips (Strict / Normal / Loose) plus a bare slider for the exact 1-20 value. */
 @Composable
-private fun ColumnScope.Results(ui: PhotosUi, vm: PhotosViewModel) {
-    val sdk = Build.VERSION.SDK_INT
-    Text(
-        "${ui.groups.size} group${if (ui.groups.size == 1) "" else "s"} · scanned ${ui.scanned} photos" +
-            (if (ui.failed > 0) " · ${ui.failed} couldn't be read" else "") + (if (ui.ignored > 0) " · ${ui.ignored} skipped" else ""),
-        color = Halo.Text2, fontSize = 13.sp, modifier = Modifier.testTag("photos.summary"),
-    )
-    ui.truncatedFrom?.let { Text("Your library has $it photos; only the newest ${Clustering.MAX_PHOTOS} were scanned.", color = Halo.Amber, fontSize = 12.sp) }
-    ui.message?.let { Text(it, color = Halo.Amber, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp).testTag("photos.message")) }
-    Spacer(Modifier.height(6.dp))
-
-    Box(Modifier.weight(1f)) {
-        if (ui.groups.isEmpty()) {
-            Text(if (ui.scanned == 0) "No photos to compare." else "No similar photos found at this setting. Try a higher similarity number.", color = Halo.Text3, fontSize = 13.sp, modifier = Modifier.padding(top = 24.dp))
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(ui.groups, key = { it.id }) { g -> GroupCard(g, ui.rev, vm) }
+private fun ThresholdRow(ui: PhotosUi, vm: PhotosViewModel) {
+    Column {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            listOf(PhotosStrings.STRICT to 4, PhotosStrings.NORMAL to Clustering.DEFAULT_THRESHOLD, PhotosStrings.LOOSE to 14).forEach { (label, t) ->
+                HaloChip(label, selected = ui.threshold == t, modifier = Modifier.testTag("photos.preset.$t")) { vm.setThresholdLive(t); vm.regroup(t) }
             }
+            Text("≤ ${ui.threshold}", color = Halo.Text3, fontSize = 12.sp, modifier = Modifier.testTag("photos.thresholdLabel"))
         }
-    }
-
-    Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-        if (ui.deleteMode == DeleteMode.DISABLED_BEFORE_API_30) {
-            Text(PhotoPermissions.deleteExplanation(sdk).orEmpty(), color = Halo.Amber, fontSize = 12.sp, modifier = Modifier.testTag("photos.deleteDisabled"))
-        } else {
-            Button(
-                onClick = vm::requestDelete, enabled = ui.marked > 0 && ui.phase == Phase.READY,
-                colors = ButtonDefaults.buttonColors(containerColor = Halo.Red), modifier = Modifier.fillMaxWidth().testTag("photos.delete"),
-            ) { Icon(Icons.Filled.Delete, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(if (ui.marked == 0) "Nothing selected" else "Move ${ui.marked} (${formatBytes(ui.markedBytes)}) to Trash…") }
-        }
+        Slider(
+            value = ui.threshold.toFloat(), onValueChange = { vm.setThresholdLive(it.toInt()) }, onValueChangeFinished = { vm.regroup(ui.threshold) },
+            valueRange = Clustering.MIN_THRESHOLD.toFloat()..Clustering.MAX_THRESHOLD.toFloat(), steps = Clustering.MAX_THRESHOLD - Clustering.MIN_THRESHOLD - 1,
+            colors = SliderDefaults.colors(thumbColor = Halo.Accent, activeTrackColor = Halo.Accent),
+            modifier = Modifier.semantics { contentDescription = "Similarity threshold, ${ui.threshold} of 64 bits. Lower is stricter." }.testTag("photos.threshold"),
+        )
     }
 }
 
 @Composable
-private fun GroupCard(g: PhotoGroup, rev: Int, vm: PhotosViewModel) {
+private fun GroupStrip(g: PhotoGroup, rev: Int, vm: PhotosViewModel) {
     val session = vm.session
     HaloCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("${g.items.size} similar photos", color = Halo.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                Text("${formatBytes(g.wastedBytes)} could be freed", color = Halo.Text3, fontSize = 11.sp)
-            }
-            TextButton(onClick = { vm.keepBest(g.id) }, modifier = Modifier.testTag("photos.keepBest.${g.id}")) { Icon(Icons.Filled.Check, null, Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)); Text("Keep best", color = Halo.Accent, fontSize = 12.sp) }
-            TextButton(onClick = { vm.ignore(g.id) }, modifier = Modifier.testTag("photos.skip.${g.id}")) { Text("Skip", color = Halo.Text2, fontSize = 12.sp) }
+            Text("${g.items.size} · ${formatBytes(g.wastedBytes)}", color = Halo.Text2, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            HaloChip("Keep best", accent = Halo.Green, modifier = Modifier.testTag("photos.keepBest.${g.id}")) { vm.keepBest(g.id) }
+            Spacer(Modifier.width(6.dp))
+            HaloIconButton(Icons.Filled.Close, "Skip this group", { vm.ignore(g.id) }, Modifier.testTag("photos.skip.${g.id}"))
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(g.items, key = { it.photo.id }) { item ->
                 val marked = rev >= 0 && session.isMarked(g.id, item.photo.id)
@@ -267,22 +252,18 @@ private fun PhotoTile(item: HashedPhoto, marked: Boolean, best: Boolean, vm: Pho
     val bmp by produceState(vm.thumbs.peek(p.id)?.asImageBitmap(), p.id) {
         if (value == null) value = decodeGate.withPermit { withContext(Dispatchers.IO) { vm.thumbs.load(p) } }?.asImageBitmap()
     }
-    val desc = "${p.name}, ${formatBytes(p.sizeBytes)}, ${"%.1f".format(p.megapixels)} megapixels" + if (best) ", suggested to keep" else ""
-    val shape = RoundedCornerShape(10.dp)
-    Column(Modifier.width(112.dp)) {
-        Box(
-            Modifier.size(112.dp).clip(shape).background(Halo.Surface2)
-                .border(BorderStroke(2.dp, if (marked) Halo.Red else Halo.Green), shape)
-                .clickable(onClick = onToggle, role = Role.Checkbox)
-                .semantics { contentDescription = desc; stateDescription = if (marked) "Will be moved to Trash. Tap to keep." else "Kept. Tap to select for Trash." }
-                .testTag("photos.tile.${p.id}"),
-        ) {
-            bmp?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alpha = if (marked) 0.45f else 1f) }
-            Text(
-                if (marked) "TRASH" else if (best) "BEST · KEEP" else "KEEP", color = Halo.Text, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.BottomStart).padding(4.dp).background((if (marked) Halo.Red else Halo.Green).copy(alpha = 0.85f), RoundedCornerShape(5.dp)).padding(horizontal = 5.dp, vertical = 1.dp),
-            )
-        }
-        Text("${formatBytes(p.sizeBytes)} · ${"%.1f".format(p.megapixels)} MP", color = Halo.Text3, fontSize = 10.sp, maxLines = 1)
+    val desc = "${p.name}, ${formatBytes(p.sizeBytes)}, ${"%.1f".format(p.megapixels)} megapixels" + if (best) ", best" else ""
+    val shape = RoundedCornerShape(12.dp)
+    Box(
+        Modifier.size(104.dp).clip(shape).background(Halo.Surface2)
+            .border(BorderStroke(2.dp, if (marked) Halo.Red else Color.Transparent), shape)
+            .clickable(onClick = onToggle, role = Role.Checkbox)
+            .semantics { contentDescription = desc; stateDescription = if (marked) "Will be moved to Trash. Tap to keep." else "Kept. Tap to select for Trash." }
+            .testTag("photos.tile.${p.id}"),
+    ) {
+        bmp?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alpha = if (marked) 0.4f else 1f) }
+        if (best) Text(PhotosStrings.BEST, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.align(Alignment.TopStart).padding(6.dp).background(Halo.Green.copy(alpha = 0.9f), RoundedCornerShape(50)).padding(horizontal = 7.dp, vertical = 2.dp))
+        if (marked) Icon(Icons.Filled.Delete, null, tint = Halo.Red, modifier = Modifier.align(Alignment.Center).size(28.dp))
     }
 }
