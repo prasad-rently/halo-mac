@@ -987,9 +987,10 @@ struct ClipboardPrivacyTests {
 // MARK: - Cross-language expense fixtures (F-056 F56-1)
 //
 // docs/specs/pattern-packs/expense-fixtures.v1.json is the contract the Kotlin port
-// (android/halocloud ExpenseFixtureTest) must also satisfy. Its `expect` blocks were
-// recorded FROM this code, so any change to TransactionParser / SmsClassifier /
-// PatternPack that alters behaviour fails here until the fixture (and Kotlin) move too.
+// (android/halocloud ExpenseFixtureTest) must also satisfy, with no per-platform override.
+// Its `expect` blocks follow the spec (F-048, F-044 7.4), and both platforms read the same
+// rules from india-bank-sms.v1.json, so any change to the pack or to TransactionParser /
+// SmsClassifier that alters behaviour fails here until the fixture (and Kotlin) move too.
 
 @Suite("ExpenseFixtures")
 struct ExpenseFixtureTests {
@@ -1080,11 +1081,52 @@ struct ExpenseFixtureTests {
         }
     }
 
-    @Test("The shipped Swift default pack has not drifted from india-bank-sms.v1.json (word lists + amount regex)")
-    func packMatchesJSON() throws {
-        let url = root.appendingPathComponent("docs/specs/pattern-packs/india-bank-sms.v1.json")
+    @Test("There is no per-platform expectation: desktop and phone are held to the same expect block")
+    func noPerPlatformOverrides() throws {
+        let url = root.appendingPathComponent("docs/specs/pattern-packs/expense-fixtures.v1.json")
         let j = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
-        let parser = try #require(j["parser"] as? [String: Any])
+        for m in try #require(j["messages"] as? [[String: Any]]) {
+            let x = try #require(m["expect"] as? [String: Any])
+            #expect(x["classifierKotlin"] == nil, "\(m["id"] ?? "?"): fix the divergence instead of overriding it")
+        }
+    }
+}
+
+// MARK: - The pack is the bundled JSON (F-048 / F-056 follow-up)
+//
+// The desktop used to embed its own copy of the rules (and a compact hard-coded classifier), checked for drift against
+// the JSON by a test. It now loads the one shared file from the app bundle, so these tests pin the loading itself: the
+// resource must be in the bundle (sandboxed release builds read it via Bundle.main, like signatures.json), it must not
+// be stale against docs/specs, and BOTH the parser and the classifier must really be driven by what it says.
+
+@Suite("PatternPackBundle")
+struct PatternPackBundleTests {
+    private var packURL: URL {
+        URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("docs/specs/pattern-packs/india-bank-sms.v1.json")
+    }
+
+    @Test("india-bank-sms.v1.json is a resource of the app bundle and indiaDefault is the real pack, not the inert fallback")
+    func loadsFromBundle() throws {
+        let url = try #require(Bundle.main.url(forResource: PatternPack.resourceName, withExtension: "json"),
+                               "the pack JSON is not in the app bundle - Copy Bundle Resources lost it")
+        let bundled = try PatternPack.parse(Data(contentsOf: url))
+        let pack = PatternPack.indiaDefault
+        #expect(pack.id == "india-bank-sms")
+        #expect(pack.version == bundled.version && pack.version >= 2)
+        #expect(!pack.debitWords.isEmpty && !pack.classifier.otpKeywords.isEmpty && pack.categories.count == 9)
+    }
+
+    @Test("The bundled copy is the repo's docs/specs copy (not a stale second copy)")
+    func bundleMatchesRepo() throws {
+        let bundledURL = try #require(Bundle.main.url(forResource: PatternPack.resourceName, withExtension: "json"))
+        #expect(try Data(contentsOf: bundledURL) == Data(contentsOf: packURL))
+    }
+
+    @Test("Every list the Kotlin PatternPack reads is read here too (same JSON, same values)")
+    func sameValuesAsJSON() throws {
+        let j = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: packURL)) as? [String: Any])
+        let parser = try #require(j["parser"] as? [String: Any]), cls = try #require(j["classifier"] as? [String: Any])
         let pack = PatternPack.indiaDefault
         #expect(parser["debitWords"] as? [String] == pack.debitWords)
         #expect(parser["creditWords"] as? [String] == pack.creditWords)
@@ -1093,13 +1135,49 @@ struct ExpenseFixtureTests {
         #expect(parser["nonBankSenders"] as? [String] == pack.nonBankSenders)
         #expect(parser["balancePrefix"] as? [String] == pack.balancePrefix)
         #expect(parser["amountRegex"] as? String == pack.amountRegex)
-        // F-056: the §12 category rules are now in the pack so the phone reads the SAME copy; the desktop's embedded
-        // copy must not drift from it.
+        #expect((parser["rejectPatterns"] as? [String])?.count == pack.rejectPatterns.count)
+        #expect(cls["serviceKeywords"] as? [String] == pack.classifier.serviceKeywords)
+        #expect(cls["promoKeywords"] as? [String] == pack.classifier.promoKeywords)
         let cats = try #require((j["categories"] as? [String: Any])?["rules"] as? [[String: Any]])
         #expect(cats.count == pack.categories.count)
         for (c, p) in zip(cats, pack.categories) {
-            #expect(c["category"] as? String == p.category, "category name \(p.category)")
+            #expect(c["category"] as? String == p.category)
             #expect(c["triggers"] as? [String] == p.triggers, "triggers \(p.category)")
+            #expect((c["wordTriggers"] as? [String] ?? []) == p.wordTriggers, "wordTriggers \(p.category)")
         }
+    }
+
+    /// The pack with one extra promo keyword, so a classifier that ignores the pack cannot pass.
+    private func packWithExtraPromoKeyword() throws -> PatternPack {
+        var j = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: packURL)) as? [String: Any])
+        var cls = try #require(j["classifier"] as? [String: Any])
+        cls["promoKeywords"] = (cls["promoKeywords"] as? [String] ?? []) + ["ZZZTESTWORD"]
+        j["classifier"] = cls
+        return try PatternPack.parse(JSONSerialization.data(withJSONObject: j))
+    }
+
+    @Test("SmsClassifier is driven by the pack: a keyword added to the pack's classifier changes the verdict, no code change")
+    func classifierIsPackDriven() throws {
+        let body = "Hello, zzztestword for you"
+        #expect(SmsClassifier.classify(sender: "XX-ABCDEF", body: body) == .uncategorized)
+        #expect(SmsClassifier.classify(sender: "XX-ABCDEF", body: body, pack: try packWithExtraPromoKeyword()) == .promotional)
+    }
+
+    @Test("The two classifier divergences from the old compact port are resolved by the pack: refund-initiated is transactional, a telecom recharge is promotional")
+    func formerDivergences() {
+        #expect(SmsClassifier.classify(sender: "VK-ICICIB-T", body: "Refund of Rs 899 initiated for order. Reference 3345") == .transactional)
+        #expect(SmsClassifier.classify(sender: "VM-AIRTEL-S", body: "Recharge of Rs 299 successful. Validity 28 days") == .promotional)
+    }
+
+    @Test("Whole-word matching: CRED is not inside CREDITED, but is a word in 'to CRED via UPI'; a trailing letter run also breaks the word")
+    func wholeWord() {
+        #expect(!PatternPack.containsWord("RS.500 DEBITED AND CREDITED TO A/C" as NSString, "CRED"))
+        #expect(PatternPack.containsWord("RS.499 PAID TO CRED VIA UPI" as NSString, "CRED"))
+        #expect(PatternPack.containsWord("CRED" as NSString, "CRED"))
+        #expect(PatternPack.containsWord("PAID TO CRED." as NSString, "CRED"))
+        #expect(!PatternPack.containsWord("PUBLIC LIBRARY" as NSString, "LIC"))
+        #expect(!PatternPack.containsWord("SCRED" as NSString, "CRED"))
+        // a second, valid occurrence after an embedded one is still found
+        #expect(PatternPack.containsWord("COLA POINT, OLA CABS" as NSString, "OLA"))
     }
 }
