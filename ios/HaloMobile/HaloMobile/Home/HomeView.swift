@@ -182,7 +182,7 @@ struct HomeView: View {
                     Text(HaloStrings.Home.setupCloudSubtitle).font(HaloFont.caption).foregroundColor(.haloText2)
                 }
                 Spacer(minLength: 8)
-                HaloIconButton(icon: "chevron.right", label: HaloStrings.Home.setupCloudAction, tint: .haloAccent) { router.tab = .settings }
+                HaloIconButton(icon: "chevron.forward", label: HaloStrings.Home.setupCloudAction, tint: .haloAccent) { router.tab = .settings }
             }
         }
         .accessibilityIdentifier("home.setupCloud")

@@ -89,8 +89,10 @@ struct ShareView: View {
     // MARK: This device
 
     private var thisDevice: some View {
-        HaloCard {
-            HStack(spacing: 12) {
+        let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+                                                  : AnyLayout(HStackLayout(spacing: 12))
+        return HaloCard {
+            layout {
                 Image(systemName: "iphone").font(.system(.title3)).foregroundColor(.haloAccent)
                     .frame(width: 40, height: 40)
                     .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.haloAccent.opacity(0.14)))
@@ -99,7 +101,7 @@ struct ShareView: View {
                     Text(model.identity.alias).font(HaloFont.headline).foregroundColor(.haloText).lineLimit(2)
                     listenBadge
                 }
-                Spacer(minLength: 0)
+                if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
                 HaloIconButton(icon: "info.circle", label: "About receiving") { showReceivingInfo = true }
             }
         }
@@ -111,7 +113,7 @@ struct ShareView: View {
         case .listening(let port): return HaloStatusBadge("Ready · port \(port)", .ok)
         case .starting: return HaloStatusBadge("Starting…", .warning)
         case .stopped: return HaloStatusBadge("Not listening", .error)
-        case .failed(let why): return HaloStatusBadge("Can't receive: \(why)", .error)
+        case .failed(let why): return HaloStatusBadge("Can't receive: \(why)", .error, maxLines: 0)
         }
     }
 
@@ -442,7 +444,11 @@ struct AddAddressSheet: View {
             .navigationTitle(HaloStrings.Share.addByAddress)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(HaloStrings.Share.cancel) { dismiss() } } }
-            .onAppear { focused = true }
+            .onAppear {
+                focused = true
+                // A leftover scan notice ("No devices found…") would read as an error about the address.
+                model.notice = nil
+            }
         }
         .presentationDetents([.medium, .large])
         .preferredColorScheme(.dark)
