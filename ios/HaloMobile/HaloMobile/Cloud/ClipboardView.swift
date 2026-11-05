@@ -15,7 +15,7 @@ struct ClipboardView: View {
                                    actionTitle: "Open Cloud setup") { cloud.wantsSetup = true }
                 } else { content }
             }
-            .background(Color.haloBackground)
+            .frame(maxWidth: .infinity, maxHeight: .infinity).haloScreen()
             .navigationTitle(CloudStrings.clipboard)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {

@@ -114,7 +114,13 @@ final class AppModel: ObservableObject {
         }
         Task { [weak self] in
             do {
+                #if DEBUG
+                // Several simulators share the Mac's network, so 53317 is often taken: `-debugPort 53320` on launch.
+                let override = UInt16(clamping: UserDefaults.standard.integer(forKey: "debugPort"))
+                let port = try await server.start(port: override == 0 ? HaloShare.defaultPort : override)
+                #else
                 let port = try await server.start(port: HaloShare.defaultPort)
+                #endif
                 self?.listenState = .listening(port: Int(port))
             } catch {
                 self?.server = nil
@@ -205,7 +211,7 @@ final class AppModel: ObservableObject {
             for p in found { self.merge(p) }
             self.isScanning = false
             if self.peers.isEmpty {
-                self.notice = "No devices found. Make sure the other device has HaloShare or LocalSend open on the same Wi-Fi — or add its address below."
+                self.notice = "No devices found on this Wi-Fi."
             }
         }
     }
@@ -295,6 +301,16 @@ final class AppModel: ObservableObject {
     }
 
     #if DEBUG
+    /// Developer aid for screenshots: forces the transfer card into a state (`-debugTransfer sending|finished|failed`).
+    func debugSetTransfer(_ name: String) {
+        switch name {
+        case "sending": transfer = .sending(fileName: "quarterly-report.pdf", sent: 18_400_000, total: 41_000_000, overallSent: 18_400_000, overallTotal: 41_000_000)
+        case "finished": transfer = .finished("Sent quarterly-report.pdf to Gokul's Mac.")
+        case "failed": transfer = .failed("Couldn't reach Gokul's Mac. Check you're on the same Wi-Fi.")
+        default: break
+        }
+    }
+
     /// Developer aid: makes a throw-away file of `megabytes` of non-text bytes and sends it to the
     /// selected peer, so the send path can be exercised without driving the system file picker.
     func sendTestFile(megabytes: Int = 5) {

@@ -17,7 +17,7 @@ struct MessagesView: View {
                     content
                 }
             }
-            .background(Color.haloBackground)
+            .frame(maxWidth: .infinity, maxHeight: .infinity).haloScreen()
             .navigationTitle(CloudStrings.messages)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -127,7 +127,7 @@ struct ConversationView: View {
             }
             .padding(16)
         }
-        .background(Color.haloBackground)
+        .frame(maxWidth: .infinity, maxHeight: .infinity).haloScreen()
         .navigationTitle(thread?.contact ?? "")
         .navigationBarTitleDisplayMode(.inline)
     }
