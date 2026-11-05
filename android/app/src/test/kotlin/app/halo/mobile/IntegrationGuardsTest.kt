@@ -15,7 +15,7 @@ class IntegrationGuardsTest {
 
     @Test fun `the Messages OTP copy chip is flagged sensitive and never goes through the syncing copy path`() {
         val src = main.resolve("CloudScreens.kt").readText()
-        assertTrue(src.contains("copySensitive(ctx, code)"))
+        assertTrue(src.contains("copyPrivate(ctx, code)"))
         assertFalse("an OTP must not be copied with copyToClipboard", Regex("copyToClipboard\\([^\\n]*otp", RegexOption.IGNORE_CASE).containsMatchIn(src))
     }
 

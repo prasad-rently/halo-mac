@@ -176,6 +176,7 @@ object ClipboardController {
         if (!CloudPrefs(app).clipboardEnabled) return
         if (isMarkedSensitive(app)) return          // a password manager / Halo's own generator said "don't keep or share this" (Android 13+ flag)
         val text = readClipboard(app) ?: return
+        if (text == localOnlyText) return          // an in-app "Copy" of private content (an OTP): never leaves the phone
         publishText(app, text)
     }
 
@@ -192,6 +193,7 @@ object ClipboardController {
      * and [onLocalCopy] skips it. Sending it to the Mac stays an explicit, separate tap.
      */
     fun copySensitive(ctx: Context, text: String) {
+        localOnlyText = text                       // integration: same engine-not-open race as copyPrivate (pre-Android-13 has no sensitive flag to rely on)
         engine?.suppressEcho(text)
         val clip = ClipData.newPlainText("Halo", text)
         if (Build.VERSION.SDK_INT >= 33) clip.description.extras = android.os.PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
@@ -230,6 +232,23 @@ object ClipboardController {
     fun copyToClipboard(ctx: Context, item: ClipItem) {
         engine?.suppressEcho(item.text)               // so our own listener doesn't publish it straight back
         ctx.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Halo", item.text))
+    }
+
+    /** The last text this app put on the clipboard that must stay on the phone (a one-time code copied from the inbox). */
+    @Volatile private var localOnlyText: String? = null
+
+    /**
+     * Put [text] on the live clipboard for the user to paste, and keep it OFF the cloud. Unlike [copyToClipboard] this does not
+     * depend on a sync engine being open: with clipboard sync on but the stream still connecting, the engine is null, no echo
+     * hash exists, and our own clipboard listener would have uploaded the code. It is also flagged sensitive so Android 13+
+     * hides it from the clipboard preview and keyboard suggestions. Pre-13 phones simply ignore the extra.
+     */
+    fun copyPrivate(ctx: Context, text: String) {
+        localOnlyText = text
+        engine?.suppressEcho(text)
+        val clip = ClipData.newPlainText("Halo", text)
+        clip.description.extras = android.os.PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) }
+        ctx.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(clip)
     }
 
     fun purge(ctx: Context, done: (String) -> Unit) {

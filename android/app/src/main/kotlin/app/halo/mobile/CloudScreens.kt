@@ -43,6 +43,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -182,7 +184,8 @@ fun SmsScreen(vm: CloudViewModel) {
     var lineFilter by rememberSaveable { mutableIntStateOf(ALL_LINES) }
     var copied by remember { mutableStateOf<String?>(null) }
     var messages by remember { mutableStateOf<List<LocalMessage>>(emptyList()) }
-    LaunchedEffect(canRead, tick, resume) { messages = if (canRead) withContext(Dispatchers.IO) { LocalInbox.recent(ctx, 60) } else emptyList() }
+    // Only read the inbox when it will be shown (granted AND paired): bodies are not loaded for a screen that renders the pairing panel.
+    LaunchedEffect(canRead, profile != null, tick, resume) { messages = if (canRead && profile != null) withContext(Dispatchers.IO) { LocalInbox.recent(ctx, 60) } else emptyList() }
 
     HaloScreen(HaloCopy.MESSAGES_TITLE, subtitle = if (profile != null && enabled && canRead) "Syncing to your Mac" else null) {
         if (profile == null) {
@@ -247,7 +250,7 @@ fun SmsScreen(vm: CloudViewModel) {
             else HaloCard(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
                 val now = System.currentTimeMillis()
                 shown.forEach { m -> MessageRow(m, now, lines.firstOrNull { it.line.subscriptionId == m.subId }?.line?.label?.takeIf { lines.size > 1 }) { code ->
-                    app.halo.mobile.cloud.ClipboardController.copySensitive(ctx, code)   // an OTP: flagged sensitive (hidden from previews) and never published by clipboard sync
+                    app.halo.mobile.cloud.ClipboardController.copyPrivate(ctx, code)   // local-only + sensitive: a one-time code must never reach the clipboard sync
                     copied = "Code copied"
                 } }
             }
@@ -297,7 +300,7 @@ private fun MessageRow(m: LocalMessage, now: Long, lineLabel: String?, onCopyCod
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(m.address.ifBlank { "Unknown" }, color = HaloColors.Text, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
-                    if (!m.read) { Spacer(Modifier.width(6.dp)); Box(Modifier.size(8.dp).background(HaloColors.Accent, CircleShape).testTag("sms.unread")) }
+                    if (!m.read) { Spacer(Modifier.width(6.dp)); Box(Modifier.size(8.dp).background(HaloColors.Accent, CircleShape).semantics { contentDescription = "Unread" }.testTag("sms.unread")) }
                     if (lineLabel != null) { Spacer(Modifier.width(6.dp)); HaloStatusBadge(lineLabel, HaloColors.Text2) }
                 }
                 Text(m.body.replace('\n', ' '), color = HaloColors.Text2, fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)

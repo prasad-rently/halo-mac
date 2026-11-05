@@ -56,6 +56,10 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.halo.mobile.cloud.CloudViewModel
 import app.halo.mobile.cloud.LocalInbox
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import app.halo.mobile.design.*
 import java.util.Calendar
 
@@ -86,11 +90,12 @@ fun HomeScreen(vm: AppViewModel, cloud: CloudViewModel, go: (HaloDestination) ->
     val now = System.currentTimeMillis()
 
     var todayCount by remember { mutableIntStateOf(-1) }
+    val scope = rememberCoroutineScope()
+    // The provider query is blocking IO: never on the main thread, and it loads row ids only (a count needs no message text).
     fun refreshToday() {
-        todayCount = if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED) {
-            val midnight = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
-            LocalInbox.recent(ctx, 999, midnight).size
-        } else -1
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) { todayCount = -1; return }
+        val midnight = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
+        scope.launch { todayCount = withContext(Dispatchers.IO) { LocalInbox.countSince(ctx, midnight) } }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refreshToday(); vm.refreshInbox(); if (profile == null && problem != null) cloud.refreshProfile() }
     LaunchedEffect(prefs.lastSyncAt) { refreshToday() }
