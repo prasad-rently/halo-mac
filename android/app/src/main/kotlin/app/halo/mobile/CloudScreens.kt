@@ -23,11 +23,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -135,6 +137,7 @@ fun PairingPanel(vm: CloudViewModel, why: String) {
 
 private val SMS_PERMISSIONS = arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_PHONE_STATE, Manifest.permission.READ_PHONE_NUMBERS)
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun SmsScreen(vm: CloudViewModel) {
     val profile by vm.profile.collectAsStateWithLifecycle()
@@ -160,6 +163,7 @@ fun SmsScreen(vm: CloudViewModel) {
     val syncSent by vm.syncSent.collectAsStateWithLifecycle()
     var confirmSentOn by remember { mutableStateOf(false) }
     var confirmSentOff by remember { mutableStateOf(false) }
+    var sentInfo by remember { mutableStateOf(false) }
     var allow by remember { mutableStateOf(vm.prefs.allow.joinToString(", ")) }
     var deny by remember { mutableStateOf(vm.prefs.deny.joinToString(", ")) }
 
@@ -176,7 +180,7 @@ fun SmsScreen(vm: CloudViewModel) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Sync messages to my Mac", color = Halo.Text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                    Text(if (canRead) "Messages you receive. Encrypted before upload." else "Needs permission to read your messages.", color = Halo.Text3, fontSize = 11.sp)
+                    Text(if (canRead) "Encrypted before upload." else "Needs permission to read your messages.", color = Halo.Text3, fontSize = 11.sp)
                 }
                 Switch(checked = enabled && canRead, onCheckedChange = { on ->
                     if (!on) vm.setSmsEnabled(false)
@@ -224,14 +228,12 @@ fun SmsScreen(vm: CloudViewModel) {
             HaloCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Also sync messages I send", color = Halo.Text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                        Text(if (syncSent) "On. Messages you send are uploaded, encrypted, and shown on your Mac next to the replies."
-                             else "Off. Only messages you receive are uploaded.", color = Halo.Text3, fontSize = 11.sp, modifier = Modifier.testTag("sms.sent.state"))
+                        Text("Sent messages", color = Halo.Text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        Text(if (syncSent) "On · uploaded encrypted" else "Off · received only", color = if (syncSent) Halo.Amber else Halo.Text3, fontSize = 11.sp, modifier = Modifier.testTag("sms.sent.state"))
                     }
+                    IconButton(onClick = { sentInfo = true }, modifier = Modifier.testTag("sms.sent.info")) { Icon(Icons.Filled.Info, "About syncing sent messages", tint = Halo.Text2) }
                     Switch(checked = syncSent, onCheckedChange = { on -> if (on) confirmSentOn = true else confirmSentOff = true }, modifier = Modifier.testTag("sms.sent.toggle"))
                 }
-                Spacer(Modifier.height(6.dp))
-                Text("This sends what you write, not just what people send you. It follows the SIM switches and the sender filters below (a blocked number is skipped in both directions). Sent messages are copied on the next sync, which can be up to about 15 minutes after you send, and they never raise a notification or count as unread on your Mac.", color = Halo.Text3, fontSize = 11.sp)
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -251,19 +253,27 @@ fun SmsScreen(vm: CloudViewModel) {
         }
     }
 
+    if (sentInfo) androidx.compose.material3.ModalBottomSheet(onDismissRequest = { sentInfo = false }, containerColor = Halo.Surface) {
+        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Sync sent messages", color = Halo.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text("Turning this on uploads what you write, not only what people send you — end-to-end encrypted with the same key as received messages — so your Mac shows both sides of each conversation.", color = Halo.Text2, fontSize = 13.sp)
+            Text("It follows the SIM switches and sender filters (a blocked number is skipped both ways). Sent messages are copied on the next sync, up to about 15 minutes after sending. They never raise a notification or count as unread on your Mac, and are never used for spending tracking.", color = Halo.Text2, fontSize = 13.sp)
+            Text("Turn it off any time: uploads stop at once, and you can also delete what was already uploaded.", color = Halo.Text2, fontSize = 13.sp)
+        }
+    }
     if (confirmSentOn) androidx.compose.material3.AlertDialog(
-        onDismissRequest = { confirmSentOn = false },
-        title = { Text("Sync the messages you send?") },
-        text = { Text("Halo will upload the messages you send, plus the last ${vm.prefs.backfillDays} days of ones you already sent, end-to-end encrypted with the same key as your received messages. Your Mac will show them as your side of each conversation. You can turn this off any time and remove what was uploaded.") },
-        confirmButton = { TextButton(onClick = { confirmSentOn = false; vm.enableSentSync() }, modifier = Modifier.testTag("sms.sent.confirmOn")) { Text("Turn on") } },
-        dismissButton = { TextButton(onClick = { confirmSentOn = false }) { Text("Cancel") } },
+        onDismissRequest = { confirmSentOn = false }, containerColor = Halo.Background,
+        title = { Text("Sync sent messages?", color = Halo.Text) },
+        text = { Text("Your sent messages from the last ${vm.prefs.backfillDays} days will be uploaded, encrypted.", color = Halo.Text2) },
+        confirmButton = { Button(onClick = { confirmSentOn = false; vm.enableSentSync() }, modifier = Modifier.testTag("sms.sent.confirmOn")) { Text("Turn on") } },
+        dismissButton = { OutlinedButton(onClick = { confirmSentOn = false }) { Text("Cancel") } },
     )
     if (confirmSentOff) androidx.compose.material3.AlertDialog(
-        onDismissRequest = { confirmSentOff = false },
-        title = { Text("Stop syncing sent messages?") },
-        text = { Text("New sent messages will stop uploading right away. Do you also want to delete the sent messages already uploaded? They will disappear from your Mac. Messages on this phone and the ones you received are not touched.") },
-        confirmButton = { TextButton(onClick = { confirmSentOff = false; vm.disableSentSync(removeUploaded = true) }, modifier = Modifier.testTag("sms.sent.removeUploaded")) { Text("Stop and delete uploaded") } },
-        dismissButton = { TextButton(onClick = { confirmSentOff = false; vm.disableSentSync(removeUploaded = false) }, modifier = Modifier.testTag("sms.sent.keepUploaded")) { Text("Stop, keep uploaded") } },
+        onDismissRequest = { confirmSentOff = false }, containerColor = Halo.Background,
+        title = { Text("Stop syncing sent?", color = Halo.Text) },
+        text = { Text("Delete the sent messages already uploaded? They will disappear from your Mac. Messages on this phone are not touched.", color = Halo.Text2) },
+        confirmButton = { Button(onClick = { confirmSentOff = false; vm.disableSentSync(removeUploaded = true) }, modifier = Modifier.testTag("sms.sent.removeUploaded")) { Text("Stop and delete") } },
+        dismissButton = { OutlinedButton(onClick = { confirmSentOff = false; vm.disableSentSync(removeUploaded = false) }, modifier = Modifier.testTag("sms.sent.keepUploaded")) { Text("Stop, keep") } },
     )
 }
 
