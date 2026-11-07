@@ -4,6 +4,9 @@ import android.content.Context
 import android.os.Build
 import app.halo.cloud.CloudAuthCredential
 import app.halo.cloud.FirebaseConfig
+import app.halo.cloud.ProfileLoad
+import app.halo.cloud.SealedBlobFile
+import app.halo.cloud.SmsSyncEngine
 import app.halo.cloud.SyncState
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -29,16 +32,23 @@ data class CloudProfile(
 private val json = Json { ignoreUnknownKeys = true }
 
 class CloudStore(private val ctx: Context) {
-    private val file get() = File(ctx.filesDir, "cloud-profile.bin")
+    private val blob get() = SealedBlobFile(File(ctx.filesDir, "cloud-profile.bin"), SecretBox)
     private val prefs get() = ctx.getSharedPreferences("halo.cloud.identity", Context.MODE_PRIVATE)
 
-    fun load(): CloudProfile? = try {
-        if (!file.exists()) null else json.decodeFromString(CloudProfile.serializer(), String(SecretBox.open(file.readBytes()), Charsets.UTF_8))
-    } catch (e: Exception) { null }       // an unreadable profile (Keystore reset, corrupt file) means "not paired"
+    /**
+     * What is on disk, with the reason when it is not a usable profile. "Not paired" ([ProfileLoad.Missing] / [ProfileLoad.Corrupt])
+     * is distinct from a Keystore that is momentarily unavailable ([ProfileLoad.Unavailable] — keep the file, retry, never
+     * overwrite) and from a key that is gone for good ([ProfileLoad.KeyLost] — tell the user, offer a reset).
+     */
+    fun loadResult(): ProfileLoad<CloudProfile> = blob.load { json.decodeFromString(CloudProfile.serializer(), it) }
 
-    fun save(p: CloudProfile) { file.writeBytes(SecretBox.seal(json.encodeToString(CloudProfile.serializer(), p).toByteArray(Charsets.UTF_8))) }
+    /** The profile, or null for anything else — use [loadResult] when the difference matters. */
+    fun load(): CloudProfile? = (loadResult() as? ProfileLoad.Loaded)?.value
 
-    fun clear() { file.delete() }
+    /** Pairing creates the Keystore key if there is none (sealing never does — see [SecretBox]). Temp + rename, sealed before any file is touched. */
+    fun save(p: CloudProfile) { SecretBox.ensureKey(); blob.write(json.encodeToString(CloudProfile.serializer(), p)) }
+
+    fun clear() { blob.delete() }
 
     /** Stable across re-pairing so this phone's lines and messages stay under one `deviceId` in the cloud. */
     val deviceId: String get() = prefs.getString("deviceId", null) ?: UUID.randomUUID().toString().also { prefs.edit().putString("deviceId", it).apply() }
@@ -57,6 +67,12 @@ class CloudPrefs(ctx: Context) {
     var allow: Set<String> get() = p.getStringSet("smsAllow", emptySet()) ?: emptySet(); set(v) { p.edit().putStringSet("smsAllow", v).apply() }
     var deny: Set<String> get() = p.getStringSet("smsDeny", emptySet()) ?: emptySet(); set(v) { p.edit().putStringSet("smsDeny", v).apply() }
 
+    /**
+     * "Also sync messages I send". OFF unless the user turns it on, and never turned on by anything else (not a default,
+     * not a pairing, not an upgrade): it widens what leaves the phone from received messages to the user's own writing.
+     */
+    var syncSent: Boolean get() = p.getBoolean("syncSent", false); set(v) { p.edit().putBoolean("syncSent", v).apply() }
+
     var clipboardEnabled: Boolean get() = p.getBoolean("clipEnabled", false); set(v) { p.edit().putBoolean("clipEnabled", v).apply() }
     var clipboardFilter: Boolean get() = p.getBoolean("clipFilter", false); set(v) { p.edit().putBoolean("clipFilter", v).apply() }
 
@@ -68,6 +84,8 @@ class CloudPrefs(ctx: Context) {
     var lastSyncAt: Long get() = p.getLong("lastSyncAt", 0); set(v) { p.edit().putLong("lastSyncAt", v).apply() }
     var lastSyncSummary: String get() = p.getString("lastSyncSummary", "") ?: ""; set(v) { p.edit().putString("lastSyncSummary", v).apply() }
     var lastSyncError: String? get() = p.getString("lastSyncError", null); set(v) { p.edit().putString("lastSyncError", v).apply() }
+    /** H-14: rows the last pass gave up on after repeated failures (0 = none). */
+    var quarantinedCount: Int get() = p.getInt("quarantined", 0); set(v) { p.edit().putInt("quarantined", v).apply() }
     var lastReconcileAt: Long get() = p.getLong("lastReconcileAt", 0); set(v) { p.edit().putLong("lastReconcileAt", v).apply() }
 
     fun clearAll() { p.edit().clear().apply() }
@@ -78,8 +96,29 @@ class PrefsSyncState(ctx: Context) : SyncState {
     private val p = ctx.getSharedPreferences("halo.cloud.syncstate", Context.MODE_PRIVATE)
     override fun highWater(subscriptionId: Int): Long? = if (p.contains("hw.$subscriptionId")) p.getLong("hw.$subscriptionId", 0) else null
     override fun setHighWater(subscriptionId: Int, dateMs: Long) { p.edit().putLong("hw.$subscriptionId", dateMs).apply() }
+    override fun sentHighWater(subscriptionId: Int): Long? = if (p.contains("shw.$subscriptionId")) p.getLong("shw.$subscriptionId", 0) else null
+    override fun setSentHighWater(subscriptionId: Int, dateMs: Long) { p.edit().putLong("shw.$subscriptionId", dateMs).apply() }
+    override fun sentRemovalPending(): Boolean = p.getBoolean("sentRemovalPending", false)
+    override fun setSentRemovalPending(pending: Boolean) { p.edit().putBoolean("sentRemovalPending", pending).commit() }
+    override fun clearSent() {
+        val e = p.edit().remove("sentRemovalPending")
+        for (k in p.all.keys) if (k.startsWith("shw.") || k.startsWith("fail.${SmsSyncEngine.SENT_KEY_PREFIX}")) e.remove(k)
+        e.putStringSet("quarantine", quarantined().filterNot { it.startsWith(SmsSyncEngine.SENT_KEY_PREFIX) }.toSet())
+        e.commit()
+    }
     // commit(), not apply(): a cleared mark set and the epoch that replaces it must reach disk together.
-    override fun clear() { p.edit().clear().commit() }
+    // A requested sent-removal that has not landed survives a new pairing (see [SyncState.sentRemovalPending]).
+    override fun clear() { val owed = sentRemovalPending(); p.edit().clear().apply { if (owed) putBoolean("sentRemovalPending", true) }.commit() }
+    // H-14 quarantine: failure counters and the parked set live beside the marks and are cleared with them.
+    override fun failures(key: String): Int = p.getInt("fail.$key", 0)
+    override fun setFailures(key: String, count: Int) { p.edit().apply { if (count <= 0) remove("fail.$key") else putInt("fail.$key", count) }.apply() }
+    override fun quarantined(): Set<String> = p.getStringSet("quarantine", emptySet())?.toSet() ?: emptySet()
+    override fun quarantine(key: String) { p.edit().putStringSet("quarantine", quarantined() + key).remove("fail.$key").commit() }
+    override fun clearQuarantine() {
+        val e = p.edit().remove("quarantine")
+        for (k in p.all.keys) if (k.startsWith("fail.")) e.remove(k)
+        e.commit()
+    }
     override fun pairingEpoch(): String? = p.getString("epoch", null)
     override fun setPairingEpoch(epoch: String) { p.edit().putString("epoch", epoch).commit() }
 }

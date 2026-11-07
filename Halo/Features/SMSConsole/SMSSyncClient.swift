@@ -146,12 +146,14 @@ final class SMSSyncClient: ObservableObject {
         do {
             // New devices under `sms/{uid}` → attach per-device line/message observers.
             let smsHandle = try await rtdb.observeChildAdded(at: "sms/\(uid)") { [weak self] deviceId, _ in
+                guard !DatabaseCheckEngine.isProbeKey(deviceId) else { return }     // F-057: a "Check my database" probe, not a phone
                 Task { @MainActor in self?.observeDevice(uid: uid, deviceId: deviceId) }
             }
             observers.append((path: "sms/\(uid)", handle: smsHandle))
 
             // Device metadata under `devices/{uid}`.
             let devHandle = try await rtdb.observeChildAdded(at: "devices/\(uid)") { [weak self] deviceId, value in
+                guard !DatabaseCheckEngine.isProbeKey(deviceId) else { return }
                 Task { @MainActor in self?.mergeDevice(deviceId: deviceId, value: value) }
             }
             observers.append((path: "devices/\(uid)", handle: devHandle))
@@ -258,10 +260,12 @@ final class SMSSyncClient: ObservableObject {
     /// Wipe one device's subtree (retire an old phone).
     func wipeDevice(_ deviceId: String) async {
         guard case let .connected(uid) = state else { return }
+        // Validate before touching anything: an unsafe id must not even detach this device's observers.
+        guard DeviceRetirement.isSafeDeviceID(deviceId) else { state = .error("That device id can't be retired safely."); return }
         await removeDeviceObservers(deviceId)
         do {
-            try await rtdb.removeValue(at: "sms/\(uid)/\(deviceId)")
-            try await rtdb.removeValue(at: "devices/\(uid)/\(deviceId)")
+            // F-057 FR-S4: the id is spliced into a path, so DeviceRetirement refuses an empty or "/"-bearing one.
+            try await DeviceRetirement.retire(uid: uid, deviceId: deviceId) { try await rtdb.removeValue(at: $0) }
             devicesById[deviceId] = nil
             linesById = linesById.filter { $0.value.deviceId != deviceId }
             messagesById = messagesById.filter { !$0.key.hasPrefix("\(deviceId)/") }
@@ -322,6 +326,15 @@ final class SMSSyncClient: ObservableObject {
         await startObserving(uid: uid)
     }
 
+    /// Re-read only `devices/{uid}` (cheap — a few small nodes). The live observer is child_added only, so a
+    /// phone that syncs again re-puts its row (new `lastSeen`) without the Mac ever hearing about it; the
+    /// Cloud settings pane calls this when it opens so "Last seen" is not frozen at first sight.
+    func refreshDevices() async {
+        guard case let .connected(uid) = state else { return }
+        guard let raw = (try? await rtdb.getValue(at: "devices/\(uid)")) as? [String: Any] else { return }
+        for (deviceId, dv) in raw where !DatabaseCheckEngine.isProbeKey(deviceId) { mergeDevice(deviceId: deviceId, value: dv) }
+    }
+
     // MARK: One-shot reconcile (manual Refresh)
 
     private func reconcile(uid: String) async {
@@ -329,9 +342,9 @@ final class SMSSyncClient: ObservableObject {
             let devicesRaw = (try await rtdb.getValue(at: "devices/\(uid)")) as? [String: Any] ?? [:]
             let smsRaw = (try await rtdb.getValue(at: "sms/\(uid)")) as? [String: Any] ?? [:]
 
-            for (deviceId, dv) in devicesRaw { mergeDevice(deviceId: deviceId, value: dv) }
+            for (deviceId, dv) in devicesRaw where !DatabaseCheckEngine.isProbeKey(deviceId) { mergeDevice(deviceId: deviceId, value: dv) }
 
-            for (deviceId, node) in smsRaw {
+            for (deviceId, node) in smsRaw where !DatabaseCheckEngine.isProbeKey(deviceId) {
                 let dict = node as? [String: Any] ?? [:]
                 if let linesDict = dict["lines"] as? [String: Any] {
                     for (subIdStr, lv) in linesDict { mergeLine(deviceId: deviceId, subIdStr: subIdStr, value: lv) }
@@ -506,7 +519,8 @@ enum SMSWire {
         let d = value as? [String: Any] ?? [:]
         return SMSDevice(id: id,
                          name: d["name"] as? String ?? id,
-                         platform: d["platform"] as? String ?? "android")
+                         platform: d["platform"] as? String ?? "android",
+                         lastSeen: DeviceLastSeen.date(fromRaw: d["lastSeen"]))
     }
 
     static func line(deviceId: String, subIdStr: String, value: Any?, crypto: CryptoService) -> SMSLine {

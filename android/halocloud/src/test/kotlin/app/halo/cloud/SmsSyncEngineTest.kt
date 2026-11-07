@@ -58,6 +58,38 @@ class SmsSyncEngineTest {
         assertFalse(node.toString().contains("HDFCBK")); assertFalse(node.toString().contains("debited"))
     }
 
+    @Test fun `a SIM rename bumps lineVersion and updatedAt, an unchanged line does not (H-21b)`() {
+        val db = FakeRtdb(); var t = now
+        val src = FakeSource(listOf(sim1), mutableListOf())
+        val engine = SmsSyncEngine(db, testCrypto(), "dev-A", "Pixel 8", src, MemorySyncState(), { SenderFilter() }, { 90 }, { t })
+        fun line() = db.dump("sms/uid-1/dev-A/lines/1") as JsonObject
+        fun v(k: String) = line()[k]!!.jsonPrimitive.content.toLong()
+
+        engine.sync()
+        assertEquals(1L, v("lineVersion")); assertEquals(now, v("updatedAt"))
+        val enc = line()["ownNumberEnc"]!!.jsonPrimitive.content
+
+        t += 60_000; engine.sync()                                       // nothing changed
+        assertEquals("an unchanged line must not look changed", 1L, v("lineVersion")); assertEquals(now, v("updatedAt"))
+        assertEquals("…and its ciphertext is stable, not re-rolled every sync", enc, line()["ownNumberEnc"]!!.jsonPrimitive.content)
+
+        t += 60_000; src.lines = listOf(sim1.copy(label = "Travel SIM")); engine.sync()   // the rename
+        assertEquals(2L, v("lineVersion")); assertEquals(t, v("updatedAt"))
+        assertEquals("Travel SIM", line()["label"]!!.jsonPrimitive.content)
+
+        t += 60_000; src.lines = listOf(sim1.copy(label = "Travel SIM", ownNumber = "+911111111111")); engine.sync()   // own number changed
+        assertEquals(3L, v("lineVersion"))
+    }
+
+    @Test fun `a line written before H-21 (no version) is upgraded once and keeps its toggle`() {
+        val db = FakeRtdb(); val c = testCrypto()
+        db.put("sms/uid-1/dev-A/lines/1", SmsWire.lineNode(sim1, c, syncEnabled = true))      // the v2.5 shape
+        val engine = SmsSyncEngine(db, c, "dev-A", "Pixel 8", FakeSource(listOf(sim1), mutableListOf()), MemorySyncState(), { SenderFilter() }, { 90 }, { now })
+        engine.sync()
+        val line = db.dump("sms/uid-1/dev-A/lines/1") as JsonObject
+        assertEquals("1", line["lineVersion"]!!.jsonPrimitive.content); assertEquals("true", line["syncEnabled"]!!.jsonPrimitive.content)
+    }
+
     @Test fun `registers the device and every SIM line, with the number encrypted`() {
         val (db, _, engine) = harness(listOf(1 to rec(1, "A", "x", now - day)))
         engine.sync()
@@ -188,6 +220,77 @@ class SmsSyncEngineTest {
         val retry = engine.sync()
         assertTrue(retry.ok)
         for (id in listOf(1 to 3, 2 to 2, 3 to 1)) assertTrue("row ${id.first} missing", db.dump("sms/uid-1/dev-A/messages/${id.first}_${now - id.second * day}") != null)
+    }
+
+    // ── H-14: poison-row quarantine ───────────────────────────────────────────────────────────
+
+    private fun poisonHarness(): Triple<FakeRtdb, SmsSyncEngine, MemorySyncState> {
+        val db = FakeRtdb(); val state = MemorySyncState()
+        val src = FakeSource(listOf(sim1), mutableListOf(1 to rec(1, "A", "one", now - 3 * day), 1 to rec(2, "A", "poison", now - 2 * day), 1 to rec(3, "A", "three", now - day)))
+        val engine = SmsSyncEngine(db, testCrypto(), "dev-A", "Pixel 8", src, state, { SenderFilter() }, { 90 }, { now }, pairingEpoch = "p")
+        db.failWrites = { it.endsWith("/messages/2_${now - 2 * day}") }; db.failKind = RtdbException.Kind.OPERATION_FAILED
+        return Triple(db, engine, state)
+    }
+
+    @Test fun `a row that fails five passes in a row is quarantined and later rows sync`() {
+        val (db, engine, _) = poisonHarness()
+        // Passes 1-4: the line stops at the bad row, exactly as before — nothing after it is sent.
+        repeat(SmsSyncEngine.QUARANTINE_AFTER - 1) {
+            val r = engine.sync()
+            assertEquals(1, r.failed); assertEquals(0, r.quarantined)
+            assertNull("row 3 must wait while the bad row is still being retried", db.dump("sms/uid-1/dev-A/messages/3_${now - day}"))
+        }
+        // Pass 5: the row is given up on and the line moves on.
+        val fifth = engine.sync()
+        assertEquals(1, fifth.quarantined); assertEquals(0, fifth.failed); assertTrue(fifth.ok)
+        assertTrue(db.dump("sms/uid-1/dev-A/messages/3_${now - day}") != null)
+        // And it stays out of the way: no more attempts at it, the count stays visible.
+        db.writes.clear()
+        val sixth = engine.sync()
+        assertEquals(1, sixth.quarantined); assertTrue(sixth.ok)
+        assertEquals(0, db.writes.count { it.endsWith("/messages/2_${now - 2 * day}") })
+    }
+
+    @Test fun `a dropped connection never counts toward quarantine`() {
+        val (db, engine, state) = poisonHarness()
+        db.failKind = RtdbException.Kind.NETWORK
+        repeat(SmsSyncEngine.QUARANTINE_AFTER + 3) { assertEquals(1, engine.sync().failed) }
+        assertTrue(state.quarantined().isEmpty())
+    }
+
+    @Test fun `a server outage or rate limit never counts toward quarantine either (H-14)`() {
+        for (status in listOf(500, 502, 503, 429, 408, 404)) {
+            val (db, engine, state) = poisonHarness()
+            db.failStatus = status                                                 // OPERATION_FAILED, but the server's trouble, not the row's
+            repeat(SmsSyncEngine.QUARANTINE_AFTER + 3) { assertEquals("HTTP $status", 1, engine.sync().failed) }
+            assertTrue("HTTP $status must not park a healthy row", state.quarantined().isEmpty())
+            assertEquals(0, state.failures("1|2_${now - 2 * day}"))
+        }
+        val (db, engine, state) = poisonHarness()
+        db.failStatus = 400                                                        // the server rejecting this row: that does count
+        repeat(SmsSyncEngine.QUARANTINE_AFTER) { engine.sync() }
+        assertEquals(1, state.quarantined().size)
+    }
+
+    @Test fun `a success resets the failure count so only consecutive failures quarantine`() {
+        val (db, engine, state) = poisonHarness()
+        repeat(SmsSyncEngine.QUARANTINE_AFTER - 1) { engine.sync() }
+        assertEquals(SmsSyncEngine.QUARANTINE_AFTER - 1, state.failures("1|2_${now - 2 * day}"))
+        db.failWrites = null; assertTrue(engine.sync().ok)                       // it uploads this time
+        assertEquals("a success clears the counter", 0, state.failures("1|2_${now - 2 * day}"))
+        assertTrue(state.quarantined().isEmpty())
+    }
+
+    @Test fun `Retry skipped re-sends the quarantined rows`() {
+        val (db, engine, state) = poisonHarness()
+        repeat(SmsSyncEngine.QUARANTINE_AFTER) { engine.sync() }
+        assertEquals(1, state.quarantined().size)
+        db.failWrites = null                                                      // the cause was fixed
+        engine.retryQuarantined()
+        assertTrue(state.quarantined().isEmpty())
+        val r = engine.sync()
+        assertTrue(r.ok); assertEquals(0, r.quarantined)
+        assertTrue(db.dump("sms/uid-1/dev-A/messages/2_${now - 2 * day}") != null)
     }
 
     @Test fun `deny list beats allow list and numbers match across formats`() {
