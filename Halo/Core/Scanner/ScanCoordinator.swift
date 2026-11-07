@@ -30,6 +30,15 @@ actor ScanCoordinator {
     /// Awaited after a category has been read from disk and before it is returned. A no-op in
     /// production; tests use it to make one scan finish after a newer one (BUG-001 R8).
     private let afterScan: @Sendable (CleanupKind) async -> Void
+    /// Where Smart Scan's "Xcode" line comes from (D-04). Injectable so a test does not walk the
+    /// real DerivedData.
+    private let xcodeGlobal: @Sendable () async -> [BuildArtifactItem]
+
+    /// What Smart Scan looks at. BUG-001 FR-2 removed `~/Library/Caches` from System Caches (it was
+    /// scanned twice); that left Smart Scan blind to the user's cache folder — typically the largest
+    /// cache source — so `.userCaches` is listed here (BUG-001 OQ-4). ONE owner per path still holds:
+    /// each folder below belongs to exactly one of these kinds (`SmartScanCoverageTests`).
+    static let smartScanKinds: [CleanupKind] = [.systemCaches, .userCaches, .logFiles, .trash, .xcodeData]
 
     init(roots: @escaping @Sendable (CleanupKind) -> [String] = { $0.targetPaths },
          trashDirectories: @escaping @Sendable () -> [URL] = {
@@ -39,7 +48,9 @@ actor ScanCoordinator {
              var resulting: NSURL?
              try FileManager.default.trashItem(at: url, resultingItemURL: &resulting)
          },
-         afterScan: @escaping @Sendable (CleanupKind) async -> Void = { _ in }) {
+         afterScan: @escaping @Sendable (CleanupKind) async -> Void = { _ in },
+         xcodeGlobal: @escaping @Sendable () async -> [BuildArtifactItem] = { await BuildArtifactScanner().xcodeGlobalItems() }) {
+        self.xcodeGlobal = xcodeGlobal
         self.afterScan = afterScan
         self.roots = roots
         self.trashDirectories = trashDirectories
@@ -51,7 +62,7 @@ actor ScanCoordinator {
     func runFullScan() async -> SmartScanResult {
         await withTaskGroup(of: CleanupCategory?.self) { group in
 
-            for kind in [CleanupKind.systemCaches, .logFiles, .trash, .xcodeData] {
+            for kind in Self.smartScanKinds {
                 group.addTask {
                     await self.scanCategory(kind)
                 }
@@ -182,7 +193,9 @@ actor ScanCoordinator {
             if Task.isCancelled { break }
             // `trashItem` on something already in the Trash "succeeds" without moving it, which
             // would be reported as moved, dropped from the list, and still occupy the disk.
-            // Halo never deletes permanently, so say what the user has to do instead.
+            // The flat Cleanup lists never delete permanently (the one exception is F-054's guarded
+            // "Move to Trash and empty" in BuildArtifactRemover, which never reaches this code), so
+            // say what the user has to do instead.
             let key = CleanupPath.key(item.url)
             if trashKeys.contains(where: { CleanupPath.isCovered(key, by: $0) }) {
                 result.failures.append(.init(name: item.name,
@@ -216,7 +229,7 @@ actor ScanCoordinator {
     /// the total and leaves the directory skeleton behind.
     private func scanDerivedDataDirectories() async -> [ScannedItem] {
         // F-054 D-04: sourced from BuildArtifactScanner so the folders have exactly one owner.
-        let found = await BuildArtifactScanner().xcodeGlobalItems()
+        let found = await xcodeGlobal()
         return found.map {
             ScannedItem(id: UUID(), url: $0.artifactURL, size: $0.size,
                         creationDate: nil, modifiedDate: $0.artifactModified, kind: .derived)

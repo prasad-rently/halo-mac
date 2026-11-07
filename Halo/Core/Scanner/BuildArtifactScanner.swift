@@ -1,4 +1,6 @@
 import Foundation
+import AppKit
+import Darwin.sys.proc_info
 
 // MARK: - F-054 Build Artifact Cleaner — engine
 //
@@ -131,7 +133,12 @@ struct BuildArtifactItem: Identifiable, Sendable, Equatable {
     let projectLastModified: Date?
     let gitStatus: BuildArtifactGitStatus
     let regenHint: String
+    /// Modified in the last 24 h (artifact or project marker) — a recency PROXY for "a build may be running".
     let isActive: Bool
+    /// A running process demonstrably uses this project (cwd of a build tool, or the workspace is open
+    /// in Xcode) — see `BuildArtifactInUse`. Stronger evidence than `isActive`, and like it, blocks
+    /// smart-select and permanent removal. A scan-time fact: the remover asks again before acting.
+    var isInUse: Bool = false
 
     var isXcodeGlobal: Bool { toolchainID == BuildArtifactScanner.xcodeGlobalToolchainID }
     /// "Unverified" = nothing but the marker pair vouches for it.
@@ -139,11 +146,23 @@ struct BuildArtifactItem: Identifiable, Sendable, Equatable {
 
     /// D-02 (owner-accepted): the irreversible "Trash and empty" action is for Safe + git-verified
     /// items ONLY. Caution, Needs-network, Unverified and Xcode-global items get Move to Trash.
-    var permanentRemovalEligible: Bool { regenClass == .safe && gitStatus == .ignored }
+    /// Follow-up to the #59 review: an item that is Active (touched < 24 h ago) or In use is not
+    /// eligible either — a build may be writing into it, and an irreversible delete is the wrong
+    /// moment to bet on "probably finished". They keep the recoverable Move to Trash.
+    var permanentRemovalEligible: Bool {
+        regenClass == .safe && gitStatus == .ignored && !isActive && !isInUse
+    }
 
-    /// FR-U4: smart-select never picks Caution, Active, or items git could not vouch for in a repo.
+    /// "Safe" as the Select-all-Safe control means it: Safe class AND positively vouched for — git
+    /// said ignored, or it is a fixed Xcode folder that needs no vouching. An `.notRepo` item
+    /// (nothing but the marker pair says it is build output) is Unverified, not Safe.
+    var isVerifiedSafe: Bool {
+        regenClass == .safe && (gitStatus == .ignored || gitStatus == .notApplicable)
+    }
+
+    /// FR-U4: smart-select never picks Caution, Active, In-use, or items git could not vouch for in a repo.
     func isSmartSelectable(staleDays: Int? = nil, now: Date = Date()) -> Bool {
-        guard regenClass != .caution, !isActive, gitStatus != .unavailable else { return false }
+        guard regenClass != .caution, !isActive, !isInUse, gitStatus != .unavailable else { return false }
         if let days = staleDays {
             let reference = [artifactModified, projectLastModified].compactMap { $0 }.max()
             guard let ref = reference else { return false }
@@ -164,6 +183,8 @@ struct BuildArtifactScanSummary: Sendable, Equatable {
     var skippedNotGitIgnored = 0
     var skippedUserIgnored = 0
     var gitUnavailableInRepo = 0
+    /// Offered as Unverified because the only thing "ignoring" them is a catch-all pattern (`*`).
+    var gitCatchAllIgnored = 0
     var stoppedEarly = false
     var catalogMissing = false
     var rootsScanned: [String] = []
@@ -227,6 +248,188 @@ enum BuildArtifactSafety {
     }
 }
 
+// MARK: - "In use" detection (follow-up to #59, spec §5.3.6)
+//
+// The mtime-based Active badge is a PROXY. This is evidence: is a running process actually using
+// the project? Only cheap, subprocess-free signals are used — `libproc` (the same `proc_pidinfo`
+// family ProcessMonitor already reads) and `NSRunningApplication`. No `lsof`, no AppleScript
+// (which would need an Automation permission), no file contents are read — apart from DerivedData's
+// own `info.plist`, to learn which project a DerivedData folder belongs to.
+//
+//   1. cwd of any running process that is not an idle shell: `npm run dev`, `cargo watch`,
+//      `gradle`, `xcodebuild`, an editor's language server ... — if its cwd is inside the item's
+//      project folder (or the artifact), the project is in use.
+//   2. Xcode: an Xcode-family process (Xcode, XCBBuildService, SourceKitService, swift-frontend ...)
+//      holds files open inside a DerivedData folder => that folder is in use, and its workspace's
+//      folder (`info.plist` `WorkspacePath`) is an open project, so e.g. its `build/` is too.
+//   3. If Xcode is running but Halo cannot see what it has open (libproc denied — the App Sandbox
+//      — or it holds nothing we can read), EVERY DerivedData folder is treated as in use. Not
+//      knowing is never read as "free".
+//
+// Limits, stated plainly: a tool run from a shell that then `cd`s elsewhere, a build that has not
+// started yet, or any state in a sandboxed build is invisible. "Not in use" means "no signal",
+// not "proven idle" — which is why the remover asks again right before an irreversible action and
+// why Active stays as a second, independent badge.
+
+struct BuildArtifactInUseSignals: Sendable, Equatable {
+    /// Resolved cwds of running, non-idle processes.
+    var busyDirectories: Set<String> = []
+    /// Resolved paths of DerivedData folders an Xcode-family process holds files open in.
+    var openDerivedDataFolders: Set<String> = []
+    /// Resolved folders of the workspaces/projects those DerivedData folders belong to.
+    var openProjectDirectories: Set<String> = []
+    /// Xcode is running but what it has open could not be read: every DerivedData folder counts as in use.
+    var xcodeRunningButOpaque = false
+    /// Resolved `…/Xcode/DerivedData`, to recognise Xcode-global items for the opaque case.
+    var derivedDataRoot: String = ""
+
+    static let none = BuildArtifactInUseSignals()
+}
+
+enum BuildArtifactInUse {
+
+    /// Interactive shells and session holders sit in a project folder without building anything;
+    /// counting them would mark every project that has a terminal open in it. (A shell RUNNING a
+    /// tool has that tool as a child with the same cwd, which is counted.)
+    static let idleProcessNames: Set<String> = [
+        "zsh", "bash", "sh", "fish", "dash", "ksh", "tcsh", "csh", "nu", "login", "tmux", "screen",
+    ]
+    static let xcodeBundleID = "com.apple.dt.Xcode"
+
+    /// Pure. Is this item in use, given the signals?
+    static func isInUse(_ item: BuildArtifactItem, signals: BuildArtifactInUseSignals) -> Bool {
+        let artifact = item.artifactURL.resolvingSymlinksInPath().path
+        if signals.busyDirectories.contains(where: { CleanupPath.isCovered($0, by: artifact) }) { return true }
+        if item.isXcodeGlobal {
+            if signals.openDerivedDataFolders.contains(artifact) { return true }
+            if signals.xcodeRunningButOpaque, !signals.derivedDataRoot.isEmpty,
+               CleanupPath.isCovered(artifact, by: signals.derivedDataRoot) { return true }
+            return false
+        }
+        let project = URL(fileURLWithPath: item.projectPath).resolvingSymlinksInPath().path
+        if signals.openProjectDirectories.contains(project) { return true }
+        return signals.busyDirectories.contains { CleanupPath.isCovered($0, by: project) }
+    }
+
+    /// The one spelling both sides are compared in. The kernel reports `/private/var/…`, while
+    /// Foundation's `resolvingSymlinksInPath` deliberately yields `/var/…` for the same folder;
+    /// passing kernel paths through the same function makes them comparable.
+    static func canonical(_ path: String) -> String { URL(fileURLWithPath: path).resolvingSymlinksInPath().path }
+
+    /// Xcode, and the services it launches, live inside an `Xcode*.app` bundle.
+    static func isXcodeFamily(executablePath path: String) -> Bool {
+        path.contains("/Xcode") && path.contains(".app/Contents/")
+    }
+
+    /// Blocking libproc reads (about a thousand syscalls) — never call from the main actor.
+    /// Under the App Sandbox the reads of OTHER processes are denied and the signals come back
+    /// empty (plus `xcodeRunningButOpaque` when Xcode is up); see the header for what that means.
+    static func currentSignals(home: String = NSHomeDirectory(),
+                               xcodeAppRunning: Bool? = nil,
+                               excludingPID: pid_t = getpid(),
+                               isXcodeProcess: (pid_t, String) -> Bool = { isXcodeFamily(executablePath: $1) }) -> BuildArtifactInUseSignals {
+        var s = BuildArtifactInUseSignals()
+        let derivedRoot = canonical(home + "/Library/Developer/Xcode/DerivedData")
+        s.derivedDataRoot = derivedRoot
+
+        var xcodePIDs: [pid_t] = []
+        for pid in allPIDs() where pid != excludingPID {
+            guard let exe = executablePath(of: pid) else { continue }
+            if isXcodeProcess(pid, exe) { xcodePIDs.append(pid) }
+            let name = (exe as NSString).lastPathComponent
+            if !idleProcessNames.contains(name), let cwd = currentDirectory(of: pid), cwd != "/" {
+                s.busyDirectories.insert(canonical(cwd))
+            }
+        }
+
+        var sawAnyOpenFile = false
+        for pid in xcodePIDs {
+            let paths = openFilePaths(of: pid).map(canonical)
+            if !paths.isEmpty { sawAnyOpenFile = true }
+            for p in paths where CleanupPath.isCovered(p, by: derivedRoot) && p != derivedRoot {
+                let rest = p.dropFirst(derivedRoot.count + 1)
+                guard let folder = rest.split(separator: "/").first else { continue }
+                s.openDerivedDataFolders.insert(derivedRoot + "/" + folder)
+            }
+        }
+        for folder in s.openDerivedDataFolders {
+            if let ws = workspacePath(ofDerivedDataFolder: folder) {
+                let url = URL(fileURLWithPath: ws).resolvingSymlinksInPath()
+                // `App.xcworkspace` / `App.xcodeproj` / `Package.swift` sit INSIDE the project folder.
+                s.openProjectDirectories.insert(url.deletingLastPathComponent().path)
+                s.openProjectDirectories.insert(url.path)
+            }
+        }
+        let running = xcodeAppRunning
+            ?? !NSRunningApplication.runningApplications(withBundleIdentifier: xcodeBundleID).isEmpty
+        s.xcodeRunningButOpaque = running && !sawAnyOpenFile
+        return s
+    }
+
+    /// `WorkspacePath` from `<DerivedData folder>/info.plist` — the project Xcode built this for.
+    static func workspacePath(ofDerivedDataFolder folder: String) -> String? {
+        guard let data = FileManager.default.contents(atPath: folder + "/info.plist"),
+              let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any]
+        else { return nil }
+        return plist["WorkspacePath"] as? String
+    }
+
+    // MARK: libproc readers — each returns nil / [] when the kernel refuses (sandbox, other user)
+
+    private static let procPidListFDs: Int32 = 1
+    private static let procPidVnodePathInfo: Int32 = 9
+    private static let procPidFDVnodePathInfo: Int32 = 2
+    private static let proxFDTypeVnode: UInt32 = 1
+    private static let procPidPathMax = 4096
+
+    static func allPIDs() -> [pid_t] {
+        let count = proc_listallpids(nil, 0)
+        guard count > 0 else { return [] }
+        var pids = [pid_t](repeating: 0, count: Int(count) + 32)
+        let actual = proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size))
+        guard actual > 0 else { return [] }
+        return pids.prefix(Int(actual)).filter { $0 > 0 }
+    }
+
+    static func executablePath(of pid: pid_t) -> String? {
+        var buf = [CChar](repeating: 0, count: procPidPathMax)
+        guard proc_pidpath(pid, &buf, UInt32(buf.count)) > 0 else { return nil }
+        return String(cString: buf)
+    }
+
+    /// The process's current working directory, resolved by the kernel.
+    static func currentDirectory(of pid: pid_t) -> String? {
+        var info = proc_vnodepathinfo()
+        let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
+        guard proc_pidinfo(pid, procPidVnodePathInfo, 0, &info, size) == size else { return nil }
+        let path = withUnsafePointer(to: &info.pvi_cdir.vip_path) {
+            $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+        }
+        return path.isEmpty ? nil : path
+    }
+
+    /// Paths of the regular files / directories the process has open. Empty when denied.
+    static func openFilePaths(of pid: pid_t) -> [String] {
+        let bytes = proc_pidinfo(pid, procPidListFDs, 0, nil, 0)
+        guard bytes > 0 else { return [] }
+        let stride = MemoryLayout<proc_fdinfo>.size
+        var fds = [proc_fdinfo](repeating: proc_fdinfo(), count: Int(bytes) / stride + 16)
+        let got = proc_pidinfo(pid, procPidListFDs, 0, &fds, Int32(fds.count * stride))
+        guard got > 0 else { return [] }
+        var out: [String] = []
+        for fd in fds.prefix(Int(got) / stride) where fd.proc_fdtype == proxFDTypeVnode {
+            var vi = vnode_fdinfowithpath()
+            let size = Int32(MemoryLayout<vnode_fdinfowithpath>.size)
+            guard proc_pidfdinfo(pid, fd.proc_fd, procPidFDVnodePathInfo, &vi, size) == size else { continue }
+            let path = withUnsafePointer(to: &vi.pvip.vip_path) {
+                $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+            }
+            if !path.isEmpty { out.append(path) }
+        }
+        return out
+    }
+}
+
 // MARK: - Git gate (D3)
 
 enum GitGate {
@@ -236,6 +439,46 @@ enum GitGate {
         case tracked        // git tracks something inside it
         case notIgnored     // in a work tree, untracked but NOT ignored
         case unavailable    // in a work tree but git could not answer
+        /// Git says ignored, but only because of a catch-all pattern (`*`, `/*`, `.*` ...), as in a
+        /// dotfiles repo whose work tree is `$HOME`. That says nothing about THIS folder, so it is
+        /// not a positive ignore: offered as Unverified, Trash only, never smart-selected.
+        case catchAllIgnore
+    }
+
+    /// What `git check-ignore -v` reported for a path: the rule that ignored it.
+    struct IgnoreRule: Sendable, Equatable { let source: String; let line: Int; let pattern: String }
+
+    /// Parses ONE record of `git check-ignore -v` output: `<source>:<line>:<pattern>\t<path>`.
+    /// nil when it does not look like that — callers must then NOT treat the path as verified.
+    static func parseCheckIgnoreVerbose(_ output: String) -> IgnoreRule? {
+        guard let record = output.split(separator: "\n").first,
+              let tab = record.firstIndex(of: "\t") else { return nil }
+        let left = String(record[record.startIndex..<tab])
+        guard let rx = try? NSRegularExpression(pattern: #"^(.+?):(\d+):(.*)$"#),
+              let m = rx.firstMatch(in: left, range: NSRange(left.startIndex..., in: left)),
+              m.numberOfRanges == 4,
+              let r1 = Range(m.range(at: 1), in: left), let r2 = Range(m.range(at: 2), in: left),
+              let r3 = Range(m.range(at: 3), in: left), let line = Int(left[r2]) else { return nil }
+        return IgnoreRule(source: String(left[r1]), line: line, pattern: String(left[r3]))
+    }
+
+    /// What a `check-ignore -v` HIT means. `-v` (unlike `-q`) exits 0 and prints the rule even when
+    /// the last matching rule is a NEGATION (`!build/`) — i.e. the path is explicitly NOT ignored
+    /// (`git status` lists it as untracked, possibly someone's new work). Verified against git 2.56:
+    /// `build/` then `!build/` gives `.gitignore:2:!build/<TAB>build`, exit 0. A negated rule must
+    /// therefore read as "not ignored", exactly as the `-q` form did before `-v` was introduced.
+    static func verdict(for rule: IgnoreRule) -> Verdict {
+        if rule.pattern.hasPrefix("!") { return .notIgnored }
+        return isCatchAllPattern(rule.pattern) ? .catchAllIgnore : .ignored
+    }
+
+    /// A pattern with no literal name character in it — only `*`, `?`, `/`, `.`, `!` — ignores
+    /// (nearly) everything, so it proves nothing about one folder: `*`, `/*`, `**`, `**/*`, `.*`.
+    /// `node_modules/`, `target`, `*.o`, `build*` all carry a literal and are not catch-alls.
+    static func isCatchAllPattern(_ pattern: String) -> Bool {
+        let p = pattern.trimmingCharacters(in: .whitespaces)
+        guard !p.isEmpty else { return true }
+        return p.allSatisfy { "*?/.![]\\".contains($0) }
     }
 
     private static let cacheLock = NSLock()
@@ -304,10 +547,15 @@ enum GitGate {
         guard tracked.succeeded else { return .unavailable }
         if !tracked.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return .tracked }
 
-        let ign = ShellReader.run(git, ["-C", project.path, "check-ignore", "-q", "--", artifactName], timeout: 10)
+        // `-v` names the rule that matched, so a catch-all `*` can be told from a real entry.
+        // Asked about THIS folder's own path (relative to the project dir), nothing broader.
+        let ign = ShellReader.run(git, ["-C", project.path, "check-ignore", "-v", "--", artifactName], timeout: 10)
         if ign.launchFailure != nil || ign.didTimeOut { return .unavailable }
         switch ign.exitCode {
-        case 0: return .ignored
+        case 0:
+            // Cannot say which rule ignored it => cannot call it verified.
+            guard let rule = parseCheckIgnoreVerbose(ign.standardOutput) else { return .unavailable }
+            return verdict(for: rule)
         case 1: return .notIgnored
         default: return .unavailable
         }
@@ -331,6 +579,9 @@ actor BuildArtifactScanner {
         var home = NSHomeDirectory()
         /// false = behave as if no git binary exists (sandboxed build, or tests of that path).
         var useGit = true
+        /// Reads the "in use" signals once per sizing pass. nil = no detection (tests, headless).
+        /// The pane wires `BuildArtifactInUse.currentSignals`.
+        var inUseSignals: (@Sendable () -> BuildArtifactInUseSignals)? = nil
     }
 
     /// Directory names never descended into during DETECTION (heavy, or output we would only
@@ -443,6 +694,15 @@ actor BuildArtifactScanner {
                     summary.gitUnavailableInRepo += 1
                     gated.append((c, .unavailable))
                 }
+            case .catchAllIgnore:
+                // A catch-all `*` is not a positive ignore, so rules that need one are not offered;
+                // the rest are Unverified (Trash only, never smart-selected).
+                if needsIgnore {
+                    continuation.yield(.skipped(path: key, reason: .requiresGitIgnore))
+                } else {
+                    summary.gitCatchAllIgnored += 1
+                    gated.append((c, .unavailable))
+                }
             }
         }
 
@@ -528,6 +788,11 @@ actor BuildArtifactScanner {
                 if Task.isCancelled { group.cancelAll(); continue }
                 addNext()
             }
+        }
+        // Read the signals AFTER the (possibly long) sizing: the freshest picture of what is running.
+        if let provider = config.inUseSignals {
+            let signals = provider()
+            out = out.map { var i = $0; i.isInUse = BuildArtifactInUse.isInUse(i, signals: signals); return i }
         }
         return out
     }
