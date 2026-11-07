@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import UniformTypeIdentifiers
 
 // MARK: - RosterPanelView
@@ -28,6 +29,9 @@ struct RosterPanelView: View {
     @State private var dropTargeted = false
     @State private var pickerEntryID: UUID?
     @State private var pendingPhotoMatch: AvatarFolderMatcher.Result?
+    @State private var storageUsage = AvatarStorageUsage.empty
+    @State private var usageTask: Task<Void, Never>?
+    @State private var confirmClearRosterPhotos = false
 
     private var roster: DrawRoster? { store.selected }
 
@@ -47,9 +51,10 @@ struct RosterPanelView: View {
                             titleVisibility: .visible,
                             presenting: pendingImport) { plan in
             // FR-4: never silently merged — two people can share a name.
-            Button("Keep both") { finishImport(plan.labels(for: .keepBoth), skipped: 0) }
+            Button("Keep both") { finishImport(plan.labels(for: .keepBoth), avatars: plan.avatars(for: .keepBoth), skipped: 0) }
             Button("Skip duplicates") {
-                finishImport(plan.labels(for: .skipDuplicates), skipped: plan.duplicateCount)
+                finishImport(plan.labels(for: .skipDuplicates), avatars: plan.avatars(for: .skipDuplicates),
+                             skipped: plan.duplicateCount)
             }
             Button("Cancel", role: .cancel) { }
         } message: { plan in
@@ -363,6 +368,9 @@ struct RosterPanelView: View {
                     Button("Import photos from a folder…") { chooseFolderForPhotos() }
                     Button("Clear all photos") { confirmClearPhotos = true }
                         .foregroundColor(.haloText3)
+                    Button("Export roster CSV…") { viewModel.exportRosterCSV() }
+                        .foregroundColor(.haloText3)
+                        .help("Names plus each avatar's kind and emoji/initials. Photos are never included.")
                 }
                 .buttonStyle(.plain).font(.system(size: 11)).foregroundColor(.haloAccent)
                 .confirmationDialog("Delete every stored photo?",
@@ -378,6 +386,13 @@ struct RosterPanelView: View {
                 }
                 Text("Photos stay on this Mac, as small copies, and are deleted with the roster.")
                     .font(.system(size: 10)).foregroundColor(.haloText3)
+                photoStorageReadout
+            }
+            .onAppear { refreshUsage() }
+            // ANY store change (a photo replaced keeps the count; a roster renamed or deleted changes
+            // the list) — debounced so a burst of edits is one scan.
+            .onReceive(store.objectWillChange.debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)) { _ in
+                refreshUsage()
             }
             .confirmationDialog(photoMatchTitle(pendingPhotoMatch),
                                 isPresented: Binding(get: { pendingPhotoMatch != nil },
@@ -430,6 +445,47 @@ struct RosterPanelView: View {
         beginImport(RosterImport.labels(fromPasted: raw))
     }
 
+    // MARK: - Photo storage (v2.6 C-3)
+
+    /// The directory walk runs off the main thread; only the latest request's result is kept.
+    private func refreshUsage() {
+        usageTask?.cancel()
+        usageTask = Task {
+            let usage = await store.avatarStorageUsageAsync()
+            if !Task.isCancelled { storageUsage = usage }
+        }
+    }
+
+    private var photoStorageReadout: some View {
+        let thisRoster = roster.flatMap { r in storageUsage.rosters.first { $0.rosterID == r.id }?.bytes } ?? 0
+        return VStack(alignment: .leading, spacing: 4) {
+            Text("Photo storage: \(AvatarStorageUsage.format(storageUsage.totalBytes)) on this Mac · "
+                 + "\(AvatarStorageUsage.format(thisRoster)) in this roster")
+                .font(.system(size: 10.5, weight: .medium)).foregroundColor(.haloText2)
+            ForEach(storageUsage.rosters) { row in
+                HStack {
+                    Text(row.name).lineLimit(1)
+                    Spacer()
+                    Text(AvatarStorageUsage.format(row.bytes))
+                }
+                .font(.system(size: 10)).foregroundColor(.haloText3)
+            }
+            Button("Clear this roster's photos") { confirmClearRosterPhotos = true }
+                .buttonStyle(.plain).font(.system(size: 11)).foregroundColor(.haloText3)
+                .disabled(thisRoster == 0)
+                .confirmationDialog("Delete this roster's photos?",
+                                    isPresented: $confirmClearRosterPhotos, titleVisibility: .visible) {
+                    Button("Delete photos in \(roster?.name ?? "this roster")", role: .destructive) {
+                        if let id = roster?.id { store.clearPhotos(inRoster: id) }
+                        refreshUsage()
+                    }
+                    Button("Cancel", role: .cancel) { }
+                } message: {
+                    Text("This removes the photo avatars of \(roster?.name ?? "this roster") only. Other rosters keep theirs. Those entries go back to initials. It cannot be undone.")
+                }
+        }
+    }
+
     // MARK: - Photo import from a folder (F-053 FR-B1)
 
     private func chooseFolderForPhotos() {
@@ -472,19 +528,19 @@ struct RosterPanelView: View {
     /// Classifies first, adds second. Anything that duplicates a name already there — or
     /// repeats within the batch — raises the Keep both / Skip prompt instead of being
     /// merged or added blindly.
-    private func beginImport(_ labels: [String]) {
+    private func beginImport(_ labels: [String], avatars: [EntryAvatar?] = []) {
         guard !labels.isEmpty else { return }
-        let plan = store.prepareImport(labels)
+        let plan = store.prepareImport(labels, avatars: avatars)
         if plan.hasDuplicates {
             pendingImport = plan
         } else {
-            finishImport(labels, skipped: 0)
+            finishImport(labels, avatars: avatars, skipped: 0)
         }
     }
 
-    private func finishImport(_ labels: [String], skipped: Int) {
+    private func finishImport(_ labels: [String], avatars: [EntryAvatar?] = [], skipped: Int) {
         let requested = labels.count
-        let added = store.commitImport(labels)
+        let added = store.commitImport(labels, avatars: avatars)
         var notes: [String] = []
         if added < requested {
             notes.append("Roster is full at \(DrawRoster.entryCap) entries — \(requested - added) not added.")
@@ -517,12 +573,13 @@ struct RosterPanelView: View {
             if let data = item as? Data { url = URL(dataRepresentation: data, relativeTo: nil) }
             else { url = item as? URL }
             guard let url else { return }
-            let result = Result { try RosterImport.read(fileAt: url) }
+            let result = Result { try RosterImport.readRows(fileAt: url) }
             DispatchQueue.main.async {
                 switch result {
-                case .success(let labels):
-                    if labels.isEmpty { limitNotice = "No names found in \(url.lastPathComponent)." }
-                    else { beginImport(labels) }
+                case .success(let rows):
+                    // v2.6 C-4: a CSV may carry an avatar column (emoji only — see RosterAvatarCSV).
+                    if rows.isEmpty { limitNotice = "No names found in \(url.lastPathComponent)." }
+                    else { beginImport(rows.map(\.label), avatars: rows.map(\.avatar)) }
                 case .failure(let error):
                     limitNotice = Self.message(for: error)
                 }

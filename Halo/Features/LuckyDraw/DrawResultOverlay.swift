@@ -11,6 +11,11 @@ struct DrawResultOverlay: View {
     var avatar: EntryAvatar? = nil
     var rosterID: UUID? = nil
     var showAvatar = false
+    /// v2.6 C-1: when true the avatar is drawn by `WinnerHeroAvatar` (a separate layer that flies in
+    /// from the wheel); this card then only keeps an empty slot of the same size and reports its frame.
+    var heroManaged = false
+    /// False holds the name's per-character reveal back until the hero avatar reports it has landed.
+    var nameGate = true
     let reducedMotion: Bool
     let canPutBack: Bool
     var onSpinAgain: () -> Void
@@ -20,6 +25,10 @@ struct DrawResultOverlay: View {
 
     @State private var appeared = false
     @State private var shockwave = false
+
+    static let avatarDiameter: CGFloat = 132
+
+    private var revealed: Bool { appeared && nameGate }
 
     /// Past this length a 12 ms per-character stagger reads as a stutter rather than
     /// a flourish, so long names fade in whole.
@@ -36,8 +45,16 @@ struct DrawResultOverlay: View {
             }
 
             VStack(spacing: 10) {
-                if showAvatar {
-                    AvatarView(avatar: avatar, label: label, rosterID: rosterID, diameter: 132,
+                if showAvatar && heroManaged {
+                    Color.clear
+                        .frame(width: Self.avatarDiameter, height: Self.avatarDiameter)
+                        .background(GeometryReader { g in
+                            Color.clear.preference(key: HeroSlotKey.self,
+                                                   value: g.frame(in: .named("luckyStage")))
+                        })
+                        .padding(.bottom, 2)
+                } else if showAvatar {
+                    AvatarView(avatar: avatar, label: label, rosterID: rosterID, diameter: Self.avatarDiameter,
                                ringColor: .haloAmber, ringStyle: AvatarView.winnerRing, ringFraction: 0.07)
                         .shadow(color: Color(hex: "#ffd36b").opacity(0.35), radius: 22)
                         // Reduced Motion: it simply fades in with the card; otherwise it springs up a
@@ -110,10 +127,10 @@ struct DrawResultOverlay: View {
                     Text(String(character))
                         .font(.system(size: 27, weight: .heavy, design: .rounded))
                         .foregroundColor(.haloText)
-                        .offset(y: appeared ? 0 : 10)
-                        .opacity(appeared ? 1 : 0)
+                        .offset(y: revealed ? 0 : 10)
+                        .opacity(revealed ? 1 : 0)
                         .animation(.spring(response: 0.5, dampingFraction: 0.7)
-                            .delay(0.3 + Double(index) * 0.012), value: appeared)
+                            .delay((heroManaged ? 0 : 0.3) + Double(index) * 0.012), value: revealed)
                 }
             }
         }
@@ -132,6 +149,60 @@ struct DrawResultOverlay: View {
             }
         }
         .padding(-2)
+    }
+}
+
+// MARK: - Hero avatar (v2.6 C-1)
+
+/// The popup card's avatar slot, in the lucky-draw stage's coordinate space.
+struct HeroSlotKey: PreferenceKey {
+    static var defaultValue: CGRect?
+    static func reduce(value: inout CGRect?, nextValue: () -> CGRect?) { value = nextValue() ?? value }
+}
+
+/// The winner's avatar, flying from its wheel segment to the popup's avatar slot while it grows to
+/// full size (450 ms ease-out). Reduced Motion — or a winner the wheel drew no avatar for — gets a
+/// plain cross-fade at the slot, no movement. The geometry is `HeroTravel` (unit-tested); this view
+/// only plays it. Must sit in the stage's own ZStack so `.position` is in stage coordinates.
+struct WinnerHeroAvatar: View {
+    let avatar: EntryAvatar?
+    let label: String
+    let rosterID: UUID?
+    let target: CGRect
+    let origin: (centre: CGPoint, diameter: CGFloat)?
+    let reducedMotion: Bool
+    /// Called once the flight (or fade) has finished.
+    var onLanded: () -> Void = {}
+
+    @State private var landed = false
+
+    var body: some View {
+        let style = HeroTravel.style(reducedMotion: reducedMotion, hasOrigin: origin != nil)
+        let start = origin.map {
+            HeroTravel.start(origin: $0.centre, originDiameter: $0.diameter,
+                             target: CGPoint(x: target.midX, y: target.midY), targetDiameter: target.width)
+        }
+        let flying = style == .travel && !landed
+        AvatarView(avatar: avatar, label: label, rosterID: rosterID, diameter: target.width,
+                   ringColor: .haloAmber, ringStyle: AvatarView.winnerRing, ringFraction: 0.07)
+            .shadow(color: Color(hex: "#ffd36b").opacity(0.35), radius: 22)
+            .scaleEffect(flying ? (start?.scale ?? 1) : 1)
+            .offset(flying ? (start?.offset ?? .zero) : .zero)
+            .opacity(style == .crossfade && !landed ? 0 : 1)
+            .position(x: target.midX, y: target.midY)
+            .onAppear {
+                let duration = style == .travel ? HeroTravel.duration : HeroTravel.crossfadeDuration
+                if #available(macOS 14.0, *) {
+                    // Completion of the animation itself, not a parallel timer.
+                    withAnimation(.easeOut(duration: duration), completionCriteria: .logicallyComplete) {
+                        landed = true
+                    } completion: { onLanded() }
+                } else {
+                    // macOS 13 has no animation-completion callback; fall back to the animation's duration.
+                    withAnimation(.easeOut(duration: duration)) { landed = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + duration) { onLanded() }
+                }
+            }
     }
 }
 

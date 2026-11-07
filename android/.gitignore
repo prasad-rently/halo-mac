@@ -5,3 +5,8 @@ local.properties
 .idea/
 captures/
 .kotlin/
+
+# Release signing material must never be committed (F-058 / FR-R3). Owner holds the keystore.
+*.jks
+*.keystore
+*.p12

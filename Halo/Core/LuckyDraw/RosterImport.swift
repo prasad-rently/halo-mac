@@ -64,6 +64,12 @@ enum RosterImport {
     /// Reads a dropped file into labels. UTF-8 first, then Mac Roman — the encoding an
     /// older Excel "CSV (Macintosh)" export is in — so accented names survive either way.
     static func read(fileAt url: URL) throws -> [String] {
+        let (text, ext) = try readText(fileAt: url)
+        return labels(fromFileContents: text, fileExtension: ext)
+    }
+
+    /// The size/type/encoding checks shared by `read(fileAt:)` and `readRows(fileAt:)`.
+    static func readText(fileAt url: URL) throws -> (text: String, ext: String) {
         let ext = url.pathExtension.lowercased()
         guard supportedExtensions.contains(ext) else { throw ReadError.unsupportedType(ext) }
 
@@ -74,7 +80,7 @@ enum RosterImport {
         if data.count > maxFileBytes { throw ReadError.tooLarge(bytes: data.count) }
         guard let text = String(data: data, encoding: .utf8)
                       ?? String(data: data, encoding: .macOSRoman) else { throw ReadError.unreadable }
-        return labels(fromFileContents: text, fileExtension: ext)
+        return (text, ext)
     }
 
     // MARK: - Duplicates
@@ -98,6 +104,8 @@ enum RosterImport {
 
     struct Item: Equatable {
         let label: String
+        /// v2.6 C-4: the avatar a CSV row asked for — only ever `.emoji` or nil (see `RosterAvatarCSV`).
+        var avatar: EntryAvatar? = nil
         /// True when the same name is already on the roster, or appears earlier in this
         /// same batch. The *first* of two identical incoming labels is not a duplicate
         /// of the second — only the repeat is.
@@ -118,16 +126,25 @@ enum RosterImport {
             case .skipDuplicates:  return items.filter { !$0.isDuplicate }.map(\.label)
             }
         }
+
+        /// Avatars parallel to `labels(for:)`.
+        func avatars(for policy: DuplicatePolicy) -> [EntryAvatar?] {
+            switch policy {
+            case .keepBoth:        return items.map(\.avatar)
+            case .skipDuplicates:  return items.filter { !$0.isDuplicate }.map(\.avatar)
+            }
+        }
     }
 
     /// Never merges silently (FR-4): this only *classifies*; the caller asks the user.
-    static func plan(incoming: [String], existing: [String]) -> Plan {
+    static func plan(incoming: [String], existing: [String], avatars: [EntryAvatar?] = []) -> Plan {
         var seen = Set(existing.map(key(for:)))
         var items: [Item] = []
         items.reserveCapacity(incoming.count)
-        for label in incoming {
+        for (i, label) in incoming.enumerated() {
             let k = key(for: label)
-            items.append(Item(label: label, isDuplicate: seen.contains(k)))
+            items.append(Item(label: label, avatar: i < avatars.count ? avatars[i] : nil,
+                              isDuplicate: seen.contains(k)))
             seen.insert(k)
         }
         return Plan(items: items)
@@ -136,7 +153,7 @@ enum RosterImport {
     // MARK: - Helpers
 
     /// Trim, truncate to what will be stored, and drop empties.
-    private static func clean(_ piece: String) -> String? {
+    static func clean(_ piece: String) -> String? {
         let trimmed = piece.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         return String(trimmed.prefix(labelLimit))

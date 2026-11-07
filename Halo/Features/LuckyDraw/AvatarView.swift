@@ -11,15 +11,17 @@ import CoreGraphics
 /// whole reason this is a thread-safe class rather than something `@MainActor`: `Canvas`'s
 /// renderer closure is not main-actor isolated.
 ///
-/// Sizes are bucketed (64 / 128 / 256 px) so a window resize doesn't decode a photo again, and the
-/// cache is capped, so a 500-entry roster is a bounded amount of memory (~37 KB per 96-px image).
+/// Sizes are bucketed (64 / 128 / 256 px) so a window resize doesn't decode a photo again. The cache
+/// is capped **in bytes** (64 MB — H-10), evicting the least recently *used* image first: a count cap
+/// alone let 600 × 256-px images (~150 MB) sit in memory, and evicting by insertion order threw away
+/// the photos the wheel was drawing every frame while keeping ones it had scrolled past.
 final class AvatarImageCache: ObservableObject, @unchecked Sendable {
     static let shared = AvatarImageCache()
 
     /// Set by `LuckyDrawStore.shared`. Nil ⇒ photos are never resolved (monogram fallback).
     var store: AvatarStore? {
         get { lock.lock(); defer { lock.unlock() }; return _store }
-        set { lock.lock(); _store = newValue; images.removeAll(); order.removeAll(); failed.removeAll(); lock.unlock() }
+        set { lock.lock(); _store = newValue; images.removeAll(); lastUsed.removeAll(); bytes = 0; failed.removeAll(); lock.unlock() }
     }
 
     @Published private(set) var revision = 0
@@ -27,20 +29,40 @@ final class AvatarImageCache: ObservableObject, @unchecked Sendable {
     private let lock = NSLock()
     private var _store: AvatarStore?
     private var images: [String: CGImage] = [:]
-    private var order: [String] = []
+    /// key → value of `tick` at its last use. Eviction takes the smallest; a hit only bumps a number, so
+    /// the per-frame lookup from `Canvas` stays O(1).
+    private var lastUsed: [String: UInt64] = [:]
+    private var tick: UInt64 = 0
+    private var bytes = 0
     private var inFlight = Set<String>()
     /// Keys whose load came back empty (file missing or unreadable). Without this a missing photo was
     /// re-read from disk on every frame the wheel drew: 60 dispatches a second per entry.
     private var failed = Set<String>()
     private var bumpScheduled = false
-    private let capacity = 600
+    /// Upper bound on decoded pixel memory.
+    static let defaultByteCapacity = 64 * 1024 * 1024
+    private let byteCapacity: Int
     private var _loadAttempts = 0
+
+    init(byteCapacity: Int = AvatarImageCache.defaultByteCapacity) { self.byteCapacity = byteCapacity }
 
     /// How many disk loads this cache has started. Exposed so a test can prove a missing photo is
     /// not re-read on every frame.
     var loadAttempts: Int { lock.lock(); defer { lock.unlock() }; return _loadAttempts }
     /// How many decoded images it currently holds.
     var decodedCount: Int { lock.lock(); defer { lock.unlock() }; return images.count }
+    /// Bytes of decoded pixels currently held — never above `byteCapacity` (except a single image larger than it).
+    var decodedBytes: Int { lock.lock(); defer { lock.unlock() }; return bytes }
+    /// Whether `fileName` is decoded at `points`, without touching its recency. Test seam.
+    func isCached(fileName: String, rosterID: UUID, points: CGFloat) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return images["\(rosterID.uuidString)/\(fileName)@\(Self.bucket(forPoints: points))"] != nil
+    }
+
+    /// Loads started and not yet finished. Test seam.
+    var inFlightCount: Int { lock.lock(); defer { lock.unlock() }; return inFlight.count }
+
+    static func cost(of image: CGImage) -> Int { image.bytesPerRow * image.height }
 
     static func bucket(forPoints points: CGFloat) -> Int {
         let px = points * 2
@@ -56,8 +78,10 @@ final class AvatarImageCache: ObservableObject, @unchecked Sendable {
         let base = "\(rosterID.uuidString)/\(fileName)@"
         let key = base + String(px)
         lock.lock()
-        if let hit = images[key] { lock.unlock(); return hit }
-        let standIn = [256, 128, 64].lazy.filter { $0 != px }.compactMap { self.images[base + String($0)] }.first
+        if let hit = images[key] { tick &+= 1; lastUsed[key] = tick; lock.unlock(); return hit }
+        let standInKey = [256, 128, 64].lazy.filter { $0 != px }.map { base + String($0) }.first { self.images[$0] != nil }
+        let standIn = standInKey.flatMap { images[$0] }
+        if let standInKey { tick &+= 1; lastUsed[standInKey] = tick }       // it is being drawn: it is in use
         let store = _store
         let shouldLoad = store != nil && !failed.contains(key) && inFlight.insert(key).inserted
         if shouldLoad { _loadAttempts += 1 }
@@ -75,9 +99,15 @@ final class AvatarImageCache: ObservableObject, @unchecked Sendable {
         inFlight.remove(key)
         var scheduleBump = false
         if let image {
+            if let old = images[key] { bytes -= Self.cost(of: old) }
             images[key] = image
-            order.append(key)
-            while order.count > capacity { images.removeValue(forKey: order.removeFirst()) }
+            bytes += Self.cost(of: image)
+            tick &+= 1; lastUsed[key] = tick
+            // Evict least-recently-used until under the cap, but never the image that just landed.
+            while bytes > byteCapacity, let victim = lastUsed.filter({ $0.key != key }).min(by: { $0.value < $1.value })?.key {
+                if let gone = images.removeValue(forKey: victim) { bytes -= Self.cost(of: gone) }
+                lastUsed.removeValue(forKey: victim)
+            }
             // Every avatar on screen observes `revision`, so one bump per photo is O(n^2) redraws while a
             // 500-entry roster fills in. Batch: the first photo to land arms a short timer; the rest
             // ride along on the same bump.
@@ -99,9 +129,11 @@ final class AvatarImageCache: ObservableObject, @unchecked Sendable {
     func forget(rosterID: UUID) {
         lock.lock()
         let prefix = rosterID.uuidString + "/"
-        for key in images.keys where key.hasPrefix(prefix) { images.removeValue(forKey: key) }
+        for key in images.keys where key.hasPrefix(prefix) {
+            if let gone = images.removeValue(forKey: key) { bytes -= Self.cost(of: gone) }
+        }
         failed = failed.filter { !$0.hasPrefix(prefix) }
-        order.removeAll { $0.hasPrefix(prefix) }
+        lastUsed = lastUsed.filter { !$0.key.hasPrefix(prefix) }
         lock.unlock()
         DispatchQueue.main.async { self.revision &+= 1 }
     }
