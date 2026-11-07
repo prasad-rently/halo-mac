@@ -1,6 +1,6 @@
 # BUG-001 — Cleanup: no rescan, and deleted items linger in other categories
 
-> **Status:** 📋 Queued — analysis and requirements only; System Caches scope decided 2026-10-27. **No fix is written yet.**
+> **Status:** 🔧 **Fix merged in `release/v2.5` (PR #53); H-01/H-04 added there; v2.6 hardening H-02/H-03/H-05 built on PR #60 (unmerged).** OQ-1 closed by measurement (§6). **Nothing here has been clicked through in the running app** (T-1 ◆ pending). System Caches scope decided 2026-10-27.
 > **Raised:** 2026-10-27 · **Severity:** Medium (wrong numbers + a visible "ghost item" that errors when clicked; no data loss) · **Effort estimate:** ~2.5–3 d
 > **Blocks:** [F-054 Build Artifact Cleaner](F-054-build-artifact-cleaner.md) — that pane must sit on the corrected state model.
 > **Not a feature** (no new `F-xxx`, so the mobile-parity rule does not apply); recorded here and in `FEATURE_ROADMAP.md`'s bug queue.
@@ -112,10 +112,32 @@ Two defects and one requirement:
 | ~~OQ-1~~ | ~~What should **System Caches** be once it stops listing `~/Library/Caches`?~~ | **Resolved 2026-10-27: minimal fix, then measure.** Remove the `~/Library/Caches` overlap now and keep `/private/var/folders`. Before adding `/Library/Caches` (or merging the category into *Temp Files*), check on a real Mac what is readable and deletable (SIP, root-owned files) and record the result here. |
 | OQ-2 | Rescan scope: one button for everything (proposed) vs per-category rescan too. | One header button; a per-category rescan is a one-line addition if wanted. |
 | OQ-3 | Keep a visible "moved to Trash, not yet freed" total in the header, so the user sees pending space? | Proposed: yes — it directly answers "I deleted it, why is my disk still full?". |
-| OQ-4 | Smart Scan coverage after FR-2 (see §3): add `.userCaches` to `runFullScan`'s category list so `~/Library/Caches` stays covered? | Proposed: yes — one-line change; add a test that Smart Scan's categories still cover `~/Library/Caches` exactly once. |
+| OQ-4 | Smart Scan coverage after FR-2 (see §3): add `.userCaches` to `runFullScan`'s category list so `~/Library/Caches` stays covered? | Proposed: yes — one-line change; add a test that Smart Scan's categories still cover `~/Library/Caches` exactly once. **Status 2026-11-01: NOT applied.** `runFullScan` on `release/v2.6` scans `systemCaches, logFiles, trash, xcodeData` — `~/Library/Caches` is therefore **no longer in Smart Scan** (PR #53's body calls the drop in the Smart Scan System Caches number "a correction"). Still open; v2.7 / owner decision. |
 
 ---
 
 ## 6. Implementation Record
 
-*Not started.*
+### 6.1 PR #53 — merged into `release/v2.5`
+
+System Caches no longer lists `~/Library/Caches` (one owner per path). `CleanupViewModel.reconcile(removed:)` removes a trashed path (and anything under it) from **every** category immediately, then rescans the affected categories + Trash for exact sizes. Scan generations + a removed-since-scan-start filter stop a stale scan resurrecting a deleted row. `executeCleanup` returns per-item results: only items that moved leave the lists; failures stay listed with the error; already-gone files drop quietly. **Rescan** button (⌘R) with "Last scanned"; rescan on app activation after 60 s; `pruneMissing` before the Clean-all confirmation; a banner saying space is freed when the Trash is emptied. `ScanCoordinator` takes injectable roots/trash. Before merge: scan-generation guards made test-provable (**H-04**: removing either guard turns a test red) and Clean All acts on the confirmed snapshot (**H-01**).
+**Verified:** 16 new tests (`CleanupRootsTests`, `CleanupReconcileTests`, `CleanupViewModelTests`) plus the H-01/H-04 additions; mutation-checked (re-adding `~/Library/Caches` to System Caches; skipping the cross-category reconcile; removing the stale-scan filter). **Not checked on screen:** the Rescan button, ⌘R, banner, activation rescan (T-1 ◆). Not done: FSEvents watching (explicit non-goal).
+
+### 6.2 v2.6 hardening on PR #60 (unmerged)
+
+| ID | Built | Honest note |
+|---|---|---|
+| H-02 | `pruneMissing` / `beginCleanAll` / `cleanAll` existence checks run on a detached task, bounded by a deadline and by cancellation (cancellation made real by `withTaskCancellationHandler` in review); unchecked paths are treated as **present** — never dropped on a guess | The AC's "20 000-item prune without a > 50 ms main-thread stall" was **not measured** (no signpost); the only indicator is 20 000 `lstat`s on warm local APFS = 33 ms. No in-progress state during the up-to-5 s (+30 s in `cleanAll`) check — a double-click opens two prunes; key computation (`reconcile`, `cleanAll` filter) is still on the main actor |
+| H-03 | `CleanOutcome`: one banner per operation, shown on partial failure ("Moved 2, 1 failed: bad.bin — …"), cleared on category switch and the next full rescan | model tests; GUI placement not seen |
+| H-05 | `CleanupPath.key` resolves symlinked **directory** components (leaf not followed); documents a case-**sensitive** policy; `directoryKey` for roots/Trash (review fix: a symlinked root or Trash previously never covered its items) | **Partial.** The BRD AC asked for a case-insensitive temp-volume test and a per-volume policy — **neither exists**; firmlinks (`/System/Volumes/Data/…`) are not canonicalised (not reachable today: scanners use `/Users/…`). The pure `/var`↔`/private/var` tests pass even without H-05 (`standardizedFileURL` already maps it) — regression guards, not proofs; only the symlinked-directory test discriminates |
+
+### 6.3 H-06 measurements (read-only, one Mac, macOS 27, 2026-10-28 — closes OQ-1)
+
+- **`/Library/Caches`:** `drwxrwxrwt root:admin` (sticky + world-writable), 7 entries, **4 KB total**; children owned by `root`, `_iconservices`, `_modelmanagerd`. With the sticky bit a non-root process cannot remove another owner's entry, so nothing meaningful is deletable and there is nothing to reclaim.
+- **`/private/var/folders`:** `root:wheel drwxr-xr-x` with the SIP flag `sunlnk`; two-letter hash dirs. The user's own `…/<hash>/C` (cache, **620 MB**) and `…/T` (temp, **1.4 GB**) are owned by the user, mode `0700`, but dozens of sub-entries return `Operation not permitted` (e.g. `TemporaryItems`, `*ShortcutsSandboxCache`, `com.apple.WebKit.*.Sandbox`) — protected even for the owner.
+- **Decision recorded (owner may overturn):** do **not** add `/private/var/folders` as a root; if wanted later, only the user's `DARWIN_USER_CACHE_DIR` children, relying on H-03's partial-failure banner for the protected ones. `/Library/Caches` is not added (nothing to reclaim). The category stays as #53 left it — one owner per path, `/private/var/folders` kept per the 2026-10-27 decision.
+- **Caveat:** a single machine and one user; not re-measured on Intel or another macOS.
+
+### 6.4 `/var` path-key note (H-19 fold-in)
+
+`URL.standardizedFileURL` already maps `/private/var` → `/var`, so `/var` and `/private/var` spellings of one item reconcile **without** the H-05 change. What H-05 actually fixes (and what turns its tests red) is symlinked directory components and non-existent leaves.
