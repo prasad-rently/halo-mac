@@ -77,6 +77,15 @@ final class SMSConsoleViewModel: ObservableObject {
         return "\(dev) · \(l.label)"
     }
 
+    /// The thread row's one-line preview. A message the user sent reads "You: …" so it is never mistaken for a reply.
+    func preview(for thread: SMSThread) -> String {
+        guard let last = thread.lastMessage else { return "" }
+        return last.direction == .sent ? "You: \(last.body)" : last.body
+    }
+
+    /// "Sent from Pixel 8 · Personal" — the line a sent message left from.
+    func sentLabel(for message: SMSMessage, line: SMSLine) -> String { "Sent from \(lineTitle(line))" }
+
     func unread(forLine id: String) -> Int {
         allThreads.filter { $0.lineId == id }.reduce(0) { $0 + $1.unreadCount }
     }

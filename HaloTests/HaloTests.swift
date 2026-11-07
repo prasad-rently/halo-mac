@@ -6186,7 +6186,9 @@ struct CleanupReconcileTests {
         var cats = [CleanupCategory(kind: .systemCaches), CleanupCategory(kind: .userCaches)]
         cats[0].items = [item("/x/Caches/a.bin"), item("/x/Caches/dir/b.bin"), item("/x/Caches/keep.bin")]
         cats[1].items = [item("/x/Caches/a.bin"), item("/x/Caches/dir/b.bin")]
-        let changed = CleanupReconciler.apply(removedKeys: ["/x/Caches/a.bin", "/x/Caches/dir"], to: &cats)
+        // Keys come from `CleanupPath.key` — never hand-typed: it folds case on a case-insensitive volume.
+        let changed = CleanupReconciler.apply(
+            removedKeys: ["/x/Caches/a.bin", "/x/Caches/dir"].map { CleanupPath.key(URL(fileURLWithPath: $0)) }, to: &cats)
         #expect(Set(changed) == [.systemCaches, .userCaches])
         #expect(cats[0].items.map(\.name) == ["keep.bin"])
         #expect(cats[1].items.isEmpty)
@@ -6196,7 +6198,7 @@ struct CleanupReconcileTests {
     func prefixIsNotAncestor() {
         var cats = [CleanupCategory(kind: .userCaches)]
         cats[0].items = [item("/x/Caches/dir/a.bin"), item("/x/Caches/dir2/a.bin")]
-        CleanupReconciler.apply(removedKeys: ["/x/Caches/dir"], to: &cats)
+        CleanupReconciler.apply(removedKeys: [CleanupPath.key(URL(fileURLWithPath: "/x/Caches/dir"))], to: &cats)
         #expect(cats[0].items.map(\.url.path) == ["/x/Caches/dir2/a.bin"])
     }
 
@@ -6319,7 +6321,7 @@ struct CleanupViewModelTests {
         let vm = f.vm()
         await vm.scanAll()
         #expect(names(vm, .trash).isEmpty)
-        await vm.cleanAll(confirmed: try #require(vm.beginCleanAll(for: .userCaches)))
+        await vm.cleanAll(confirmed: try #require(await vm.beginCleanAll(for: .userCaches)))
         #expect(names(vm, .trash) == ["a.bin"])
         #expect(vm.lastCleanResult?.deleted == 1)
     }
@@ -6330,7 +6332,7 @@ struct CleanupViewModelTests {
         try f.file("ok1.bin"); try f.file("bad.bin"); try f.file("ok2.bin")
         let vm = f.vm(failing: ["bad.bin"])
         await vm.scanAll()
-        await vm.cleanAll(confirmed: try #require(vm.beginCleanAll(for: .userCaches)))
+        await vm.cleanAll(confirmed: try #require(await vm.beginCleanAll(for: .userCaches)))
         #expect(names(vm, .userCaches) == ["bad.bin"])
         #expect(names(vm, .systemCaches) == ["bad.bin"])
         #expect(vm.cleanError?.contains("bad.bin") == true)
@@ -6358,7 +6360,7 @@ struct CleanupViewModelTests {
         let vm = f.vm()
         await vm.scanAll()
         try FileManager.default.removeItem(at: a)
-        vm.pruneMissing()
+        await vm.pruneMissing()
         #expect(names(vm, .userCaches) == ["b.bin"])
         #expect(names(vm, .systemCaches) == ["b.bin"])
     }
@@ -6408,7 +6410,7 @@ struct CleanupViewModelTests {
         let vm = f.vm()
         await vm.scanAll()
         #expect(names(vm, .trash) == ["t.bin"])
-        await vm.cleanAll(confirmed: try #require(vm.beginCleanAll(for: .trash)))
+        await vm.cleanAll(confirmed: try #require(await vm.beginCleanAll(for: .trash)))
         #expect(names(vm, .trash) == ["t.bin"], "an item already in the Trash is still there")
         #expect(FileManager.default.fileExists(atPath: f.trash.appendingPathComponent("t.bin").path))
         #expect(vm.cleanError != nil)
@@ -6459,7 +6461,7 @@ struct CleanupViewModelTests {
         try f.file("c1.bin"); try f.file("c2.bin"); try f.file("c3.bin")
         let vm = f.vm()
         await vm.scanAll()
-        let snapshot = try #require(vm.beginCleanAll(for: .userCaches))        // user opens the dialog: N = 3
+        let snapshot = try #require(await vm.beginCleanAll(for: .userCaches))        // user opens the dialog: N = 3
         #expect(snapshot.items.count == 3)
 
         try f.file("new1.bin"); try f.file("new2.bin")                           // M = 2 more appear…
@@ -6481,7 +6483,7 @@ struct CleanupViewModelTests {
         let a = try f.file("a.bin"); try f.file("b.bin")
         let vm = f.vm()
         await vm.scanAll()
-        let snapshot = try #require(vm.beginCleanAll(for: .userCaches))
+        let snapshot = try #require(await vm.beginCleanAll(for: .userCaches))
         try FileManager.default.removeItem(at: a)
         await vm.cleanAll(confirmed: snapshot)
         #expect(vm.cleanError == nil)

@@ -136,6 +136,13 @@ struct SafeFileNameTests {
         #expect(SafeFileName.relativePath("Win\\Style\\a.txt") == "Win/Style/a.txt")
     }
 
+    @Test("Received names cannot carry bidi overrides, zero-width or control characters")
+    func invisibles() {
+        #expect(SafeFileName.relativePath("invoice-\u{202E}gpj.exe") == "invoice-gpj.exe")
+        #expect(SafeFileName.relativePath("a\u{200B}b/\u{FEFF}c.txt") == "ab/c.txt")
+        #expect(SafeFileName.relativePath("tab\there\n.txt") == "tabhere.txt")
+    }
+
     @Test("Traversal is neutralised")
     func neutralises() {
         #expect(SafeFileName.relativePath("../../.zshrc") == ".zshrc")

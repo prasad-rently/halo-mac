@@ -70,15 +70,28 @@ struct SMSLine: Identifiable, Hashable, Sendable {
     var syncEnabled: Bool = true
 }
 
+/// Which way a message went. The phone syncs what it RECEIVES always, and what the user SENDS only when they
+/// opt in ("Also sync messages I send").
+///
+/// This is load-bearing well beyond display: the expenditure pipeline (F-048/F-056) must only ever see
+/// `.received` — a text the user wrote ("paid you Rs 500, got it?") is not a bank alert and must never become
+/// a transaction — and a sent message must never raise a notification or count as unread.
+enum SMSDirection: String, Hashable, Sendable {
+    case received
+    case sent
+}
+
 /// A single message (already decrypted for the console).
 struct SMSMessage: Identifiable, Hashable, Sendable {
     let id: String
     let lineId: String
-    let contactNumber: String   // the other party
+    /// The other party: the sender of a received message, the RECIPIENT of a sent one.
+    let contactNumber: String
     let body: String
     let date: Date
     let category: SMSCategory
     var read: Bool
+    var direction: SMSDirection = .received
 }
 
 /// A per-line conversation thread (F-044 D21 — thread identity = device+line+contact).
@@ -90,9 +103,14 @@ struct SMSThread: Identifiable, Hashable, Sendable {
 
     var lastMessage: SMSMessage? { messages.max(by: { $0.date < $1.date }) }
     var lastDate: Date { lastMessage?.date ?? .distantPast }
-    var unreadCount: Int { messages.filter { !$0.read }.count }
-    /// Dominant category (the thread's newest message's category is a good proxy).
-    var category: SMSCategory { lastMessage?.category ?? .uncategorized }
+    /// Only received messages can be unread — a message the user sent is by definition read.
+    var unreadCount: Int { messages.filter { $0.direction == .received && !$0.read }.count }
+    /// Dominant category: the newest RECEIVED message's. A sent message is never classified (the classifier
+    /// reads a bank's alert format; the user's own writing would mislabel the thread), so a thread whose newest
+    /// message is the user's keeps the category of what they were replying to.
+    var category: SMSCategory {
+        messages.filter { $0.direction == .received }.max(by: { $0.date < $1.date })?.category ?? .uncategorized
+    }
 }
 
 // MARK: - Classifier (pack-driven, F-044 §7.4)

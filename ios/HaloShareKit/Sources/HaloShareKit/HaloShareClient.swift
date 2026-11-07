@@ -182,6 +182,12 @@ public final class HaloShareClient: NSObject, @unchecked Sendable {
         guard FileManager.default.isReadableFile(atPath: file.url.path) else {
             throw HaloShareError.fileUnreadable(file.name)
         }
+        // `uploadTask(fromFile:)` follows links. The path was vetted when the selection was made,
+        // possibly long ago and in a container other processes can write to; a link there must not
+        // turn "send this file" into "send whatever it points at".
+        if (try? file.url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true {
+            throw HaloShareError.fileUnreadable(file.name)
+        }
 
         let task = session.uploadTask(with: request, fromFile: file.url)
         lock.withLock { progressHandlers[task.taskIdentifier] = progress }

@@ -13,6 +13,9 @@ struct CleanupResult: Sendable {
     var alreadyGone: [URL] = []
     var freed: Int64 = 0
     var failures: [Failure] = []
+    /// `ScannedItem.key` of everything in `gone`, collected here (off the main actor) so the caller
+    /// can drop those rows without keying or hashing tens of thousands of URLs itself.
+    var goneKeys: Set<String> = []
 
     /// Everything that should leave the on-screen lists.
     var gone: [URL] { removed + alreadyGone }
@@ -30,6 +33,15 @@ actor ScanCoordinator {
     /// Awaited after a category has been read from disk and before it is returned. A no-op in
     /// production; tests use it to make one scan finish after a newer one (BUG-001 R8).
     private let afterScan: @Sendable (CleanupKind) async -> Void
+    /// Where Smart Scan's "Xcode" line comes from (D-04). Injectable so a test does not walk the
+    /// real DerivedData.
+    private let xcodeGlobal: @Sendable () async -> [BuildArtifactItem]
+
+    /// What Smart Scan looks at. BUG-001 FR-2 removed `~/Library/Caches` from System Caches (it was
+    /// scanned twice); that left Smart Scan blind to the user's cache folder — typically the largest
+    /// cache source — so `.userCaches` is listed here (BUG-001 OQ-4). ONE owner per path still holds:
+    /// each folder below belongs to exactly one of these kinds (`SmartScanCoverageTests`).
+    static let smartScanKinds: [CleanupKind] = [.systemCaches, .userCaches, .logFiles, .trash, .xcodeData]
 
     init(roots: @escaping @Sendable (CleanupKind) -> [String] = { $0.targetPaths },
          trashDirectories: @escaping @Sendable () -> [URL] = {
@@ -39,7 +51,9 @@ actor ScanCoordinator {
              var resulting: NSURL?
              try FileManager.default.trashItem(at: url, resultingItemURL: &resulting)
          },
-         afterScan: @escaping @Sendable (CleanupKind) async -> Void = { _ in }) {
+         afterScan: @escaping @Sendable (CleanupKind) async -> Void = { _ in },
+         xcodeGlobal: @escaping @Sendable () async -> [BuildArtifactItem] = { await BuildArtifactScanner().xcodeGlobalItems() }) {
+        self.xcodeGlobal = xcodeGlobal
         self.afterScan = afterScan
         self.roots = roots
         self.trashDirectories = trashDirectories
@@ -51,7 +65,7 @@ actor ScanCoordinator {
     func runFullScan() async -> SmartScanResult {
         await withTaskGroup(of: CleanupCategory?.self) { group in
 
-            for kind in [CleanupKind.systemCaches, .logFiles, .trash, .xcodeData] {
+            for kind in Self.smartScanKinds {
                 group.addTask {
                     await self.scanCategory(kind)
                 }
@@ -85,6 +99,7 @@ actor ScanCoordinator {
 
         // Xcode DerivedData: enumerate build-project directories as single items
         if kind == .xcodeData {
+            // D-04: the Smart Scan "Xcode" line is sourced from the F-054 scanner (single owner).
             category.items = await scanDerivedDataDirectories()
             category.isScanning = false
             return category
@@ -159,7 +174,8 @@ actor ScanCoordinator {
                     size: size,
                     creationDate: resVals?.creationDate,
                     modifiedDate: resVals?.contentModificationDate,
-                    kind: .other
+                    kind: .other,
+                    pathKey: CleanupPath.key(child)
                 )
                 items.append(item)
             }
@@ -176,13 +192,15 @@ actor ScanCoordinator {
     /// set, and the caller then dropped every row. Now each outcome is explicit.
     func executeCleanup(items: [ScannedItem]) async -> CleanupResult {
         var result = CleanupResult()
-        let trashKeys = trashDirectories().map(CleanupPath.key)
+        let trashKeys = trashDirectories().map(CleanupPath.directoryKey)
         for item in items {
             if Task.isCancelled { break }
             // `trashItem` on something already in the Trash "succeeds" without moving it, which
             // would be reported as moved, dropped from the list, and still occupy the disk.
-            // Halo never deletes permanently, so say what the user has to do instead.
-            let key = CleanupPath.key(item.url)
+            // The flat Cleanup lists never delete permanently (the one exception is F-054's guarded
+            // "Move to Trash and empty" in BuildArtifactRemover, which never reaches this code), so
+            // say what the user has to do instead.
+            let key = item.key
             if trashKeys.contains(where: { CleanupPath.isCovered(key, by: $0) }) {
                 result.failures.append(.init(name: item.name,
                     message: "already in the Trash — empty the Trash in Finder to free the space"))
@@ -191,6 +209,7 @@ actor ScanCoordinator {
             do {
                 try trash(item.url)
                 result.removed.append(item.url)
+                result.goneKeys.insert(key)
                 result.freed += item.size
             } catch {
                 let ns = error as NSError
@@ -198,6 +217,7 @@ actor ScanCoordinator {
                     || !CleanupPath.existsOnDisk(item.url)
                 if alreadyGone {
                     result.alreadyGone.append(item.url)
+                    result.goneKeys.insert(key)
                 } else {
                     result.failures.append(.init(name: item.name, message: error.localizedDescription))
                 }
@@ -214,52 +234,12 @@ actor ScanCoordinator {
     /// space — scanning individual files inside them only finds a tiny fraction of
     /// the total and leaves the directory skeleton behind.
     private func scanDerivedDataDirectories() async -> [ScannedItem] {
-        let home = NSHomeDirectory()
-        let roots = [
-            URL(fileURLWithPath: "\(home)/Library/Developer/Xcode/DerivedData"),
-            URL(fileURLWithPath: "\(home)/Library/Developer/CoreSimulator/Caches")
-        ]
-        let fm = FileManager.default
-        var items: [ScannedItem] = []
-
-        for root in roots {
-            guard fm.fileExists(atPath: root.path) else { continue }
-
-            let children = (try? fm.contentsOfDirectory(
-                at: root,
-                includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey, .creationDateKey],
-                options: [.skipsHiddenFiles]
-            )) ?? []
-
-            // Process each project folder concurrently to calculate sizes fast
-            await withTaskGroup(of: ScannedItem?.self) { group in
-                for child in children {
-                    group.addTask {
-                        var isDir: ObjCBool = false
-                        guard fm.fileExists(atPath: child.path, isDirectory: &isDir),
-                              isDir.boolValue else { return nil }
-
-                        let resVals = try? child.resourceValues(
-                            forKeys: [.contentModificationDateKey, .creationDateKey]
-                        )
-                        let size = await self.scanner.calculateSize(of: child)
-                        guard size > 0 else { return nil }   // skip empty placeholder dirs
-
-                        return ScannedItem(
-                            id: UUID(),
-                            url: child,
-                            size: size,
-                            creationDate: resVals?.creationDate,
-                            modifiedDate: resVals?.contentModificationDate,
-                            kind: .derived
-                        )
-                    }
-                }
-                for await result in group {
-                    if let item = result { items.append(item) }
-                }
-            }
+        // F-054 D-04: sourced from BuildArtifactScanner so the folders have exactly one owner.
+        let found = await xcodeGlobal()
+        return found.map {
+            ScannedItem(id: UUID(), url: $0.artifactURL, size: $0.size,
+                        creationDate: nil, modifiedDate: $0.artifactModified, kind: .derived,
+                        pathKey: CleanupPath.key($0.artifactURL))
         }
-        return items.sorted { $0.size > $1.size }
     }
 }

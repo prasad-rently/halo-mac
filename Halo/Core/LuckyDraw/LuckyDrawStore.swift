@@ -28,6 +28,10 @@ final class LuckyDrawStore: ObservableObject {
     /// it must never run after a failed or missing read — an unreadable file would otherwise
     /// make every photo look unreferenced.
     private var loadedCleanly = false
+    /// Where the launch-time orphan sweep runs. Production hops to a utility queue; a test passes a
+    /// closure that runs the work inline (or records that it was never offered) so it can assert the
+    /// sweep's outcome immediately instead of sleeping and hoping (H-09).
+    private let sweepScheduler: (@escaping @Sendable () -> Void) -> Void
 
     private convenience init() {
         self.init(fileURL: Self.defaultStorageURL)
@@ -36,8 +40,12 @@ final class LuckyDrawStore: ObservableObject {
 
     /// Test seam: a scratch file and a private notification center, so a test never
     /// touches the user's rosters or posts a real app-termination notification.
-    init(fileURL: URL?, notificationCenter: NotificationCenter = .default, detectFaces: Bool = true) {
+    init(fileURL: URL?, notificationCenter: NotificationCenter = .default, detectFaces: Bool = true,
+         sweepScheduler: @escaping (@escaping @Sendable () -> Void) -> Void = { work in
+             DispatchQueue.global(qos: .utility).async(execute: work)
+         }) {
         self.fileURL = fileURL
+        self.sweepScheduler = sweepScheduler
         self.avatarStore = fileURL.map {
             AvatarStore(rootURL: $0.deletingLastPathComponent()
                 .appendingPathComponent("luckydraw/avatars", isDirectory: true),
@@ -88,19 +96,25 @@ final class LuckyDrawStore: ObservableObject {
 
     /// Step one of an add: classify what is about to be added against what is already on
     /// the selected roster. Changes nothing.
-    func prepareImport(_ labels: [String]) -> RosterImport.Plan {
-        RosterImport.plan(incoming: labels, existing: selected?.entries.map(\.label) ?? [])
+    func prepareImport(_ labels: [String], avatars: [EntryAvatar?] = []) -> RosterImport.Plan {
+        RosterImport.plan(incoming: labels, existing: selected?.entries.map(\.label) ?? [], avatars: avatars)
     }
 
     /// Step two: add `labels`, capped at `DrawRoster.entryCap`. Labels arrive already
     /// trimmed and truncated by `RosterImport`.
     @discardableResult
-    func commitImport(_ labels: [String]) -> Int {
+    func commitImport(_ labels: [String], avatars: [EntryAvatar?] = []) -> Int {
         guard !labels.isEmpty else { return 0 }
         var added = 0
         mutateSelected { roster in
-            for label in labels where roster.entries.count < DrawRoster.entryCap {
-                roster.entries.append(DrawEntry(label: String(label.prefix(RosterImport.labelLimit))))
+            for (i, label) in labels.enumerated() where roster.entries.count < DrawRoster.entryCap {
+                // v2.6 C-4: an imported avatar is only ever an emoji — re-checked here so no caller
+                // (present or future) can slip a `.photo(fileName:)` in through an import.
+                var avatar: EntryAvatar?
+                if i < avatars.count, case .emoji(let e)? = avatars[i], EmojiValidation.isSingleEmoji(e) {
+                    avatar = .emoji(e)
+                }
+                roster.entries.append(DrawEntry(label: String(label.prefix(RosterImport.labelLimit)), avatar: avatar))
                 added += 1
             }
         }
@@ -279,12 +293,52 @@ final class LuckyDrawStore: ObservableObject {
 
     func avatarStorageBytes() -> Int64 { avatarStore?.totalBytes() ?? 0 }
 
+    /// Entries holding a photo avatar, across every roster — a cheap change signal for the storage readout.
+    var photoAvatarCount: Int {
+        rosters.reduce(0) { $0 + $1.entries.filter { $0.avatar?.isPhoto == true }.count }
+    }
+
+    /// v2.6 C-3: total and per-roster photo storage, for the roster panel's readout.
+    func avatarStorageUsage() -> AvatarStorageUsage {
+        guard let avatarStore else { return .empty }
+        return AvatarStorageUsage.compute(rosters: rosters.map { ($0.id, $0.name) }, store: avatarStore)
+    }
+
+    /// Same result as `avatarStorageUsage()`, but the directory walk runs on a background queue —
+    /// the roster panel calls this on every change, and must not stat every photo on the main thread.
+    func avatarStorageUsageAsync() async -> AvatarStorageUsage {
+        guard let avatarStore else { return .empty }
+        let rows = rosters.map { ($0.id, $0.name) }          // snapshot on the main actor
+        return await withCheckedContinuation { cont in
+            DispatchQueue.global(qos: .utility).async {
+                cont.resume(returning: AvatarStorageUsage.compute(rosters: rows, store: avatarStore))
+            }
+        }
+    }
+
+    /// v2.6 C-3: "Clear this roster's photos" — removes only `rosterID`'s photo files and sets those
+    /// entries back to a monogram. Other rosters, and entries with an emoji avatar, are untouched.
+    /// Returns how many entries lost a photo.
+    @discardableResult
+    func clearPhotos(inRoster rosterID: UUID) -> Int {
+        guard let r = rosters.firstIndex(where: { $0.id == rosterID }) else { return 0 }
+        avatarStore?.deleteAll(rosterID: rosterID)
+        var cleared = 0
+        for e in rosters[r].entries.indices where rosters[r].entries[e].avatar?.isPhoto == true {
+            rosters[r].entries[e].avatar = nil
+            cleared += 1
+        }
+        AvatarImageCache.shared.forget(rosterID: rosterID)
+        scheduleSave()
+        return cleared
+    }
+
     /// Deletes photo files nothing references — only after a clean load (see `loadedCleanly`).
     private func sweepOrphanPhotos() {
         guard loadedCleanly, let avatarStore else { return }
         let live = liveReferences()
         let fileURL = self.fileURL
-        DispatchQueue.global(qos: .utility).async {
+        sweepScheduler {
             Self.performSweep(avatarStore: avatarStore, live: live, fileURL: fileURL)
         }
     }
@@ -300,7 +354,7 @@ final class LuckyDrawStore: ObservableObject {
     private func liveReferences() -> [UUID: Set<String>] {
         var referenced: [UUID: Set<String>] = [:]
         for roster in rosters {
-            referenced[roster.id] = Set(roster.entries.compactMap { $0.avatar?.photoFileName })
+            referenced[roster.id] = Set(roster.entries.compactMap { $0.avatar?.photoFileName }.compactMap(AvatarFileName.normalized))
         }
         return referenced
     }
@@ -336,8 +390,8 @@ final class LuckyDrawStore: ObservableObject {
                 var files = Set<String>()
                 for case let entry as [String: Any] in (roster["entries"] as? [Any]) ?? [] {
                     if let avatar = entry["avatar"] as? [String: Any], avatar["kind"] as? String == "photo",
-                       let file = avatar["file"] as? String, AvatarFileName.isValid(file) {
-                        files.insert(file)
+                       let file = avatar["file"] as? String, let canonical = AvatarFileName.normalized(file) {
+                        files.insert(canonical)
                     }
                 }
                 guard !files.isEmpty else { continue }

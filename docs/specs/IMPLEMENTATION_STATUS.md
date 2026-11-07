@@ -2,6 +2,19 @@
 
 > ⚠️ **Historical (2026-07).** This was the session handoff for PR #7. It is superseded by [`docs/V2_5_PLAN.md`](../V2_5_PLAN.md) and the v2.5 section of [`FEATURE_ROADMAP.md`](../FEATURE_ROADMAP.md): the work described here was merged in v2.5 with the PR #7 review findings fixed, the Firebase SDK replaced by REST (it cannot sign in from a DMG), and the crypto contract bumped to v2 (`crypto-parity-vectors.v2.json`). References below to the SDK, `crypto-parity-vectors.v1.json` and 200 000 PBKDF2 rounds are no longer current.
 
+> **v2.6 rows (added 2026-11-01).** Honest status of the items that continue this work — 🔧 = built on an open, **unmerged** PR; nothing below is verified on a real device or Firebase project. Plan and record: [`docs/V2_6_PLAN.md`](../V2_6_PLAN.md).
+>
+> | Item | Status | PR |
+> |---|---|---|
+> | F-055 Android background & sharing | 🔧 service/consent/share target emulator-verified on pre-review code only; real multicast, Doze/OEM ⛔ unverified | #62 (stacked on #61) |
+> | F-056 Expenditure on the phone | 🔧 JVM-only; known parser false positives | #58 |
+> | F-057 Cloud setup assistant | 🔧 stubs/loopback only; reviewed (10 fixes) | #63 |
+> | F-058 Release engineering | 🔧 CI never run on GitHub | #56 |
+> | Android hardening (H-13/14/15/16/20b/21b) | 🔧 JVM; emulator vs local stand-in; device Keystore unverified | #61 |
+> | Desktop hardening (H-02/03/05/08/09/10/20a/21a) | 🔧 model tests; no GUI session | #60 |
+> | F-054 Build Artifact Cleaner | 🔧 pane never viewed on screen | #59 |
+> | F-053 completion (C-1…C-4) | 🔧 hero flight not seen on screen | #57 |
+
 > **Session handoff.** Where the build stands, what's on which branch/PR, and the
 > exact next steps. Read this first when resuming.
 > **Last updated:** 2026-07 (end of the planning + F-044 Phase 0 session).
