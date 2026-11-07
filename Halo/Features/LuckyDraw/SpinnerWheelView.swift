@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 // MARK: - SpinnerWheelView
 
@@ -20,6 +21,12 @@ struct SpinnerWheelView: View {
     /// F-053. The defaults reproduce the F-051 wheel exactly, so every existing caller is unchanged.
     var rosterID: UUID? = nil
     var avatarMode: AvatarDisplayMode = .nameOnly
+    /// v2.6 C-2: the previous winner, shown in the hub between spins. Nil keeps the F-051 hub (the
+    /// entry count). Display only — it is never read when a winner is chosen.
+    var hubEntry: DrawEntry? = nil
+    /// Measurement only (v2.6 H-11): lets a test draw avatars past the production limit to see what
+    /// they would cost. Production callers leave it nil.
+    var avatarLimitOverride: Int? = nil
 
     /// Redraws when a photo finishes decoding (the wheel is paused at rest, so nothing else would).
     @ObservedObject private var avatarCache = AvatarImageCache.shared
@@ -31,8 +38,7 @@ struct SpinnerWheelView: View {
     /// the winner popup still shows the avatar. **Provisional** — F-053 spike S3 sets the real
     /// figure from a frame-rate trace; nothing here has been measured yet.
     static let avatarLimit = 40
-    /// Smallest avatar worth drawing; below this a face is a smudge.
-    private let minAvatarDiameter: CGFloat = 20
+    private var minAvatarDiameter: CGFloat { WheelGeometry.minAvatarDiameter }
 
     var body: some View {
         TimelineView(.animation(paused: spinStart == nil)) { timeline in
@@ -60,12 +66,17 @@ struct SpinnerWheelView: View {
 
     // MARK: - Draw
 
+    /// v2.6 H-11: one interval per frame drawn, visible in Instruments' os_signpost track
+    /// (subsystem com.halo.mac, category LuckyDrawWheel). Costs nothing unless something is recording.
+    private static let signposter = OSSignposter(subsystem: "com.halo.mac", category: "LuckyDrawWheel")
+
     private func draw(in context: inout GraphicsContext, size: CGSize, now: Date) {
+        let signpostState = Self.signposter.beginInterval("wheelFrame")
+        defer { Self.signposter.endInterval("wheelFrame", signpostState) }
         let frame = currentFrame(now: now)
         let side = min(size.width, size.height)
         let centre = CGPoint(x: size.width / 2, y: size.height / 2)
-        let scale = 1 - 0.03 * frame.windup
-        let radius = (side / 2 - side * 0.045) * scale
+        let radius = WheelGeometry.radius(side: side, windup: frame.windup)
         guard radius > 10 else { return }
 
         // The recoil: the wheel loads 8° backwards before it launches.
@@ -138,8 +149,9 @@ struct SpinnerWheelView: View {
         // Labels fade as the wheel picks up speed — at cruise they are a smear
         // anyway, and holding them at full opacity just muddies the ring.
         let labelAlpha = 1 - 0.75 * min(speed * 1.6, 1)
-        let avatarDiameter = avatarMode == .nameOnly || count > Self.avatarLimit || side <= 260
-            ? 0 : avatarDiameter(count: count, radius: radius, side: side)
+        // 0 when the wheel draws no avatars at all (mode, entry limit, size).
+        let avatarDiameter = WheelGeometry.wheelAvatarDiameter(mode: avatarMode, count: count, side: side,
+                                                               radius: radius, limit: avatarLimitOverride ?? Self.avatarLimit)
 
         for (index, entry) in entries.enumerated() {
             let start = angle + Double(index) * sweep - 90
@@ -191,7 +203,7 @@ struct SpinnerWheelView: View {
             let withAvatar = avatarDiameter >= minAvatarDiameter && avatarMode.showsAvatar(for: entry)
             if withAvatar && alpha > 0.05 {
                 drawAvatar(&context, entry: entry, index: index, count: count, centre: centre, radius: r,
-                           midAngle: start + sweep / 2, diameter: avatarDiameter, alpha: alpha, lit: lit)
+                           angle: angle, diameter: avatarDiameter, alpha: alpha, lit: lit)
             }
 
             // Avatar only: the picture is the label. Otherwise the name sits inboard of the avatar.
@@ -205,22 +217,25 @@ struct SpinnerWheelView: View {
 
     // MARK: - Avatars (F-053)
 
-    /// Diameter that fits the arc where the avatar sits, capped so it never swallows the wedge.
-    private func avatarDiameter(count: Int, radius: CGFloat, side: CGFloat) -> CGFloat {
-        let arc = (360.0 / Double(count)) * .pi / 180 * Double(radius) * 0.80
-        return min(CGFloat(arc) * 0.82, radius * 0.34, side * 0.14)
-    }
-
     /// Avatars stay **upright** as the wheel turns (a rotated face reads worse than a rotated name);
     /// only their position follows the wedge.
     private func drawAvatar(_ context: inout GraphicsContext, entry: DrawEntry, index: Int, count: Int,
-                            centre: CGPoint, radius: CGFloat, midAngle: Double,
+                            centre: CGPoint, radius: CGFloat, angle: Double,
                             diameter: CGFloat, alpha: Double, lit: Bool) {
-        let place = radius * 0.80
-        let rad = midAngle * .pi / 180
-        let c = CGPoint(x: centre.x + cos(rad) * place, y: centre.y + sin(rad) * place)
-        let d = lit ? diameter * 1.15 : diameter
+        let c = WheelGeometry.avatarCentre(index: index, count: count, angle: angle,
+                                           wheelCentre: centre, radius: radius)
+        let d = lit ? diameter * WheelGeometry.liftedScale : diameter
         let rect = CGRect(x: c.x - d / 2, y: c.y - d / 2, width: d, height: d)
+        drawAvatarDisc(&context, entry: entry, rect: rect, index: index, count: count, alpha: alpha,
+                       ring: lit ? Color.haloCyan : SegmentPalette.rim(for: index, of: count))
+    }
+
+    /// One avatar (photo / emoji / monogram) in a ringed circle at `rect`. Shared by the segments
+    /// and the hub.
+    private func drawAvatarDisc(_ context: inout GraphicsContext, entry: DrawEntry, rect: CGRect,
+                                index: Int, count: Int, alpha: Double, ring ringColor: Color) {
+        let d = rect.width
+        let c = CGPoint(x: rect.midX, y: rect.midY)
         let circle = Path(ellipseIn: rect)
         let ringWidth = max(1.5, d * 0.07)
 
@@ -247,7 +262,7 @@ struct SpinnerWheelView: View {
         var ring = context
         ring.opacity = alpha
         ring.stroke(Path(ellipseIn: rect.insetBy(dx: ringWidth / 2, dy: ringWidth / 2)),
-                    with: .color(lit ? Color.haloCyan : SegmentPalette.rim(for: index, of: count)),
+                    with: .color(ringColor),
                     lineWidth: ringWidth)
         ring.stroke(Path(ellipseIn: rect.insetBy(dx: ringWidth, dy: ringWidth)),
                     with: .color(Color.haloBackground.opacity(0.55)), lineWidth: 1)
@@ -331,6 +346,17 @@ struct SpinnerWheelView: View {
                                            endPoint: CGPoint(x: rect.maxX, y: rect.maxY)))
         context.stroke(Path(ellipseIn: rect), with: .color(Color.haloBorder2),
                        lineWidth: max(1, side * 0.004))
+        // v2.6 C-2: between spins the hub carries the previous winner's avatar (when the roster's
+        // display mode shows one for that entry); while the wheel turns it is the entry count, as ever.
+        let hubDiameter = WheelGeometry.hubDiameter(radius: radius)
+        if spinStart == nil, let hubEntry, avatarMode.showsAvatar(for: hubEntry),
+           hubDiameter * 0.86 >= minAvatarDiameter {
+            let d = hubDiameter * 0.86
+            drawAvatarDisc(&context, entry: hubEntry,
+                           rect: CGRect(x: centre.x - d / 2, y: centre.y - d / 2, width: d, height: d),
+                           index: 0, count: max(entries.count, 1), alpha: 1, ring: Color.haloAmber)
+            return
+        }
         let text = context.resolve(
             Text("\(entries.count)")
                 .font(.system(size: side * 0.028, weight: .bold, design: .rounded))

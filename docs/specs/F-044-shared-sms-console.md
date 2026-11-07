@@ -1,6 +1,8 @@
 # F-044 — Shared SMS Console (NFeat-122)
 
 > **Status:** 🗓 Planned · **Platform:** Desktop (console) + Mobile (sync source)
+>
+> **v2.6 hardening cross-references (added 2026-11-01; no behaviour change to this spec).** The status line above is historical — current status is in `FEATURE_ROADMAP.md` Pipeline Status (desktop merged in v2.5; **not run against a live Firebase project or a real phone**). v2.6 hardening that touches this feature, all **built on unmerged PRs** and tracked in [`../V2_6_PLAN.md`](../V2_6_PLAN.md) §6: **H-14** poison-row quarantine + "Retry skipped" (#61) · **H-20** wire-contract fixture `docs/specs/wire-contract/phone-nodes.v1.json`, Swift side #60, Kotlin side #61 · **H-21** line-node changes reach a live Mac — `lineVersion`/`updatedAt` written by the phone (#61), re-delivery by `observeChildAddedOrChanged` on the desktop (#60) · **H-18** rules-file drift check (#56) · **F-057** per-path database check, Devices last-seen + retire (#63) · **H-12** (passphrase typed twice, D-01) is merged in v2.5. Verification debt: V-1, V-2, V-4, V-5.
 > **Depends on:** [00-foundations](00-foundations.md) (BYOB Firebase), F-049 (Halo Mobile)
 > **Reference:** *SMSArchiver* project
 
