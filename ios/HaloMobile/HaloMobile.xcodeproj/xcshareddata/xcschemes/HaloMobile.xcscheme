@@ -39,7 +39,31 @@
          </BuildableReference>
       </MacroExpansion>
       <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "F5FB6EB3D12D9CDF0952770C"
+               BuildableName = "HaloMobileTests.xctest"
+               BlueprintName = "HaloMobileTests"
+               ReferencedContainer = "container:HaloMobile.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "33A5D029411F8897EF4772A5"
+               BuildableName = "HaloMobileUITests.xctest"
+               BlueprintName = "HaloMobileUITests"
+               ReferencedContainer = "container:HaloMobile.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
+      <CommandLineArguments>
+      </CommandLineArguments>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
