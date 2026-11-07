@@ -176,7 +176,7 @@ actor ScanCoordinator {
     /// set, and the caller then dropped every row. Now each outcome is explicit.
     func executeCleanup(items: [ScannedItem]) async -> CleanupResult {
         var result = CleanupResult()
-        let trashKeys = trashDirectories().map(CleanupPath.key)
+        let trashKeys = trashDirectories().map(CleanupPath.directoryKey)
         for item in items {
             if Task.isCancelled { break }
             // `trashItem` on something already in the Trash "succeeds" without moving it, which
