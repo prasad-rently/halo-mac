@@ -85,6 +85,7 @@ actor ScanCoordinator {
 
         // Xcode DerivedData: enumerate build-project directories as single items
         if kind == .xcodeData {
+            // D-04: the Smart Scan "Xcode" line is sourced from the F-054 scanner (single owner).
             category.items = await scanDerivedDataDirectories()
             category.isScanning = false
             return category
@@ -214,52 +215,11 @@ actor ScanCoordinator {
     /// space — scanning individual files inside them only finds a tiny fraction of
     /// the total and leaves the directory skeleton behind.
     private func scanDerivedDataDirectories() async -> [ScannedItem] {
-        let home = NSHomeDirectory()
-        let roots = [
-            URL(fileURLWithPath: "\(home)/Library/Developer/Xcode/DerivedData"),
-            URL(fileURLWithPath: "\(home)/Library/Developer/CoreSimulator/Caches")
-        ]
-        let fm = FileManager.default
-        var items: [ScannedItem] = []
-
-        for root in roots {
-            guard fm.fileExists(atPath: root.path) else { continue }
-
-            let children = (try? fm.contentsOfDirectory(
-                at: root,
-                includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey, .creationDateKey],
-                options: [.skipsHiddenFiles]
-            )) ?? []
-
-            // Process each project folder concurrently to calculate sizes fast
-            await withTaskGroup(of: ScannedItem?.self) { group in
-                for child in children {
-                    group.addTask {
-                        var isDir: ObjCBool = false
-                        guard fm.fileExists(atPath: child.path, isDirectory: &isDir),
-                              isDir.boolValue else { return nil }
-
-                        let resVals = try? child.resourceValues(
-                            forKeys: [.contentModificationDateKey, .creationDateKey]
-                        )
-                        let size = await self.scanner.calculateSize(of: child)
-                        guard size > 0 else { return nil }   // skip empty placeholder dirs
-
-                        return ScannedItem(
-                            id: UUID(),
-                            url: child,
-                            size: size,
-                            creationDate: resVals?.creationDate,
-                            modifiedDate: resVals?.contentModificationDate,
-                            kind: .derived
-                        )
-                    }
-                }
-                for await result in group {
-                    if let item = result { items.append(item) }
-                }
-            }
+        // F-054 D-04: sourced from BuildArtifactScanner so the folders have exactly one owner.
+        let found = await BuildArtifactScanner().xcodeGlobalItems()
+        return found.map {
+            ScannedItem(id: UUID(), url: $0.artifactURL, size: $0.size,
+                        creationDate: nil, modifiedDate: $0.artifactModified, kind: .derived)
         }
-        return items.sorted { $0.size > $1.size }
     }
 }

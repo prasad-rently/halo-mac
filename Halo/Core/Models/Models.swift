@@ -78,6 +78,14 @@ enum CleanupKind: String, CaseIterable, Identifiable {
     case iosBackups = "iOS Backups"
     case languagePacks = "Language Packs"
     case browsers = "Browsers"
+    /// F-054. Has its own actor + pane (like `.browsers`); also owns the fixed Xcode-global
+    /// folders that `.xcodeData` used to scan (D7).
+    case buildArtifacts = "Build Artifacts"
+
+    /// The categories the Cleanup sidebar lists and `CleanupViewModel` scans as flat file lists.
+    /// `.xcodeData` is folded into Build Artifacts (D7) — it stays an enum case only so Smart Scan
+    /// keeps its "Xcode" line item (D-04), sourced from `BuildArtifactScanner`.
+    static var cleanupPaneKinds: [CleanupKind] { allCases.filter { $0 != .xcodeData } }
 
     var id: String { rawValue }
 
@@ -94,6 +102,7 @@ enum CleanupKind: String, CaseIterable, Identifiable {
         case .iosBackups: return "iphone"
         case .languagePacks: return "globe"
         case .browsers: return "network"
+        case .buildArtifacts: return "shippingbox.fill"
         }
     }
 
@@ -123,12 +132,19 @@ enum CleanupKind: String, CaseIterable, Identifiable {
         case .mailAttachments:
             return ["\(home)/Library/Mail"]
         case .xcodeData:
-            return ["\(home)/Library/Developer/Xcode/DerivedData",
-                    "\(home)/Library/Developer/CoreSimulator/Caches"]
+            // F-054 D7: DerivedData + CoreSimulator/Caches are owned by Build Artifacts now
+            // (`BuildArtifactRoots.xcodeGlobalRoots`). Two categories listing one folder is the
+            // BUG-001 defect, so this one reports no roots; Smart Scan sources its Xcode line from
+            // `BuildArtifactScanner.xcodeGlobalItems`.
+            return []
         case .iosBackups:
             return ["\(home)/Library/Application Support/MobileSync/Backup"]
         case .languagePacks:
             return ["/Applications"]
+        case .buildArtifacts:
+            // Own actor + pane (BuildArtifactScanner); user-configurable roots are checked at scan
+            // time (BuildArtifactRoots / D-03), the invariant test covers the defaults.
+            return []
         case .browsers:
             // Scanned/cleared via the dedicated BrowserCleanerScanner actor +
             // BrowserCleanerViewModel (per-category, not a flat file listing) —
