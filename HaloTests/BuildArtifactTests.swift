@@ -51,22 +51,28 @@ enum BATestCatalog {
 
 func baItem(_ url: URL, cls: BuildArtifactRegenClass = .safe, git: BuildArtifactGitStatus = .ignored,
             size: Int64 = 1_000, active: Bool = false, project: String = "proj",
-            toolchain: String = "rust", modified: Date? = nil, id: String? = nil) -> BuildArtifactItem {
+            toolchain: String = "rust", modified: Date? = nil, id: String? = nil,
+            inUse: Bool = false) -> BuildArtifactItem {
     BuildArtifactItem(id: id ?? CleanupPath.key(url), artifactURL: url, projectName: project,
                       projectPath: url.deletingLastPathComponent().path, toolchainID: toolchain,
                       toolchainName: toolchain.capitalized, regenClass: cls, size: size,
                       artifactModified: modified, projectLastModified: modified, gitStatus: git,
-                      regenHint: "rebuild", isActive: active)
+                      regenHint: "rebuild", isActive: active, isInUse: inUse)
 }
 
+/// A "now" a week ahead, so folders created a moment ago are not Active (< 24 h) — needed wherever a
+/// test expects an item to be permanent-eligible, which Active items no longer are.
+let baAged = Date().addingTimeInterval(7 * 86_400)
+
 func baScan(_ f: BAFixture, roots: [String]? = nil, home: String? = nil, excluded: [String]? = nil,
-            useGit: Bool = true, ignored: Set<String> = [],
+            useGit: Bool = true, ignored: Set<String> = [], now: Date? = nil,
             catalog: BuildArtifactCatalog? = BATestCatalog.fromSource()) async -> (items: [BuildArtifactItem], summary: BuildArtifactScanSummary) {
     var cfg = BuildArtifactScanner.Config()
     cfg.home = home ?? f.url("home").path
     cfg.excludedPaths = excluded ?? BuildArtifactRoots.defaultExcluded(home: cfg.home)
     cfg.useGit = useGit
     cfg.ignoredPaths = ignored
+    if let now { cfg.now = now }
     return await BuildArtifactScanner(catalog: catalog).scanAll(roots: roots ?? [f.root.path], config: cfg)
 }
 
@@ -349,8 +355,11 @@ struct BuildArtifactGitGateTests {
         try! "target/\n".write(to: f.url("r/.gitignore"), atomically: true, encoding: .utf8)
         f.file("r/target/x")
         #expect(Self.run(["-C", f.url("r").path, "init", "-q"]))
-        let r = await baScan(f)
+        let r = await baScan(f, now: baAged)
         #expect(r.items.count == 1 && r.items[0].gitStatus == .ignored && r.items[0].permanentRemovalEligible)
+        // Same folder, scanned "now": freshly built => Active => Move to Trash only.
+        let fresh = await baScan(f)
+        #expect(fresh.items.count == 1 && fresh.items[0].isActive && !fresh.items[0].permanentRemovalEligible)
     }
 
     /// Spike S-A degrade path: git cannot be consulted (sandboxed build / no git).
@@ -497,6 +506,19 @@ struct BuildArtifactRootsTests {
 
 /// A stand-in Trash: a temp directory plus a `trashItem` that moves into it and reports the URL, the
 /// way the system call does. Counts calls so a test can prove an item was never touched.
+/// Whether the real Trash can be used by a test at all.
+enum BATrash {
+    static var realDirectories: [URL] { FileManager.default.urls(for: .trashDirectory, in: .userDomainMask) }
+    /// An existing, writable directory. `trashItem` needs nothing more, and the round-trip test does
+    /// not read the Trash's contents.
+    static func isUsable(_ dirs: [URL]) -> Bool {
+        guard let d = dirs.first else { return false }
+        var isDir: ObjCBool = false
+        return FileManager.default.fileExists(atPath: d.path, isDirectory: &isDir) && isDir.boolValue
+            && FileManager.default.isWritableFile(atPath: d.path)
+    }
+}
+
 final class FakeTrash: @unchecked Sendable {
     let dir: URL
     private let lock = NSLock()
@@ -671,13 +693,20 @@ struct BuildArtifactRemoverTests {
 
     /// End to end through the REAL `FileManager.trashItem` and the real Trash directory list, on a
     /// uniquely named temp folder. Proves `resultingItemURL` is what isInsideTrash expects. Touches the
-    /// user's real Trash only with this one folder, which it removes again.
-    @Test func realTrashItemRoundTrip() {
+    /// user's real Trash only with this one folder, which it removes again. OPT-IN: a default test run
+    /// must never touch the real Trash (review of #66), so it runs only with `HALO_TEST_REAL_TRASH=1`
+    /// in the environment AND a usable Trash (`BATrash.isUsable`); otherwise it is skipped, not failed.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["HALO_TEST_REAL_TRASH"] == "1"
+                       && BATrash.isUsable(BATrash.realDirectories)))
+    func realTrashItemRoundTrip() {
         let f = BAFixture(); defer { f.cleanup() }
         let unique = "f054-roundtrip-\(UUID().uuidString)"
         f.file("proj/\(unique)/artifact.bin", bytes: 64)
         let item = baItem(f.url("proj/\(unique)"))
         let out = BuildArtifactRemover.trashAndEmpty([item], home: f.url("home").path, permanentAllowed: true, reverify: { _ in nil })
+        // The system itself refused to trash (no permission / no Trash after all): that is the
+        // environment, not a regression in the remover — nothing was touched, so end the test quietly.
+        if out.moved.isEmpty, out.leftInTrash.isEmpty, out.refused.isEmpty, f.exists("proj/\(unique)") { return }
         #expect(out.moved == [item.id], "failed: \(out.failed) left: \(out.leftInTrash) refused: \(out.refused)")
         #expect(out.permanentlyRemoved == [item.id], "left in Trash: \(out.leftInTrash.map(\.message))")
         #expect(!f.exists("proj/\(unique)"))
@@ -731,17 +760,35 @@ struct BuildArtifactsViewModelTests {
             baItem(f.url("e"), git: .unavailable, project: "git-unavailable", modified: old),
             baItem(f.url("g"), cls: .needsNetwork, project: "net", modified: old),
             baItem(f.url("h"), project: "fresh", modified: Date()),
+            baItem(f.url("i"), project: "in-use", modified: old, inUse: true),
         ]
         let vm = makeVM(f, scan: { _, _ in AsyncStream { c in for i in items { c.yield(.found(i)) }; c.yield(.finished(.init())); c.finish() } })
         await vm.scan()
         vm.selectAllSafe()
         let names = Set(vm.selectedItems.map(\.projectName))
-        #expect(names == ["ok-safe", "ok-nonrepo", "fresh"], "\(names)")
+        // `ok-nonrepo` is Unverified (nothing but a marker pair vouches for it): not "Safe".
+        #expect(names == ["ok-safe", "fresh"], "\(names)")
         vm.selectStale()
         let stale = Set(vm.selectedItems.map(\.projectName))
         #expect(stale == ["ok-safe", "ok-nonrepo", "net"], "\(stale)")
-        #expect(!stale.contains("caution") && !stale.contains("active") && !stale.contains("git-unavailable"))
+        #expect(!stale.contains("caution") && !stale.contains("active") && !stale.contains("git-unavailable") && !stale.contains("in-use"))
         vm.selectNone(); #expect(vm.selection.isEmpty)
+    }
+
+    /// Review note #2: "Select all Safe" says Safe. Unverified (.notRepo) is out; Xcode's fixed
+    /// folders (no project, no git to ask) and git-verified Safe items stay in.
+    @Test func selectAllSafeExcludesUnverifiedButKeepsXcodeAndGitVerified() async {
+        let f = BAFixture(); defer { f.cleanup() }
+        let items = [
+            baItem(f.url("a"), git: .ignored, project: "verified"),
+            baItem(f.url("b"), git: .notRepo, project: "unverified"),
+            baItem(f.url("c"), git: .notApplicable, project: "xcode", toolchain: BuildArtifactScanner.xcodeGlobalToolchainID),
+        ]
+        let vm = makeVM(f, scan: { _, _ in AsyncStream { c in for i in items { c.yield(.found(i)) }; c.finish() } })
+        await vm.scan()
+        vm.selectAllSafe()
+        #expect(Set(vm.selectedItems.map(\.projectName)) == ["verified", "xcode"])
+        #expect(items[1].isUnverified && !items[1].isVerifiedSafe && items[0].isVerifiedSafe && items[2].isVerifiedSafe)
     }
 
     /// BUG-001 FR-4: a newer scan supersedes an older one; a stale result never lands.
@@ -753,7 +800,7 @@ struct BuildArtifactsViewModelTests {
             counter.next() == 1 ? baStream([slow], delayMs: 400) : baStream([fast])
         })
         vm.rescan()
-        try? await Task.sleep(nanoseconds: 80_000_000)
+        for _ in 0..<200 where !vm.isScanning { try? await Task.sleep(nanoseconds: 10_000_000) }   // scan 1 really started
         await vm.scan()
         try? await Task.sleep(nanoseconds: 700_000_000)
         #expect(vm.items.map(\.projectName) == ["fast"], "stale scan landed: \(vm.items.map(\.projectName))")
@@ -858,19 +905,55 @@ struct BuildArtifactsViewModelTests {
         #expect(!BuildArtifactsViewModel.ReviewSnapshot(items: []).allPermanentEligible)
     }
 
+    /// Strict on purpose (the first version used `||` alternatives and could not fail): exact section
+    /// order, exact contents, biggest first inside each section.
     @Test func groupingAndFiltersAreSortedBiggestFirst() async {
         let f = BAFixture(); defer { f.cleanup() }
-        let items = [baItem(f.url("a"), size: 10, project: "p1", toolchain: "rust"),
-                     baItem(f.url("b"), size: 90, project: "p2", toolchain: "node"),
-                     baItem(f.url("c"), size: 50, project: "p1", toolchain: "rust")]
+        let old = Date(timeIntervalSinceNow: -90 * 86_400)
+        let items = [baItem(f.url("a"), size: 10, project: "p1", toolchain: "rust", modified: old),
+                     baItem(f.url("b"), size: 90, project: "p2", toolchain: "node", modified: Date()),
+                     baItem(f.url("c"), size: 50, project: "p1", toolchain: "rust", modified: Date())]
         let vm = makeVM(f, scan: { _, _ in AsyncStream { c in for i in items { c.yield(.found(i)) }; c.finish() } })
         await vm.scan()
         #expect(vm.items.map(\.size) == [90, 50, 10])
-        vm.grouping = .project
-        #expect(vm.sections.map(\.title) == ["p2", "p1"] || vm.sections.map(\.title) == ["p1", "p2"])
-        #expect(vm.sections.first?.title == "p2" || vm.sections.first?.items.reduce(0, { $0 + $1.size }) == 90)
+
+        vm.grouping = .biggest
+        #expect(vm.sections.map(\.title) == [""])
+        #expect(vm.sections[0].items.map(\.size) == [90, 50, 10])
+
+        vm.grouping = .project                      // p2 = 90, p1 = 60
+        #expect(vm.sections.map(\.title) == ["p2", "p1"])
+        #expect(vm.sections.map { $0.items.map(\.size) } == [[90], [50, 10]])
+
+        vm.grouping = .toolchain                    // Node = 90, Rust = 60
+        #expect(vm.sections.map(\.title) == ["Node", "Rust"])
+        #expect(vm.sections.map { $0.items.map(\.size) } == [[90], [50, 10]])
+
         vm.grouping = .biggest; vm.toolchainFilter = "rust"
-        #expect(vm.visibleItems.map(\.size) == [50, 10] || vm.visibleItems.map(\.size).sorted(by: >) == [50, 10])
+        #expect(vm.visibleItems.map(\.size) == [50, 10])
+        vm.toolchainFilter = nil; vm.staleOnly = true
+        #expect(vm.visibleItems.map(\.size) == [10], "only the folder untouched for 90 days is stale")
+    }
+
+    /// Review note #4: a scan still running when a removal completes must not put the trashed row back.
+    @Test func aScanRunningDuringARemovalNeverRelistsTheTrashedRow() async {
+        let f = BAFixture(); defer { f.cleanup() }
+        let trash = FakeTrash(in: f)
+        f.file("proj/a/x"); f.file("proj/b/x")
+        let a = baItem(f.url("proj/a"), project: "a"), b = baItem(f.url("proj/b"), project: "b")
+        let calls = CallCounter()
+        // Scan 1 already sized both folders and is about to report them (slow stream).
+        let vm = makeVM(f, trash: trash, scan: { _, _ in calls.next(); return baStream([a, b], delayMs: 1_500) })
+        vm.rescan()
+        for _ in 0..<300 where !vm.isScanning { try? await Task.sleep(nanoseconds: 10_000_000) }   // scan really running
+        #expect(vm.isScanning)
+        vm.review = BuildArtifactsViewModel.ReviewSnapshot(items: [a])
+        await vm.confirm(.trash)
+        #expect(!f.exists("proj/a"), "a was moved to the (fake) Trash while the scan was running")
+        #expect(vm.isScanning, "the removal finished well inside the scan's delay, so the scan was still in flight")
+        for _ in 0..<600 where vm.isScanning { try? await Task.sleep(nanoseconds: 10_000_000) }
+        #expect(!vm.isScanning)
+        #expect(vm.items.map(\.projectName) == ["b"], "the scan re-listed a row that is already in the Trash: \(vm.items.map(\.projectName))")
     }
 }
 
@@ -902,7 +985,7 @@ struct BuildArtifactReviewHardeningTests {
             try "target/\n".write(to: f.url("\(repo)/.gitignore"), atomically: true, encoding: .utf8)
             #expect(g(repo, ["init", "-q"]))
         }
-        let scan = await baScan(f, roots: [f.root.path])
+        let scan = await baScan(f, roots: [f.root.path], now: baAged)
         let byProject = Dictionary(uniqueKeysWithValues: scan.items.map { ($0.projectName, $0) })
         let ok = try #require(byProject["ok"]), late = try #require(byProject["late"])
         #expect(ok.permanentRemovalEligible && late.permanentRemovalEligible)
@@ -990,5 +1073,423 @@ struct BuildArtifactReviewHardeningTests {
         #expect(refused.map(\.lastPathComponent) == ["Downloads", "Library"])
         #expect(store.userRoots == [f.url("work").standardizedFileURL.path])
         #expect(vm.banner?.isError == true && vm.banner?.text.contains("Downloads") == true)
+    }
+}
+
+// MARK: - Follow-up to PR #59: in-use detection, Active/In-use never permanent, catch-all .gitignore
+
+@Suite("F-054 in use")
+struct BuildArtifactInUseTests {
+
+    /// A real child process (`/bin/sleep`) with its cwd in a fixture folder — no stand-in for the
+    /// kernel's answer. Test-only use of `Process`: ShellReader is blocking and cannot hold a child open.
+    private func spawn(_ exe: String, _ args: [String], cwd: URL, stdin: Pipe? = nil) throws -> Process {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: exe); p.arguments = args; p.currentDirectoryURL = cwd
+        p.standardOutput = FileHandle.nullDevice; p.standardError = FileHandle.nullDevice
+        if let stdin { p.standardInput = stdin }
+        try p.run()
+        return p
+    }
+    private func stop(_ p: Process) { p.terminate(); p.waitUntilExit() }
+
+    private func signals(_ f: BAFixture, xcodeRunning: Bool = false) -> BuildArtifactInUseSignals {
+        BuildArtifactInUse.currentSignals(home: f.url("home").path, xcodeAppRunning: xcodeRunning)
+    }
+
+    @Test func aRunningToolWhoseCwdIsInTheProjectMarksItsArtifactInUse() throws {
+        let f = BAFixture(); defer { f.cleanup() }
+        f.file("busy/package.json"); f.file("busy/node_modules/x"); f.dir("busy/packages/app")
+        f.file("idle/package.json"); f.file("idle/node_modules/x")
+        let busy = baItem(f.url("busy/node_modules"), project: "busy"), idle = baItem(f.url("idle/node_modules"), project: "idle")
+
+        let child = try spawn("/bin/sleep", ["60"], cwd: f.url("busy/packages/app"))   // a sub-package of `busy`
+        defer { stop(child) }
+        let live = signals(f)
+        #expect(BuildArtifactInUse.isInUse(busy, signals: live), "a tool running inside the project folder")
+        #expect(!BuildArtifactInUse.isInUse(idle, signals: live))
+
+        stop(child)
+        #expect(!BuildArtifactInUse.isInUse(busy, signals: signals(f)), "the signal follows the process: gone when it exits")
+    }
+
+    @Test func anIdleShellSittingInTheFolderIsNotABuild() throws {
+        let f = BAFixture(); defer { f.cleanup() }
+        f.file("p/package.json"); f.file("p/node_modules/x")
+        let item = baItem(f.url("p/node_modules"), project: "p")
+        let stdin = Pipe()
+        let shell = try spawn("/bin/bash", ["-c", "read x"], cwd: f.url("p"), stdin: stdin)   // waits on stdin, runs nothing
+        defer { stop(shell) }
+        Thread.sleep(forTimeInterval: 0.2)
+        #expect(!BuildArtifactInUse.isInUse(item, signals: signals(f)), "a terminal parked in the project is not a running build")
+        #expect(BuildArtifactInUse.idleProcessNames.contains("zsh") && BuildArtifactInUse.idleProcessNames.contains("bash"))
+    }
+
+    @Test func pureEvaluationFollowsTheSignals() {
+        var s = BuildArtifactInUseSignals()
+        let node = baItem(URL(fileURLWithPath: "/w/app/node_modules"), project: "app")
+        s.busyDirectories = ["/w/app/server"]
+        #expect(BuildArtifactInUse.isInUse(node, signals: s))
+        s.busyDirectories = ["/w/application"]                      // look-alike sibling
+        #expect(!BuildArtifactInUse.isInUse(node, signals: s))
+        s.busyDirectories = ["/w/app/node_modules/.bin"]            // inside the artifact itself
+        #expect(BuildArtifactInUse.isInUse(node, signals: s))
+        s.busyDirectories = []; s.openProjectDirectories = ["/w/app"]
+        #expect(BuildArtifactInUse.isInUse(node, signals: s))
+        #expect(!BuildArtifactInUse.isInUse(baItem(URL(fileURLWithPath: "/w/other/node_modules"), project: "other"), signals: s))
+        #expect(!BuildArtifactInUse.isInUse(node, signals: .none))
+    }
+
+    @Test func openFilesAreReadFromTheKernel() throws {
+        let f = BAFixture(); defer { f.cleanup() }
+        let file = f.file("held/data.mdb")
+        let h = try FileHandle(forReadingFrom: file); defer { try? h.close() }
+        #expect(BuildArtifactInUse.openFilePaths(of: getpid()).map(BuildArtifactInUse.canonical).contains(BuildArtifactInUse.canonical(file.path)))
+    }
+
+    /// Xcode-family process with a file open inside a DerivedData folder => that folder, and the
+    /// project its info.plist names, are in use. The process is the test's own (real fds, real kernel).
+    @Test func xcodeHoldingADerivedDataFolderMarksItAndItsWorkspaceInUse() throws {
+        let f = BAFixture(); defer { f.cleanup() }
+        let dd = "home/Library/Developer/Xcode/DerivedData"
+        f.file("\(dd)/App-aaa/Index.noindex/DataStore/data.mdb"); f.file("\(dd)/Other-bbb/Build/x")
+        let plist = ["WorkspacePath": f.url("work/App/App.xcworkspace").path]
+        try (PropertyListSerialization.data(fromPropertyList: plist, format: .binary, options: 0))
+            .write(to: f.url("\(dd)/App-aaa/info.plist"))
+        f.dir("work/App/App.xcworkspace"); f.file("work/App/Package.swift"); f.file("work/App/build/y")
+        f.file("work/Elsewhere/build/y")
+
+        let held = try FileHandle(forReadingFrom: f.url("\(dd)/App-aaa/Index.noindex/DataStore/data.mdb")); defer { try? held.close() }
+        let s = BuildArtifactInUse.currentSignals(home: f.url("home").path, xcodeAppRunning: true,
+                                                  excludingPID: -1, isXcodeProcess: { pid, _ in pid == getpid() })
+        #expect(s.openDerivedDataFolders == [f.url("\(dd)/App-aaa").path])
+        #expect(!s.xcodeRunningButOpaque)
+
+        let tc = BuildArtifactScanner.xcodeGlobalToolchainID
+        let open = baItem(f.url("\(dd)/App-aaa"), git: .notApplicable, project: "App", toolchain: tc)
+        let closed = baItem(f.url("\(dd)/Other-bbb"), git: .notApplicable, project: "Other", toolchain: tc)
+        #expect(BuildArtifactInUse.isInUse(open, signals: s))
+        #expect(!BuildArtifactInUse.isInUse(closed, signals: s))
+        #expect(BuildArtifactInUse.isInUse(baItem(f.url("work/App/build"), project: "App", toolchain: "xcode"), signals: s),
+                "the build/ of a project that is open in Xcode")
+        #expect(!BuildArtifactInUse.isInUse(baItem(f.url("work/Elsewhere/build"), project: "Elsewhere", toolchain: "xcode"), signals: s))
+    }
+
+    /// Not knowing is not "free": Xcode is up but nothing of it is readable => all DerivedData in use.
+    @Test func xcodeRunningButOpaqueTreatsEveryDerivedDataFolderAsInUse() throws {
+        let f = BAFixture(); defer { f.cleanup() }
+        let dd = "home/Library/Developer/Xcode/DerivedData"
+        f.file("\(dd)/App-aaa/x"); f.file("home/Library/Developer/CoreSimulator/Caches/c/x"); f.file("work/p/build/y")
+        let tc = BuildArtifactScanner.xcodeGlobalToolchainID
+        let derived = baItem(f.url("\(dd)/App-aaa"), git: .notApplicable, project: "App", toolchain: tc)
+        let simCache = baItem(f.url("home/Library/Developer/CoreSimulator/Caches/c"), git: .notApplicable, project: "c", toolchain: tc)
+        let project = baItem(f.url("work/p/build"), project: "p", toolchain: "xcode")
+
+        let opaque = BuildArtifactInUse.currentSignals(home: f.url("home").path, xcodeAppRunning: true,
+                                                       excludingPID: -1, isXcodeProcess: { _, _ in false })
+        #expect(opaque.xcodeRunningButOpaque)
+        #expect(BuildArtifactInUse.isInUse(derived, signals: opaque))
+        #expect(!BuildArtifactInUse.isInUse(simCache, signals: opaque), "only DerivedData is Xcode's open-project data")
+        #expect(!BuildArtifactInUse.isInUse(project, signals: opaque))
+
+        let notRunning = BuildArtifactInUse.currentSignals(home: f.url("home").path, xcodeAppRunning: false,
+                                                           excludingPID: -1, isXcodeProcess: { _, _ in false })
+        #expect(!notRunning.xcodeRunningButOpaque && !BuildArtifactInUse.isInUse(derived, signals: notRunning))
+    }
+
+    @Test func theScannerStampsInUseFromTheSignalsItIsGiven() async throws {
+        let f = BAFixture(); defer { f.cleanup() }
+        f.file("busy/package.json"); f.file("busy/node_modules/x")
+        f.file("idle/package.json"); f.file("idle/node_modules/x")
+        let busyDir = f.url("busy").path
+        var cfg = BuildArtifactScanner.Config()
+        cfg.home = f.url("home").path; cfg.excludedPaths = []; cfg.useGit = false
+        cfg.inUseSignals = { var s = BuildArtifactInUseSignals(); s.busyDirectories = [busyDir]; return s }
+        let r = await BuildArtifactScanner(catalog: BATestCatalog.fromSource()).scanAll(roots: [f.root.path], config: cfg)
+        let byName = Dictionary(uniqueKeysWithValues: r.items.map { ($0.projectName, $0) })
+        #expect(byName["busy"]?.isInUse == true && byName["idle"]?.isInUse == false)
+        #expect(byName["busy"]?.isSmartSelectable() == false)
+    }
+
+    // MARK: never smart-selected, never permanent
+
+    @Test func inUseAndActiveItemsAreNeverPermanentEligible() {
+        let u = URL(fileURLWithPath: "/x/a")
+        #expect(baItem(u).permanentRemovalEligible, "control: Safe + git-verified, idle")
+        #expect(!baItem(u, active: true).permanentRemovalEligible, "Active (< 24 h) keeps only Move to Trash")
+        #expect(!baItem(u, inUse: true).permanentRemovalEligible)
+        #expect(!baItem(u, inUse: true).isSmartSelectable() && !baItem(u, active: true).isSmartSelectable())
+        let snap = BuildArtifactsViewModel.ReviewSnapshot(items: [baItem(u), baItem(u, active: true), baItem(u, inUse: true)])
+        #expect(!snap.allPermanentEligible && snap.ineligibleForPermanent == 2 && snap.activeCount == 1 && snap.inUseCount == 1)
+    }
+
+    @Test func theRemoverRefusesAnActiveOrInUseItemForPermanentRemovalAndTouchesNothing() {
+        let f = BAFixture(); defer { f.cleanup() }
+        let trash = FakeTrash(in: f)
+        f.file("p/a/x"); f.file("p/b/x")
+        let out = BuildArtifactRemover.trashAndEmpty([baItem(f.url("p/a"), active: true), baItem(f.url("p/b"), inUse: true)],
+                                                    trash: trash.function, trashDirectories: [trash.dir],
+                                                    home: f.url("home").path, permanentAllowed: true, reverify: { _ in nil })
+        #expect(out.refused.count == 2 && out.moved.isEmpty && trash.callCount == 0 && f.exists("p/a/x") && f.exists("p/b/x"))
+        // ...but the recoverable action is still available for them.
+        let moved = BuildArtifactRemover.moveToTrash([baItem(f.url("p/a"), active: true)], trash: trash.function, home: f.url("home").path)
+        #expect(moved.moved.count == 1)
+    }
+
+    /// Eligibility was true at scan time; something happened since. The remover asks again.
+    @Test func permanentRemovalReverifiesInUseAndModificationRightBeforeActing() throws {
+        let f = BAFixture(); defer { f.cleanup() }
+        f.file("p/a/x")
+        let url = f.url("p/a")
+        let seen = try #require(try url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+        let item = baItem(url, modified: seen)
+
+        // A build started: a tool now runs in the project folder.
+        let busy = BuildArtifactRemover.reverifyPermanentEligible(signals: {
+            var s = BuildArtifactInUseSignals(); s.busyDirectories = [f.url("p").path]; return s
+        })
+        #expect(busy(item)?.contains("running process") == true)
+
+        // Or something wrote into the folder after the scan.
+        try FileManager.default.setAttributes([.modificationDate: seen.addingTimeInterval(120)], ofItemAtPath: url.path)
+        let changed = BuildArtifactRemover.reverifyPermanentEligible(signals: { .none })
+        #expect(changed(item)?.contains("changed after the scan") == true)
+
+        // End to end through trashAndEmpty with the default verifier: nothing moves.
+        let trash = FakeTrash(in: f)
+        let out = BuildArtifactRemover.trashAndEmpty([item], trash: trash.function, trashDirectories: [trash.dir],
+                                                    home: f.url("home").path, permanentAllowed: true,
+                                                    reverify: BuildArtifactRemover.reverifyPermanentEligible(signals: { .none }))
+        #expect(out.refused.count == 1 && out.moved.isEmpty && trash.callCount == 0 && f.exists("p/a/x"))
+    }
+}
+
+@Suite("F-054 catch-all gitignore")
+struct BuildArtifactCatchAllIgnoreTests {
+
+    @Test func verboseOutputIsParsedAndCatchAllPatternsAreTold() {
+        #expect(GitGate.parseCheckIgnoreVerbose(".gitignore:3:node_modules/\tnode_modules")
+                == GitGate.IgnoreRule(source: ".gitignore", line: 3, pattern: "node_modules/"))
+        #expect(GitGate.parseCheckIgnoreVerbose("../.gitignore:1:*\tnode_modules\n")?.pattern == "*")
+        #expect(GitGate.parseCheckIgnoreVerbose("/a b/.gitignore:12:target\ttarget")?.source == "/a b/.gitignore")
+        #expect(GitGate.parseCheckIgnoreVerbose("") == nil && GitGate.parseCheckIgnoreVerbose("garbage") == nil)
+        for p in ["*", "/*", "**", "**/*", ".*", "*/", "?", "/**", " * "] { #expect(GitGate.isCatchAllPattern(p), "\(p)") }
+        for p in ["node_modules/", "target", "*.o", "build*", "*build", "/build", ".build", "dist/", "**/node_modules"] {
+            #expect(!GitGate.isCatchAllPattern(p), "\(p)")
+        }
+    }
+
+    /// Review of #66: `check-ignore -v` exits 0 and names the rule even when the last matching rule is a
+    /// NEGATION — the path is then explicitly NOT ignored. It must never read as verified.
+    @Test func aNegatedRuleIsNotIgnored() {
+        #expect(GitGate.verdict(for: .init(source: ".gitignore", line: 2, pattern: "!build/")) == .notIgnored)
+        #expect(GitGate.verdict(for: .init(source: ".gitignore", line: 2, pattern: "!*")) == .notIgnored)
+        #expect(GitGate.verdict(for: .init(source: ".gitignore", line: 1, pattern: "build/")) == .ignored)
+        #expect(GitGate.verdict(for: .init(source: ".gitignore", line: 1, pattern: "*")) == .catchAllIgnore)
+    }
+
+    @Test(.enabled(if: BuildArtifactGitGateTests.git != nil))
+    func aFolderExplicitlyUnIgnoredByGitIsNeverVerified() async throws {
+        let f = BAFixture(); defer { f.cleanup() }
+        let git = BuildArtifactGitGateTests.git!
+        func g(_ a: [String]) -> Bool { ShellReader.run(git, ["-C", f.url("repo").path] + a, timeout: 20).succeeded }
+        // `build/` is ignored on line 1 and un-ignored on line 2: `git status` shows it as untracked.
+        f.file("repo/Cargo.toml"); f.file("repo/target/x"); f.file("repo/dist/x")
+        try "target/\n!target/\n".write(to: f.url("repo/.gitignore"), atomically: true, encoding: .utf8)
+        #expect(g(["init", "-q"]))
+        #expect(GitGate.inspect(artifactName: "target", project: f.url("repo")) == .notIgnored)
+
+        let r = await baScan(f, roots: [f.root.path], now: baAged)
+        #expect(r.items.filter { $0.artifactURL.path.hasSuffix("repo/target") }.isEmpty,
+                "an explicitly un-ignored, untracked folder is skipped like any other not-ignored one")
+        #expect(r.summary.skippedNotGitIgnored >= 1)
+    }
+
+    /// Positive control for the default re-verification, on a REAL scan result: an untouched, ignored,
+    /// untracked folder passes (so the "modified since the scan" comparison does not trip on timestamp
+    /// precision and silently make permanent removal unreachable), and the same folder fails once a
+    /// build writes into it.
+    @Test(.enabled(if: BuildArtifactGitGateTests.git != nil))
+    func theDefaultReverificationPassesAnUntouchedItemAndRefusesAnEditedOne() async throws {
+        let f = BAFixture(); defer { f.cleanup() }
+        let git = BuildArtifactGitGateTests.git!
+        f.file("repo/Cargo.toml"); f.file("repo/target/x")
+        try "target/\n".write(to: f.url("repo/.gitignore"), atomically: true, encoding: .utf8)
+        #expect(ShellReader.run(git, ["-C", f.url("repo").path, "init", "-q"], timeout: 20).succeeded)
+        let r = await baScan(f, roots: [f.root.path], now: baAged)
+        let item = try #require(r.items.first { $0.artifactURL.path.hasSuffix("repo/target") })
+        #expect(item.permanentRemovalEligible)
+        let verify = BuildArtifactRemover.reverifyPermanentEligible(signals: { .none })
+        #expect(verify(item) == nil, "untouched since the scan: \(verify(item) ?? "")")
+        f.file("repo/target/new-file")                                   // a build adds an entry
+        #expect(verify(item)?.contains("changed after the scan") == true)
+    }
+
+    /// The review's dotfiles-repo case: the work tree is an enclosing repo whose .gitignore is `*`.
+    /// Everything under it is "ignored", which says nothing about THIS folder.
+    @Test(.enabled(if: BuildArtifactGitGateTests.git != nil))
+    func aRepoThatIgnoresEverythingDoesNotMakeEverythingPermanentEligible() async throws {
+        let f = BAFixture(); defer { f.cleanup() }
+        let git = BuildArtifactGitGateTests.git!
+        func g(_ repo: String, _ a: [String]) -> Bool { ShellReader.run(git, ["-C", f.url(repo).path] + a, timeout: 20).succeeded }
+        // Enclosing "dotfiles" repo ignoring everything, with a project inside it (no .git of its own).
+        f.file("dots/.gitignore", bytes: 0)
+        try "*\n".write(to: f.url("dots/.gitignore"), atomically: true, encoding: .utf8)
+        f.file("dots/proj/Cargo.toml"); f.file("dots/proj/target/x"); f.file("dots/proj/dist/x")
+        f.file("dots/web/package.json"); f.file("dots/web/node_modules/x")
+        #expect(g("dots", ["init", "-q"]))
+        // Control: a repo with a REAL ignore entry.
+        f.file("good/Cargo.toml"); f.file("good/target/x")
+        try "target/\n".write(to: f.url("good/.gitignore"), atomically: true, encoding: .utf8)
+        #expect(g("good", ["init", "-q"]))
+
+        #expect(GitGate.inspect(artifactName: "target", project: f.url("dots/proj")) == .catchAllIgnore)
+        #expect(GitGate.inspect(artifactName: "target", project: f.url("good")) == .ignored)
+
+        let r = await baScan(f, roots: [f.root.path], now: baAged)
+        let byPath = Dictionary(uniqueKeysWithValues: r.items.map { ($0.artifactURL.path.replacingOccurrences(of: f.root.path + "/", with: ""), $0) })
+        let proj = try #require(byPath["dots/proj/target"]), web = try #require(byPath["dots/web/node_modules"])
+        for i in [proj, web] {
+            #expect(i.gitStatus == .unavailable && i.isUnverified)
+            #expect(!i.permanentRemovalEligible && !i.isSmartSelectable() && !i.isVerifiedSafe)
+        }
+        #expect(byPath["dots/proj/dist"] == nil, "dist/ needs a POSITIVE ignore; a catch-all is not one")
+        #expect(byPath["good/target"]?.permanentRemovalEligible == true, "the real ignore entry still verifies")
+        #expect(r.summary.gitCatchAllIgnored == 2)
+
+        // Even handed a stale "eligible" item, the re-verification at removal time refuses it.
+        let forged = BuildArtifactItem(id: proj.id, artifactURL: proj.artifactURL, projectName: proj.projectName,
+                                   projectPath: proj.projectPath, toolchainID: proj.toolchainID, toolchainName: proj.toolchainName,
+                                   regenClass: .safe, size: proj.size, artifactModified: nil, projectLastModified: nil,
+                                   gitStatus: .ignored, regenHint: "", isActive: false)
+        #expect(forged.permanentRemovalEligible)
+        let trash = FakeTrash(in: f)
+        let out = BuildArtifactRemover.trashAndEmpty([forged], trash: trash.function, trashDirectories: [trash.dir],
+                                                    home: f.url("home").path, permanentAllowed: true,
+                                                    reverify: BuildArtifactRemover.reverifyPermanentEligible(signals: { .none }))
+        #expect(out.refused.count == 1 && trash.callCount == 0 && f.exists("dots/proj/target/x"))
+    }
+}
+
+// MARK: - Settings → Cleanup (model)
+
+@MainActor
+@Suite("F-054 settings model")
+struct BuildArtifactSettingsModelTests {
+
+    private func store() -> (BuildArtifactRootsStore, UserDefaults, String) {
+        let suite = "f054-settings-\(UUID())"
+        let d = UserDefaults(suiteName: suite)!; d.removePersistentDomain(forName: suite)
+        return (BuildArtifactRootsStore(defaults: d), d, suite)
+    }
+
+    @Test func staleDaysDefaultsPersistsAndIsClamped() {
+        let (s, d, suite) = store(); defer { d.removePersistentDomain(forName: suite) }
+        let m = BuildArtifactSettingsModel(store: s, sandboxed: false)
+        #expect(m.staleDays == 30 && s.staleDays == 30)
+        m.staleDays = 45
+        #expect(BuildArtifactRootsStore(defaults: d).staleDays == 45, "persisted under \(BuildArtifactRootsStore.staleDaysKey)")
+        #expect(d.integer(forKey: "buildArtifactStaleDays") == 45)
+        m.staleDays = 0;    #expect(m.staleDays == 1 && s.staleDays == 1)
+        m.staleDays = 9999; #expect(m.staleDays == 365 && s.staleDays == 365)
+        d.set(100_000, forKey: BuildArtifactRootsStore.staleDaysKey)
+        #expect(s.staleDays == 365, "a hand-edited value is clamped on read too")
+    }
+
+    @Test func includeHomeIsOffByDefaultPersistsAndAddsTheHomeRoot() {
+        let (s, d, suite) = store(); defer { d.removePersistentDomain(forName: suite) }
+        let m = BuildArtifactSettingsModel(store: s, sandboxed: false)
+        #expect(!m.includeHome && !s.includeHome && m.includeHomeAvailable)
+        let before = s.scanRoots(sandboxed: false, home: "/h", exists: { $0 == "/h/Documents" || $0 == "/h" })
+        #expect(before == ["/h/Documents"])
+        m.includeHome = true
+        #expect(BuildArtifactRootsStore(defaults: d).includeHome)
+        #expect(d.bool(forKey: "buildArtifactIncludeHome"))
+        let after = s.scanRoots(sandboxed: false, home: "/h", exists: { $0 == "/h/Documents" || $0 == "/h" })
+        #expect(after == ["/h"], "home covers the project roots inside it, so nothing is scanned twice")
+        #expect(BuildArtifactSettingsModel.includeHomeWarning.contains("slower") && BuildArtifactSettingsModel.includeHomeWarning.contains("Unverified"))
+    }
+
+    @Test func includeHomeIsUnavailableAndNeverPersistedWhenSandboxed() {
+        let (s, d, suite) = store(); defer { d.removePersistentDomain(forName: suite) }
+        d.set(true, forKey: BuildArtifactRootsStore.includeHomeKey)        // stale value from an unsandboxed run
+        let m = BuildArtifactSettingsModel(store: s, sandboxed: true)
+        #expect(!m.includeHomeAvailable && !m.includeHome)
+        m.includeHome = true
+        #expect(!m.includeHome, "the toggle cannot be switched on")
+    }
+
+    @Test func resetIgnoreListForgetsEveryNeverOfferChoiceAndOnlyThat() {
+        let (s, d, suite) = store(); defer { d.removePersistentDomain(forName: suite) }
+        s.addRoot(URL(fileURLWithPath: "/tmp/f054-keep"), sandboxed: false)
+        s.ignore("/a/node_modules"); s.ignore("/b/target")
+        let m = BuildArtifactSettingsModel(store: s, sandboxed: false)
+        #expect(m.ignoredCount == 2)
+        m.resetIgnoreList()
+        #expect(m.ignoredCount == 0 && s.ignoredPaths.isEmpty)
+        #expect(s.userRoots == ["/tmp/f054-keep"], "the user's chosen roots are not part of the ignore list")
+    }
+
+    /// The pane holds its own store over the same defaults; it must re-render when Settings changes one.
+    @Test func changingASettingNotifiesAnOpenPane() async {
+        let f = BAFixture(); defer { f.cleanup() }
+        let (s, d, suite) = store(); defer { d.removePersistentDomain(forName: suite) }
+        let vm = BuildArtifactsViewModel(roots: s, sandboxed: false, home: f.url("home").path,
+                                         trash: FakeTrash(in: f).function, trashDirectories: [], scan: nil)
+        var fired = 0
+        let sub = vm.objectWillChange.sink { fired += 1 }; defer { sub.cancel() }
+        BuildArtifactSettingsModel(store: BuildArtifactRootsStore(defaults: d), sandboxed: false).staleDays = 60
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        #expect(fired >= 1 && vm.roots.staleDays == 60)
+    }
+}
+
+// MARK: - Smart Scan still covers ~/Library/Caches (BUG-001 OQ-4)
+
+@Suite("Smart Scan coverage (BUG-001 OQ-4)")
+struct SmartScanCoverageTests {
+
+    @Test func smartScanCoversUserCachesExactlyOnce() {
+        let caches = "\(NSHomeDirectory())/Library/Caches"
+        let owners = ScanCoordinator.smartScanKinds.filter { kind in
+            kind.targetPaths.contains { CleanupPath.isCovered(caches, by: $0) || CleanupPath.isCovered($0, by: caches) }
+        }
+        #expect(owners == [.userCaches], "~/Library/Caches must be scanned by Smart Scan once, via exactly one owner: \(owners)")
+    }
+
+    @Test func smartScanKindsOwnDisjointPaths() {
+        let roots = ScanCoordinator.smartScanKinds.map { (kind: $0, paths: $0.targetPaths) }
+        #expect(CleanupPath.overlappingRoots(roots).isEmpty)
+        #expect(Set(ScanCoordinator.smartScanKinds).count == ScanCoordinator.smartScanKinds.count)
+    }
+
+    @Test func runFullScanScansExactlyTheSmartScanKindsAndIncludesUserCaches() async throws {
+        let f = BAFixture(); defer { f.cleanup() }
+        f.file("userCaches/app/blob.bin", bytes: 64 * 1024)
+        let uc = f.url("userCaches").path
+        let coordinator = ScanCoordinator(
+            roots: { kind in kind == .userCaches ? [uc] : [] },
+            trashDirectories: { [] },
+            xcodeGlobal: { [] })
+        let result = await coordinator.runFullScan()
+        #expect(Set(result.categoryResults.map(\.kind)) == Set(ScanCoordinator.smartScanKinds))
+        let user = try #require(result.categoryResults.first { $0.kind == .userCaches })
+        #expect(user.allBytes >= 64 * 1024 && result.totalBytes >= 64 * 1024, "the user's cache folder is part of the Smart Scan total")
+    }
+}
+
+// MARK: - Trash gate predicate (the real round-trip test is skipped without a usable Trash)
+
+@Suite("F-054 trash availability gate")
+struct BuildArtifactTrashGateTests {
+    @Test func aMissingOrUnwritableTrashSkipsInsteadOfFailing() {
+        let f = BAFixture(); defer { f.cleanup() }
+        #expect(BATrash.isUsable([f.dir("Trash")]))
+        #expect(!BATrash.isUsable([f.url("no-such-trash")]))
+        #expect(!BATrash.isUsable([]))
+        #expect(!BATrash.isUsable([f.file("a-file-not-a-dir")]))
+        let ro = f.dir("ro"); try? FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: ro.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: ro.path) }
+        #expect(!BATrash.isUsable([ro]))
     }
 }

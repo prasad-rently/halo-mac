@@ -559,6 +559,10 @@ struct SettingsView: View {
             FocusSessionSettingsTab()
                 .tabItem { Label("Focus", systemImage: "moon.stars.fill") }
 
+            // Cleanup (F-054 follow-up)
+            CleanupSettingsTab()
+                .tabItem { Label("Cleanup", systemImage: "shippingbox.fill") }
+
             // About
             VStack(spacing: 16) {
                 Image(systemName: "sparkles")

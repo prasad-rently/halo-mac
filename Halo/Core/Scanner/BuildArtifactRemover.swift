@@ -99,7 +99,7 @@ enum BuildArtifactRemover {
                               trashDirectories: [URL] = defaultTrashDirectories(),
                               home: String = NSHomeDirectory(),
                               permanentAllowed: Bool = permanentRemovalAvailable(),
-                              reverify: Reverify = reverifyGitIgnored) -> Outcome {
+                              reverify: Reverify = reverifyPermanentEligible()) -> Outcome {
         var out = Outcome()
         for item in items {
             // S-B: unproven in a sandboxed build => nothing is touched, not even moved to Trash.
@@ -146,7 +146,31 @@ enum BuildArtifactRemover {
 
     // MARK: Pieces
 
-    /// Default `Reverify` for the permanent action: git must STILL say the folder is ignored and
+    /// Default `Reverify` for the permanent action: everything a scan-time flag could have gone stale
+    /// on, asked again right before the irreversible step —
+    ///   1. nobody has started using the project since (cwd of a running tool / open in Xcode);
+    ///   2. the folder has not been modified since the scan saw it (a build is writing into it);
+    ///   3. git still says ignored and untracked (`reverifyGitIgnored`).
+    /// `signals` is injectable; the default reads the live process table (blocking libproc).
+    static func reverifyPermanentEligible(
+        signals: @escaping @Sendable () -> BuildArtifactInUseSignals = { BuildArtifactInUse.currentSignals() }
+    ) -> Reverify {
+        return { item in
+            if BuildArtifactInUse.isInUse(item, signals: signals()) {
+                return "A running process is using this project now — not removed permanently."
+            }
+            // `attributesOfItem`, not `URL.resourceValues`: the URL object caches the value it read
+            // at scan time and would answer with the very date being compared against.
+            if let seen = item.artifactModified,
+               let now = (try? FileManager.default.attributesOfItem(atPath: item.artifactURL.path))?[.modificationDate] as? Date,
+               now > seen {
+                return "It changed after the scan (a build may be writing to it) — not removed permanently."
+            }
+            return reverifyGitIgnored(item)
+        }
+    }
+
+    /// Git half of the re-verification: git must STILL say the folder is ignored and
     /// holds nothing tracked, and the folder must still be a direct child of the project it was
     /// found in. Blocking (ShellReader) — callers run off the main actor.
     static let reverifyGitIgnored: Reverify = { item in
