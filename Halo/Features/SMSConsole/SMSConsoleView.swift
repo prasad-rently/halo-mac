@@ -225,7 +225,7 @@ struct SMSConsoleView: View {
                         Text(SMSTime.short(thread.lastDate)).font(HaloFont.body(10)).foregroundColor(.haloText2)
                     }
                     HStack {
-                        Text(thread.lastMessage?.body ?? "").font(HaloFont.body(11)).foregroundColor(.haloText2).lineLimit(1)
+                        Text(vm.preview(for: thread)).font(HaloFont.body(11)).foregroundColor(.haloText2).lineLimit(1)
                         Spacer(minLength: 4)
                         if thread.unreadCount > 0 { Circle().fill(Color.haloAccent).frame(width: 7, height: 7) }
                     }
@@ -254,7 +254,7 @@ struct SMSConsoleView: View {
                     Divider().background(Color.haloBorder)
                     ScrollView {
                         VStack(alignment: .leading, spacing: 10) {
-                            ForEach(thread.messages.sorted { $0.date < $1.date }) { messageBubble($0) }
+                            ForEach(thread.messages.sorted { $0.date < $1.date }) { messageBubble($0, line: line) }
                         }
                         .padding(18).frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -282,7 +282,12 @@ struct SMSConsoleView: View {
         .padding(.horizontal, 18).padding(.vertical, 14)
     }
 
-    private func messageBubble(_ m: SMSMessage) -> some View {
+    @ViewBuilder
+    private func messageBubble(_ m: SMSMessage, line: SMSLine) -> some View {
+        if m.direction == .sent { sentBubble(m, line: line) } else { receivedBubble(m) }
+    }
+
+    private func receivedBubble(_ m: SMSMessage) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(m.body).font(HaloFont.body(13)).foregroundColor(.haloText)
@@ -299,6 +304,31 @@ struct SMSConsoleView: View {
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.haloBorder, lineWidth: 1))
             .frame(maxWidth: 520, alignment: .leading)
             Spacer(minLength: 0)
+        }
+    }
+
+    /// A message the user sent from the phone: right-aligned, accent-tinted, and labelled with the line it left from.
+    /// No category — it is the user's own writing, not something to classify.
+    private func sentBubble(_ m: SMSMessage, line: SMSLine) -> some View {
+        HStack {
+            Spacer(minLength: 0)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(m.body).font(HaloFont.body(13)).foregroundColor(.haloText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+                HStack(spacing: 6) {
+                    Image(systemName: "paperplane.fill").font(.system(size: 8)).foregroundColor(.haloAccent)
+                    Text(vm.sentLabel(for: m, line: line)).font(HaloFont.body(9)).foregroundColor(.haloText2)
+                    Text("·").foregroundColor(.haloText2)
+                    Text(SMSTime.clock(m.date)).font(HaloFont.body(9)).foregroundColor(.haloText2)
+                }
+            }
+            .padding(12)
+            // Same bubble as a received one (haloSurface2 radius-12 card, haloBorder stroke) with the console's own
+            // selected-row accent wash (haloAccent @ 0.12) — the idiom the sidebar and filter chips already use.
+            .background(Color.haloAccent.opacity(0.12)).cornerRadius(12)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.haloBorder, lineWidth: 1))
+            .frame(maxWidth: 520, alignment: .trailing)
         }
     }
 }

@@ -649,7 +649,7 @@ struct WireContractTests {
     func fixtureShape() throws {
         let f = try PhoneFixture.load()
         #expect(f.root["contract"] as? String == "halo-phone-nodes" && f.root["version"] as? Int == 1)
-        #expect(f.entries("lines").count >= 2 && f.entries("messages").count >= 2 && f.entries("clipboard").count >= 3)
+        #expect(f.entries("lines").count >= 2 && f.entries("messages").count >= 2 && f.entries("sent").count >= 1 && f.entries("clipboard").count >= 3)
     }
 
     @Test("Every phone-written device node decodes as the desktop reads it")
@@ -691,6 +691,36 @@ struct WireContractTests {
             #expect(m.read == want["read"] as? Bool, "message \(key)")
             #expect(m.id == "\(f.deviceId)/\(key)")
         }
+    }
+
+    @Test("Every phone-written SENT node decodes as a sent message - recipient and body decrypted, never classified, never unread")
+    func sentMessages() throws {
+        let f = try PhoneFixture.load()
+        for entry in f.entries("sent") {
+            let key = try #require(entry["key"] as? String)
+            let want = try #require(entry["expect"] as? [String: Any])
+            let m = try #require(SMSWire.message(deviceId: f.deviceId, msgId: key, value: entry["node"], crypto: f.crypto, node: .sent), "sent \(key) did not decode")
+            #expect(m.direction == .sent && want["direction"] as? String == "sent")
+            #expect(m.contactNumber == want["address"] as? String, "sent \(key)")
+            #expect(m.body == want["body"] as? String, "sent \(key)")
+            #expect(m.date == Date(timeIntervalSince1970: Double(want["dateMs"] as! Int) / 1000), "sent \(key)")
+            #expect(m.lineId == "\(f.deviceId)-\(want["subscriptionId"] as! Int)", "sent \(key)")
+            #expect(m.read, "a message the user sent is read by definition")
+            #expect(m.category == .uncategorized, "a sent message is never classified (its text reads like a bank alert)")
+            #expect(m.id == "\(f.deviceId)/sent/\(key)", "a sent id must never equal a received id")
+        }
+    }
+
+    @Test("The fixture's sent message lands in the same thread as that contact's received message")
+    func sentJoinsTheContactsThread() throws {
+        let f = try PhoneFixture.load()
+        let sent = try #require(f.entries("sent").first)
+        let sentMsg = try #require(SMSWire.message(deviceId: f.deviceId, msgId: "s", value: sent["node"], crypto: f.crypto, node: .sent))
+        let received = try #require(f.entries("messages").first { ($0["expect"] as? [String: Any])?["address"] as? String == sentMsg.contactNumber })
+        let recvMsg = try #require(SMSWire.message(deviceId: f.deviceId, msgId: "r", value: received["node"], crypto: f.crypto))
+        #expect(SMSSyncClient.normalizeContact(sentMsg.contactNumber) == SMSSyncClient.normalizeContact(recvMsg.contactNumber) && sentMsg.lineId == recvMsg.lineId)
+        // …and the phone computed the same keyed thread hash for both.
+        #expect((sent["node"] as? [String: Any])?["threadKey"] as? String == (received["node"] as? [String: Any])?["threadKey"] as? String)
     }
 
     @Test("A message encrypted under a different key is skipped, never shown blank")
@@ -1324,5 +1354,169 @@ struct AvatarFollowUpTests {
         #expect(AvatarImageCache.servedBucket(requested: 256, photoCount: 257, byteCapacity: AvatarImageCache.defaultByteCapacity) == 128)
         #expect(AvatarImageCache.servedBucket(requested: 128, photoCount: 5_000, byteCapacity: AvatarImageCache.defaultByteCapacity) == 128)
         #expect(AvatarImageCache.servedBucket(requested: 64, photoCount: 5_000, byteCapacity: AvatarImageCache.defaultByteCapacity) == 64)
+    }
+}
+
+
+// MARK: - Sent-message sync (F-044 D23's deferred half)
+
+/// What the Mac shows and — more importantly — must NOT do once the phone syncs the messages the user sends.
+@MainActor
+@Suite("Sent messages on the console (sent-sync)")
+struct SentSyncTests {
+
+    // MARK: building blocks
+
+    private func node(_ crypto: CryptoService, address: String, body: String, dateMs: Double, sub: Int = 1,
+                       type: Int?, read: Bool = true) throws -> [String: Any] {
+        var n: [String: Any] = ["addressEnc": try crypto.encrypt(address), "bodyEnc": try crypto.encrypt(body),
+                                "threadKey": "k", "threadId": 1, "subscriptionId": sub, "date": dateMs,
+                                "read": read, "seen": true, "syncedAt": dateMs, "schema": 1]
+        if let type { n["type"] = type }
+        return n
+    }
+
+    private func client() throws -> (SMSSyncClient, CryptoService) {
+        let c = SMSSyncClient()
+        let crypto = try PhoneFixture.load().crypto
+        c.installCryptoForTesting(crypto)
+        return (c, crypto)
+    }
+
+    private func msg(_ id: String, _ dir: SMSDirection, _ body: String = "Rs 500 debited from a/c XX1234", date: Date = Date(),
+                     cat: SMSCategory = .transactional, read: Bool = false) -> SMSMessage {
+        SMSMessage(id: id, lineId: "L", contactNumber: "VK-HDFCBK-T", body: body, date: date, category: cat, read: read, direction: dir)
+    }
+
+    // MARK: decoding — an old phone's rows, and rows that must never be rendered as received
+
+    @Test("A messages row with no type (every phone before sent-sync) or type 1 is a received message")
+    func oldPhoneRowsStayReceived() throws {
+        let (_, crypto) = try client()
+        for type in [nil, 1] as [Int?] {
+            let m = SMSWire.message(deviceId: "d", msgId: "1_1", value: try node(crypto, address: "X", body: "b", dateMs: 1_000, type: type), crypto: crypto)
+            #expect(m?.direction == .received, "type \(String(describing: type))")
+        }
+    }
+
+    @Test("A type-2 row inside messages is a SENT message, and any other type there is dropped, never rendered as received")
+    func typeIsHonoured() throws {
+        let (_, crypto) = try client()
+        let two = SMSWire.message(deviceId: "d", msgId: "1_1", value: try node(crypto, address: "X", body: "b", dateMs: 1_000, type: 2), crypto: crypto)
+        #expect(two?.direction == .sent)
+        for type in [0, 3, 4, 5, 6, 99] {       // draft, outbox, failed, queued, junk
+            #expect(SMSWire.message(deviceId: "d", msgId: "1_1", value: try node(crypto, address: "X", body: "b", dateMs: 1_000, type: type), crypto: crypto) == nil, "type \(type) must not be shown as received")
+        }
+        var stringly = try node(crypto, address: "X", body: "b", dateMs: 1_000, type: nil); stringly["type"] = "2"
+        #expect(SMSWire.message(deviceId: "d", msgId: "1_1", value: stringly, crypto: crypto) == nil, "a malformed type is rejected, not guessed")
+    }
+
+    @Test("A row under sent/ is sent whatever its fields say, and a row there claiming another type is rejected")
+    func sentNodeKind() throws {
+        let (_, crypto) = try client()
+        #expect(SMSWire.message(deviceId: "d", msgId: "1_1", value: try node(crypto, address: "X", body: "b", dateMs: 1_000, type: 2), crypto: crypto, node: .sent)?.direction == .sent)
+        #expect(SMSWire.message(deviceId: "d", msgId: "1_1", value: try node(crypto, address: "X", body: "b", dateMs: 1_000, type: nil), crypto: crypto, node: .sent)?.direction == .sent)
+        #expect(SMSWire.message(deviceId: "d", msgId: "1_1", value: try node(crypto, address: "X", body: "b", dateMs: 1_000, type: 1), crypto: crypto, node: .sent) == nil)
+    }
+
+    // MARK: threads — unread, category, search
+
+    @Test("Sent messages are never unread, whatever their read flag says, and never colour the thread")
+    func unreadAndCategory() throws {
+        let (c, crypto) = try client()
+        let t = 1_800_000_000_000.0
+        c.mergeMessage(deviceId: "d", msgId: "in", value: try node(crypto, address: "+919876543210", body: "Rs 500 debited from a/c XX1234", dateMs: t, type: 1, read: false))
+        c.mergeMessage(deviceId: "d", msgId: "out", value: try node(crypto, address: "+919876543210", body: "Paid you Rs 500 via UPI — received?", dateMs: t + 60_000, type: 2, read: false), node: .sent)
+        #expect(c.threads.count == 1, "both sides of the conversation are one thread")
+        let thread = try #require(c.threads.first)
+        #expect(thread.messages.count == 2 && thread.lastMessage?.direction == .sent)
+        #expect(thread.unreadCount == 1, "only the received message can be unread")
+        #expect(thread.category == .personal, "the sent message is not classified; the thread keeps the received one's category")
+    }
+
+    @Test("A thread of nothing but sent messages has no unread and no classified category")
+    func sentOnlyThread() throws {
+        let (c, crypto) = try client()
+        c.mergeMessage(deviceId: "d", msgId: "out", value: try node(crypto, address: "56161", body: "STOP", dateMs: 1_800_000_000_000, type: 2, read: false), node: .sent)
+        let thread = try #require(c.threads.first)
+        #expect(thread.unreadCount == 0 && thread.category == .uncategorized)
+    }
+
+    @Test("Search finds a sent message's text and its recipient; the row previews it as 'You: …'")
+    func searchCoversBothSides() throws {
+        let vm = SMSConsoleViewModel()
+        let crypto = try PhoneFixture.load().crypto
+        vm.client.installCryptoForTesting(crypto)
+        let t = 1_800_000_000_000.0
+        vm.client.mergeMessage(deviceId: "d", msgId: "in", value: try node(crypto, address: "+919876543210", body: "see you at seven", dateMs: t, type: 1, read: false))
+        vm.client.mergeMessage(deviceId: "d", msgId: "out", value: try node(crypto, address: "+919812300000", body: "parking is behind the cafe", dateMs: t + 1_000, type: 2), node: .sent)
+
+        vm.search = "parking"                                   // only in the sent message
+        #expect(vm.filteredThreads.map(\.contactNumber) == ["+919812300000"])
+        vm.search = "seven"                                     // only in the received one
+        #expect(vm.filteredThreads.map(\.contactNumber) == ["+919876543210"])
+        vm.search = "98123"                                     // the recipient of a sent-only thread
+        #expect(vm.filteredThreads.count == 1)
+        vm.search = ""
+        let sentThread = try #require(vm.allThreads.first { $0.contactNumber == "+919812300000" })
+        #expect(vm.preview(for: sentThread) == "You: parking is behind the cafe")
+        #expect(vm.totalUnread == 1, "the unread badge counts the one received message and not the sent one")
+    }
+
+    @Test("SMSThread itself never counts a sent message as unread, nor lets one set the category (defence in depth behind the decoder)")
+    func threadGuardsIndependentOfDecoder() {
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        let recv = msg("r", .received, "see you", date: t0, cat: .personal, read: true)
+        let sent = msg("s", .sent, "Rs 500 debited", date: t0.addingTimeInterval(10), cat: .transactional, read: false)   // hand-built: unread + classified
+        let thread = SMSThread(id: "t", lineId: "L", contactNumber: "X", messages: [recv, sent])
+        #expect(thread.unreadCount == 0)
+        #expect(thread.category == .personal)
+        #expect(SMSThread(id: "t", lineId: "L", contactNumber: "X", messages: [sent]).category == .uncategorized)
+    }
+
+    // MARK: notifications
+
+    @Test("A sent message never raises a notification; a new received one still does")
+    func notificationRule() {
+        let connected = Date(timeIntervalSince1970: 1_000)
+        let later = Date(timeIntervalSince1970: 2_000)
+        #expect(!SMSSyncClient.shouldNotify(message: msg("s", .sent, date: later), isNew: true, connectedAt: connected, notificationsEnabled: true))
+        #expect(SMSSyncClient.shouldNotify(message: msg("r", .received, date: later), isNew: true, connectedAt: connected, notificationsEnabled: true))
+        // the pre-existing rules still hold
+        #expect(!SMSSyncClient.shouldNotify(message: msg("r", .received, date: later), isNew: false, connectedAt: connected, notificationsEnabled: true))
+        #expect(!SMSSyncClient.shouldNotify(message: msg("r", .received, date: connected.addingTimeInterval(-1)), isNew: true, connectedAt: connected, notificationsEnabled: true))
+        #expect(!SMSSyncClient.shouldNotify(message: msg("r", .received, date: later), isNew: true, connectedAt: connected, notificationsEnabled: false))
+    }
+
+    // MARK: the expenditure pipeline (F-048/F-056) — a sent message is never a transaction
+
+    @Test("A sent bank-style text produces no transaction, even force-included by an override")
+    func sentNeverReachesTheLedger() {
+        let pack = PatternPack.indiaDefault
+        let text = "Rs.5000 debited from a/c XX1234 via UPI"
+        let sent = msg("d/sent/1", .sent, text)
+        let received = msg("d/1", .received, text)
+
+        let none = TransactionPipeline.run(messages: [sent], pack: pack, overrides: .init())
+        #expect(none.transactions.isEmpty && none.unreadableCount == 0)
+
+        var forced = ExpenditureOverrides(); forced.includedIds = [sent.id]        // D9 "force include" must not open the door
+        #expect(TransactionPipeline.run(messages: [sent], pack: pack, overrides: forced).transactions.isEmpty)
+
+        // The same text received IS a transaction — the guard is about direction, not about the text.
+        #expect(TransactionPipeline.run(messages: [received], pack: pack, overrides: .init()).transactions.count == 1)
+        // Mixed: only the received one is counted, so a sent copy can't even form a near-duplicate pair.
+        let mixed = TransactionPipeline.run(messages: [sent, received], pack: pack, overrides: .init())
+        #expect(mixed.transactions.count == 1 && mixed.transactions.allSatisfy { !$0.isDuplicate })
+    }
+
+    @Test("The expenditure view model feeds the pipeline received messages only")
+    func pipelineInputIsReceivedOnly() throws {
+        let (c, crypto) = try client()
+        let t = 1_800_000_000_000.0
+        c.mergeMessage(deviceId: "d", msgId: "in", value: try node(crypto, address: "VK-HDFCBK-T", body: "Rs.100 debited via UPI", dateMs: t, type: 1))
+        c.mergeMessage(deviceId: "d", msgId: "out", value: try node(crypto, address: "VK-HDFCBK-T", body: "Rs.100 debited via UPI", dateMs: t + 1_000, type: 2), node: .sent)
+        let input = ExpenditureViewModel.pipelineInput(from: c.threads)
+        #expect(input.map(\.id) == ["d/in"] && input.allSatisfy { $0.direction == .received })
     }
 }
