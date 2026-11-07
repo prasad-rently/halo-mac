@@ -143,7 +143,8 @@ actor FileSystemScanner {
                     size: sizeBytes,
                     creationDate: created,
                     modifiedDate: modified,
-                    kind: kind
+                    kind: kind,
+                    pathKey: CleanupPath.key(fileURL)
                 )
                 results.append(item)
             } else {
