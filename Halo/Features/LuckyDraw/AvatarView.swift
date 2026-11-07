@@ -15,13 +15,19 @@ import CoreGraphics
 /// is capped **in bytes** (64 MB — H-10), evicting the least recently *used* image first: a count cap
 /// alone let 600 × 256-px images (~150 MB) sit in memory, and evicting by insertion order threw away
 /// the photos the wheel was drawing every frame while keeping ones it had scrolled past.
+///
+/// **Working set larger than the cap.** The wheel visits every entry each frame, which is the worst
+/// case for LRU: once more photos are being drawn than fit, each load evicts the photo needed next
+/// and nothing is ever a hit (64 MB holds exactly 256 photos at the 256-px bucket). The cache counts the
+/// distinct photos it has been asked for; when they could not all fit at 256 px it serves the
+/// 128-px bucket instead (a quarter of the memory), so the whole roster fits and stays decoded.
 final class AvatarImageCache: ObservableObject, @unchecked Sendable {
     static let shared = AvatarImageCache()
 
     /// Set by `LuckyDrawStore.shared`. Nil ⇒ photos are never resolved (monogram fallback).
     var store: AvatarStore? {
         get { lock.lock(); defer { lock.unlock() }; return _store }
-        set { lock.lock(); _store = newValue; images.removeAll(); lastUsed.removeAll(); bytes = 0; failed.removeAll(); lock.unlock() }
+        set { lock.lock(); _store = newValue; images.removeAll(); lastUsed.removeAll(); bytes = 0; failed.removeAll(); seenPhotos.removeAll(); lock.unlock() }
     }
 
     @Published private(set) var revision = 0
@@ -38,6 +44,8 @@ final class AvatarImageCache: ObservableObject, @unchecked Sendable {
     /// Keys whose load came back empty (file missing or unreadable). Without this a missing photo was
     /// re-read from disk on every frame the wheel drew: 60 dispatches a second per entry.
     private var failed = Set<String>()
+    /// Distinct photos (roster/file, any size) asked for since the store was set — the working set.
+    private var seenPhotos = Set<String>()
     private var bumpScheduled = false
     /// Upper bound on decoded pixel memory.
     static let defaultByteCapacity = 64 * 1024 * 1024
@@ -56,7 +64,8 @@ final class AvatarImageCache: ObservableObject, @unchecked Sendable {
     /// Whether `fileName` is decoded at `points`, without touching its recency. Test seam.
     func isCached(fileName: String, rosterID: UUID, points: CGFloat) -> Bool {
         lock.lock(); defer { lock.unlock() }
-        return images["\(rosterID.uuidString)/\(fileName)@\(Self.bucket(forPoints: points))"] != nil
+        let px = Self.servedBucket(requested: Self.bucket(forPoints: points), photoCount: seenPhotos.count, byteCapacity: byteCapacity)
+        return images["\(rosterID.uuidString)/\(fileName)@\(px)"] != nil
     }
 
     /// Loads started and not yet finished. Test seam.
@@ -69,15 +78,26 @@ final class AvatarImageCache: ObservableObject, @unchecked Sendable {
         return px <= 64 ? 64 : (px <= 128 ? 128 : 256)
     }
 
+    /// Decoded size of one photo at `bucket` px, as `cost(of:)` will count it (RGBA, square-ish).
+    static func estimatedCost(bucket: Int) -> Int { bucket * bucket * 4 }
+
+    /// The bucket actually served: the requested one, except that the 256-px bucket steps down to 128
+    /// when the working set (`photoCount` distinct photos) could not all stay decoded at 256 px.
+    static func servedBucket(requested: Int, photoCount: Int, byteCapacity: Int) -> Int {
+        guard requested == 256, photoCount * estimatedCost(bucket: 256) > byteCapacity else { return requested }
+        return 128
+    }
+
     /// The decoded photo if it is ready; otherwise a load is started and — if the same photo is
     /// already decoded at another size — that is returned meanwhile, so a card that asks for a larger
     /// avatar than the roster list did shows the picture at once rather than flashing initials.
     /// Nil only when nothing of this photo is decoded yet.
     func photo(fileName: String, rosterID: UUID, points: CGFloat) -> CGImage? {
-        let px = Self.bucket(forPoints: points)
         let base = "\(rosterID.uuidString)/\(fileName)@"
-        let key = base + String(px)
         lock.lock()
+        seenPhotos.insert(String(base.dropLast()))
+        let px = Self.servedBucket(requested: Self.bucket(forPoints: points), photoCount: seenPhotos.count, byteCapacity: byteCapacity)
+        let key = base + String(px)
         if let hit = images[key] { tick &+= 1; lastUsed[key] = tick; lock.unlock(); return hit }
         let standInKey = [256, 128, 64].lazy.filter { $0 != px }.map { base + String($0) }.first { self.images[$0] != nil }
         let standIn = standInKey.flatMap { images[$0] }
@@ -134,6 +154,7 @@ final class AvatarImageCache: ObservableObject, @unchecked Sendable {
         }
         failed = failed.filter { !$0.hasPrefix(prefix) }
         lastUsed = lastUsed.filter { !$0.key.hasPrefix(prefix) }
+        seenPhotos = seenPhotos.filter { !$0.hasPrefix(prefix) }
         lock.unlock()
         DispatchQueue.main.async { self.revision &+= 1 }
     }

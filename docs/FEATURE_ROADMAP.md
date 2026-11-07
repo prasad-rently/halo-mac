@@ -20,17 +20,17 @@
 | ID | Feature | Status | Effort | Depends On |
 |---|---|---|---|---|
 | [F-001](#f-001--gpu-metrics-dashboard-card) | GPU Metrics Dashboard Card | ✅ Done | 0.5 d | Phase 3 merged |
-| [F-002](#f-002--xpc-helper-privileged-operations) | XPC Helper — Privileged Ops | ✅ Done | 3 d | none |
-| [F-003](#f-003--storekitmit-2-promanager) | StoreKit 2 ProManager | ⏭ Skipped (user) | 3 d | none |
+| [F-002](#f-002--xpc-helper--privileged-operations) | XPC Helper — Privileged Ops | ✅ Done | 3 d | none |
+| [F-003](#f-003--storekit-2-promanager) | StoreKit 2 ProManager | ⏭ Skipped (user) | 3 d | none |
 | [F-004](#f-004--signature-database--real-malware-definitions) | Signature Database | ✅ Done | 3 d | none |
 | [F-005](#f-005--bgscheduler--scheduled-smart-scan) | BGScheduler — Scheduled Smart Scan | ✅ Done | 1 d | none |
 | [F-006](#f-006--sentry-crash-reporting) | Sentry Crash Reporting | ✅ Done | 0.5 d | none |
 | [F-007](#f-007--privacyinfoxcprivacy--app-store-assets) | PrivacyInfo + App Store Assets | ⏭ Skipped (user) | 2 d | F-002, F-003 |
-| [F-008](#f-008--menu-bar-display-styles-bardot-mode) | Menu Bar Display Styles | ✅ Done | 1.5 d | Phase 3 merged |
+| [F-008](#f-008--menu-bar-display-styles-bar--dot-mode) | Menu Bar Display Styles | ✅ Done | 1.5 d | Phase 3 merged |
 | [F-009](#f-009--login-items--real-smappservice-integration) | Login Items — Real SMAppService | ✅ Done | 2 d | none |
 | [F-010](#f-010--applications-deep-uninstall--real-leftover-scan) | Applications Deep Uninstall | ✅ Done | 2.5 d | none |
 | [F-011](#f-011--in-app-alert-history-log) | In-App Alert History Log | ✅ Done | 1 d | F-001, Phase 3 |
-| [F-012](#f-012--maintenance-tasks--xpc-real-execution) | Maintenance Tasks — Real Execution | ✅ Done | 1 d | F-002 |
+| [F-012](#f-012--maintenance-tasks--real-execution) | Maintenance Tasks — Real Execution | ✅ Done | 1 d | F-002 |
 | [F-013](#f-013--icloud-clipboard-sync) | iCloud Clipboard Sync | ⏭ Skipped (user) | 5 d | F-003 |
 | [F-014](#f-014--pdf-health-report-export) | PDF Health Report Export | ✅ Done | 2 d | none |
 | [F-015](#f-015--custom-scan-schedule-ui) | Custom Scan Schedule UI | ✅ Done | 1 d | F-005 |
@@ -69,9 +69,13 @@
 | [F-050](#f-050--haloshare-mobile--desktop-nfeat-127) | HaloShare Mobile ↔ Desktop (NFeat-127) | 🔧 Merged to v2.4 — tests and builds pass; not yet run on a device or against official LocalSend | ~6 d so far | HaloShare (LocalSend) |
 | [F-051](#f-051--lucky-draw-spinner-wheel-nfeat-128) | Lucky Draw Spinner Wheel (NFeat-128) | ✅ Done | ~6 d | CelebrationOverlay (F-037) |
 | [F-052](#f-052--lethe-anonymous-ephemeral-chat-nfeat-129) | Lethe — Anonymous Ephemeral Chat (NFeat-129) | 🔧 Merged to v2.4 — ship gate (Mac ↔ real phone) not yet run | ~8 d | Keychain, `AlertManager` |
-| [F-053](#f-053--lucky-draw-avatars-nfeat-130) | Lucky Draw Avatars (NFeat-130) | 🔧 Emoji / photo / monogram built on PR #54 (not merged, not clicked through, 60 fps unmeasured); animated + caricature await art | ~8–10 d | F-051 |
-| [F-054](#f-054--build-artifact-cleaner-nfeat-131) | Build Artifact Cleaner (NFeat-131) | 🗓 Planned — requirements written 2026-10-27, no code | ~7–9 d | BUG-001 |
-| [BUG-001](#bug-001--cleanup-no-rescan-and-stale-cross-category-items) | Cleanup: no rescan + stale cross-category items | 📋 Queued — root cause analysed from code, not yet reproduced | ~2.5–3 d | none (blocks F-054) |
+| [F-053](#f-053--lucky-draw-avatars-nfeat-130) | Lucky Draw Avatars (NFeat-130) | 🔧 Emoji / photo / monogram merged in v2.5 (#54; not clicked through, 60 fps unmeasured); **completion C-1…C-4 built on PR #57 (unmerged; hero flight not seen on screen)**; animated + caricature ⛔ await art (v2.7) | ~8–10 d | F-051 |
+| [F-054](#f-054--build-artifact-cleaner-nfeat-131) | Build Artifact Cleaner (NFeat-131) | 🔧 Built on PR #59 (unmerged, reviewed) — **pane never viewed on screen; permanent removal hidden in sandboxed builds; Settings panel not built** | ~7–9 d | BUG-001 |
+| [BUG-001](#bug-001--cleanup-no-rescan-and-stale-cross-category-items) | Cleanup: no rescan + stale cross-category items | 🔧 Fix merged in v2.5 (#53, tests + mutation checks; **not clicked through — T-1 ◆**); v2.6 hardening H-02/03/05 on PR #60 (unmerged) | ~2.5–3 d | none (blocks F-054) |
+| [F-055](#f-055--android-background-receiving--sharing) | Android Background Receiving & Sharing | 🔧 Built on PR #62 (unmerged; stacked on #61) — **service/consent/share target emulator-verified on the pre-review code only (JVM since); real multicast, Doze/OEM NOT verified (V-6)** | ~8 d | F-050, F-049 |
+| [F-056](#f-056--expenditure-on-the-phone-f-048-mobile-half) | Expenditure on the Phone (F-048 mobile half) | 🔧 Built on PR #58 (unmerged) — **JVM-only; Keystore, Compose screen, device perf NOT verified; known parser false positives** | ~7 d | F-048, F-049 |
+| [F-057](#f-057--cloud-setup-assistant) | Cloud Setup Assistant | 🔧 Built on PR #63 (unmerged; independently reviewed — 10 defects fixed in `0228187`) — **stubs/loopback only; NOT verified vs real Firebase or on screen** | ~4 d | F-044, F-045 |
+| [F-058](#f-058--release-engineering) | Release Engineering (CI, DMG, APK signing) | 🔧 Built on PR #56 (unmerged, reviewed) — **CI workflow never run on GitHub** | ~4 d | none |
 
 > **Status legend:** ✅ Done · 📋 Queued (next up) · 🗓 Planned (user-requested, spec pending discussion) · 💡 Future Idea (unsolicited) · ⏭ Skipped · 🔧 Built on a branch, not yet merged or validated against its ship gate
 
@@ -134,17 +138,26 @@ Theme: **land the cloud line.** F-044/F-045/F-048 were built in July on `feature
 
 ---
 
-## v2.6 candidates — requirements raised 2026-10-27 (F-053 partly built on PR #54; BUG-001 and F-054 not started)
+## v2.6 scope & status — "stabilise, finish, clean up" (built on open PRs #56–#63; nothing merged, nothing released)
 
-Three owner requests were analysed and specified. **No development has started on BUG-001 or F-054** (BUG-001 has an open fix PR, #53, at the time of writing); **F-053's emoji / photo / monogram kinds are built on the unmerged PR #54** — see its card. Order is dictated by one dependency: F-054 must be built on the state model BUG-001 introduces.
+Theme: make v2.5 trustworthy and complete, ship the one fully specified new desktop feature, and make releases repeatable. **Admission rule:** only work that can be completed and verified without a physical device, account, certificate, artwork or owner decision — see [`V2_6_PLAN.md`](V2_6_PLAN.md) §2. Everything else is in the v2.7 backlog below. Estimates are rough engineer-days (total ≈ 58, ≈ 67 with a 15 % buffer; two parallel tracks ≈ 6–7 weeks); they are not commitments and actuals were not tracked.
 
-| Order | Item | One line | Spec |
-|---|---|---|---|
-| 1 | **BUG-001** Cleanup rescan + stale categories | `~/Library/Caches` is scanned by *both* System Caches and User Caches; deletes only update the category they came from; no rescan exists; totals double-count | [`specs/BUG-001-cleanup-stale-state.md`](specs/BUG-001-cleanup-stale-state.md) |
-| 2 | **F-054** Build Artifact Cleaner | Find regenerable build folders (`node_modules`, `target/`, `build/`, DerivedData …) across all projects; marker-pair + git-aware safety gates; review sheet; new Cleanup pane | [`specs/F-054-build-artifact-cleaner.md`](specs/F-054-build-artifact-cleaner.md) |
-| 3 | **F-053** Lucky Draw Avatars | Emoji / animated emoji / bundled caricatures / local photos in a ring on the wheel segments, the winner popup, multi-draw strip and log | [`specs/F-053-lucky-draw-avatars.md`](specs/F-053-lucky-draw-avatars.md) |
+**State on 2026-11-01:** eight PRs against `release/v2.6` are open and unmerged. **The owner has not run any of T-1…T-9 or V-1…V-10.** Nothing below is ✅ for anything touching a real phone, a real Firebase project, a screen, or the sandboxed build. Plan and record: [`V2_6_PLAN.md`](V2_6_PLAN.md).
 
-**Owner decisions — all five answered 2026-10-27** (recorded in each spec):
+| Order | Item | One line | Effort | Status | Spec / PR |
+|---|---|---|---|---|---|
+| 0 | Land v2.5 (#50–#55, RC, owner tests) | Gate for everything below | — | ✅ merged into `release/v2.5`; **owner tests T-1…T-9 not run**; beta not published | `V2_6_PLAN.md` §5 |
+| 1 | **Hardening H-01…H-21** | Close every defect/test gap found by the reviews of #50–#55 | ≈ 17 | 🔧 H-01/04/07/12 merged in v2.5; the rest built on #56/#60/#61 (H-02/03/05/08/09/10/20a/21a · H-13/14/15/16/20b/21b · H-18); **H-05 partial, H-11 partial, H-17 open** | `V2_6_PLAN.md` §6 · #56 #60 #61 |
+| 2 | **F-054** Build Artifact Cleaner | Regenerable build output across projects; marker + git gates | ≈ 9 | 🔧 built on #59; pane **not viewed on screen** | [spec](specs/F-054-build-artifact-cleaner.md) · #59 |
+| 3 | **F-053** completion (non-art) | Hero travel, hub last winner, storage readout, CSV column, wheel signposts | ≈ 5 | 🔧 C-1…C-4 built on #57; hero flight **not seen on screen**; C-6 ⛔ ART | [spec](specs/F-053-lucky-draw-avatars.md) · #57 |
+| 4 | **F-055** Android background & sharing | Foreground service, Sharesheet, multicast | ≈ 8 | 🔧 built on #62 (stacked on #61) | [spec](specs/F-055-android-background-and-sharing.md) · #62 |
+| 5 | **F-056** Expenditure on Android | Parse device SMS with the shared pattern pack | ≈ 7 | 🔧 built on #58 (JVM-only) | [spec](specs/F-056-expenditure-on-android.md) · #58 |
+| 6 | **F-057** Cloud setup assistant | Per-path database check, auto-hiding pairing code, device list | ≈ 4 | 🔧 built on #63 (D-01 accepted → no longer blocked) | [spec](specs/F-057-cloud-setup-assistant.md) · #63 |
+| 7 | **F-058** Release engineering | CI, DMG script, APK signing, release template | ≈ 4 | 🔧 built on #56; CI never run | [spec](specs/F-058-release-engineering.md) · #56 |
+
+**Owner decisions — D-01…D-08 accepted 2026-10-28 (defaults)**; the authoritative table is [`V2_6_PLAN.md`](V2_6_PLAN.md) §3. In short: D-01 passphrase typed twice on an empty database · D-02 permanent removal only for Safe + git-verified items · **D-03 `~/Downloads` excluded from F-054 and not user-addable in v2.6** · D-04 Smart Scan keeps an Xcode (global) line item · D-05 landing order / `main` untouched · D-06 stale PRs and the "F-051" name (#6/#7 closed; #1 open on purpose; rename not done) · D-07 owner holds the Android keystore · D-08 one beta containing all six v2.5 PRs.
+
+**Earlier owner decisions — all five answered 2026-10-27** (recorded in each spec):
 
 | # | Decision | Answer | Where |
 |---|---|---|---|
@@ -152,11 +165,34 @@ Three owner requests were analysed and specified. **No development has started o
 | 2 | What does "exclusive builds folders" mean? | **All regenerable build output**, not Xcode-only | F-054 §0 |
 | 3 | `removeItem` on Halo's own avatar copies | **Allowed**, confined to `Application Support/Halo/luckydraw/avatars/` | F-053 NFR-S4 |
 | 4 | Art source for animated emoji / caricatures | **Commissioned or self-drawn** (owner supplies ~40 characters + a few animated emoji). Until it exists F-053 ships emoji + monogram + photos | F-053 D9, R1 |
-| 5 | What System Caches contains | **Minimal fix, then measure** — drop the `~/Library/Caches` overlap, keep `/private/var/folders`, check `/Library/Caches` on a real Mac before adding it | BUG-001 OQ-1 |
+| 5 | What System Caches contains | **Minimal fix, then measure** — `~/Library/Caches` overlap dropped; **measured 2026-10-28: `/Library/Caches` 4 KB root-owned, `/private/var/folders` partly SIP-protected → neither added** | BUG-001 OQ-1, §6.3 |
 
-> The two permanent-deletion exceptions (1 and 3) are **approved but not yet in `CLAUDE.md`'s rule text or in code** — they are written into the rule when the features are built, so the mandatory `trashItem` rule is not weakened ahead of an implementation that scopes it.
+> The two permanent-deletion exceptions: **#3 (avatars) is implemented and merged in `release/v2.5`** and is in `CLAUDE.md`'s rule text. **#1 (F-054) is implemented on PR #59, which also edits `CLAUDE.md` — unmerged, so `CLAUDE.md` on `release/v2.6` does not yet carry it.** It is hidden and refused in sandboxed builds.
 
-**Not decided here:** release assignment (v2.5 is already merged; v2.6 is a label for "after v2.5", not a frozen scope).
+**Verification debt (needs a real device/account/screen — never marked ✅ from an emulator or JVM run):** V-1 real SMS → Mac · V-2 live Firebase ciphertext + rules, F-057's check, H-21 rename · V-3 background clipboard on the owner's phone, H-15 a11y config · V-4 camera QR · V-5 delete-mirroring · V-6 foreground service under Doze/OEM, real multicast · V-7 expenditure on real bank SMS, real Keystore ledger · V-8 avatars at real roster sizes / hero flight on screen · V-9 sandboxed release build (F-053/F-054 paths) · V-10 official LocalSend. Cases: `MANUAL_TEST_PLAN.md` §20.6–§20.7.
+
+**Open review findings carried (known issues / v2.7 items):** F-056 parser false positives and short-trigger category collisions · H-05 case-insensitive-volume test, per-volume policy, firmlinks · H-11 on-screen fps and Instruments · H-17 sidebar canary · H-13 follow-up `CloudStore.load()` · F-053 hub shows the last winner (`history.first`) and the C-3 readout sits in the roster panel, not Settings · F-054 Active items permanent-eligible, auto-rescan TCC prompts, `*`-ignoring enclosing repo · BUG-001 OQ-4 (Smart Scan no longer covers `~/Library/Caches`) · F-055 notification-denied behaviour. Details: `V2_6_PLAN.md` §6.
+
+## v2.7 backlog — blocked or too large for v2.6
+
+Each item names its blocker and what unblocks it (`V2.7-xx` IDs are reserved here, not yet specced).
+
+| ID | Item | Blocker | Unblocked by |
+|---|---|---|---|
+| V2.7-01 | **Physical-device validation campaign** (V-1…V-7) for F-044/045/049/055/056 — converts every 🔧 to ✅ or a filed defect; highest value in the list | DEV, ACC | Owner phone + own Firebase project |
+| V2.7-02 | Official LocalSend interop, both directions (V-10) | DEV | A device running the official app |
+| V2.7-03 | Assisted Firebase provisioning (S2) | ACC (Google restricted-scope review) | Owner decision: verification vs per-user OAuth client |
+| V2.7-04 | Distribution: Play Store / F-Droid; App Store | ACC | Owner decision (F-049 D7: sideload only for v1) |
+| V2.7-05 | Notarisation | CERT | Paid Developer ID |
+| V2.7-06/07 | F-053 bundled caricatures, "give everyone a character", animated emoji (C-6) | ART | Owner supplies/commissions the set; licence recorded (checklist: F-053 §14.5) |
+| V2.7-08 | iOS cloud client (F-049 iOS): shared Swift package for `Halo/Core/Cloud`, SMS viewer, clipboard, QR pairing | big build (≈ 2–3 wk) | H-20 contract suite in place; **real iPhone to verify** |
+| V2.7-09 | F-047 local generation (MLX) + model manager | spike S3, multi-GB download | Owner OK for models and disk budget |
+| V2.7-10 | HaloShare TLS serving / unify desktop onto `HaloShareKit` (MD1/MD3) | design decision | Owner decision on MD1 |
+| V2.7-11 | Expenditure cloud sync (phone → Mac) | privacy design | F-056 proven on a real inbox (V-7) |
+| V2.7-12…17 | Mobile ports: Similar Photos (P1), Lucky Draw mobile (P2), usage insights (P2), snippets (P2), beautifier/Downloads/drive speed (P3), Android-only auditors (P3) | capacity | `HALO_MOBILE_ROADMAP.md` priorities |
+| V2.7-18…23 | Reply to SMS, MMS, sent-message sync, F-048 AI parsing, Lethe Android AC-1 on a real phone, clipboard images | various | not specified |
+| V2.7-24 | **Open v2.6 items promoted from review:** parser false positives (coordinated Swift + pack + fixture change; make desktop classifier pack-driven), H-05 gaps, H-11 on-screen measurement, H-17 canary, XPC git helper for sandboxed F-054, F-054 Settings panel + Xcode "in use", H-13 `CloudStore.load()`, BUG-001 OQ-4 | review | owner prioritisation |
+| HK-1…5 | `main` is 238 commits behind `release/v2.5` (counted 2026-11-01; the pack said ~167 behind v2.4); stale PRs #1 (open on purpose)/#6/#7; two things called "F-051"; old local installs; worktree/branch sprawl | owner decisions | owner's word — never done by Claude unprompted |
 
 ---
 
@@ -2293,7 +2329,7 @@ New **"iCloud"** tab in the **Files** module, alongside SpaceLens, Exact Duplica
 
 ---
 
-*Last updated: 2026-10-27 (F-053, F-054, BUG-001 requirements added; F-053 status reconciled with PR #54) · previously 2026-10-24 · `release/v2.4` @ 6ee0a21 · the Pipeline Status table above is authoritative; per-card statuses were reconciled with it and with the code on that date. Features without a card here: F-035 and F-040 (merged into F-026 / F-027).*
+*Last updated: 2026-11-01 (v2.6 scope & status, v2.7 backlog, F-055…F-058 added; statuses reconciled with PRs #56–#63 — all open and unmerged) · previously 2026-10-27 (F-053, F-054, BUG-001 requirements added; F-053 status reconciled with PR #54) · before that 2026-10-24 · `release/v2.4` @ 6ee0a21 · the Pipeline Status table above is authoritative; per-card statuses were reconciled with it and with the code on that date. Features without a card here: F-035 and F-040 (merged into F-026 / F-027).*
 
 ---
 
@@ -3633,7 +3669,7 @@ The spec's own ship gate (AC-1: Mac ↔ real phone against the production relay)
 
 ## F-053 — Lucky Draw Avatars (NFeat-130)
 
-**Status:** 🔧 Partly built on PR #54 (2026-10-27; not merged) — emoji, photos and monogram; **animated emoji and caricatures wait for the commissioned art** · **Effort:** ~8–10 d incl. 1.5 d spikes · **Depends on:** F-051
+**Status:** 🔧 Emoji / photos / monogram merged in `release/v2.5` (#54); **v2.6 completion C-1…C-4 built on PR #57 (unmerged) — hero flight not seen on screen**; **animated emoji and caricatures wait for the commissioned art (v2.7)** · **Effort:** ~8–10 d incl. 1.5 d spikes · **Depends on:** F-051
 **Full spec:** [`docs/specs/F-053-lucky-draw-avatars.md`](specs/F-053-lucky-draw-avatars.md)
 
 ### Intent
@@ -3661,7 +3697,7 @@ Default display mode · pack themes · hub shows last winner (see spec §12). *R
 
 ## F-054 — Build Artifact Cleaner (NFeat-131)
 
-**Status:** 🗓 Planned (requirements written 2026-10-27; **no code**) · **Effort:** ~7–9 d incl. 1 d spikes · **Depends on:** BUG-001
+**Status:** 🔧 Built on PR #59 (unmerged, independently reviewed) — **pane never viewed on screen; sandbox spikes analysis-only; permanent removal hidden in sandboxed builds** · **Effort:** ~7–9 d incl. 1 d spikes · **Depends on:** BUG-001
 **Full spec:** [`docs/specs/F-054-build-artifact-cleaner.md`](specs/F-054-build-artifact-cleaner.md)
 
 ### Intent
@@ -3680,13 +3716,13 @@ A **Build Artifacts** pane in the Cleanup sidebar that finds regenerable build o
 ❌ iOS / ❌ Android — **Won't do** (no developer build trees on a phone; sandbox forbids the access). Study: [`HALO_MOBILE_ROADMAP.md`](HALO_MOBILE_ROADMAP.md) §3 / §9.
 
 ### Open questions
-Smart Scan inclusion · default scan roots (see spec §12). *Resolved 2026-10-27:* free-space exception (approved, narrow) and scope (all regenerable build output).
+*Resolved 2026-10-27:* free-space exception (approved, narrow) and scope (all regenerable build output). *Resolved 2026-10-28 (v2.6):* D-02 permanent removal only for Safe + git-verified; D-03 `~/Downloads` excluded and not user-addable; D-04 Smart Scan keeps an Xcode (global) line item. Still open: default scan roots including `~/Documents`/`~/Desktop` (spec OQ-4).
 
 ---
 
 ## BUG-001 — Cleanup: no rescan, and stale cross-category items
 
-**Status:** 📋 Queued (analysis written 2026-10-27; **not yet reproduced in a running app, no fix**) · **Effort:** ~2.5–3 d · **Blocks:** F-054
+**Status:** 🔧 Fix merged in `release/v2.5` (#53) — **not clicked through in the running app (T-1 ◆)**; v2.6 hardening H-02/03/05 on PR #60 (unmerged; H-05 partial) · **Effort:** ~2.5–3 d · **Blocks:** F-054
 **Full spec:** [`docs/specs/BUG-001-cleanup-stale-state.md`](specs/BUG-001-cleanup-stale-state.md)
 
 ### Report
@@ -3700,3 +3736,35 @@ Rescan (+⌘R, +auto on app activation after 60 s) · one owner per path with a 
 
 ### Not a feature
 No mobile row required (governance rule applies to `F-xxx` features).
+
+---
+
+## F-055 — Android Background Receiving & Sharing
+
+**Status:** 🔧 Built on PR #62 (unmerged; stacked on #61) — service / consent / share target emulator-verified on API 36 on the pre-review code (JVM only since); **real multicast and Doze/OEM NOT verified (V-6)** · **Effort:** ~8 d · **Depends on:** F-050, F-049
+**Full spec:** [`docs/specs/F-055-android-background-and-sharing.md`](specs/F-055-android-background-and-sharing.md)
+Opt-in foreground service (`dataSync`, default off, one-tap stop) hosting the HaloShare receiver and clipboard stream; Sharesheet target that only stages items; multicast announce/listen. Closes MR-OS-1/MR-OS-2/MR-DI-4 in code on the PR. **Mobile parity:** Android-only; iOS ❌ deferred (cannot background) — [`HALO_MOBILE_ROADMAP.md`](HALO_MOBILE_ROADMAP.md) §3.
+
+---
+
+## F-056 — Expenditure on the Phone (F-048 mobile half)
+
+**Status:** 🔧 Built on PR #58 (unmerged) — JVM-verified; **real Keystore sealing, Compose "Spend" screen and device performance NOT verified (V-7)**; known desktop-parity parser false positives · **Effort:** ~7 d · **Depends on:** F-048, F-049
+**Full spec:** [`docs/specs/F-056-expenditure-on-android.md`](specs/F-056-expenditure-on-android.md)
+Kotlin port of the classifier/parser driven by the same pattern pack as the desktop, one shared fixture file passing on Swift and Kotlin, a sealed local ledger, no cloud upload. **Mobile parity:** this *is* the mobile half; iOS via cloud later (`V2.7-11`).
+
+---
+
+## F-057 — Cloud Setup Assistant
+
+**Status:** 🔧 Built on PR #63 (unmerged; independently reviewed, 10 defects fixed in `0228187`) — stubs/loopback only; **NOT verified against real Firebase or on screen (V-2)** · **Effort:** ~4 d · **Depends on:** F-044, F-045
+**Full spec:** [`docs/specs/F-057-cloud-setup-assistant.md`](specs/F-057-cloud-setup-assistant.md)
+"Check my database" (per-path write/read/delete probe incl. the `clipboard/` rules defect), 60-second auto-hiding pairing code, Mac Devices last-seen + retire. Carries D-01 (built in v2.5). **Mobile parity:** phone-side check is part of the feature; iOS with the iOS client.
+
+---
+
+## F-058 — Release Engineering
+
+**Status:** 🔧 Built on PR #56 (unmerged, reviewed) — **the CI workflow has never run on GitHub** · **Effort:** ~4 d · **Depends on:** none
+**Full spec:** [`docs/specs/F-058-release-engineering.md`](specs/F-058-release-engineering.md)
+CI on `release/**`, `scripts/build-dmg.sh`, `scripts/bump-version.sh`, `android/scripts/sign-release.sh`, `scripts/check-rules-sync.sh` (H-18), release checklist and notes template. **Mobile parity:** n/a (repo-level).

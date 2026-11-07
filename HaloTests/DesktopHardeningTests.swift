@@ -145,6 +145,13 @@ struct CleanupPathKeyTests {
         return d
     }
 
+    // HONESTY NOTE (review of #60): `URL.standardizedFileURL` already maps `/private/var` to `/var`, so the
+    // tests that only compare those two spellings (`varAndPrivateVarAgree`, `missingLeafStillNormalises`,
+    // `reconcilesAcrossSpellings`, `totalsCountOnce`, `overlapUsesResolvedKeys`) pass even WITHOUT the
+    // realpath work. They are regression GUARDS — they go red if the key degrades to comparing raw strings —
+    // not proofs of H-05. The tests that actually discriminate are `symlinkedDirectoryAgrees`,
+    // `symlinkedRootCoversItems` and, in `CleanupPathVolumeTests`, the firmlink and per-volume case tests.
+
     /// The two spellings of a temp path: `/var/folders/…` and `/private/var/folders/…`.
     private func spellings(of url: URL) throws -> (viaVar: URL, viaPrivate: URL) {
         let bare = url.path.hasPrefix("/private") ? String(url.path.dropFirst("/private".count)) : url.path
@@ -152,7 +159,7 @@ struct CleanupPathKeyTests {
         return (URL(fileURLWithPath: bare), URL(fileURLWithPath: "/private" + bare))
     }
 
-    @Test("/var and /private/var spell one key")
+    @Test("guard: /var and /private/var spell one key")
     func varAndPrivateVarAgree() throws {
         let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let file = dir.appendingPathComponent("a.bin"); try Data([1]).write(to: file)
@@ -160,14 +167,14 @@ struct CleanupPathKeyTests {
         #expect(CleanupPath.key(s.viaVar) == CleanupPath.key(s.viaPrivate))
     }
 
-    @Test("A path that no longer exists still resolves its existing ancestors")
+    @Test("guard: a path that no longer exists still resolves its existing ancestors")
     func missingLeafStillNormalises() throws {
         let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let s = try spellings(of: dir.appendingPathComponent("gone/deep.bin"))
         #expect(CleanupPath.key(s.viaVar) == CleanupPath.key(s.viaPrivate))
     }
 
-    @Test("A row addressed by one spelling reconciles when the other is reported removed")
+    @Test("guard: a row addressed by one spelling reconciles when the other is reported removed")
     func reconcilesAcrossSpellings() throws {
         let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let file = dir.appendingPathComponent("a.bin"); try Data([1]).write(to: file)
@@ -179,7 +186,7 @@ struct CleanupPathKeyTests {
         #expect(cats[0].items.isEmpty)
     }
 
-    @Test("The same file listed under both spellings is counted once")
+    @Test("guard: the same file listed under both spellings is counted once")
     func totalsCountOnce() throws {
         let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let file = dir.appendingPathComponent("a.bin"); try Data([1]).write(to: file)
@@ -229,12 +236,7 @@ struct CleanupPathKeyTests {
         #expect(overlaps.count == 1, "a root reached through a symlinked root overlaps it")
     }
 
-    @Test("Case policy: keys are case-sensitive (documented in CleanupPath.key)")
-    func casePolicy() {
-        #expect(CleanupPath.key(URL(fileURLWithPath: "/x/Caches/A.bin")) != CleanupPath.key(URL(fileURLWithPath: "/x/Caches/a.bin")))
-    }
-
-    @Test("Root-overlap detection sees through symlinked spellings")
+    @Test("guard: root-overlap detection sees through /var vs /private/var spellings")
     func overlapUsesResolvedKeys() throws {
         let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let s = try spellings(of: dir)
@@ -584,23 +586,23 @@ struct AvatarBoundsTests {
         let store = AvatarStore(rootURL: root, detectFaces: false)
         let (id, names) = try roster(of: 4, in: store)
         let (a, b, c, d) = (names[0], names[1], names[2], names[3])
-        // What one decoded 256-px photo actually costs, measured rather than assumed.
+        // What one decoded 128-px photo actually costs, measured rather than assumed.
         let probe = AvatarImageCache(); probe.store = store
-        _ = probe.photo(fileName: a, rosterID: id, points: 128)
+        _ = probe.photo(fileName: a, rosterID: id, points: 64)
         wait { probe.decodedCount == 1 }
         let one = probe.decodedBytes
         #expect(one > 0)
         let cache = AvatarImageCache(byteCapacity: one * 3 + one / 2); cache.store = store   // room for three
         func load(_ n: String) {
-            _ = cache.photo(fileName: n, rosterID: id, points: 128)
-            wait { cache.isCached(fileName: n, rosterID: id, points: 128) }
+            _ = cache.photo(fileName: n, rosterID: id, points: 64)
+            wait { cache.isCached(fileName: n, rosterID: id, points: 64) }
         }
         load(a); load(b); load(c)
-        _ = cache.photo(fileName: a, rosterID: id, points: 128)              // `a` is drawn again: most recent
+        _ = cache.photo(fileName: a, rosterID: id, points: 64)              // `a` is drawn again: most recent
         load(d)                                                              // over the cap: the oldest USE goes
-        #expect(cache.isCached(fileName: a, rosterID: id, points: 128), "the most recently used photo was evicted (FIFO, not LRU)")
-        #expect(!cache.isCached(fileName: b, rosterID: id, points: 128), "the least recently used photo was kept")
-        #expect(cache.isCached(fileName: c, rosterID: id, points: 128) && cache.isCached(fileName: d, rosterID: id, points: 128))
+        #expect(cache.isCached(fileName: a, rosterID: id, points: 64), "the most recently used photo was evicted (FIFO, not LRU)")
+        #expect(!cache.isCached(fileName: b, rosterID: id, points: 64), "the least recently used photo was kept")
+        #expect(cache.isCached(fileName: c, rosterID: id, points: 64) && cache.isCached(fileName: d, rosterID: id, points: 128))
         #expect(cache.decodedBytes <= one * 3 + one / 2)
     }
 }
@@ -795,5 +797,532 @@ struct LiveLineChangeTests {
         node["updatedAt"] = 1_800_000_000_123
         let line = SMSWire.line(deviceId: f.deviceId, subIdStr: "1", value: node, crypto: f.crypto)
         #expect(line.label == "Personal" && line.ownNumber == "+919876543210")
+    }
+}
+
+
+// MARK: - Follow-up to #60's reviews (h05)
+
+// MARK: H-05 — per-volume case policy, firmlinks
+
+/// A real, throwaway volume: a sparse disk image formatted APFS (case-insensitive) or Case-sensitive
+/// APFS, attached at a mount point of the test's choosing. `nil` when `hdiutil` cannot make or attach one
+/// (not present, sandboxed, no Disk Images service) — the suites that need it are disabled then.
+private final class TempVolume: @unchecked Sendable {
+    let base: URL
+    let mount: URL
+    private var attached = false
+
+    init?(caseSensitive: Bool, mountName: String = "mnt") {
+        base = FileManager.default.temporaryDirectory.appendingPathComponent("halo-vol-\(UUID().uuidString)")
+        mount = base.appendingPathComponent(mountName)
+        do { try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true) } catch { return nil }
+        let image = base.appendingPathComponent("v").path          // hdiutil appends ".sparseimage"
+        let made = ShellReader.run("/usr/bin/hdiutil",
+                                   ["create", "-size", "8m", "-fs", caseSensitive ? "Case-sensitive APFS" : "APFS",
+                                    "-volname", "HaloT", "-type", "SPARSE", image], timeout: 60)
+        guard made.succeeded else { try? FileManager.default.removeItem(at: base); return nil }
+        let up = ShellReader.run("/usr/bin/hdiutil",
+                                 ["attach", "-mountpoint", mount.path, "-nobrowse", "-noverify", "-noautoopen", image + ".sparseimage"],
+                                 timeout: 60)
+        guard up.succeeded else { try? FileManager.default.removeItem(at: base); return nil }
+        attached = true
+        CleanupPath.resetKeyCache()
+    }
+
+    func detach() {
+        if attached { attached = !ShellReader.run("/usr/bin/hdiutil", ["detach", mount.path, "-force"], timeout: 60).succeeded }
+        // Only when the volume is gone: removing `base` while the image is still mounted would recurse into it.
+        if !attached { try? FileManager.default.removeItem(at: base) }
+        CleanupPath.resetKeyCache()
+    }
+
+    var supportsCaseSensitiveNames: Bool? {
+        try? mount.resourceValues(forKeys: [.volumeSupportsCaseSensitiveNamesKey]).volumeSupportsCaseSensitiveNames
+    }
+
+    /// Whether a disk image can be made here at all — decided once, by trying.
+    static let available: Bool = {
+        guard let v = TempVolume(caseSensitive: false) else { return false }
+        v.detach()
+        return true
+    }()
+}
+
+private func scanned(_ url: URL, size: Int64 = 100) -> ScannedItem {
+    ScannedItem(id: UUID(), url: url, size: size, creationDate: nil, modifiedDate: nil, kind: .cache)
+}
+
+@Suite("Cleanup path keys follow the volume (H-05 follow-up)")
+struct CleanupPathVolumeTests {
+
+    @Test("Case-insensitive volume (real APFS disk image): one file, however it is spelled",
+          .enabled(if: TempVolume.available))
+    func caseInsensitiveVolumeFolds() throws {
+        let v = try #require(TempVolume(caseSensitive: false)); defer { v.detach() }
+        #expect(v.supportsCaseSensitiveNames == false, "premise: the image is a case-insensitive volume")
+        let dir = v.mount.appendingPathComponent("Dir")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent("A.bin"); try Data([1]).write(to: file)
+        let lower = v.mount.appendingPathComponent("dir/a.bin")
+        #expect(FileManager.default.fileExists(atPath: lower.path), "premise: the filesystem itself treats them as one file")
+
+        #expect(CleanupPath.key(file) == CleanupPath.key(lower))
+        // A leaf that no longer exists (a removed item) folds the same way.
+        #expect(CleanupPath.key(dir.appendingPathComponent("Gone.BIN")) == CleanupPath.key(v.mount.appendingPathComponent("DIR/gone.bin")))
+
+        // What it means for the lists: a row spelled one way goes when the other spelling is removed ...
+        var cats = [CleanupCategory(kind: .userCaches)]
+        cats[0].items = [scanned(file)]
+        CleanupReconciler.apply(removedKeys: [CleanupPath.key(lower)], to: &cats)
+        #expect(cats[0].items.isEmpty, "a row survived its file being removed under another case spelling (ghost row)")
+        // ... and one file listed under two spellings is one file in the total.
+        cats = [CleanupCategory(kind: .systemCaches), CleanupCategory(kind: .userCaches)]
+        cats[0].items = [scanned(file)]; cats[1].items = [scanned(lower)]
+        #expect(CleanupReconciler.distinctBytes(cats) == 100)
+    }
+
+    @Test("Case-sensitive volume (real Case-sensitive APFS disk image): A.bin and a.bin are two files",
+          .enabled(if: TempVolume.available))
+    func caseSensitiveVolumeKeepsCase() throws {
+        let v = try #require(TempVolume(caseSensitive: true)); defer { v.detach() }
+        #expect(v.supportsCaseSensitiveNames == true, "premise: the image is a case-sensitive volume")
+        let upper = v.mount.appendingPathComponent("A.bin"), lower = v.mount.appendingPathComponent("a.bin")
+        try Data([1]).write(to: upper); try Data([2, 2]).write(to: lower)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: v.mount.path).count == 2, "premise: two distinct files")
+
+        #expect(CleanupPath.key(upper) != CleanupPath.key(lower))
+        var cats = [CleanupCategory(kind: .userCaches)]
+        cats[0].items = [scanned(upper), scanned(lower)]
+        CleanupReconciler.apply(removedKeys: [CleanupPath.key(lower)], to: &cats)
+        #expect(cats[0].items.map(\.name) == ["A.bin"], "removing a.bin dropped (or kept) the wrong row")
+        cats = [CleanupCategory(kind: .userCaches)]
+        cats[0].items = [scanned(upper), scanned(lower)]
+        #expect(CleanupReconciler.distinctBytes(cats) == 200, "two distinct files were counted as one")
+    }
+
+    @Test("A case-sensitive volume mounted inside a case-insensitive one: the mount point's name folds, what is below it does not",
+          .enabled(if: TempVolume.available))
+    func mixedVolumes() throws {
+        let v = try #require(TempVolume(caseSensitive: true, mountName: "MNT")); defer { v.detach() }
+        let parentFlag = try v.base.resourceValues(forKeys: [.volumeSupportsCaseSensitiveNamesKey]).volumeSupportsCaseSensitiveNames
+        guard parentFlag == false else { return }        // the temp dir itself is on a case-sensitive volume here: nothing mixed to test
+        try FileManager.default.createDirectory(at: v.mount.appendingPathComponent("Dir"), withIntermediateDirectories: true)
+
+        let a = CleanupPath.key(v.base.appendingPathComponent("MNT/Dir/A.bin"))
+        let sameMountOtherSpelling = CleanupPath.key(v.base.appendingPathComponent("mnt/Dir/A.bin"))
+        let otherFileBelow = CleanupPath.key(v.base.appendingPathComponent("MNT/dir/A.bin"))
+        #expect(a == sameMountOtherSpelling, "the mount point's name lives on the case-insensitive parent: one directory")
+        #expect(a != otherFileBelow, "below the mount point the volume is case-sensitive: Dir and dir differ")
+        #expect(a.hasSuffix("/mnt/Dir/A.bin"), "folded above and including the mount point, verbatim below it: \(a)")
+    }
+
+    @Test("Whatever volume the temp folder is on, keys fold case exactly when that volume does")
+    func keysAgreeWithTheRealVolumeFlag() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("halo-flag-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let sensitive = (try? dir.resourceValues(forKeys: [.volumeSupportsCaseSensitiveNamesKey]).volumeSupportsCaseSensitiveNames) ?? true
+        let same = CleanupPath.key(dir.appendingPathComponent("Sub/A.bin")) == CleanupPath.key(dir.appendingPathComponent("sub/a.bin"))
+        #expect(same == !sensitive, "key folds case: \(same), volume case-sensitive: \(sensitive)")
+        #expect(CleanupPath.key(dir.appendingPathComponent("A.bin")) != CleanupPath.key(dir.appendingPathComponent("B.bin")))
+    }
+
+    @Test("Firmlinks: /System/Volumes/Data/<x> and /<x> are one location",
+          .enabled(if: FileManager.default.fileExists(atPath: "/System/Volumes/Data/Users")))
+    func firmlinkSpellingsAgree() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("halo-firm-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("a.bin"); try Data([1]).write(to: file)
+        // C `realpath`, not `resolvingSymlinksInPath()` — Foundation strips the leading "/private" of /private/var.
+        func real(_ url: URL) -> String { var buf = [CChar](repeating: 0, count: Int(PATH_MAX)); return realpath(url.path, &buf) != nil ? String(cString: buf) : url.path }
+        let viaData = URL(fileURLWithPath: "/System/Volumes/Data" + real(file))
+        try #require(FileManager.default.fileExists(atPath: viaData.path), "premise: the Data-volume spelling reaches the same file")
+
+        #expect(CleanupPath.key(file) == CleanupPath.key(viaData))
+        #expect(CleanupPath.directoryKey(dir) == CleanupPath.directoryKey(viaData.deletingLastPathComponent()))
+        var cats = [CleanupCategory(kind: .userCaches)]
+        cats[0].items = [scanned(viaData)]
+        CleanupReconciler.apply(removedKeys: [CleanupPath.key(file)], to: &cats)
+        #expect(cats[0].items.isEmpty, "a row addressed through /System/Volumes/Data outlived its file")
+
+        let home = URL(fileURLWithPath: NSHomeDirectory())
+        let homeViaData = URL(fileURLWithPath: "/System/Volumes/Data" + real(home))
+        #expect(CleanupPath.directoryKey(home) == CleanupPath.directoryKey(homeViaData))
+    }
+
+    @Test("A drive swapped for a differently-formatted one at the same mount point is not keyed by the old volume's case flag",
+          .enabled(if: TempVolume.available))
+    @MainActor
+    func remountAtTheSamePathIsRescanned() async throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("halo-remount-\(UUID().uuidString)")
+        let mount = base.appendingPathComponent("mnt")
+        try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
+        func attach(caseSensitive: Bool, image: String) -> Bool {
+            let path = base.appendingPathComponent(image).path
+            guard ShellReader.run("/usr/bin/hdiutil", ["create", "-size", "8m", "-fs", caseSensitive ? "Case-sensitive APFS" : "APFS",
+                                                       "-volname", "HaloT", "-type", "SPARSE", path], timeout: 60).succeeded else { return false }
+            return ShellReader.run("/usr/bin/hdiutil", ["attach", "-mountpoint", mount.path, "-nobrowse", "-noverify", "-noautoopen",
+                                                        path + ".sparseimage"], timeout: 60).succeeded
+        }
+        func detach() -> Bool { ShellReader.run("/usr/bin/hdiutil", ["detach", mount.path, "-force"], timeout: 60).succeeded }
+        var attached = false
+        defer {
+            if attached { attached = !detach() }
+            if !attached { try? FileManager.default.removeItem(at: base) }   // never recurse into a volume that is still mounted
+            CleanupPath.resetKeyCache()
+        }
+        // Other tests (and every scan) clear the key cache too, and the swap takes seconds, so the stale
+        // entry can be wiped before the scan: establish the premise — the old flag IS still cached —
+        // and retry the swap if it was not, rather than let the assertion below pass for the wrong reason.
+        var stale = false
+        for attempt in 0..<4 where !stale {
+            if attempt > 0 {
+                attached = !detach(); try #require(!attached)
+                for f in (try? FileManager.default.contentsOfDirectory(atPath: base.path)) ?? [] where f.hasSuffix(".sparseimage") {
+                    try? FileManager.default.removeItem(at: base.appendingPathComponent(f))
+                }
+            }
+            CleanupPath.resetKeyCache()
+            try #require(attach(caseSensitive: false, image: "ci\(attempt)"))
+            attached = true
+            #expect(CleanupPath.key(mount.appendingPathComponent("A.bin")) == CleanupPath.key(mount.appendingPathComponent("a.bin")))
+            attached = !detach()
+            try #require(!attached)
+            try #require(attach(caseSensitive: true, image: "cs\(attempt)"))
+            attached = true
+            try? Data(repeating: 1, count: 4096).write(to: mount.appendingPathComponent("A.bin"))
+            try? Data(repeating: 2, count: 4096).write(to: mount.appendingPathComponent("a.bin"))
+            // Premise: the old volume's flag is still cached for this mount point, although the two files are distinct.
+            stale = CleanupPath.key(mount.appendingPathComponent("A.bin")) == CleanupPath.key(mount.appendingPathComponent("a.bin"))
+            if !stale, let n = try? FileManager.default.contentsOfDirectory(atPath: mount.path) {
+                for f in n where f.lowercased() == "a.bin" { try? FileManager.default.removeItem(at: mount.appendingPathComponent(f)) }
+            }
+        }
+        try #require(stale, "premise: the previous volume's case flag stays cached across the swap (without a reset)")
+
+        let trash = base.appendingPathComponent("trash")
+        let root = mount.path
+        let coordinator = ScanCoordinator(roots: { $0 == .userCaches ? [root] : [] }, trashDirectories: { [trash] }, trash: { _ in })
+        let vm = CleanupViewModel(coordinator: coordinator, kinds: [.userCaches])
+        await vm.scanAll()
+        let items = (vm.category(for: .userCaches)?.items ?? []).filter { $0.name.lowercased() == "a.bin" }
+        #expect(items.count == 2, "premise: both files of the case-sensitive volume are listed")
+        #expect(Set(items.map(\.key)).count == 2, "two distinct files were given one key — the previous volume's case flag was reused")
+    }
+
+    @Test("canonicalFirmlink only rewrites real firmlink roots")
+    func canonicalFirmlinkRules() {
+        #expect(CleanupPath.canonicalFirmlink("/System/Volumes/Data/Users/x") == "/Users/x")
+        #expect(CleanupPath.canonicalFirmlink("/System/Volumes/Data/private/var/folders") == "/private/var/folders")
+        #expect(CleanupPath.canonicalFirmlink("/System/Volumes/Data/usr/local/bin") == "/usr/local/bin")
+        #expect(CleanupPath.canonicalFirmlink("/System/Volumes/Data/nothing-firmlinked-here") == "/System/Volumes/Data/nothing-firmlinked-here")
+        #expect(CleanupPath.canonicalFirmlink("/System/Volumes/Data") == "/System/Volumes/Data")
+        #expect(CleanupPath.canonicalFirmlink("/System/Volumes/DataX/Users/x") == "/System/Volumes/DataX/Users/x")
+        #expect(CleanupPath.canonicalFirmlink("/Users/x") == "/Users/x")
+    }
+}
+
+
+// MARK: Clean All: feedback while preparing, one at a time
+
+@MainActor
+@Suite("Clean All: in-progress feedback and no double-start (review of #60)")
+struct CleanAllBusyTests {
+    typealias Fixture = CleanupViewModelTests.Fixture
+
+    private func spin(until cond: () -> Bool) async {
+        let end = Date().addingTimeInterval(5)
+        while !cond(), Date() < end { try? await Task.sleep(nanoseconds: 2_000_000) }
+    }
+
+    @Test("While the prune runs the model says so, and a second Clean All is ignored — it does not open a second prune")
+    func secondBeginIsIgnored() async throws {
+        let f = try Fixture()
+        for i in 0..<4 { try f.file("f\(i).bin") }
+        let rec = Recorder()
+        let root = f.root, trash = f.trash
+        let coordinator = ScanCoordinator(roots: { $0 == .userCaches ? [root.path] : [] },
+                                          trashDirectories: { [trash] }, trash: { _ in })
+        let vm = CleanupViewModel(coordinator: coordinator, kinds: [.userCaches],
+                                  existsOnDisk: { _ in rec.note(); Thread.sleep(forTimeInterval: 0.05); return true })
+        await vm.scanAll()
+        #expect(!vm.isPreparing && !vm.isBusy)
+
+        let first = Task { await vm.beginCleanAll(for: .userCaches) }
+        await spin { vm.isPreparing }
+        #expect(vm.isPreparing && vm.isBusy, "no in-progress state during the existence check")
+
+        let second = await vm.beginCleanAll(for: .userCaches)       // the double-click
+        #expect(second == nil, "a second Clean All opened a second prune")
+
+        let snapshot = await first.value
+        #expect(snapshot?.items.count == 4)
+        #expect(rec.calls == 4, "the existence check ran \(rec.calls) times for 4 rows: a second prune was started")
+        #expect(!vm.isPreparing && !vm.isBusy, "the flag was left set")
+    }
+
+    @Test("The whole re-check before the trash counts as busy, not just the trash itself")
+    func busyFromTheFirstAwait() async throws {
+        let f = try Fixture()
+        for i in 0..<3 { try f.file("f\(i).bin") }
+        let trashed = Recorder(), checks = Recorder()
+        let root = f.root, trash = f.trash
+        let coordinator = ScanCoordinator(roots: { $0 == .userCaches ? [root.path] : [] },
+                                          trashDirectories: { [trash] }, trash: { _ in trashed.note() })
+        let vm = CleanupViewModel(coordinator: coordinator, kinds: [.userCaches],
+                                  existsOnDisk: { _ in checks.note(); Thread.sleep(forTimeInterval: 0.03); return true })
+        await vm.scanAll()
+        let snapshot = try #require(await vm.beginCleanAll(for: .userCaches))
+        let before = checks.calls
+
+        let first = Task { await vm.cleanAll(confirmed: snapshot) }
+        await spin { checks.calls > before }                         // inside the existence re-check
+        #expect(trashed.calls == 0, "premise: nothing has been trashed yet")
+        #expect(vm.isCleaning && vm.isBusy, "isCleaning was only set once the trash started — the re-check window looked idle")
+        await first.value
+        #expect(!vm.isCleaning)
+    }
+
+    @Test("A second 'Move to Trash' while one is running is ignored: nothing is trashed twice and the first banner survives")
+    func secondConfirmIsIgnored() async throws {
+        let f = try Fixture()
+        for i in 0..<3 { try f.file("f\(i).bin") }
+        let trashed = Recorder()
+        let root = f.root, trash = f.trash
+        // A slow trash: the second click lands while the first is mid-way, when every file still exists —
+        // so the existence re-check cannot be what saves it.
+        let coordinator = ScanCoordinator(roots: { $0 == .userCaches ? [root.path] : [] },
+                                          trashDirectories: { [trash] },
+                                          trash: { url in
+                                              trashed.note()
+                                              Thread.sleep(forTimeInterval: 0.06)
+                                              try FileManager.default.moveItem(at: url, to: trash.appendingPathComponent(url.lastPathComponent))
+                                          })
+        let vm = CleanupViewModel(coordinator: coordinator, kinds: [.userCaches])
+        await vm.scanAll()
+        let snapshot = try #require(await vm.beginCleanAll(for: .userCaches))
+
+        let first = Task { await vm.cleanAll(confirmed: snapshot) }
+        await spin { trashed.calls >= 1 }
+        await vm.cleanAll(confirmed: snapshot)                       // the double-click
+        await first.value
+
+        #expect(trashed.calls == 3, "trashed \(trashed.calls) times for 3 items: the second click ran a second clean")
+        #expect(vm.outcome?.moved == 3 && vm.outcome?.failed == 0, "the first operation's banner was replaced")
+        #expect(!vm.isCleaning)
+    }
+
+    @Test("A cancelled Clean All does not leave the model stuck busy")
+    func cancellationReleasesTheFlags() async throws {
+        let f = try Fixture()
+        for i in 0..<300 { try f.file("f\(i).bin") }
+        let root = f.root, trash = f.trash
+        let coordinator = ScanCoordinator(roots: { $0 == .userCaches ? [root.path] : [] },
+                                          trashDirectories: { [trash] }, trash: { _ in })
+        let vm = CleanupViewModel(coordinator: coordinator, kinds: [.userCaches],
+                                  existsOnDisk: { _ in Thread.sleep(forTimeInterval: 0.002); return true }, pruneDeadline: 30)
+        await vm.scanAll()
+        let task = Task { await vm.beginCleanAll(for: .userCaches) }
+        await spin { vm.isPreparing }
+        task.cancel()
+        _ = await task.value
+        #expect(!vm.isPreparing && !vm.isBusy)
+        let again = await vm.beginCleanAll(for: .userCaches)
+        #expect(again != nil, "after a cancelled attempt Clean All never worked again")
+    }
+}
+
+
+// MARK: H-02 measurement: 20 000 rows must not stall the main actor
+
+/// Measures how long the main thread is blocked. A background thread posts a block to the main queue every
+/// few ms and records how late it ran; a synchronous stretch of main-actor work shows up as one late block.
+private final class MainThreadHeartbeat: @unchecked Sendable {
+    private let lock = NSLock()
+    private var worst: TimeInterval = 0
+    private var running = false
+
+    func start() {
+        lock.lock(); running = true; worst = 0; lock.unlock()
+        Thread.detachNewThread { [self] in
+            while true {
+                lock.lock(); let go = running; lock.unlock()
+                if !go { return }
+                let posted = CFAbsoluteTimeGetCurrent()
+                DispatchQueue.main.async { [self] in
+                    let late = CFAbsoluteTimeGetCurrent() - posted
+                    lock.lock(); worst = max(worst, late); lock.unlock()
+                }
+                Thread.sleep(forTimeInterval: 0.004)
+            }
+        }
+    }
+
+    /// The longest the main thread was unavailable since `start()`.
+    func stop() -> TimeInterval {
+        lock.lock(); running = false; let w = worst; lock.unlock()
+        return w
+    }
+}
+
+@MainActor
+@Suite("Clean All on a 20 000-row list keeps the main actor free (H-02 measurement)")
+struct CleanupMainActorTests {
+    typealias Fixture = CleanupViewModelTests.Fixture
+
+    /// The longest main-thread stall allowed while 20 000 rows are checked, trashed and reconciled. Generous
+    /// on purpose (a loaded CI box, parallel tests on the main actor): the failure it guards is a stall of
+    /// SECONDS, which is what keying/hashing every row on the main actor costs. Measured on this Mac:
+    /// 90-130 ms alone (up to ~250 ms with six suites running in parallel); the #60 head, same test: 3.3 s.
+    static let allowedStall: TimeInterval = 0.75
+
+    private func run(items: [ScannedItem], fixture f: Fixture, exists: @escaping @Sendable (URL) -> Bool,
+                     trash: @escaping @Sendable (URL) throws -> Void) async throws -> (stall: TimeInterval, wall: TimeInterval, vm: CleanupViewModel) {
+        let root = f.root, trashDir = f.trash
+        let coordinator = ScanCoordinator(roots: { $0 == .userCaches ? [root.path] : [] },
+                                          trashDirectories: { [trashDir] }, trash: trash)
+        let vm = CleanupViewModel(coordinator: coordinator, kinds: [.userCaches], existsOnDisk: exists, pruneDeadline: 60)
+        await vm.scanAll()
+        vm.apply(scanned: CleanupCategory(kind: .userCaches, items: items))
+        try #require(vm.category(for: .userCaches)?.items.count == items.count, "premise: the list holds every row")
+
+        let beat = MainThreadHeartbeat()
+        beat.start()
+        let t0 = Date()
+        let snapshot = try #require(await vm.beginCleanAll(for: .userCaches))
+        await vm.cleanAll(confirmed: snapshot)
+        let wall = Date().timeIntervalSince(t0)
+        return (beat.stop(), wall, vm)
+    }
+
+    @Test("20 000 rows: prune + Clean All + reconcile never block the main thread beyond the threshold")
+    func twentyThousandRows() async throws {
+        // The heartbeat sees EVERY main-thread stall in the process, including other suites' tests running in
+        // parallel, so one noisy run proves nothing. Best of three: a real regression (3.3 s on the #60 head)
+        // is slow every time; contention from a loaded run is not.
+        var best = TimeInterval.infinity
+        for attempt in 1...3 {
+            let f = try Fixture()
+            // Rows are created the way the scanners create them: key computed at scan time, off the main thread.
+            let items = (0..<20_000).map { i -> ScannedItem in
+                let url = f.root.appendingPathComponent("group\(i % 40)/file\(i).bin")
+                return ScannedItem(id: UUID(), url: url, size: 4096, creationDate: nil, modifiedDate: nil, kind: .cache,
+                                   pathKey: CleanupPath.key(url))
+            }
+            let r = try await run(items: items, fixture: f, exists: { _ in true }, trash: { _ in })
+            print("[H-02] 20000 synthetic rows (attempt \(attempt)): wall \(String(format: "%.3f", r.wall)) s, worst main-thread stall \(String(format: "%.0f", r.stall * 1000)) ms")
+            #expect(r.vm.category(for: .userCaches)?.items.isEmpty == true, "premise: everything was reconciled away")
+            best = min(best, r.stall)
+            if best < Self.allowedStall { break }
+        }
+        #expect(best < Self.allowedStall, "the main thread was blocked for at least \(best) s on every attempt")
+    }
+
+    /// The heavy variant: 20 000 REAL files on disk, real `lstat`s, real moves into a temp "trash". Seconds of
+    /// setup, so opt-in: `HALO_MEASURE_CLEANUP=1`.
+    @Test("20 000 real files (opt-in: HALO_MEASURE_CLEANUP=1)",
+          .enabled(if: ProcessInfo.processInfo.environment["HALO_MEASURE_CLEANUP"] != nil))
+    func twentyThousandRealFiles() async throws {
+        let f = try Fixture()
+        let fm = FileManager.default
+        for g in 0..<40 { try fm.createDirectory(at: f.root.appendingPathComponent("group\(g)"), withIntermediateDirectories: true) }
+        for i in 0..<20_000 { fm.createFile(atPath: f.root.appendingPathComponent("group\(i % 40)/file\(i).bin").path, contents: Data([1])) }
+        let items = (0..<20_000).map { i -> ScannedItem in
+            let url = f.root.appendingPathComponent("group\(i % 40)/file\(i).bin")
+            return ScannedItem(id: UUID(), url: url, size: 1, creationDate: nil, modifiedDate: nil, kind: .cache,
+                               pathKey: CleanupPath.key(url))
+        }
+        let trash = f.trash
+        let r = try await run(items: items, fixture: f, exists: CleanupPath.existsOnDisk,
+                              trash: { url in try FileManager.default.moveItem(at: url, to: trash.appendingPathComponent(UUID().uuidString)) })
+        print("[H-02] 20000 REAL files: wall \(String(format: "%.3f", r.wall)) s, worst main-thread stall \(String(format: "%.0f", r.stall * 1000)) ms")
+        #expect(r.vm.outcome?.moved == 20_000)
+        #expect(r.stall < Self.allowedStall, "the main thread was blocked for \(r.stall) s")
+    }
+
+    @Test("A scanned row carries its key, so the list is never re-keyed on the main actor")
+    func scannersAttachTheKey() async throws {
+        let f = try Fixture()
+        try f.file("a.bin")
+        try f.file("b.bin")
+        let vm = f.vm()
+        await vm.scanAll()
+        let items = (vm.category(for: .userCaches)?.items ?? []) + (vm.category(for: .trash)?.items ?? [])
+        #expect(!items.isEmpty)
+        #expect(items.allSatisfy { $0.pathKey != nil && $0.pathKey == CleanupPath.key($0.url) })
+    }
+}
+
+
+// MARK: Avatars: BigTIFF, working set larger than the cache
+
+@Suite("Avatar header probe and cache working set (review of #60)")
+struct AvatarFollowUpTests {
+    private func probe(_ d: Data) -> ImageHeaderProbe.Result {
+        ImageHeaderProbe.probe(read: { o, n in o < d.count ? d.subdata(in: o..<min(d.count, o + n)) : nil })
+    }
+
+    @Test("A BigTIFF is refused (fail closed), in both byte orders — as the probe's own doc says — instead of falling through unchecked")
+    func bigTIFFIsMalformed() {
+        // "II" 2B 00 and "MM" 00 2B, then the BigTIFF offset size (8) / constant (0) / first-IFD offset.
+        let little = Data([0x49, 0x49, 0x2B, 0x00, 0x08, 0x00, 0x00, 0x00, 0x10, 0, 0, 0, 0, 0, 0, 0])
+        let big = Data([0x4D, 0x4D, 0x00, 0x2B, 0x00, 0x08, 0x00, 0x00, 0, 0, 0, 0, 0, 0, 0, 0x10])
+        #expect(probe(little) == .malformed)
+        #expect(probe(big) == .malformed)
+        // Neighbours stay as they were: classic TIFF reads, a random 8 bytes is left to ImageIO.
+        #expect(probe(Pixels.tiffHeader(width: 10, height: 20)) == .size(width: 10, height: 20))
+        #expect(probe(Data([0x49, 0x49, 0x2C, 0x00, 0, 0, 0, 0])) == .notPNGOrTIFF)
+    }
+
+    @Test("A BigTIFF is refused at import, never decoded")
+    func bigTIFFRefusedAtImport() {
+        let store = AvatarStore(rootURL: Pixels.tempRoot(), detectFaces: false)
+        let bigTIFF = Data([0x49, 0x49, 0x2B, 0x00, 0x08, 0x00, 0x00, 0x00, 0x10, 0, 0, 0, 0, 0, 0, 0] + [UInt8](repeating: 0, count: 64))
+        #expect(throws: (any Error).self) { _ = try store.importPhoto(data: bigTIFF, rosterID: UUID()) }
+    }
+
+    private func wait(timeout: TimeInterval = 15, _ cond: () -> Bool) {
+        let end = Date().addingTimeInterval(timeout)
+        while !cond(), Date() < end { Thread.sleep(forTimeInterval: 0.01) }
+    }
+
+    @Test("A roster larger than the cache holds at 256 px steps down to 128 px and then stays decoded: a full extra pass re-decodes nothing")
+    func largeRosterDoesNotThrash() throws {
+        let root = Pixels.tempRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let store = AvatarStore(rootURL: root, detectFaces: false)
+        let id = UUID()
+        let first = try store.importPhoto(data: Pixels.png(width: 300, height: 300), rosterID: id)
+        let src = try #require(store.url(for: first, rosterID: id))
+        var names = [first]
+        while names.count < 12 {
+            let n = AvatarFileName.make()
+            try FileManager.default.copyItem(at: src, to: try #require(store.url(for: n, rosterID: id)))
+            names.append(n)
+        }
+        // Room for 5 photos at 256 px, so 12 do not fit there — but 12 fit comfortably at 128 px.
+        let cap = AvatarImageCache.estimatedCost(bucket: 256) * 5 + 1024
+        let cache = AvatarImageCache(byteCapacity: cap); cache.store = store
+        func pass() {
+            for n in names { _ = cache.photo(fileName: n, rosterID: id, points: 128) }       // asks for the 256-px bucket
+            wait { cache.inFlightCount == 0 }
+        }
+        pass()                       // fills: the first photos at 256 px, then the working set outgrows the cap
+        pass()                       // settles every photo at the 128-px bucket
+        let settled = cache.loadAttempts
+        pass(); pass()
+        #expect(cache.loadAttempts == settled, "\(cache.loadAttempts - settled) photos were decoded again after the cache had settled (LRU thrash)")
+        #expect(names.allSatisfy { cache.isCached(fileName: $0, rosterID: id, points: 128) }, "not every photo of the roster stays decoded")
+        #expect(cache.decodedBytes <= cap)
+    }
+
+    @Test("A roster that fits keeps its 256-px photos — the step-down only starts when the working set cannot fit")
+    func smallRosterKeepsFullSize() {
+        #expect(AvatarImageCache.servedBucket(requested: 256, photoCount: 200, byteCapacity: AvatarImageCache.defaultByteCapacity) == 256)
+        #expect(AvatarImageCache.servedBucket(requested: 256, photoCount: 256, byteCapacity: AvatarImageCache.defaultByteCapacity) == 256)
+        #expect(AvatarImageCache.servedBucket(requested: 256, photoCount: 257, byteCapacity: AvatarImageCache.defaultByteCapacity) == 128)
+        #expect(AvatarImageCache.servedBucket(requested: 128, photoCount: 5_000, byteCapacity: AvatarImageCache.defaultByteCapacity) == 128)
+        #expect(AvatarImageCache.servedBucket(requested: 64, photoCount: 5_000, byteCapacity: AvatarImageCache.defaultByteCapacity) == 64)
     }
 }

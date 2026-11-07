@@ -6186,7 +6186,9 @@ struct CleanupReconcileTests {
         var cats = [CleanupCategory(kind: .systemCaches), CleanupCategory(kind: .userCaches)]
         cats[0].items = [item("/x/Caches/a.bin"), item("/x/Caches/dir/b.bin"), item("/x/Caches/keep.bin")]
         cats[1].items = [item("/x/Caches/a.bin"), item("/x/Caches/dir/b.bin")]
-        let changed = CleanupReconciler.apply(removedKeys: ["/x/Caches/a.bin", "/x/Caches/dir"], to: &cats)
+        // Keys come from `CleanupPath.key` — never hand-typed: it folds case on a case-insensitive volume.
+        let changed = CleanupReconciler.apply(
+            removedKeys: ["/x/Caches/a.bin", "/x/Caches/dir"].map { CleanupPath.key(URL(fileURLWithPath: $0)) }, to: &cats)
         #expect(Set(changed) == [.systemCaches, .userCaches])
         #expect(cats[0].items.map(\.name) == ["keep.bin"])
         #expect(cats[1].items.isEmpty)
@@ -6196,7 +6198,7 @@ struct CleanupReconcileTests {
     func prefixIsNotAncestor() {
         var cats = [CleanupCategory(kind: .userCaches)]
         cats[0].items = [item("/x/Caches/dir/a.bin"), item("/x/Caches/dir2/a.bin")]
-        CleanupReconciler.apply(removedKeys: ["/x/Caches/dir"], to: &cats)
+        CleanupReconciler.apply(removedKeys: [CleanupPath.key(URL(fileURLWithPath: "/x/Caches/dir"))], to: &cats)
         #expect(cats[0].items.map(\.url.path) == ["/x/Caches/dir2/a.bin"])
     }
 

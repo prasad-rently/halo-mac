@@ -1,5 +1,7 @@
 # Build Plan — NFeat-122 → NFeat-127 (F-044 → F-050)
 
+> **v2.6 pointer (2026-11-01).** This M0–M7 plan is kept as history. The current plan for the v2.6 line — hardening, F-054…F-058, decisions, verification debt — is [`../V2_6_PLAN.md`](../V2_6_PLAN.md); the owner-run cases are in `../MANUAL_TEST_PLAN.md` §20.6–§20.7.
+
 Cross-feature execution sequence, dependencies, spikes, and milestones. Turns the
 seven individual specs into one ordered plan. Effort figures are rough
 order-of-magnitude (per-spec §10); the **spikes gate** the estimates.

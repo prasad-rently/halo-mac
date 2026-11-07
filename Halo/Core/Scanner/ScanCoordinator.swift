@@ -13,6 +13,9 @@ struct CleanupResult: Sendable {
     var alreadyGone: [URL] = []
     var freed: Int64 = 0
     var failures: [Failure] = []
+    /// `ScannedItem.key` of everything in `gone`, collected here (off the main actor) so the caller
+    /// can drop those rows without keying or hashing tens of thousands of URLs itself.
+    var goneKeys: Set<String> = []
 
     /// Everything that should leave the on-screen lists.
     var gone: [URL] { removed + alreadyGone }
@@ -171,7 +174,8 @@ actor ScanCoordinator {
                     size: size,
                     creationDate: resVals?.creationDate,
                     modifiedDate: resVals?.contentModificationDate,
-                    kind: .other
+                    kind: .other,
+                    pathKey: CleanupPath.key(child)
                 )
                 items.append(item)
             }
@@ -196,7 +200,7 @@ actor ScanCoordinator {
             // The flat Cleanup lists never delete permanently (the one exception is F-054's guarded
             // "Move to Trash and empty" in BuildArtifactRemover, which never reaches this code), so
             // say what the user has to do instead.
-            let key = CleanupPath.key(item.url)
+            let key = item.key
             if trashKeys.contains(where: { CleanupPath.isCovered(key, by: $0) }) {
                 result.failures.append(.init(name: item.name,
                     message: "already in the Trash — empty the Trash in Finder to free the space"))
@@ -205,6 +209,7 @@ actor ScanCoordinator {
             do {
                 try trash(item.url)
                 result.removed.append(item.url)
+                result.goneKeys.insert(key)
                 result.freed += item.size
             } catch {
                 let ns = error as NSError
@@ -212,6 +217,7 @@ actor ScanCoordinator {
                     || !CleanupPath.existsOnDisk(item.url)
                 if alreadyGone {
                     result.alreadyGone.append(item.url)
+                    result.goneKeys.insert(key)
                 } else {
                     result.failures.append(.init(name: item.name, message: error.localizedDescription))
                 }
@@ -232,7 +238,8 @@ actor ScanCoordinator {
         let found = await xcodeGlobal()
         return found.map {
             ScannedItem(id: UUID(), url: $0.artifactURL, size: $0.size,
-                        creationDate: nil, modifiedDate: $0.artifactModified, kind: .derived)
+                        creationDate: nil, modifiedDate: $0.artifactModified, kind: .derived,
+                        pathKey: CleanupPath.key($0.artifactURL))
         }
     }
 }

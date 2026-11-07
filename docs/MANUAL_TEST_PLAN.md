@@ -1106,6 +1106,123 @@ The cases marked **◆** are the ones unit tests and offscreen renders cannot re
 | TC-WIDG-10 | P0 | App Group contract (unit) | Run `AppGroupContractTests` | Team-prefixed; constant == every entitlement; no restricted entitlement in `Halo-Debug.entitlements` |
 | TC-WIDG-11 | P1 | HaloShare TLS pinning (unit) | Run `TLSPinningTests` | An https peer with the wrong certificate, or no pin, is refused |
 
+## 20.6 Owner script for the v2.5 RC (T-1…T-9)
+
+**Why here:** the v2.6 plan's I-6 item ("`MANUAL_TEST_PLAN` §20 additions, cases T-1…T-9 with ◆ marks") was never written into this file; they are added now. **Every case is ◆ — not yet run.** Order is chosen so an early failure does not waste later effort. Results go in a PR comment and here; roadmap statuses change only once a result is recorded. Needs: a Mac running the RC, plus for T-5…T-9 an Android phone and **your own** Firebase project.
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-V25-T1 ◆ | P0 | Cleanup stays consistent (BUG-001) | Delete an item from *User Caches*; look at *System Caches* and *Trash*; press ⌘R | Nothing stale anywhere; ⌘R rescans; banner says "Moved N items". A failure is a #53 regression — note category + item |
+| TC-V25-T2 ◆ | P0 | Sidebar scrolls in every detail view | Open Messages (unconfigured), Expenditure, AI, Lethe, then Messages *with* data and no thread selected | Sidebar scrolls in all. Screenshot a failure — it decides whether #51's theory is right (also H-17) |
+| TC-V25-T3 ◆ | P1 | Lucky Draw avatars | Emoji + photo avatars; wheel, popup, strip; folder import; Clear all photos (confirm shown) | Looks right, no stalls; report which view; judge 60 fps feel with ≥ 20 entries (V-8) |
+| TC-V25-T4 ◆ | P1 | "Pair a phone" does not leak to history | Mac → Pair a phone shows code/QR; press Copy code | Hidden by default; **not** in Halo's clipboard history (concealed on copy) |
+| TC-V25-T5 ◆ | P0 | Pair the phone and sync SMS (V-1, V-4) | Scan the QR, type the passphrase, grant SMS, sync | Threads appear grouped Device → Line → thread; no plaintext in the Firebase console |
+| TC-V25-T6 ◆ | P1 | Per-SIM toggle and delete mirroring (V-5) | Toggle a SIM from the Mac; send yourself an SMS; delete one on the phone, tap *Sync now* | Held while off; delete mirrored |
+| TC-V25-T7 ◆ | P0 | Clipboard paths (V-3) | *Send to Mac* share target; copy on Mac → appears on phone; enable the accessibility service and copy on phone | First two work; the third **may not** on your OEM — record the result (tells us whether F-055's foreground service is enough) |
+| TC-V25-T8 ◆ | P0 | Ciphertext in Firebase (V-2) | Open a message node and a clipboard node in the Firebase console | `addressEnc`/`bodyEnc`/`contentEnc` are `v1:` ciphertext |
+| TC-V25-T9 ◆ | P1 | Wrong passphrase refused | On a database that already has data, pair with a wrong passphrase | Refused with a clear message |
+
+## 20.7 v2.6 — owner and device cases (all ◆ not yet run)
+
+**Scope:** every acceptance criterion of v2.6 whose last mile needs a human, a screen, a real phone or a real Firebase project, plus **V-1…V-10**. All v2.6 code is on **open, unmerged PRs #56–#63**; run these against a build of the merged `release/v2.6` (or the PR branch). **Nothing in this section has been run.** The V-column links each case to the verification debt in `docs/V2_6_PLAN.md` §7 — a status goes 🔧 → ✅ only when its V-row has a recorded result here.
+
+### 20.7.1 V-1…V-10 (one case each)
+
+| ID | V | Priority | Title | Steps | Expected |
+|----|---|----------|-------|-------|----------|
+| TC-V26-V01 ◆ | V-1 | P0 | Real carrier SMS reaches the Mac | Phone on a real SIM, paired; receive a real SMS | Appears in the Mac console within a sync; body decrypts; the new-SMS notification shows sender only |
+| TC-V26-V02 ◆ | V-2 | P0 | Live Firebase round trip | With your project and the rules from `docs/specs/firebase-rules.json` published: pair, sync, copy clipboard on both sides | `v1:` ciphertext in the console; clipboard rule exercised (no denial); rename a SIM on the phone → the live Mac updates (H-21) |
+| TC-V26-V03 ◆ | V-3 | P0 | Background clipboard on your phone's OEM | Enable the accessibility service; copy text in another app with Halo backgrounded | Item reaches the Mac — or the failure is recorded (H-15 a11y config without event types is only proven "bound" on the emulator) |
+| TC-V26-V04 ◆ | V-4 | P1 | Camera QR pairing | Scan the Mac's QR with the phone camera | Pairing completes; code hides after 60 s on the Mac (F-057) |
+| TC-V26-V05 ◆ | V-5 | P1 | Delete mirroring on a real inbox | Delete a message on the phone; *Sync now* | Removed on the Mac; unrelated messages untouched |
+| TC-V26-V06 ◆ | V-6 | P0 | Foreground service under Doze / OEM battery manager | Enable "Keep receiving in the background"; leave the phone idle overnight, screen off; send a file from the Mac | File offer arrives (Accept/Decline notification) — or the kill is recorded with the phone model; real multicast discovery noted separately |
+| TC-V26-V07 ◆ | V-7 | P0 | Expenditure on real bank SMS | Open **Spend**, scan; compare month total and top categories with the bank statements | Totals plausible and within the documented parser limits; note any false positive (see F-056 §9) |
+| TC-V26-V08 ◆ | V-8 | P1 | Lucky Draw at real roster sizes | A roster of ≥ 20 (and ≥ 40) entries with photos; spin; watch the hero flight | Smooth (~60 fps feel); hero lands on the popup avatar before the name reveals; record any stall |
+| TC-V26-V09 ◆ | V-9 | P0 | Sandboxed release build | Build with `Halo.entitlements` (sandbox ON); open Build Artifacts, Lucky Draw avatars, Cleanup | "Trash and empty" **absent**; git-unavailable notice shown; *Choose folders…* works; avatars import and clear; record anything denied |
+| TC-V26-V10 ◆ | V-10 | P1 | Official LocalSend interop | Send a file between Halo (Mac and Android) and the official LocalSend app, both directions | Transfer completes with consent; pinned-TLS fingerprint accepted for https peers |
+
+### 20.7.2 Cleanup and hardening (desktop)
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-V26-CLN-01 ◆ | P0 | Partial-failure banner (H-03) | Clean All over three items where one cannot be moved (e.g. permission-denied) | Banner "Moved 2, 1 failed: <name> — …"; switching category clears it; next rescan clears it |
+| TC-V26-CLN-02 ◆ | P1 | Clean All sheet opens without stalling (H-02) | Cleanup with a large category → Clean All | Sheet opens a beat later without freezing the UI; a double-click does not open two sheets *(known gap: no in-progress state)* |
+| TC-V26-CLN-03 ◆ | P1 | 20 000-item prune stall measurement (H-02 AC) | Create a 20 000-file cache folder; run Clean All with Instruments → Points of Interest / Hangs | No main-thread stall > 50 ms; record the number (the AC was **not** measured) |
+| TC-V26-CLN-04 ◆ | P2 | Symlinked and `/var` paths reconcile (H-05) | Trash an item reached through a symlinked folder | Listed once; disappears from every category |
+
+### 20.7.3 F-054 Build Artifact Cleaner (desktop; V-9 related)
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-F54-01 ◆ | P0 | Pane renders and scans | Cleanup → Build Artifacts | Sidebar row with a total; scan finishes; grouped Biggest / By project / By toolchain; each row shows project, regeneration hint and class/Active/Unverified badges |
+| TC-F54-02 ◆ | P0 | Marker-pair rule on real projects | Check a `node_modules`, a Rust `target/`, a Gradle `build/`, and a bare folder called `build` | The first three are offered; the bare `build` is **never** offered |
+| TC-F54-03 ◆ | P0 | Git gate on a real repo | In a repo, one ignored `build/` and one with tracked files inside | Ignored one offered; tracked one not offered; non-repo project labelled Unverified |
+| TC-F54-04 ◆ | P0 | Review sheet + Move to Trash | Select two items → Move to Trash → Cancel; then confirm | Cancel deletes nothing; confirm moves them; banner says space is freed only on emptying Trash and offers Open Trash |
+| TC-F54-05 ◆ | P0 | "Move to Trash and empty those items" (unsandboxed) | Select Safe + git-verified items → the permanent button → second confirmation | Only the selected items are gone; **unrelated Trash contents survive**; selecting a Caution/Unverified/Xcode-global item disables the button |
+| TC-F54-06 ◆ | P1 | Real size check (AC-13) | Compare the pane's top 10 sizes with `du -sk` on your own projects | Within 0.5 % |
+| TC-F54-07 ◆ | P0 | `~/Downloads` refused (D-03) | *Choose folders…* → pick `~/Downloads` | A banner refuses it; no silent "Nothing found" |
+| TC-F54-08 ◆ | P1 | One owner per path (D-04, BUG-001) | Look for DerivedData in Cleanup and Smart Scan; trash a project's `node_modules` | DerivedData listed once (Build Artifacts); Smart Scan has an Xcode (global) line; removal reaches other lists without a rescan |
+| TC-F54-09 ◆ | P2 | First-open TCC prompts *(known issue)* | First open of Cleanup on a fresh account | Record whether `~/Documents`/`~/Desktop` prompts appear |
+| TC-F54-10 | P1 | Engine tests (unit) | Run the `BuildArtifact*` suites | 56 tests green (temp trees; `realTrashItemRoundTrip` skipped) |
+
+### 20.7.4 F-053 completion (desktop)
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-DRAW-A01 ◆ | P0 | Hero flight (C-1) | Roster with photo avatars, auto-retire on → spin | The winner's avatar flies from its own segment to the popup slot (450 ms), then the name reveals; the winner's segment is still on the wheel during the flight |
+| TC-DRAW-A02 ◆ | P1 | Reduce Motion (C-1) | Reduce Motion on → spin | Cross-fade, no movement |
+| TC-DRAW-A03 ◆ | P1 | Hub last winner (C-2) | After a draw, look at the hub between spins | Shows the last winner's avatar (note: right after a draw this is the winner just announced — BRD said "previous winner"); name-only mode shows the F-051 hub |
+| TC-DRAW-A04 ◆ | P1 | Storage readout and clear (C-3) | Roster panel → storage readout; Clear this roster's photos → confirm | Per-roster bytes shown; only that roster's photos go; emoji and other rosters untouched *(readout is in the roster panel, not Settings)* |
+| TC-DRAW-A05 ◆ | P1 | CSV avatar column (C-4) | Export a roster; edit; re-import; import a CSV with `../x.png` | Round trip keeps emoji/monogram; a photo exports as bare `photo` with no path; the hostile row yields no avatar |
+| TC-DRAW-A06 ◆ | P1 | 60 fps feel with avatars (H-11) | Instruments or eyes at 20/40 entries | Record frame times; the 40-entry limit stays unless data says otherwise |
+
+### 20.7.5 F-055 Android background and sharing
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-F55-01 ◆ | P0 | Start, swipe away, receive | Settings → Keep receiving in the background (permission rationale shown first); swipe the app away; send a file from the Mac | Persistent notification stays; Accept/Decline notification appears showing sender/count/size **but no file names**; Accept stores the file |
+| TC-F55-02 ◆ | P0 | Stop | Tap Stop in the notification | Service gone, port closed; the Settings switch re-syncs on next open |
+| TC-F55-03 ◆ | P0 | Unanswered offer is declined | Leave an offer unanswered for > 90 s | Declined; nothing stored |
+| TC-F55-04 ◆ | P1 | Sharesheet end to end | From the Files app share a file to Halo → choose a device → Send | Item staged ("N items shared to Halo"); **nothing sent until a device is chosen and Send tapped** |
+| TC-F55-05 ◆ | P1 | Multicast discovery | Mac and phone on the same Wi-Fi; Scan | The Mac is found without typing an address; the `MulticastLock` is released afterwards; /24 scan and manual entry still work |
+| TC-F55-06 ◆ | P2 | Notification permission denied *(known issue)* | Deny POST_NOTIFICATIONS and enable the toggle | Record what happens (currently the service still runs with a warning) |
+
+### 20.7.6 F-056 Expenditure on Android
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-F56-01 ◆ | P0 | Spend tab on screen | Open Spend with READ_SMS granted | Month stepper, spent/received/net, category bars, recent list; the 6-item bottom bar is usable |
+| TC-F56-02 ◆ | P0 | Ledger sealed on a real Keystore | After a scan, `adb shell run-as <pkg>` and inspect the ledger file | Ciphertext only; no merchant, amount or SMS text |
+| TC-F56-03 ◆ | P1 | Per-SIM toggle and sender deny purge existing rows (FR-E5) | Scan; switch a SIM off / deny a sender | Their rows leave the totals; re-allowing re-reads them |
+| TC-F56-04 ◆ | P1 | Exclude / Restore and Delete & turn off | Exclude a message; restore it; Delete & turn off | Totals follow; delete wipes the ledger |
+| TC-F56-05 ◆ | P1 | Performance with a large inbox | Scan an inbox of ~10 000 messages on an emulator/phone | < 10 s first scan (JVM figure was ≈ 0.4 s — not a device measurement) |
+| TC-F56-06 | P1 | Fixtures (unit) | Swift `ExpenseFixtures` and `cd android && ./gradlew :halocloud:test` | Same fixture file green on both; known false positives are recorded in the fixtures' notes |
+
+### 20.7.7 F-057 Cloud setup assistant
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-F57-01 ◆ | P0 | Healthy project | Cloud settings → Check my database (Mac and phone) | All four paths (`meta`, `devices`, `sms`, `clipboard`) pass; no probe node left behind (`_haloCheck_*`) |
+| TC-F57-02 ◆ | P0 | Rules without `clipboard/` | Publish rules that omit `clipboard/` → check | `clipboard` fails with "Publish … `docs/specs/firebase-rules.json`" |
+| TC-F57-03 ◆ | P1 | Open database / wrong URL / Email-Password off | Test mode rules; wrong-region URL; disable Email/Password | Open-rules warning; wrong URL/region message; `OPERATION_NOT_ALLOWED` message — confirm the real status codes match the stubs |
+| TC-F57-04 ◆ | P0 | Pairing code auto-hides | Pair a phone → watch the code | Hides after 60 s; New code regenerates; leaving the pane hides it; the code never appears in the clipboard history or alert log; after it hides, ⌘V does not paste the code (pasteboard cleared if still ours) |
+| TC-F57-05 ◆ | P1 | Devices last-seen and Retire | Devices list → Retire a real phone | Last-seen shown (amber if > 7 days); confirmation; only that device's data removed |
+| TC-F57-06 | P1 | Engine tests (unit) | `DatabaseCheckTests`, `DatabaseCheckTest` | Green on both sides; no-sinks audit green |
+
+### 20.7.8 F-058 Release engineering and Android hardening
+
+| ID | Priority | Title | Steps | Expected |
+|----|----------|-------|-------|----------|
+| TC-F58-01 ◆ | P0 | CI first run | Open/refresh a PR against `release/**` | macOS, Android and rules-sync jobs go green — **never run on GitHub yet** |
+| TC-F58-02 ◆ | P0 | Broken test goes red | Push a deliberately failing test on a throwaway PR | CI red |
+| TC-F58-03 ◆ | P0 | `build-dmg.sh` end to end after review | `scripts/build-dmg.sh --version X` on a clean checkout | Signed DMG + `.sha256`; mounted-DMG re-verify passes; versions uniform |
+| TC-F58-04 ◆ | P1 | `sign-release.sh` with your keystore | Sign the unsigned APK; install over the previous release | `apksigner verify` OK; install succeeds |
+| TC-F58-05 | P2 | Version bump and rules-sync (unit/script) | `scripts/bump-version.sh --dry-run`; `scripts/check-rules-sync.sh` | Dry run changes nothing; rules-sync exits 0 |
+| TC-AND-H13 ◆ | P1 | Clipboard history sealed on a real Keystore (H-13) | After copying/Send-to-Mac, `run-as` the history file | Starts `HSF1`; no plaintext; a legacy plaintext file is sealed on next launch; a simulated Keystore outage keeps the file *(real transient-failure behaviour unverified)* |
+| TC-AND-H14 ◆ | P2 | Poison-row quarantine (H-14) | Induce a rejected row | Later rows sync; "N messages couldn't be synced" shows; Retry skipped re-sends |
+
+> **Known open items these cases can surface** (not defects of the cases): H-17 sidebar canary and H-05 gaps (no case), parser false positives (F-056 §9), hub shows last winner, C-3 location, F-054 Active items permanent-eligible. See `docs/V2_6_PLAN.md` §6.
+
 ## 21. Cross-Cutting / Non-Functional
 
 ### 21.1 Permissions
