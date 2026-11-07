@@ -10,6 +10,13 @@ struct ScannedItem: Identifiable, Sendable {
     let modifiedDate: Date?
     let kind: FileKind
     var isSelected: Bool = true
+    /// `CleanupPath.key(url)`, computed where the item is created (off the main actor) so list
+    /// surgery and the headline total never re-key tens of thousands of rows on the main thread.
+    /// Nil only for an item built without one (tests); `key` then computes it.
+    var pathKey: String? = nil
+
+    /// The comparison key for this item's path — see `CleanupPath.key`.
+    var key: String { pathKey ?? CleanupPath.key(url) }
 
     var sizeFormatted: String { ByteCountFormatter.string(fromByteCount: size, countStyle: .file) }
     var name: String { url.lastPathComponent }
@@ -162,34 +169,53 @@ enum CleanupPath {
     /// For a path that does not exist (a removed item, a root not yet created) the deepest
     /// existing ancestor is resolved and the rest appended verbatim.
     ///
-    /// **Case policy.** Keys are compared case-SENSITIVELY, on every volume. The default APFS
-    /// volume is case-insensitive, but case-sensitive APFS volumes exist and folding case would
-    /// merge two distinct files there — and the failure modes are not symmetric: an unfolded key
-    /// on a case-insensitive volume costs at worst a duplicate row (every scanner takes its
-    /// spelling from the directory enumerator, so one file is always spelled one way), while a
-    /// folded key on a case-sensitive volume would drop a real row, or trash the wrong file.
+    /// **Firmlinks.** `/System/Volumes/Data/Users/x` and `/Users/x` are one directory (the boot
+    /// volume group is two volumes stitched by the firmlinks in `/usr/share/firmlinks`) and
+    /// `realpath` does not unify them. The `/System/Volumes/Data` spelling is rewritten to the
+    /// firmlinked one, so a path an open panel or a tool hands over in either spelling keys alike.
+    ///
+    /// **Case policy — per volume (H-05).** Whether `A.bin` and `a.bin` are one file is a property
+    /// of the *volume* the directory lives on (`volumeSupportsCaseSensitiveNamesKey`), not of the
+    /// OS: the default APFS volume is case-insensitive, a case-sensitive APFS volume or disk image
+    /// is not. On a case-insensitive volume every component below the volume root is case-folded
+    /// in the key; on a case-sensitive one it is kept verbatim, and a case-sensitive volume mounted
+    /// inside a case-insensitive one is handled component by component (the mount point's own name
+    /// belongs to the *parent* volume). A volume whose flag cannot be read is treated as
+    /// case-SENSITIVE: the failure modes are not symmetric — an unfolded key on a case-insensitive
+    /// volume costs at worst a duplicate row, a folded key on a case-sensitive one would drop a
+    /// real row or trash the wrong file. Keys are for *comparison only*; they are never turned
+    /// back into a path, so a folded key never reaches `trashItem`.
+    /// Unicode normalisation (NFC/NFD) is deliberately not folded: every scanner takes its
+    /// spelling from the directory enumerator, so one file is always spelled one way.
     static func key(_ url: URL) -> String {
         let std = url.standardizedFileURL
         let leaf = std.lastPathComponent
         let parent = std.deletingLastPathComponent().path
-        if leaf.isEmpty || leaf == "/" || parent == std.path { return resolvedDirectory(std.path) }
+        if leaf.isEmpty || leaf == "/" || parent == std.path { return resolvedDirectory(std.path).key }
         let dir = resolvedDirectory(parent)
-        return dir == "/" ? "/" + leaf : dir + "/" + leaf
+        let name = dir.caseSensitive ? leaf : fold(leaf)
+        return dir.key == "/" ? "/" + name : dir.key + "/" + name
     }
 
     /// The key of a *directory that is traversed* — a scan root, the Trash. Unlike `key`, the leaf IS
     /// resolved: items under a symlinked root get keys built from the resolved path, so the root they are
     /// compared against must be resolved too or `isCovered` never matches (a Trash folder that is a
     /// symlink would let "already in the Trash" slip through).
-    static func directoryKey(_ url: URL) -> String { resolvedDirectory(url.standardizedFileURL.path) }
+    static func directoryKey(_ url: URL) -> String { resolvedDirectory(url.standardizedFileURL.path).key }
+
+    /// A directory's key, and whether names inside it are case-sensitive.
+    struct ResolvedDirectory: Sendable { let key: String; let caseSensitive: Bool }
+
+    private static func fold(_ name: String) -> String { name.folding(options: .caseInsensitive, locale: nil) }
 
     private static let resolvedLock = NSLock()
-    nonisolated(unsafe) private static var resolvedCache: [String: String] = [:]
+    nonisolated(unsafe) private static var resolvedCache: [String: ResolvedDirectory] = [:]
 
-    /// `realpath` of the deepest existing ancestor of `dir`, plus the unresolved remainder.
-    /// Successful full resolutions are cached (Clean All keys tens of thousands of rows that share
-    /// a handful of parents); a cache is bounded and never stores a path that did not resolve.
-    private static func resolvedDirectory(_ dir: String) -> String {
+    /// The key of the deepest existing ancestor of `dir`, plus the unresolved remainder (folded
+    /// like the rest when that volume is case-insensitive). Successful resolutions are cached
+    /// (Clean All keys tens of thousands of rows that share a handful of parents); the cache is
+    /// bounded and never stores a path that did not resolve.
+    private static func resolvedDirectory(_ dir: String) -> ResolvedDirectory {
         resolvedLock.lock()
         if let hit = resolvedCache[dir] { resolvedLock.unlock(); return hit }
         resolvedLock.unlock()
@@ -199,8 +225,14 @@ enum CleanupPath {
         var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
         while true {
             if realpath(existing, &buffer) != nil {
-                var out = String(cString: buffer)
-                for comp in rest.reversed() { out = out == "/" ? "/" + comp : out + "/" + comp }
+                let real = canonicalFirmlink(String(cString: buffer))
+                let base = foldedExisting(real)
+                var key = base.key
+                for comp in rest.reversed() {
+                    let name = base.caseSensitive ? comp : fold(comp)
+                    key = key == "/" ? "/" + name : key + "/" + name
+                }
+                let out = ResolvedDirectory(key: key, caseSensitive: base.caseSensitive)
                 if rest.isEmpty {
                     resolvedLock.lock()
                     if resolvedCache.count > 4096 { resolvedCache.removeAll() }
@@ -211,10 +243,84 @@ enum CleanupPath {
             }
             let ns = existing as NSString
             let parent = ns.deletingLastPathComponent
-            if parent == existing || parent.isEmpty { return dir }
+            if parent == existing || parent.isEmpty { return ResolvedDirectory(key: dir, caseSensitive: true) }
             rest.append(ns.lastPathComponent)
             existing = parent
         }
+    }
+
+    /// Case-folds an existing, fully resolved directory path volume by volume. `real` lives on
+    /// volume V (mount point M): the components below M are folded per V; M itself, and everything
+    /// above it, belong to the volume(s) that contain M, so M's own key is built recursively.
+    private static func foldedExisting(_ real: String) -> ResolvedDirectory {
+        guard let info = volumeInfo(of: real) else { return ResolvedDirectory(key: real, caseSensitive: true) }
+        let mount = info.mount
+        // The Data volume, reached through a firmlink, IS "/" as the user sees it: `/Users/x` is
+        // `Data:/Users/x`. Its components are all "below the volume root".
+        if mount == dataVolumeMount && isFirmlinked(real) {
+            return append(relative: real.split(separator: "/"), to: "/", info: info)
+        }
+        if mount == "/" { return append(relative: real.split(separator: "/"), to: "/", info: info) }
+        if real == mount || real.hasPrefix(mount + "/") {
+            // The mount point's own name belongs to the volume that contains it.
+            let parentOfMount = (mount as NSString).deletingLastPathComponent
+            let above = foldedExisting(parentOfMount.isEmpty ? "/" : parentOfMount)
+            let name = (mount as NSString).lastPathComponent
+            let shown = above.caseSensitive ? name : fold(name)
+            let base = above.key == "/" ? "/" + shown : above.key + "/" + shown
+            let relative = real == mount ? [] : real.dropFirst(mount.count + 1).split(separator: "/")
+            return append(relative: relative, to: base, info: info)
+        }
+        return ResolvedDirectory(key: real, caseSensitive: info.caseSensitive)   // unexpected shape: do not guess
+    }
+
+    private static func append(relative: [Substring], to base: String, info: (mount: String, caseSensitive: Bool))
+        -> ResolvedDirectory {
+        var key = base
+        for comp in relative {
+            let name = info.caseSensitive ? String(comp) : fold(String(comp))
+            key = key == "/" ? "/" + name : key + "/" + name
+        }
+        return ResolvedDirectory(key: key, caseSensitive: info.caseSensitive)
+    }
+
+    /// Mount point and case flag of the volume holding `path`; nil when either cannot be read.
+    private static func volumeInfo(of path: String) -> (mount: String, caseSensitive: Bool)? {
+        guard let v = try? URL(fileURLWithPath: path).resourceValues(forKeys: [.volumeURLKey, .volumeSupportsCaseSensitiveNamesKey]),
+              let mountURL = v.volume, let cs = v.volumeSupportsCaseSensitiveNames else { return nil }
+        // The same spelling `realpath` gives the paths compared against it.
+        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+        let mount = realpath(mountURL.standardizedFileURL.path, &buffer) != nil
+            ? canonicalFirmlink(String(cString: buffer)) : mountURL.standardizedFileURL.path
+        return (mount, cs)
+    }
+
+    // MARK: Firmlinks
+
+    private static let dataVolumeMount = "/System/Volumes/Data"
+
+    /// The firmlink roots (`/Users`, `/Library`, `/private`, …) from `/usr/share/firmlinks`, with the
+    /// documented set as a fallback when the file cannot be read.
+    private static let firmlinkRoots: [String] = {
+        let fallback = ["/Applications", "/Library", "/Users", "/Volumes", "/cores", "/opt", "/private", "/usr/local",
+                        "/System/Library/Caches", "/System/Library/Assets", "/System/Library/AssetsV2"]
+        guard let text = try? String(contentsOfFile: "/usr/share/firmlinks", encoding: .utf8) else { return fallback }
+        let roots = text.split(separator: "\n").compactMap { line -> String? in
+            guard let first = line.split(separator: "\t").first, first.hasPrefix("/") else { return nil }
+            return String(first)
+        }
+        return roots.isEmpty ? fallback : roots
+    }()
+
+    private static func isFirmlinked(_ path: String) -> Bool {
+        firmlinkRoots.contains { isCovered(path, by: $0) }
+    }
+
+    /// `/System/Volumes/Data/Users/x` → `/Users/x`; anything not under a firmlink root is untouched.
+    static func canonicalFirmlink(_ path: String) -> String {
+        guard path.hasPrefix(dataVolumeMount + "/") else { return path }
+        let stripped = String(path.dropFirst(dataVolumeMount.count))
+        return isFirmlinked(stripped) ? stripped : path
     }
 
     /// Test hook: forget cached resolutions (e.g. after re-pointing a symlink).
@@ -230,11 +336,19 @@ enum CleanupPath {
     static func missing(among urls: [URL],
                         exists: (URL) -> Bool = CleanupPath.existsOnDisk,
                         deadline: TimeInterval = 5) -> [URL] {
+        missing(among: urls, url: { $0 }, exists: exists, deadline: deadline)
+    }
+
+    /// `missing(among:)` over any element that has a URL — used with `ScannedItem`s so the caller gets the
+    /// rows themselves (and their pre-computed keys) back rather than URLs it would have to look up again.
+    static func missing<T>(among elements: [T], url: (T) -> URL,
+                           exists: (URL) -> Bool = CleanupPath.existsOnDisk,
+                           deadline: TimeInterval = 5) -> [T] {
         let stop = Date().addingTimeInterval(deadline)
-        var out: [URL] = []
-        for (i, url) in urls.enumerated() {
+        var out: [T] = []
+        for (i, element) in elements.enumerated() {
             if i % 256 == 0, Task.isCancelled || Date() > stop { break }
-            if !exists(url) { out.append(url) }
+            if !exists(url(element)) { out.append(element) }
         }
         return out
     }
@@ -292,12 +406,17 @@ enum CleanupReconciler {
     /// Returns the kinds whose lists changed.
     @discardableResult
     static func apply(removedKeys: [String], to categories: inout [CleanupCategory]) -> [CleanupKind] {
-        guard !removedKeys.isEmpty else { return [] }
-        let removed = Set(removedKeys)
+        apply(removedKeys: Set(removedKeys), to: &categories)
+    }
+
+    /// As above, for a set the caller already built (off the main actor, for a big batch).
+    @discardableResult
+    static func apply(removedKeys removed: Set<String>, to categories: inout [CleanupCategory]) -> [CleanupKind] {
+        guard !removed.isEmpty else { return [] }
         var changed: [CleanupKind] = []
         for i in categories.indices {
             let before = categories[i].items.count
-            categories[i].items.removeAll { isRemoved(CleanupPath.key($0.url), in: removed) }
+            categories[i].items.removeAll { isRemoved($0.key, in: removed) }
             if categories[i].items.count != before { changed.append(categories[i].kind) }
         }
         return changed
@@ -308,7 +427,7 @@ enum CleanupReconciler {
         var seen = Set<String>()
         var sum: Int64 = 0
         for cat in categories {
-            for item in cat.items where seen.insert(CleanupPath.key(item.url)).inserted { sum += item.size }
+            for item in cat.items where seen.insert(item.key).inserted { sum += item.size }
         }
         return sum
     }

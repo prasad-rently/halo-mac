@@ -13,6 +13,9 @@ struct CleanupResult: Sendable {
     var alreadyGone: [URL] = []
     var freed: Int64 = 0
     var failures: [Failure] = []
+    /// `ScannedItem.key` of everything in `gone`, collected here (off the main actor) so the caller
+    /// can drop those rows without keying or hashing tens of thousands of URLs itself.
+    var goneKeys: Set<String> = []
 
     /// Everything that should leave the on-screen lists.
     var gone: [URL] { removed + alreadyGone }
@@ -159,7 +162,8 @@ actor ScanCoordinator {
                     size: size,
                     creationDate: resVals?.creationDate,
                     modifiedDate: resVals?.contentModificationDate,
-                    kind: .other
+                    kind: .other,
+                    pathKey: CleanupPath.key(child)
                 )
                 items.append(item)
             }
@@ -182,7 +186,7 @@ actor ScanCoordinator {
             // `trashItem` on something already in the Trash "succeeds" without moving it, which
             // would be reported as moved, dropped from the list, and still occupy the disk.
             // Halo never deletes permanently, so say what the user has to do instead.
-            let key = CleanupPath.key(item.url)
+            let key = item.key
             if trashKeys.contains(where: { CleanupPath.isCovered(key, by: $0) }) {
                 result.failures.append(.init(name: item.name,
                     message: "already in the Trash — empty the Trash in Finder to free the space"))
@@ -191,6 +195,7 @@ actor ScanCoordinator {
             do {
                 try trash(item.url)
                 result.removed.append(item.url)
+                result.goneKeys.insert(key)
                 result.freed += item.size
             } catch {
                 let ns = error as NSError
@@ -198,6 +203,7 @@ actor ScanCoordinator {
                     || !CleanupPath.existsOnDisk(item.url)
                 if alreadyGone {
                     result.alreadyGone.append(item.url)
+                    result.goneKeys.insert(key)
                 } else {
                     result.failures.append(.init(name: item.name, message: error.localizedDescription))
                 }
@@ -251,7 +257,8 @@ actor ScanCoordinator {
                             size: size,
                             creationDate: resVals?.creationDate,
                             modifiedDate: resVals?.contentModificationDate,
-                            kind: .derived
+                            kind: .derived,
+                            pathKey: CleanupPath.key(child)
                         )
                     }
                 }
